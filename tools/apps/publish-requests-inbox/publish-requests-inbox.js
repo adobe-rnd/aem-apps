@@ -22,27 +22,25 @@ import {
 } from './api.js';
 
 // Super Lite (sl-*) — Spectrum-aligned controls for DA; pairs with S2 tokens in CSS.
-// NX style pipeline matches other da.live shell apps (e.g. MSM): nexter.js loadStyle + getStyle.
-const NX = 'https://da.live/nx';
+// NX style pipeline matches other da.live shell apps (e.g. MSM): nx.js loadStyle + getStyle.
+const NX = 'https://da.live/nx2';
 let nexter = null;
 let sl = null;
 let styles = null;
-let buttons = null;
 try {
   const [{ default: getStyle }, { loadStyle }] = await Promise.all([
-    import(`${NX}/utils/styles.js`),
-    import(`${NX}/scripts/nexter.js`),
+    import(`${NX}/public/utils/styles.js`),
+    import(`${NX}/scripts/nx.js`),
   ]);
   await Promise.all([
-    loadStyle(`${NX}/styles/nexter.css`),
+    loadStyle(`${NX}/styles/styles.css`),
     loadStyle(`${NX}/public/sl/styles.css`),
   ]);
   await import(`${NX}/public/sl/components.js`);
-  [nexter, sl, styles, buttons] = await Promise.all([
-    getStyle(`${NX}/styles/nexter.css`),
+  [nexter, sl, styles] = await Promise.all([
+    getStyle(`${NX}/styles/styles.css`),
     getStyle(`${NX}/public/sl/styles.css`),
     getStyle(import.meta.url),
-    getStyle(`${NX}/styles/buttons.css`),
   ]);
 } catch (e) {
   console.warn('Failed to load styles:', e);
@@ -122,7 +120,7 @@ class PublishRequestsApp extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.shadowRoot.adoptedStyleSheets = [nexter, sl, buttons, styles].filter(Boolean);
+    this.shadowRoot.adoptedStyleSheets = [nexter, sl, styles].filter(Boolean);
     this.init();
   }
 
