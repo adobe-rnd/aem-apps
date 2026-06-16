@@ -110,6 +110,7 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
 
 .site-select-title {
   margin: 0;
+  font-size: var(--s2-heading-size-xl);
   line-height: 1.15;
   font-weight: 700;
   color: var(--s2-gray-900);

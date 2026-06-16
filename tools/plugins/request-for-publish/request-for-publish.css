@@ -126,7 +126,6 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 .form-header h3 {
   margin: 0 0 var(--s2-spacing-75) 0;
-  font-size: var(--s2-heading-size-xs);
   font-weight: 700;
   color: var(--s2-gray-900);
 }
@@ -148,7 +147,6 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 .review-card-title {
   margin: 0 0 var(--s2-spacing-200) 0;
-  font-size: var(--s2-body-size-m);
   font-weight: 700;
   color: var(--s2-gray-900);
 }
