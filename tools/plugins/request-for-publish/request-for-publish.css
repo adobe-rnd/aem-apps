@@ -280,6 +280,13 @@ sl-button.pw-fill-negative::part(base):disabled {
   gap: var(--s2-spacing-75);
 }
 
+.approvers-list li code {
+  font-family: 'Roboto Mono', menlo, consolas, 'Liberation Mono', monospace;
+  background: var(--s2-gray-100);
+  padding: var(--s2-spacing-75) var(--s2-spacing-200);
+  border-radius: var(--s2-corner-radius-100);
+}
+
 /* ========== Form Elements ========== */
 .form-group {
   margin-bottom: var(--s2-spacing-300);
