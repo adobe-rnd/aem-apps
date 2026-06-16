@@ -356,8 +356,24 @@ button:focus-visible {
 .primary-actions,
 .secondary-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.primary-actions {
+  flex: 0 0 auto;
+}
+
+.secondary-actions {
+  justify-content: flex-end;
+  flex: 1 1 auto;
+}
+
+.bulk-operations {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .btn,
@@ -367,14 +383,34 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 36px;
+  min-height: 40px;
   border: 1px solid var(--cs-border);
   border-radius: 6px;
   background: #fff;
   color: var(--cs-text);
-  padding: 7px 12px;
+  padding: 8px 14px;
   font-weight: 700;
+  line-height: 1.2;
   text-decoration: none;
+  white-space: nowrap;
+}
+
+.action-bar .btn,
+.action-bar .operation-select {
+  height: 40px;
+}
+
+.action-bar .btn {
+  min-width: 132px;
+}
+
+.action-bar .btn-primary {
+  min-width: 160px;
+}
+
+.action-bar .operation-select {
+  width: 160px;
+  flex: 0 0 160px;
 }
 
 .btn-sm,
