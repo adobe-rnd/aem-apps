@@ -364,7 +364,7 @@ class RequestForPublishPlugin extends LitElement {
             ${this._approvers.map((approver) => html`<li><code>${approver}</code></li>`)}
           </ul>
           ${this._cc.length > 0 ? html`
-            <h4 class="review-card-title cc-title">CC'd</h4>
+            <p class="review-card-title cc-title">CC'd</p>
             <ul class="approvers-list">
               ${this._cc.map((email) => html`<li><code>${email}</code></li>`)}
             </ul>
@@ -417,11 +417,11 @@ class RequestForPublishPlugin extends LitElement {
           <h4 class="review-card-title">Content Changes</h4>
           <p class="review-card-body">Before submitting, please proofread and review your edits. Have you been SMART?</p>
           <ul class="smart-checklist">
-            <li><strong>S</strong> Streamline Site Structure</li>
-            <li><strong>M</strong> Metadata for SEO</li>
-            <li><strong>A</strong> Accessibility compliant</li>
-            <li><strong>R</strong> Redirects requested</li>
-            <li><strong>T</strong> Tested all links</li>
+            <li><span aria-hidden="true">S</span> Streamline Site Structure</li>
+            <li><span aria-hidden="true">M</span> Metadata for SEO</li>
+            <li><span aria-hidden="true">A</span> Accessibility compliant</li>
+            <li><span aria-hidden="true">R</span> Redirects requested</li>
+            <li><span aria-hidden="true">T</span> Tested all links</li>
           </ul>
           <a href="${this.diffUrl}" target="_blank" rel="noopener" class="action-link">
             <svg class="action-icon" viewBox="0 0 18 18"><path d="M16.5 1h-15A1.5 1.5 0 0 0 0 2.5v13A1.5 1.5 0 0 0 1.5 17h15a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 16.5 1ZM9 16H1.5a.5.5 0 0 1-.5-.5V3h8v13Zm8-.5a.5.5 0 0 1-.5.5H10V3h7v12.5Z"/></svg>
@@ -435,7 +435,7 @@ class RequestForPublishPlugin extends LitElement {
             ${this._approvers.map((approver) => html`<li><code>${approver}</code></li>`)}
           </ul>
           ${this._cc.length > 0 ? html`
-            <h4 class="review-card-title cc-title">CC</h4>
+            <p class="review-card-title cc-title">CC</p>
             <ul class="approvers-list">
               ${this._cc.map((email) => html`<li><code>${email}</code></li>`)}
             </ul>

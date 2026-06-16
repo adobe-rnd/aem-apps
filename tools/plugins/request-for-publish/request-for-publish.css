@@ -255,7 +255,7 @@ sl-button.pw-fill-negative::part(base):disabled {
   gap: var(--s2-spacing-100);
 }
 
-.smart-checklist li strong {
+.smart-checklist li span {
   display: inline-flex;
   align-items: center;
   justify-content: center;
