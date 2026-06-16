@@ -3486,13 +3486,13 @@ function setupEventListeners() {
 
 async function init() {
   try {
+    setupEventListeners();
+
     const { context, token, actions } = await DA_SDK;
 
     app.context = context;
     app.token = token;
     app.actions = actions;
-
-    setupEventListeners();
 
     // Initialize path tags and info
     renderPathTags();
