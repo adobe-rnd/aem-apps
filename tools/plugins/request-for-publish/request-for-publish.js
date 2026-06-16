@@ -19,10 +19,11 @@ let nexter = null;
 let sl = null;
 let styles = null;
 try {
-  const [{ default: getStyle }, { loadStyle }] = await Promise.all([
+  const [{ default: getStyle }, { loadStyle, getColorScheme }] = await Promise.all([
     import(`${NX}/public/utils/styles.js`),
     import(`${NX}/scripts/nx.js`),
   ]);
+  document.documentElement.style.colorScheme = getColorScheme() === 'dark-scheme' ? 'dark' : 'light';
   await Promise.all([
     loadStyle(`${NX}/styles/styles.css`),
     loadStyle(`${NX}/public/sl/styles.css`),
