@@ -387,7 +387,6 @@ class RequestForPublishPlugin extends LitElement {
     return html`
       <div class="form-container">
         <header class="form-header">
-          <h3>Request Publish</h3>
           <p class="form-subtitle">Submit this website update for approval</p>
         </header>
 
