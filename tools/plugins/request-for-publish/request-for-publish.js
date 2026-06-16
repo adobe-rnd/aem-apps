@@ -83,6 +83,7 @@ class RequestForPublishPlugin extends LitElement {
     this._withdrawn = false;
     this._commentsRequired = false;
     this._commentsMinLength = 10;
+    this._supportContact = '';
     this._submitPhase = '';
   }
 
@@ -136,6 +137,7 @@ class RequestForPublishPlugin extends LitElement {
     this._approversSource = result.source || 'unknown';
     this._commentsRequired = result.commentsRequired || false;
     this._commentsMinLength = result.commentsMinLength ?? 10;
+    this._supportContact = result.supportContact || '';
 
     if (result.accentColor) {
       this.style.setProperty('--pw-accent', result.accentColor);
@@ -332,7 +334,7 @@ class RequestForPublishPlugin extends LitElement {
           </sl-button>
         </div>
 
-        <p class="status-note">If your content owner is away please contact <a href="mailto:digiops@westernsydney.edu.au">digiops@westernsydney.edu.au</a> for assistance with content approvals.</p>
+        ${this._supportContact ? html`<p class="status-note">If your content owner is away, contact <a href="mailto:${this._supportContact}">${this._supportContact}</a> for assistance with content approvals.</p>` : nothing}
       </div>
     `;
   }
