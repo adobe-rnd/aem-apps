@@ -3,10 +3,10 @@
   --pw-accent-hover: var(--s2-blue-1000);
 
   display: block;
-  max-width: var(--grid-container-width);
-  margin: var(--spacing-800) auto;
+  max-width: var(--se-grid-container-width);
+  margin: var(--s2-spacing-800) auto;
   -webkit-font-smoothing: antialiased;
-  font-family: var(--body-font-family);
+  font-family: var(--s2-font-family);
   color: var(--s2-gray-800);
 }
 
@@ -68,8 +68,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 }
 
 .pw-action-sm::part(base) {
-  padding: var(--spacing-75) var(--spacing-200);
-  font-size: var(--s2-body-s-size);
+  padding: var(--s2-spacing-75) var(--s2-spacing-200);
 }
 
 /* ---- Loading ---- */
@@ -79,7 +78,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-200);
+  gap: var(--s2-spacing-200);
   min-height: 240px;
   color: var(--s2-gray-700);
 }
@@ -95,27 +94,28 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 
 .loading-label {
   margin: 0;
-  font-size: var(--s2-body-s-size);
   color: var(--s2-gray-700);
 }
 
 @keyframes da-perm-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ---- Toolbar ---- */
 
 .da-toolbar {
-  margin-bottom: var(--spacing-400);
+  margin-bottom: var(--s2-spacing-400);
 }
 
 .da-toolbar-header {
-  margin: 0 0 var(--spacing-400) 0;
+  margin: 0 0 var(--s2-spacing-400) 0;
 }
 
 .da-title {
   margin: 0;
-  font-size: var(--s2-heading-xl-size, var(--s2-heading-size-700));
+  font-size: var(--s2-heading-size-xl);
   line-height: 1.15;
   font-weight: 700;
   color: var(--s2-gray-900);
@@ -176,7 +176,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   border: none;
   cursor: pointer;
   color: var(--s2-gray-500);
-  border-radius: var(--s2-radius-75);
+  border-radius: var(--s2-corner-radius-100);
 }
 
 .site-clear-btn:hover {
@@ -190,8 +190,8 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   left: 0;
   right: 0;
   min-width: 200px;
-  background: #fff;
-  border: 1px solid #c0c0c0;
+  background: var(--s2-gray-25);
+  border: 1px solid var(--s2-gray-100);
   border-radius: 8px;
   box-shadow: 0 6px 20px rgb(0 0 0 / 14%);
   max-height: 260px;
@@ -222,16 +222,16 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   border-radius: 0;
   text-align: left;
   font-size: 14px;
-  font-family: var(--body-font-family, sans-serif);
+  font-family: var(--s2-font-family, sans-serif);
   line-height: 1.4;
-  color: #222;
+  color: var(--s2-gray-800);
   cursor: pointer;
   box-sizing: border-box;
 }
 
 .site-dropdown-item:hover,
 .site-dropdown-item.is-active {
-  background: #f0f4ff;
+  background: var(--s2-gray-50);
   color: var(--pw-accent, #0265dc);
 }
 
@@ -252,10 +252,9 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 /* ---- Messages ---- */
 
 .message {
-  padding: var(--spacing-200) var(--spacing-300);
-  margin-bottom: var(--spacing-200);
-  border-radius: var(--s2-radius-100);
-  font-size: var(--s2-body-s-size);
+  padding: var(--s2-spacing-200) var(--s2-spacing-300);
+  margin-bottom: var(--s2-spacing-200);
+  border-radius: var(--s2-corner-radius-500);
   line-height: 1.5;
 }
 
@@ -277,7 +276,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 /* ---- Content area ---- */
 
 .da-content {
-  padding-top: var(--spacing-200);
+  padding-top: var(--s2-spacing-200);
 }
 
 /* ---- Context back bar (site view) ---- */
@@ -296,8 +295,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   border: none;
   padding: 0;
   color: var(--pw-accent);
-  font-size: var(--s2-body-s-size, 14px);
-  font-family: var(--body-font-family, sans-serif);
+  font-family: var(--s2-font-family, sans-serif);
   font-weight: 600;
   cursor: pointer;
 }
@@ -308,11 +306,9 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 
 .context-sep {
   color: var(--s2-gray-400);
-  font-size: var(--s2-body-s-size, 14px);
 }
 
 .context-site-label {
-  font-size: var(--s2-body-s-size, 14px);
   font-weight: 700;
   color: var(--s2-gray-800);
 }
@@ -322,26 +318,26 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 .slots-list {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-300);
+  gap: var(--s2-spacing-300);
 }
 
 /* ---- Permission slot (one per path) ---- */
 
 .perm-slot {
   border: 1px solid var(--s2-gray-200);
-  border-radius: var(--s2-radius-200);
+  border-radius: var(--s2-corner-radius-700);
   overflow: hidden;
 }
 
 .perm-slot-header {
-  padding: var(--spacing-200) var(--spacing-300);
+  padding: var(--s2-spacing-200) var(--s2-spacing-300);
   background: var(--s2-gray-75, #f8f8f8);
   border-bottom: 1px solid var(--s2-gray-200);
 }
 
 .slot-section-title {
-  margin: var(--spacing-500) 0 var(--spacing-150) 0;
-  font-size: var(--s2-body-l-size, 16px);
+  margin: var(--s2-spacing-500) 0 var(--s2-spacing-150) 0;
+  font-size: var(--s2-body-size-l, 16px);
   font-weight: 700;
   color: var(--s2-gray-800);
   letter-spacing: -0.01em;
@@ -352,15 +348,15 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 }
 
 .perm-slot-plain-label {
-  font-size: var(--s2-body-m-size, 14px);
+  font-size: var(--s2-body-size-m, 14px);
   font-weight: 600;
   color: var(--s2-gray-600);
 }
 
 .perm-slot-label {
   display: inline-block;
-  padding: var(--spacing-75) var(--spacing-200);
-  border-radius: var(--s2-radius-75);
+  padding: var(--s2-spacing-75) var(--s2-spacing-200);
+  border-radius: var(--s2-corner-radius-100);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -391,8 +387,8 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 .level-row {
   display: flex;
   align-items: flex-start;
-  gap: var(--spacing-300);
-  padding: var(--spacing-250, 10px) var(--spacing-300);
+  gap: var(--s2-spacing-300);
+  padding: 10px var(--s2-spacing-300);
   border-bottom: 1px solid var(--s2-gray-100);
 }
 
@@ -403,8 +399,8 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 .level-row-label {
   flex-shrink: 0;
   width: 44px;
-  padding: var(--spacing-75) var(--spacing-150);
-  border-radius: var(--s2-radius-75);
+  padding: var(--s2-spacing-75) var(--s2-spacing-150);
+  border-radius: var(--s2-corner-radius-100);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -431,14 +427,13 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 .level-row-members {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-100);
+  gap: var(--s2-spacing-100);
   align-items: center;
   flex: 1;
   min-width: 0;
 }
 
 .level-empty {
-  font-size: var(--s2-body-s-size);
   color: var(--s2-gray-400);
   font-style: italic;
 }
@@ -555,13 +550,13 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   display: inline-flex;
   align-items: center;
   height: 24px;
-  padding: 0 var(--spacing-200);
+  padding: 0 var(--s2-spacing-200);
   background: none;
   border: 1px dashed var(--s2-gray-300);
   border-radius: 20px;
   color: var(--s2-gray-500);
   font-size: 12px;
-  font-family: var(--body-font-family);
+  font-family: var(--s2-font-family);
   cursor: pointer;
   transition: border-color 0.1s, color 0.1s, background 0.1s;
   white-space: nowrap;
@@ -575,7 +570,6 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 .add-member-btn:hover:not(:disabled) {
   border-color: var(--pw-accent);
   color: var(--pw-accent);
-  background: var(--s2-blue-75, #f0f6ff);
 }
 
 .add-input-wrap {
@@ -598,13 +592,13 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   height: 26px;
   min-width: 220px;
   max-width: 320px;
-  padding: 0 28px 0 var(--spacing-200);
+  padding: 0 28px 0 var(--s2-spacing-200);
   border: 1px solid var(--pw-accent);
   border-radius: 20px;
   background: var(--s2-gray-75, #fff);
   color: var(--s2-gray-900);
   font-size: 12px;
-  font-family: var(--body-font-family);
+  font-family: var(--s2-font-family);
   outline: none;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--pw-accent) 20%, transparent);
 }
@@ -615,13 +609,12 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   display: flex;
   align-items: center;
   width: 100%;
-  padding: var(--spacing-300) var(--spacing-300);
+  padding: var(--s2-spacing-300) var(--s2-spacing-300);
   background: none;
   border: 1px dashed var(--s2-gray-300);
-  border-radius: var(--s2-radius-200);
+  border-radius: var(--s2-corner-radius-700);
   color: var(--s2-gray-500);
-  font-size: var(--s2-body-s-size);
-  font-family: var(--body-font-family);
+  font-family: var(--s2-font-family);
   cursor: pointer;
   transition: border-color 0.1s, color 0.1s, background 0.1s;
 }
@@ -629,27 +622,26 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 .add-scope-btn:hover {
   border-color: var(--pw-accent);
   color: var(--pw-accent);
-  background: var(--s2-blue-75, #f0f6ff);
+  background: var(--s2-blue-100);
 }
 
 /* ---- Folder browser ---- */
 
 .folder-browser {
   border: 1px solid var(--s2-gray-200);
-  border-radius: var(--s2-radius-200);
+  border-radius: var(--s2-corner-radius-700);
   overflow: hidden;
-  margin-top: var(--spacing-200);
+  margin-top: var(--s2-spacing-200);
 }
 
 .folder-browser-path {
   display: flex;
   align-items: center;
-  gap: var(--spacing-100);
-  padding: var(--spacing-100) var(--spacing-200);
+  gap: var(--s2-spacing-100);
+  padding: var(--s2-spacing-100) var(--s2-spacing-200);
   background: var(--s2-gray-75, #f8f8f8);
   border-bottom: 1px solid var(--s2-gray-200);
   min-height: 32px;
-  font-size: var(--s2-body-s-size);
 }
 
 .folder-path-label {
@@ -738,14 +730,13 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 .folder-item {
   display: flex;
   align-items: center;
-  gap: var(--spacing-100);
+  gap: var(--s2-spacing-100);
   width: 100%;
   padding: 6px 12px;
   background: none;
   border: none;
   cursor: pointer;
-  font-size: var(--s2-body-s-size);
-  font-family: var(--body-font-family);
+  font-family: var(--s2-font-family);
   color: var(--s2-gray-800);
   text-align: left;
   min-height: 32px;
@@ -784,17 +775,16 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 
 .folder-empty,
 .folder-loading-col {
-  padding: var(--spacing-200) var(--spacing-300);
+  padding: var(--s2-spacing-200) var(--s2-spacing-300);
   color: var(--s2-gray-500);
-  font-size: var(--s2-body-s-size);
   font-style: italic;
 }
 
 .folder-browser-actions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-200);
-  padding: var(--spacing-200) var(--spacing-300);
+  gap: var(--s2-spacing-200);
+  padding: var(--s2-spacing-200) var(--s2-spacing-300);
   border-top: 1px solid var(--s2-gray-200);
   background: var(--s2-gray-75, #f8f8f8);
 }
@@ -807,13 +797,13 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   align-items: flex-start;
   padding: 12px 14px;
   margin-bottom: 16px;
-  background: #edf5ff;
-  border: 1px solid #b0d0f8;
-  border-left: 3px solid #1473e6;
+  background: var(--s2-gray-50);
+  border: 1px solid var(--s2-blue-400);
+  border-left: 3px solid var(--s2-blue-800);
   border-radius: 8px;
   font-size: 13px;
   line-height: 1.5;
-  color: #222;
+  color: var(--s2-gray-900);
 }
 
 
@@ -829,7 +819,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   margin-bottom: 6px;
 }
 
-@media (width <= 900px) {
+@media (width <=900px) {
   .info-panel-sections {
     grid-template-columns: 1fr;
     gap: 12px 0;
@@ -842,7 +832,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #555;
+  color: var(--s2-gray-900);
   margin-bottom: 3px;
 }
 
@@ -874,7 +864,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 
 .info-panel-term dd {
   margin: 0;
-  color: #444;
+  color: var(--s2-gray-900);
 }
 
 .info-panel-note {
@@ -898,7 +888,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   background: none;
   border: none;
   cursor: pointer;
-  color: #888;
+  color: var(--s2-gray-900);
   font-size: 14px;
   padding: 2px 5px;
   border-radius: 4px;
@@ -908,15 +898,13 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 }
 
 .info-panel-close:hover {
-  background: rgb(0 0 0 / 8%);
-  color: #222;
+  color: var(--s2-gray-1000);
 }
 
 /* ---- Misc ---- */
 
 .empty-note {
   color: var(--s2-gray-500);
-  font-size: var(--s2-body-s-size);
   font-style: italic;
   margin: 0;
 }
