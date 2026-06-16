@@ -2280,6 +2280,14 @@ function hideSearchPathsMessage() {
   if (pathInput) pathInput.disabled = false;
 }
 
+function syncSearchPathsMessage() {
+  if (parseOrgSite()) {
+    hideSearchPathsMessage();
+  } else {
+    showSearchPathsMessage();
+  }
+}
+
 function triggerPathSuggestions() {
   const pathInput = document.getElementById('search-path-input');
   if (!pathInput) return;
@@ -3213,12 +3221,15 @@ function setupEventListeners() {
   const searchPathInput = document.getElementById('search-path-input');
   if (searchPathInput) {
     let folderTreeLoaded = false;
-    searchPathInput.addEventListener('focus', () => {
+    searchPathInput.addEventListener('focus', async () => {
       if (!folderTreeLoaded) {
-        folderTreeLoaded = true;
-        loadFolderTree().catch(() => {
+        try {
+          await loadFolderTree();
+          folderTreeLoaded = app.availablePaths.length > 0;
+        } catch (error) {
           // Silently fail, autocomplete just won't be available
-        });
+          folderTreeLoaded = false;
+        }
       }
     });
 
@@ -3498,8 +3509,7 @@ async function init() {
     renderPathTags();
     updatePathInfo();
 
-    // Show message for search paths since org/site won't be configured initially
-    showSearchPathsMessage();
+    syncSearchPathsMessage();
 
     // Show ready message
     showMessage('Content Replace is ready! Enter your org/site to get started.', 'success');
