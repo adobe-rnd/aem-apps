@@ -5,28 +5,12 @@
 :host {
   --pw-accent: var(--s2-blue-900);
   --pw-accent-hover: var(--s2-blue-1000);
-  /* nx2 token aliases: ensures correct rendering regardless of host page context */
-  --body-font-family: var(--s2-font-family, 'Adobe Clean', adobe-clean, 'Trebuchet MS', sans-serif);
-  --fixed-font-family: 'Roboto Mono', menlo, consolas, 'Liberation Mono', monospace;
-  --spacing-50: var(--s2-spacing-50, 2px);
-  --spacing-75: var(--s2-spacing-75, 4px);
-  --spacing-100: var(--s2-spacing-100, 8px);
-  --spacing-150: 10px;
-  --spacing-200: var(--s2-spacing-200, 12px);
-  --spacing-300: var(--s2-spacing-300, 16px);
-  --spacing-400: var(--s2-spacing-400, 24px);
-  --spacing-600: var(--s2-spacing-600, 40px);
-  --spacing-800: var(--s2-spacing-800, 64px);
-  --s2-radius-75: 4px;
-  --s2-radius-100: 8px;
-  --s2-radius-200: 10px;
-  --s2-radius-300: 16px;
 
   display: block;
   height: 100%;
   overflow: auto;
   -webkit-font-smoothing: antialiased;
-  font-family: var(--body-font-family);
+  font-family: var(--s2-font-family);
   color: var(--s2-gray-800);
 }
 
@@ -102,7 +86,7 @@ sl-button.pw-fill-negative::part(base):disabled {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-200);
+  gap: var(--s2-spacing-200);
   height: 100%;
   min-height: 200px;
   color: var(--s2-gray-700);
@@ -110,8 +94,8 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 /* ========== Messages ========== */
 .message {
-  padding: var(--spacing-200) var(--spacing-300);
-  margin-bottom: var(--spacing-200);
+  padding: var(--s2-spacing-200) var(--s2-spacing-300);
+  margin-bottom: var(--s2-spacing-200);
   border-radius: var(--s2-radius-100);
   font-size: var(--s2-body-s-size);
   line-height: 1.5;
@@ -139,11 +123,11 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 /* ========== Form Container ========== */
 .form-container {
-  padding: var(--spacing-400);
+  padding: var(--s2-spacing-400);
 }
 
 .form-header h3 {
-  margin: 0 0 var(--spacing-75) 0;
+  margin: 0 0 var(--s2-spacing-75) 0;
   font-size: var(--s2-heading-xs-size);
   font-weight: 700;
   color: var(--s2-gray-900);
@@ -152,7 +136,7 @@ sl-button.pw-fill-negative::part(base):disabled {
 .form-subtitle {
   color: var(--s2-gray-600);
   font-size: var(--s2-body-s-size);
-  margin: 0 0 var(--spacing-400) 0;
+  margin: 0 0 var(--s2-spacing-400) 0;
   line-height: 1.5;
 }
 
@@ -161,25 +145,25 @@ sl-button.pw-fill-negative::part(base):disabled {
   background: var(--s2-gray-50);
   border: 1px solid var(--s2-gray-200);
   border-radius: var(--s2-radius-200);
-  padding: var(--spacing-300) var(--spacing-400);
-  margin-bottom: var(--spacing-300);
+  padding: var(--s2-spacing-300) var(--s2-spacing-400);
+  margin-bottom: var(--s2-spacing-300);
 }
 
 .review-card-title {
-  margin: 0 0 var(--spacing-200) 0;
+  margin: 0 0 var(--s2-spacing-200) 0;
   font-size: var(--s2-body-m-size);
   font-weight: 700;
   color: var(--s2-gray-900);
 }
 
 .review-card-title.cc-title {
-  margin-top: var(--spacing-200);
-  padding-top: var(--spacing-200);
+  margin-top: var(--s2-spacing-200);
+  padding-top: var(--s2-spacing-200);
   border-top: 1px solid var(--s2-gray-200);
 }
 
 .review-card-body {
-  margin: 0 0 var(--spacing-200) 0;
+  margin: 0 0 var(--s2-spacing-200) 0;
   font-size: var(--s2-body-s-size);
   color: var(--s2-gray-700);
   line-height: 1.5;
@@ -196,8 +180,8 @@ sl-button.pw-fill-negative::part(base):disabled {
 .detail-row {
   display: flex;
   align-items: baseline;
-  gap: var(--spacing-200);
-  padding: var(--spacing-150) 0;
+  gap: var(--s2-spacing-200);
+  padding: 10px 0;
   border-bottom: 1px solid var(--s2-gray-200);
 }
 
@@ -226,10 +210,10 @@ sl-button.pw-fill-negative::part(base):disabled {
 }
 
 .detail-row dd code {
-  font-family: var(--fixed-font-family);
+  font-family: 'Roboto Mono', menlo, consolas, 'Liberation Mono', monospace;
   font-size: var(--s2-body-s-size);
   background: var(--s2-gray-100);
-  padding: var(--spacing-75) var(--spacing-200);
+  padding: var(--s2-spacing-75) var(--s2-spacing-200);
   border-radius: var(--s2-radius-75);
 }
 
@@ -237,8 +221,8 @@ sl-button.pw-fill-negative::part(base):disabled {
 .action-link {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-50);
-  padding: var(--spacing-75) var(--spacing-200);
+  gap: var(--s2-spacing-50);
+  padding: var(--s2-spacing-75) var(--s2-spacing-200);
   font-size: var(--s2-body-s-size);
   font-weight: 600;
   color: var(--pw-accent);
@@ -267,11 +251,11 @@ sl-button.pw-fill-negative::part(base):disabled {
 /* ========== SMART Checklist ========== */
 .smart-checklist {
   list-style: none;
-  margin: 0 0 var(--spacing-300) 0;
+  margin: 0 0 var(--s2-spacing-300) 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-75);
+  gap: var(--s2-spacing-75);
 }
 
 .smart-checklist li {
@@ -279,7 +263,7 @@ sl-button.pw-fill-negative::part(base):disabled {
   color: var(--s2-gray-700);
   display: flex;
   align-items: center;
-  gap: var(--spacing-100);
+  gap: var(--s2-spacing-100);
 }
 
 .smart-checklist li strong {
@@ -305,19 +289,19 @@ sl-button.pw-fill-negative::part(base):disabled {
   color: var(--s2-gray-800);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-75);
+  gap: var(--s2-spacing-75);
 }
 
 /* ========== Form Elements ========== */
 .form-group {
-  margin-bottom: var(--spacing-300);
+  margin-bottom: var(--s2-spacing-300);
 }
 
 .form-group label {
   display: block;
   font-size: var(--s2-body-s-size);
   font-weight: 600;
-  margin-bottom: var(--spacing-75);
+  margin-bottom: var(--s2-spacing-75);
   color: var(--s2-gray-800);
 }
 
@@ -328,7 +312,7 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 .form-group .field-hint {
   display: block;
-  margin-top: var(--spacing-75);
+  margin-top: var(--s2-spacing-75);
   font-size: var(--s2-body-s-size);
   color: var(--s2-gray-700);
 }
@@ -336,13 +320,13 @@ sl-button.pw-fill-negative::part(base):disabled {
 .form-actions {
   display: flex;
   justify-content: flex-start;
-  margin-top: var(--spacing-400);
+  margin-top: var(--s2-spacing-400);
 }
 
 /* ========== Status Pages (submitted, withdrawn, existing request) ========== */
 .status-page {
   text-align: center;
-  padding: var(--spacing-400);
+  padding: var(--s2-spacing-400);
 }
 
 .status-icon {
@@ -352,7 +336,7 @@ sl-button.pw-fill-negative::part(base):disabled {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  margin-bottom: var(--spacing-300);
+  margin-bottom: var(--s2-spacing-300);
 }
 
 .status-icon svg {
@@ -376,7 +360,7 @@ sl-button.pw-fill-negative::part(base):disabled {
 }
 
 .status-heading {
-  margin: 0 0 var(--spacing-100) 0;
+  margin: 0 0 var(--s2-spacing-100) 0;
   font-size: var(--s2-heading-xs-size);
   font-weight: 700;
   color: var(--s2-gray-900);
@@ -387,7 +371,7 @@ sl-button.pw-fill-negative::part(base):disabled {
 }
 
 .status-body {
-  margin: 0 0 var(--spacing-400) 0;
+  margin: 0 0 var(--s2-spacing-400) 0;
   font-size: var(--s2-body-s-size);
   color: var(--s2-gray-700);
   line-height: 1.5;
@@ -400,12 +384,12 @@ sl-button.pw-fill-negative::part(base):disabled {
 .status-actions {
   display: flex;
   justify-content: center;
-  gap: var(--spacing-200);
-  margin-bottom: var(--spacing-300);
+  gap: var(--s2-spacing-200);
+  margin-bottom: var(--s2-spacing-300);
 }
 
 .status-note {
-  margin: var(--spacing-200) 0 0;
+  margin: var(--s2-spacing-200) 0 0;
   font-size: var(--s2-body-s-size);
   color: var(--s2-gray-700);
   line-height: 1.5;
