@@ -277,7 +277,7 @@ sl-button.pw-fill-negative::part(base):disabled {
   color: var(--s2-gray-800);
   display: flex;
   flex-direction: column;
-  gap: var(--s2-spacing-75);
+  gap: var(--s2-spacing-100);
 }
 
 .approvers-list li code {
