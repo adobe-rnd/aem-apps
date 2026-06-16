@@ -1,9 +1,9 @@
-# Your Project's Title...
-Your project's description...
+# AEM Apps
+A collection of Adobe owned apps for Experience Workspace & Document Authoring.
 
 ## Environments
-- Preview: https://main--{repo}--{owner}.aem.page/
-- Live: https://main--{repo}--{owner}.aem.live/
+- Preview: https://main--aem-apps--adobe-rnd.aem.page/
+- Live: https://main--aem-apps--adobe-rnd.aem.live/
 
 ## Documentation
 
