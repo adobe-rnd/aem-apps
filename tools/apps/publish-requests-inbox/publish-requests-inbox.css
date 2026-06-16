@@ -86,7 +86,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
 
 .loading-label {
   margin: 0;
-  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
 }
 
@@ -176,7 +175,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
   padding: var(--s2-spacing-200) var(--s2-spacing-300);
   margin-bottom: var(--s2-spacing-200);
   border-radius: var(--s2-corner-radius-500);
-  font-size: var(--s2-body-size-s);
   line-height: 1.5;
 }
 
@@ -254,7 +252,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
 
 .status-body {
   margin: 0 0 var(--s2-spacing-400) 0;
-  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
   line-height: 1.5;
 }
@@ -287,7 +284,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
 .review-subtitle {
   margin: 0;
   color: var(--s2-gray-600);
-  font-size: var(--s2-body-size-s);
   line-height: 1.5;
 }
 
@@ -309,7 +305,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
 
 .review-card-body {
   margin: 0 0 var(--s2-spacing-200) 0;
-  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
   line-height: 1.5;
 }
@@ -342,28 +337,24 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
 .detail-row dt {
   flex-shrink: 0;
   width: 120px;
-  font-size: var(--s2-body-size-s);
   font-weight: 600;
   color: var(--s2-gray-600);
 }
 
 .detail-row dd {
   margin: 0;
-  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-900);
   word-break: break-all;
 }
 
 .detail-row dd code {
   font-family: 'Roboto Mono', menlo, consolas, 'Liberation Mono', monospace;
-  font-size: var(--s2-body-size-s);
   background: var(--s2-gray-100);
   padding: var(--s2-spacing-75) var(--s2-spacing-200);
   border-radius: var(--s2-corner-radius-100);
 }
 
 .detail-comment {
-  font-size: var(--s2-body-size-s);
   font-style: italic;
   background: var(--s2-gray-100);
   padding: var(--s2-spacing-75) var(--s2-spacing-200);
@@ -382,7 +373,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
 }
 
 .smart-checklist li {
-  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
   display: flex;
   align-items: center;
@@ -415,7 +405,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
   gap: var(--s2-spacing-100);
   padding: var(--s2-spacing-200);
   margin-bottom: var(--s2-spacing-300);
-  font-size: var(--s2-body-size-s);
   color: var(--s2-orange-900);
   background: var(--s2-orange-100);
   border-radius: var(--s2-corner-radius-500);
@@ -431,7 +420,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
 }
 
 .reviewer-info {
-  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
   margin: 0 0 var(--s2-spacing-300) 0;
 }
@@ -452,7 +440,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
 
 .form-group label {
   display: block;
-  font-size: var(--s2-body-size-s);
   font-weight: 600;
   margin-bottom: var(--s2-spacing-75);
   color: var(--s2-gray-800);
@@ -465,7 +452,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
 /* ========== Small action button ========== */
 .pw-action-sm::part(base) {
   padding: var(--s2-spacing-75) var(--s2-spacing-200);
-  font-size: var(--s2-body-size-s);
 }
 
 /* ========== Reject Section ========== */
@@ -480,7 +466,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
   align-items: center;
   gap: var(--s2-spacing-75);
   cursor: pointer;
-  font-size: var(--s2-body-size-s);
   font-weight: 600;
   color: var(--s2-gray-700);
   padding: var(--s2-spacing-75) 0;
@@ -528,7 +513,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
   gap: var(--s2-spacing-75);
   color: var(--s2-gray-700);
   text-decoration: none;
-  font-size: var(--s2-body-size-s);
   font-weight: 600;
   margin-bottom: var(--s2-spacing-300);
   padding: var(--s2-spacing-75) var(--s2-spacing-100);
@@ -575,7 +559,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
 
 .inbox-subtitle {
   margin: 0;
-  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
 }
 
@@ -589,7 +572,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
   border: 1px solid var(--s2-gray-300);
   padding: var(--s2-spacing-75) var(--s2-spacing-200);
   border-radius: var(--s2-corner-radius-800);
-  font-size: var(--s2-body-size-s);
   font-weight: 700;
   white-space: nowrap;
   margin-top: var(--s2-spacing-75);
@@ -653,7 +635,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
   flex: 1;
   min-width: 0;
   font-weight: 700;
-  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-800);
   word-break: break-all;
 }
@@ -672,7 +653,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
   align-items: center;
   gap: var(--s2-spacing-50);
   padding: var(--s2-spacing-75) var(--s2-spacing-200);
-  font-size: var(--s2-body-size-s);
   font-weight: 600;
   color: var(--pw-accent);
   text-decoration: none;
@@ -708,7 +688,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
 .inbox-item-detail-row {
   display: flex;
   gap: var(--s2-spacing-200);
-  font-size: var(--s2-body-size-s);
   line-height: 1.5;
 }
 
@@ -724,7 +703,6 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
 }
 
 .status-badge {
-  font-size: var(--s2-body-size-s);
   font-weight: 700;
   color: var(--s2-gray-700);
 }
@@ -746,5 +724,4 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
 .inbox-empty p {
   margin: 0;
   color: var(--s2-gray-700);
-  font-size: var(--s2-body-size-s);
 }

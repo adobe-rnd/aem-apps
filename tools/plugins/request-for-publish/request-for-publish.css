@@ -71,7 +71,6 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 .loading-label {
   margin: 0;
-  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
 }
 
@@ -97,7 +96,6 @@ sl-button.pw-fill-negative::part(base):disabled {
   padding: var(--s2-spacing-200) var(--s2-spacing-300);
   margin-bottom: var(--s2-spacing-200);
   border-radius: var(--s2-corner-radius-500);
-  font-size: var(--s2-body-size-s);
   line-height: 1.5;
 }
 
@@ -135,7 +133,6 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 .form-subtitle {
   color: var(--s2-gray-600);
-  font-size: var(--s2-body-size-s);
   margin: 0 0 var(--s2-spacing-400) 0;
   line-height: 1.5;
 }
@@ -164,7 +161,6 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 .review-card-body {
   margin: 0 0 var(--s2-spacing-200) 0;
-  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
   line-height: 1.5;
 }
@@ -197,21 +193,18 @@ sl-button.pw-fill-negative::part(base):disabled {
 .detail-row dt {
   flex-shrink: 0;
   width: 100px;
-  font-size: var(--s2-body-size-s);
   font-weight: 600;
   color: var(--s2-gray-600);
 }
 
 .detail-row dd {
   margin: 0;
-  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-900);
   word-break: break-all;
 }
 
 .detail-row dd code {
   font-family: 'Roboto Mono', menlo, consolas, 'Liberation Mono', monospace;
-  font-size: var(--s2-body-size-s);
   background: var(--s2-gray-100);
   padding: var(--s2-spacing-75) var(--s2-spacing-200);
   border-radius: var(--s2-corner-radius-100);
@@ -223,7 +216,6 @@ sl-button.pw-fill-negative::part(base):disabled {
   align-items: center;
   gap: var(--s2-spacing-50);
   padding: var(--s2-spacing-75) var(--s2-spacing-200);
-  font-size: var(--s2-body-size-s);
   font-weight: 600;
   color: var(--pw-accent);
   text-decoration: none;
@@ -259,7 +251,6 @@ sl-button.pw-fill-negative::part(base):disabled {
 }
 
 .smart-checklist li {
-  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
   display: flex;
   align-items: center;
@@ -285,7 +276,6 @@ sl-button.pw-fill-negative::part(base):disabled {
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-800);
   display: flex;
   flex-direction: column;
@@ -299,7 +289,6 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 .form-group label {
   display: block;
-  font-size: var(--s2-body-size-s);
   font-weight: 600;
   margin-bottom: var(--s2-spacing-75);
   color: var(--s2-gray-800);
@@ -313,7 +302,6 @@ sl-button.pw-fill-negative::part(base):disabled {
 .form-group .field-hint {
   display: block;
   margin-top: var(--s2-spacing-75);
-  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
 }
 
@@ -372,7 +360,6 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 .status-body {
   margin: 0 0 var(--s2-spacing-400) 0;
-  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
   line-height: 1.5;
 }
@@ -390,7 +377,6 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 .status-note {
   margin: var(--s2-spacing-200) 0 0;
-  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
   line-height: 1.5;
 }
