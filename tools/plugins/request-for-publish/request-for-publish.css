@@ -5,6 +5,18 @@
 :host {
   --pw-accent: var(--s2-blue-900);
   --pw-accent-hover: var(--s2-blue-1000);
+  /* nx2 token aliases: ensures correct rendering regardless of host page context */
+  --body-font-family: var(--s2-font-family, 'Adobe Clean', adobe-clean, 'Trebuchet MS', sans-serif);
+  --fixed-font-family: 'Roboto Mono', menlo, consolas, 'Liberation Mono', monospace;
+  --spacing-50: var(--s2-spacing-50, 2px);
+  --spacing-75: var(--s2-spacing-75, 4px);
+  --spacing-100: var(--s2-spacing-100, 8px);
+  --spacing-150: 10px;
+  --spacing-200: var(--s2-spacing-200, 12px);
+  --spacing-300: var(--s2-spacing-300, 16px);
+  --spacing-400: var(--s2-spacing-400, 24px);
+  --spacing-600: var(--s2-spacing-600, 40px);
+  --spacing-800: var(--s2-spacing-800, 64px);
 
   display: block;
   height: 100%;
