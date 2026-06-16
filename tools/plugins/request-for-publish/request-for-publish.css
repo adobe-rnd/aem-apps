@@ -17,6 +17,10 @@
   --spacing-400: var(--s2-spacing-400, 24px);
   --spacing-600: var(--s2-spacing-600, 40px);
   --spacing-800: var(--s2-spacing-800, 64px);
+  --s2-radius-75: 4px;
+  --s2-radius-100: 8px;
+  --s2-radius-200: 10px;
+  --s2-radius-300: 16px;
 
   display: block;
   height: 100%;

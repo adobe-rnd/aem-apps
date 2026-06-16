@@ -15,6 +15,10 @@
   --spacing-600: var(--s2-spacing-600, 40px);
   --spacing-800: var(--s2-spacing-800, 64px);
   --grid-container-width: var(--se-grid-container-width, 83.4%);
+  --s2-radius-75: 4px;
+  --s2-radius-100: 8px;
+  --s2-radius-200: 10px;
+  --s2-radius-300: 16px;
 
   display: block;
   max-width: var(--grid-container-width);
