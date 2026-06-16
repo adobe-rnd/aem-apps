@@ -13,27 +13,26 @@ import {
 } from './utils.js';
 
 // Super Lite (sl-*) — Spectrum-aligned controls for DA; pairs with S2 tokens in CSS.
-// NX style pipeline matches other da.live shell apps: nexter.js loadStyle + getStyle.
-const NX = 'https://da.live/nx';
+// NX style pipeline matches other da.live shell apps: nx.js loadStyle + getStyle.
+const NX = 'https://da.live/nx2';
 let nexter = null;
 let sl = null;
 let styles = null;
-let buttons = null;
 try {
-  const [{ default: getStyle }, { loadStyle }] = await Promise.all([
-    import(`${NX}/utils/styles.js`),
-    import(`${NX}/scripts/nexter.js`),
+  const [{ default: getStyle }, { loadStyle, getColorScheme }] = await Promise.all([
+    import(`${NX}/public/utils/styles.js`),
+    import(`${NX}/scripts/nx.js`),
   ]);
+  document.documentElement.style.colorScheme = getColorScheme() === 'dark-scheme' ? 'dark' : 'light';
   await Promise.all([
-    loadStyle(`${NX}/styles/nexter.css`),
+    loadStyle(`${NX}/styles/styles.css`),
     loadStyle(`${NX}/public/sl/styles.css`),
   ]);
   await import(`${NX}/public/sl/components.js`);
-  [nexter, sl, styles, buttons] = await Promise.all([
-    getStyle(`${NX}/styles/nexter.css`),
+  [nexter, sl, styles] = await Promise.all([
+    getStyle(`${NX}/styles/styles.css`),
     getStyle(`${NX}/public/sl/styles.css`),
     getStyle(import.meta.url),
-    getStyle(`${NX}/styles/buttons.css`),
   ]);
 } catch (e) {
   console.warn('Failed to load styles:', e);
@@ -84,12 +83,13 @@ class RequestForPublishPlugin extends LitElement {
     this._withdrawn = false;
     this._commentsRequired = false;
     this._commentsMinLength = 10;
+    this._supportContact = '';
     this._submitPhase = '';
   }
 
   connectedCallback() {
     super.connectedCallback();
-    this.shadowRoot.adoptedStyleSheets = [nexter, sl, buttons, styles].filter(Boolean);
+    this.shadowRoot.adoptedStyleSheets = [nexter, sl, styles].filter(Boolean);
     this.init();
   }
 
@@ -137,6 +137,7 @@ class RequestForPublishPlugin extends LitElement {
     this._approversSource = result.source || 'unknown';
     this._commentsRequired = result.commentsRequired || false;
     this._commentsMinLength = result.commentsMinLength ?? 10;
+    this._supportContact = result.supportContact || '';
 
     if (result.accentColor) {
       this.style.setProperty('--pw-accent', result.accentColor);
@@ -333,7 +334,7 @@ class RequestForPublishPlugin extends LitElement {
           </sl-button>
         </div>
 
-        <p class="status-note">If your content owner is away please contact <a href="mailto:digiops@westernsydney.edu.au">digiops@westernsydney.edu.au</a> for assistance with content approvals.</p>
+        ${this._supportContact ? html`<p class="status-note">If your content owner is away, contact <a href="mailto:${this._supportContact}">${this._supportContact}</a> for assistance with content approvals.</p>` : nothing}
       </div>
     `;
   }
@@ -365,7 +366,7 @@ class RequestForPublishPlugin extends LitElement {
             ${this._approvers.map((approver) => html`<li><code>${approver}</code></li>`)}
           </ul>
           ${this._cc.length > 0 ? html`
-            <h4 class="review-card-title cc-title">CC'd</h4>
+            <p class="review-card-title cc-title">CC'd</p>
             <ul class="approvers-list">
               ${this._cc.map((email) => html`<li><code>${email}</code></li>`)}
             </ul>
@@ -388,7 +389,6 @@ class RequestForPublishPlugin extends LitElement {
     return html`
       <div class="form-container">
         <header class="form-header">
-          <h3>Request Publish</h3>
           <p class="form-subtitle">Submit this website update for approval</p>
         </header>
 
@@ -419,11 +419,11 @@ class RequestForPublishPlugin extends LitElement {
           <h4 class="review-card-title">Content Changes</h4>
           <p class="review-card-body">Before submitting, please proofread and review your edits. Have you been SMART?</p>
           <ul class="smart-checklist">
-            <li><strong>S</strong> Streamline Site Structure</li>
-            <li><strong>M</strong> Metadata for SEO</li>
-            <li><strong>A</strong> Accessibility compliant</li>
-            <li><strong>R</strong> Redirects requested</li>
-            <li><strong>T</strong> Tested all links</li>
+            <li><span aria-hidden="true">S</span> Streamline Site Structure</li>
+            <li><span aria-hidden="true">M</span> Metadata for SEO</li>
+            <li><span aria-hidden="true">A</span> Accessibility compliant</li>
+            <li><span aria-hidden="true">R</span> Redirects requested</li>
+            <li><span aria-hidden="true">T</span> Tested all links</li>
           </ul>
           <a href="${this.diffUrl}" target="_blank" rel="noopener" class="action-link">
             <svg class="action-icon" viewBox="0 0 18 18"><path d="M16.5 1h-15A1.5 1.5 0 0 0 0 2.5v13A1.5 1.5 0 0 0 1.5 17h15a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 16.5 1ZM9 16H1.5a.5.5 0 0 1-.5-.5V3h8v13Zm8-.5a.5.5 0 0 1-.5.5H10V3h7v12.5Z"/></svg>
@@ -437,7 +437,7 @@ class RequestForPublishPlugin extends LitElement {
             ${this._approvers.map((approver) => html`<li><code>${approver}</code></li>`)}
           </ul>
           ${this._cc.length > 0 ? html`
-            <h4 class="review-card-title cc-title">CC</h4>
+            <p class="review-card-title cc-title">CC</p>
             <ul class="approvers-list">
               ${this._cc.map((email) => html`<li><code>${email}</code></li>`)}
             </ul>
