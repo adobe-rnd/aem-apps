@@ -5,10 +5,6 @@
 :host {
   --pw-accent: var(--s2-blue-900);
   --pw-accent-hover: var(--s2-blue-1000);
-  --s2-radius-75: 4px;
-  --s2-radius-100: 8px;
-  --s2-radius-200: 10px;
-  --s2-radius-300: 16px;
 
   display: block;
   height: 100%;
@@ -75,7 +71,7 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 .loading-label {
   margin: 0;
-  font-size: var(--s2-body-s-size);
+  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
 }
 
@@ -100,8 +96,8 @@ sl-button.pw-fill-negative::part(base):disabled {
 .message {
   padding: var(--s2-spacing-200) var(--s2-spacing-300);
   margin-bottom: var(--s2-spacing-200);
-  border-radius: var(--s2-radius-100);
-  font-size: var(--s2-body-s-size);
+  border-radius: var(--s2-corner-radius-500);
+  font-size: var(--s2-body-size-s);
   line-height: 1.5;
 }
 
@@ -132,14 +128,14 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 .form-header h3 {
   margin: 0 0 var(--s2-spacing-75) 0;
-  font-size: var(--s2-heading-xs-size);
+  font-size: var(--s2-heading-size-xs);
   font-weight: 700;
   color: var(--s2-gray-900);
 }
 
 .form-subtitle {
   color: var(--s2-gray-600);
-  font-size: var(--s2-body-s-size);
+  font-size: var(--s2-body-size-s);
   margin: 0 0 var(--s2-spacing-400) 0;
   line-height: 1.5;
 }
@@ -148,14 +144,14 @@ sl-button.pw-fill-negative::part(base):disabled {
 .review-card {
   background: var(--s2-gray-50);
   border: 1px solid var(--s2-gray-200);
-  border-radius: var(--s2-radius-200);
+  border-radius: var(--s2-corner-radius-700);
   padding: var(--s2-spacing-300) var(--s2-spacing-400);
   margin-bottom: var(--s2-spacing-300);
 }
 
 .review-card-title {
   margin: 0 0 var(--s2-spacing-200) 0;
-  font-size: var(--s2-body-m-size);
+  font-size: var(--s2-body-size-m);
   font-weight: 700;
   color: var(--s2-gray-900);
 }
@@ -168,7 +164,7 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 .review-card-body {
   margin: 0 0 var(--s2-spacing-200) 0;
-  font-size: var(--s2-body-s-size);
+  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
   line-height: 1.5;
 }
@@ -201,24 +197,24 @@ sl-button.pw-fill-negative::part(base):disabled {
 .detail-row dt {
   flex-shrink: 0;
   width: 100px;
-  font-size: var(--s2-body-s-size);
+  font-size: var(--s2-body-size-s);
   font-weight: 600;
   color: var(--s2-gray-600);
 }
 
 .detail-row dd {
   margin: 0;
-  font-size: var(--s2-body-s-size);
+  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-900);
   word-break: break-all;
 }
 
 .detail-row dd code {
   font-family: 'Roboto Mono', menlo, consolas, 'Liberation Mono', monospace;
-  font-size: var(--s2-body-s-size);
+  font-size: var(--s2-body-size-s);
   background: var(--s2-gray-100);
   padding: var(--s2-spacing-75) var(--s2-spacing-200);
-  border-radius: var(--s2-radius-75);
+  border-radius: var(--s2-corner-radius-100);
 }
 
 /* ========== Action Links ========== */
@@ -227,11 +223,11 @@ sl-button.pw-fill-negative::part(base):disabled {
   align-items: center;
   gap: var(--s2-spacing-50);
   padding: var(--s2-spacing-75) var(--s2-spacing-200);
-  font-size: var(--s2-body-s-size);
+  font-size: var(--s2-body-size-s);
   font-weight: 600;
   color: var(--pw-accent);
   text-decoration: none;
-  border-radius: var(--s2-radius-100);
+  border-radius: var(--s2-corner-radius-500);
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -263,7 +259,7 @@ sl-button.pw-fill-negative::part(base):disabled {
 }
 
 .smart-checklist li {
-  font-size: var(--s2-body-s-size);
+  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
   display: flex;
   align-items: center;
@@ -276,7 +272,7 @@ sl-button.pw-fill-negative::part(base):disabled {
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: var(--s2-radius-75);
+  border-radius: var(--s2-corner-radius-100);
   background: var(--s2-gray-200);
   color: var(--s2-gray-800);
   font-size: 11px;
@@ -289,7 +285,7 @@ sl-button.pw-fill-negative::part(base):disabled {
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: var(--s2-body-s-size);
+  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-800);
   display: flex;
   flex-direction: column;
@@ -303,7 +299,7 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 .form-group label {
   display: block;
-  font-size: var(--s2-body-s-size);
+  font-size: var(--s2-body-size-s);
   font-weight: 600;
   margin-bottom: var(--s2-spacing-75);
   color: var(--s2-gray-800);
@@ -317,7 +313,7 @@ sl-button.pw-fill-negative::part(base):disabled {
 .form-group .field-hint {
   display: block;
   margin-top: var(--s2-spacing-75);
-  font-size: var(--s2-body-s-size);
+  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
 }
 
@@ -365,7 +361,7 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 .status-heading {
   margin: 0 0 var(--s2-spacing-100) 0;
-  font-size: var(--s2-heading-xs-size);
+  font-size: var(--s2-heading-size-xs);
   font-weight: 700;
   color: var(--s2-gray-900);
 }
@@ -376,7 +372,7 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 .status-body {
   margin: 0 0 var(--s2-spacing-400) 0;
-  font-size: var(--s2-body-s-size);
+  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
   line-height: 1.5;
 }
@@ -394,7 +390,7 @@ sl-button.pw-fill-negative::part(base):disabled {
 
 .status-note {
   margin: var(--s2-spacing-200) 0 0;
-  font-size: var(--s2-body-s-size);
+  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-700);
   line-height: 1.5;
 }
