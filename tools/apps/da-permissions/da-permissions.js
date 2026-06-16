@@ -9,26 +9,25 @@ import {
 } from './api.js';
 import { icon } from './icons.js';
 
-const NX = 'https://da.live/nx';
+const NX = 'https://da.live/nx2';
 let nexter = null;
 let sl = null;
 let styles = null;
-let buttons = null;
 try {
-  const [{ default: getStyle }, { loadStyle }] = await Promise.all([
-    import(`${NX}/utils/styles.js`),
-    import(`${NX}/scripts/nexter.js`),
+  const [{ default: getStyle }, { loadStyle, getColorScheme }] = await Promise.all([
+    import(`${NX}/public/utils/styles.js`),
+    import(`${NX}/scripts/nx.js`),
   ]);
+  document.documentElement.style.colorScheme = getColorScheme() === 'dark-scheme' ? 'dark' : 'light';
   await Promise.all([
-    loadStyle(`${NX}/styles/nexter.css`),
+    loadStyle(`${NX}/styles/styles.css`),
     loadStyle(`${NX}/public/sl/styles.css`),
   ]);
   await import(`${NX}/public/sl/components.js`);
-  [nexter, sl, styles, buttons] = await Promise.all([
-    getStyle(`${NX}/styles/nexter.css`),
+  [nexter, sl, styles] = await Promise.all([
+    getStyle(`${NX}/styles/styles.css`),
     getStyle(`${NX}/public/sl/styles.css`),
     getStyle(import.meta.url),
-    getStyle(`${NX}/styles/buttons.css`),
   ]);
 } catch (e) {
   console.warn('Failed to load styles:', e);
@@ -107,7 +106,7 @@ class DaPermissionsApp extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.shadowRoot.adoptedStyleSheets = [nexter, sl, buttons, styles].filter(Boolean);
+    this.shadowRoot.adoptedStyleSheets = [nexter, sl, styles].filter(Boolean);
 
     this._state = 'idle';
     this._org = '';
