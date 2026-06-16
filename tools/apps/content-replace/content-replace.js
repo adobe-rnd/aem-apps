@@ -1097,6 +1097,13 @@ async function scanFiles() {
       return;
     }
 
+    if (!app.token) {
+      showMessage('DA authentication is required to crawl content. Open the app from DA so the SDK can provide a token.', 'error');
+      syncSearchPathsMessage();
+      updateProgress(0, '');
+      return;
+    }
+
     // JSON branch: enumerate files and scan JSON content with concurrency
     if (findJsonFiles) {
       const basePaths = app.searchPaths.length > 0 ? app.searchPaths : [''];
@@ -2262,14 +2269,19 @@ function hideSearchPathsLoader() {
   if (pathInput) pathInput.disabled = false;
 }
 
-function showSearchPathsMessage() {
+function showSearchPathsMessage(
+  text = 'Enter org and site first to browse folders',
+  disablePathInput = true,
+) {
   const loader = document.getElementById('search-paths-loader');
   const message = document.getElementById('search-paths-message');
   const pathInput = document.getElementById('search-path-input');
+  const messageText = message?.querySelector('.message-text');
 
   if (loader) loader.style.display = 'none';
   if (message) message.style.display = 'flex';
-  if (pathInput) pathInput.disabled = true;
+  if (messageText) messageText.textContent = text;
+  if (pathInput) pathInput.disabled = disablePathInput;
 }
 
 function hideSearchPathsMessage() {
@@ -2304,15 +2316,15 @@ async function loadFolderTree() {
   try {
     const { token } = app;
     if (!token) {
-      showSearchPathsMessage();
-      return;
+      showSearchPathsMessage('DA authentication is required to browse folders', false);
+      return false;
     }
 
     // Use user's org/site configuration instead of DA context
     const orgSite = parseOrgSite();
     if (!orgSite) {
       showSearchPathsMessage();
-      return;
+      return false;
     }
 
     // Show loader while loading
@@ -2360,10 +2372,12 @@ async function loadFolderTree() {
 
     // Automatically show suggestions after loading completes
     triggerPathSuggestions();
+    return true;
   } catch (error) {
     hideSearchPathsLoader();
     showMessage('Could not load folder structure for autocomplete', 'error');
     app.availablePaths = [];
+    return false;
   }
 }
 
@@ -3224,8 +3238,7 @@ function setupEventListeners() {
     searchPathInput.addEventListener('focus', async () => {
       if (!folderTreeLoaded) {
         try {
-          await loadFolderTree();
-          folderTreeLoaded = app.availablePaths.length > 0;
+          folderTreeLoaded = await loadFolderTree();
         } catch (error) {
           // Silently fail, autocomplete just won't be available
           folderTreeLoaded = false;
@@ -3516,7 +3529,8 @@ async function init() {
 
     // Folder tree will be loaded on-demand when user focuses on base path field
   } catch (error) {
-    showMessage('Failed to initialize app', 'error');
+    syncSearchPathsMessage();
+    showMessage('Content Replace is running without DA authentication. Open it from DA to crawl or modify content.', 'warning');
   }
 }
 
