@@ -198,6 +198,7 @@ Conclusion: **MCP for the verbs, skill for the conversation.** The skill does re
 ## 10. Phasing
 
 - **Phase 1 — POC (zero da-agent changes):** `/mcp` on `publish-requests-worker` (Streamable HTTP) with **service auth + relaxed checks**; the 6 tools (read-only three + `request_publish` first, then `approve_request`); `request-publish` skill (verbal-confirm) + agent preset; registered in a **test site** against **prod `agent.da.live`**; test approver emails. **No per-user authz, no approval card** (mitigated per §7b).
+- **Phase 1.5 — Service identity (fast-follow):** replace the pasted user token with a **technical-account** token minted from the Adobe Developer Console *Edge Delivery Services* OAuth Server-to-Server credential (`aem.frontend.all` scope), via a `getServiceToken` seam. The technical account is granted write access on the test site. Removes the ~24h re-paste; still no per-user identity (that's Phase 2).
 - **Phase 2 — Hardening (the hard gate). Three deliverables:**
   1. **Add back IMS-token forwarding** — move the MCP server to a more official home on a trusted Adobe domain (**aem-agentic-plugins**), so prod da-agent forwards the user token; restore the worker `client_id` allow-list and revert the POC relaxations.
   2. **Restore per-user authorization** — enforce "may this person approve" using the forwarded identity.
