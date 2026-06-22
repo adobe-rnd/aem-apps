@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Anchor Links</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="https://da.live/nx2/styles/styles.css">
+    <link rel="stylesheet" href="/tools/plugins/anchor-links/anchor-links.css">
+    <script src="https://da.live/nx/utils/sdk.js" type="module"></script>
+    <script src="/tools/plugins/anchor-links/anchor-links.js" type="module"></script>
+  </head>
+  <body>
+    <div id="anchor-links-app">
+      <div id="status-message" class="status-message" role="status" aria-live="polite"></div>
+
+      <div id="main-content" class="main-content" hidden>
+        <div id="headings-list" class="headings-list" role="group" aria-label="Available headings"></div>
+        <div class="action-bar">
+          <button id="create-links" type="button" class="btn btn-primary" disabled>Create Anchor Links</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
