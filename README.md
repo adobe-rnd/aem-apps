@@ -1,5 +1,5 @@
 # AEM Apps
-A collection of Adobe owned apps for Experience Workspace & Document Authoring.
+A collection of Adobe owned apps & plugins for Experience Workspace & Document Authoring.
 
 ## Environments
 - Preview: https://main--aem-apps--adobe-rnd.aem.page/
