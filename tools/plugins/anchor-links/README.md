@@ -1,6 +1,6 @@
 # Anchor Links Plugin
 
-A DA sidekick plugin for generating anchor links to headings on your page. Useful for building tables of contents, FAQ navigation, and quick-reference sections.
+An EW plugin for generating anchor links to headings on your page. Useful for building tables of contents, FAQ navigation, and quick-reference sections.
 
 ## How to Use
 
