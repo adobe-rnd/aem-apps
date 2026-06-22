@@ -5,6 +5,21 @@ A collection of Adobe owned apps & plugins for Experience Workspace & Document A
 - Preview: https://main--aem-apps--adobe-rnd.aem.page/
 - Live: https://main--aem-apps--adobe-rnd.aem.live/
 
+## Apps & Plugins
+
+| App | Path | Entry point | Description | Type |
+|-----------|------|-------------|-------------|-------------|
+| **DA Permissions** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/da-permissions/da-permissions | `tools/apps/da-permissions` | Manage DA Permissions and configuration access  | App |
+| **MSM** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/msm/msm | `tools/apps/msm` `tools/plugins/msm` | Manage multi-site manager for your org/site  | App & Plugin |
+| **Request Publish** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-request-inbox | `tools/apps/publish-reqquest-inbox` `tools/plugins/publish-reqquest-inbox` | Manage request publish approvals, etc  | App & Plugin |
+| **Anchor Links** |https://main--aem-apps--adobe-rnd--aem.page/tools/plugins/anchor-links/anchor-links.html | `tools/plugins/anchor-links` | Lightweight plugin to create anchor links  | Plugin |
+
+## Developing
+
+- All apps and plugins must work with EW and [nx2](https://github.com/adobe/da-nx/tree/main/nx2).
+- When adding a new app or plugin, add it to the table above.
+- When adding an app, add it to https://da.live/apps#/adobe-rnd/aem-apps
+
 ## Installation
 
 ```sh
