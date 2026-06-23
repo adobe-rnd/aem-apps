@@ -214,11 +214,7 @@ class RequestForPublishPlugin extends LitElement {
 
     if (result.success) {
       this._submitted = true;
-      if (result.sheetWriteError) {
-        this._message = { type: 'warning', text: 'An email was sent to approvers, but your request could not be logged because you do not have write access. Please reach out to your site administrator for help.' };
-      } else {
-        this._message = { type: 'success', text: 'Publish request sent! Approvers have been notified.' };
-      }
+      this._message = { type: 'success', text: 'Publish request sent! Approvers have been notified.' };
     } else {
       this._message = { type: 'error', text: result.message };
     }
