@@ -4,15 +4,7 @@ import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { crawl } from 'https://da.live/nx/public/utils/tree.js';
 
 const FRAGMENTS_BASE = '/fragments';
-
-const CONSTANTS = {
-  CRAWL_THROTTLE: 10,
-  ICONS: {
-    FOLDER: './img/Smock_Folder_18_N.svg',
-    FOLDER_OPEN: './img/Smock_FolderOpen_18_N.svg',
-    FRAGMENT: './img/Smock_DocumentFragment_18_N.svg',
-  },
-};
+const CRAWL_THROTTLE = 10;
 
 let selectedFragment = null;
 
@@ -107,10 +99,8 @@ function createTreeItem(name, node, context) {
     const displayName = name.replace('.html', '');
     button.setAttribute('aria-label', `Preview fragment "${displayName}"`);
 
-    const fragmentIcon = document.createElement('img');
-    fragmentIcon.src = CONSTANTS.ICONS.FRAGMENT;
-    fragmentIcon.alt = 'Fragment';
-    fragmentIcon.className = 'tree-icon';
+    const fragmentIcon = document.createElement('span');
+    fragmentIcon.className = 'tree-icon fragment-icon';
     fragmentIcon.setAttribute('aria-hidden', 'true');
 
     const textSpan = document.createElement('span');
@@ -132,9 +122,7 @@ function createTreeItem(name, node, context) {
     folderButton.setAttribute('aria-expanded', 'false');
     folderButton.setAttribute('aria-label', `Folder ${name}`);
 
-    const folderIcon = document.createElement('img');
-    folderIcon.src = CONSTANTS.ICONS.FOLDER;
-    folderIcon.alt = '';
+    const folderIcon = document.createElement('span');
     folderIcon.className = 'tree-icon folder-icon';
     folderIcon.setAttribute('aria-hidden', 'true');
 
@@ -147,10 +135,17 @@ function createTreeItem(name, node, context) {
 
     const toggleFolder = () => {
       folderButton.classList.toggle('expanded');
-      folderButton.setAttribute('aria-expanded', folderButton.classList.contains('expanded'));
-      folderIcon.src = folderButton.classList.contains('expanded')
-        ? CONSTANTS.ICONS.FOLDER_OPEN
-        : CONSTANTS.ICONS.FOLDER;
+      const isExpanded = folderButton.classList.contains('expanded');
+      folderButton.setAttribute('aria-expanded', isExpanded);
+
+      if (isExpanded) {
+        folderIcon.classList.remove('folder-icon');
+        folderIcon.classList.add('folder-open-icon');
+      } else {
+        folderIcon.classList.remove('folder-open-icon');
+        folderIcon.classList.add('folder-icon');
+      }
+
       const list = item.querySelector('.tree-list');
       if (list) {
         list.classList.toggle('hidden');
@@ -241,9 +236,10 @@ function expandToDepth(item, currentDepth, targetDepth) {
   if (folderBtn && list && currentDepth <= targetDepth) {
     folderBtn.classList.add('expanded');
     folderBtn.setAttribute('aria-expanded', 'true');
-    const folderIcon = folderBtn.querySelector('.folder-icon');
+    const folderIcon = folderBtn.querySelector('.tree-icon');
     if (folderIcon) {
-      folderIcon.src = CONSTANTS.ICONS.FOLDER_OPEN;
+      folderIcon.classList.remove('folder-icon');
+      folderIcon.classList.add('folder-open-icon');
     }
     list.classList.remove('hidden');
 
@@ -282,9 +278,10 @@ function applyFilterToTree(items, matchingPaths) {
     if (folderBtn && list && isMatching) {
       folderBtn.classList.add('expanded');
       folderBtn.setAttribute('aria-expanded', 'true');
-      const folderIcon = folderBtn.querySelector('.folder-icon');
+      const folderIcon = folderBtn.querySelector('.tree-icon');
       if (folderIcon) {
-        folderIcon.src = CONSTANTS.ICONS.FOLDER_OPEN;
+        folderIcon.classList.remove('folder-icon');
+        folderIcon.classList.add('folder-open-icon');
       }
       list.classList.remove('hidden');
     }
@@ -305,17 +302,19 @@ function resetTreeToDefaultState(items) {
       if (depth <= targetDepth) {
         folderBtn.classList.add('expanded');
         folderBtn.setAttribute('aria-expanded', 'true');
-        const folderIcon = folderBtn.querySelector('.folder-icon');
+        const folderIcon = folderBtn.querySelector('.tree-icon');
         if (folderIcon) {
-          folderIcon.src = CONSTANTS.ICONS.FOLDER_OPEN;
+          folderIcon.classList.remove('folder-icon');
+          folderIcon.classList.add('folder-open-icon');
         }
         list.classList.remove('hidden');
       } else {
         folderBtn.classList.remove('expanded');
         folderBtn.setAttribute('aria-expanded', 'false');
-        const folderIcon = folderBtn.querySelector('.folder-icon');
+        const folderIcon = folderBtn.querySelector('.tree-icon');
         if (folderIcon) {
-          folderIcon.src = CONSTANTS.ICONS.FOLDER;
+          folderIcon.classList.remove('folder-open-icon');
+          folderIcon.classList.add('folder-icon');
         }
         list.classList.add('hidden');
       }
@@ -359,7 +358,7 @@ async function loadFragments() {
           files.push(file);
         }
       },
-      throttle: CONSTANTS.CRAWL_THROTTLE,
+      throttle: CRAWL_THROTTLE,
       mode: 'horizontal',
       method: 'GET',
       headers: { Authorization: `Bearer ${token}` },
@@ -371,7 +370,7 @@ async function loadFragments() {
 
     if (files.length === 0) {
       const emptyState = document.createElement('div');
-      emptyState.className = 'loading-state';
+      emptyState.className = 'empty-state';
       emptyState.textContent = 'No fragments found';
       fragmentsContainer.appendChild(emptyState);
       return;

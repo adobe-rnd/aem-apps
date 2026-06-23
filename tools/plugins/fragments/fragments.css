@@ -56,7 +56,7 @@ body {
 
 .fragments-container .preview-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
 }
 
@@ -206,10 +206,23 @@ body {
 }
 
 .fragments-container .tree-icon {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
   margin-right: 5px;
   vertical-align: middle;
+  display: inline-block;
+}
+
+.fragments-container .tree-icon.folder-icon {
+  content: url('./img/Smock_Folder_18_N.svg');
+}
+
+.fragments-container .tree-icon.folder-open-icon {
+  content: url('./img/Smock_FolderOpen_18_N.svg');
+}
+
+.fragments-container .tree-icon.fragment-icon {
+  content: url('./img/Smock_DocumentFragment_18_N.svg');
 }
 
 .fragments-container .tree-list {
@@ -275,8 +288,9 @@ body {
   font-size: 14px;
 }
 
-/* Loading state styles */
-.fragments-container .loading-state {
+/* Loading and empty state styles */
+.fragments-container .loading-state,
+.fragments-container .empty-state {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -413,5 +427,27 @@ body {
 
   .fragments-container .preview-iframe {
     background: var(--spectrum-alias-background-color-default, #1d1d1d);
+  }
+
+  /* Dark mode - invert icons to make them white */
+  .fragments-container .tree-icon {
+    filter: invert(1);
+  }
+
+  .fragments-container .tree-item-content:hover {
+    background-color: var(--s2-gray-700, #464646);
+  }
+
+  .fragments-container .folder-btn:hover {
+    background-color: var(--s2-gray-700, #464646);
+    color: var(--s2-gray-50, #fff);
+  }
+
+  .fragments-container .tree-item.selected > .tree-item-content {
+    background: var(--s2-gray-600, #5c5c5c);
+  }
+
+  .fragments-container .tree-item.selected > .tree-item-content .fragment-btn-item {
+    color: var(--s2-gray-50, #fff);
   }
 }
