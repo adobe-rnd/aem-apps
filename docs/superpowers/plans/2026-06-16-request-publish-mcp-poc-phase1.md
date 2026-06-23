@@ -68,7 +68,13 @@ App/Plugin READMEs updated to the thin-client model.
 
 **Why this shape:** one orchestration, one identity model. The MCP path inherits the REST layer's token-derived identity → the Phase-1 IDOR closes with no separate hardening, and the worker's **service credential is eliminated** (`EDS_OAUTH_CLIENT_ID/SECRET` dropped once every DA call uses the user token). Cost: one extra CF→CF hop on the Chat path; the bundle is coupled to the REST contract.
 
-### Steps
+**Interim auth (OAuth S2S) until IMS forwarding is proven.** The thin-client bundle is **user-token by design** — it calls the user-token-only REST endpoints (`darkalley`-validated; identity from the IMS profile; they reject the OAuth S2S service token). There is no "OAuth-S2S thin bundle." So the cutover is **build-and-prove, then switch**:
+
+- **Keep the existing OAuth-S2S `/mcp` (on `mcp-poc` / `-ci`) as the live MCP path.** Nothing about the working path changes until the new one is proven.
+- Build the bundle and verify Steps 1 + 3 (bundle reads the inbound token; da-agent forwards it on a trusted domain) **end-to-end against `-ci`** — this verification *is* "confirming IMS token forwarding works."
+- **Only then** cut over Chat to the bundle and decommission: remove the `mcp-poc` `/mcp`, drop the worker's `EDS_OAUTH_CLIENT_ID/SECRET`. Until that point, the service credential stays.
+
+### Steps (build + prove the user-token bundle; cut over last)
 
 1. **Verify the bundle can read the caller's bearer token.** `aem-agentic-plugins` capabilities receive per-request config via `env`, but the user's IMS token arrives as the request's `Authorization` header. Confirm the tool-handler runtime exposes the incoming request/headers to handlers; if not, extend the framework (`src/app.js` / `src/lib/registry.js`) to thread the inbound `Authorization` through to capability handlers. **This is the gating unknown.**
 2. **Build the `publish-workflow` bundle** under `src/plugins/publish-workflow/`:
@@ -78,7 +84,7 @@ App/Plugin READMEs updated to the thin-client model.
    - Worker base URL as an `env` var on the aem-agentic-plugins worker.
 3. **Trusted domain + token forwarding (da-agent side).** da-agent already forwards `Authorization: Bearer <imsToken>` (+ `x-api-key`) to MCP servers whose URL is in `TRUSTED_MCP_DOMAINS` (`src/tool-assembly.ts`; gate in `src/mcp/token-allowlist.ts`). Add the `aem-agentic-plugins` domain to that allowlist so the user token reaches the bundle. (The bundle then forwards it to the worker, which is the locked whitelisting assumption.)
 4. **`/mcp` is already removed from the worker at release** (see the Release section — stripped when `mcp` → `rest-api`). The `mcp-poc` branch holds the source to port. Once the bundle is the only MCP path, drop the worker's OAuth service credential.
-5. **Register + verify.** Point the test site's `mcp-servers` config at the bundle's `/mcp`; run the Chat lifecycle (request → list → approve/reject/withdraw) end-to-end against `publish-requests-ci`.
+5. **Verify, then cut over (the gate).** Point a test site's `mcp-servers` config at the bundle's `/mcp` and run the Chat lifecycle (request → list → approve/reject/withdraw) end-to-end against `publish-requests-ci`, confirming the **user token** flows da-agent → bundle → worker and identity is derived from it. Only once that passes: switch Chat off the OAuth-S2S `/mcp` and decommission it + drop the service credential. Until then, the OAuth-S2S `/mcp` remains the live path.
 
 ---
 
