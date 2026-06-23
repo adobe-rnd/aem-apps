@@ -68,15 +68,17 @@ App/Plugin READMEs updated to the thin-client model.
 
 **Why this shape:** one orchestration, one identity model. The MCP path inherits the REST layer's token-derived identity → the Phase-1 IDOR closes with no separate hardening, and the worker's **service credential is eliminated** (`EDS_OAUTH_CLIENT_ID/SECRET` dropped once every DA call uses the user token). Cost: one extra CF→CF hop on the Chat path; the bundle is coupled to the REST contract.
 
-**Interim auth (OAuth S2S) until IMS forwarding is proven.** The thin-client bundle is **user-token by design** — it calls the user-token-only REST endpoints (`darkalley`-validated; identity from the IMS profile; they reject the OAuth S2S service token). There is no "OAuth-S2S thin bundle." So the cutover is **build-and-prove, then switch**:
+**Interim auth (OAuth S2S) until IMS forwarding is proven.** S2S and caller-supplied identity are **inseparable**: S2S covers DA *access* but never caller *identity*. So any "OAuth-S2S bundle" would re-supply identity from a caller argument — re-baking the Phase-1 IDOR into **new, throwaway** code (fronting `/mcp` is different wiring than forwarding a token to the REST endpoints). **So don't build an S2S bundle.** The thin-client bundle is **user-token by design** — it calls the user-token-only REST endpoints (`darkalley`-validated; identity from the IMS profile; they reject the S2S token).
 
-- **Keep the existing OAuth-S2S `/mcp` (on `mcp-poc` / `-ci`) as the live MCP path.** Nothing about the working path changes until the new one is proven.
-- Build the bundle and verify Steps 1 + 3 (bundle reads the inbound token; da-agent forwards it on a trusted domain) **end-to-end against `-ci`** — this verification *is* "confirming IMS token forwarding works."
-- **Only then** cut over Chat to the bundle and decommission: remove the `mcp-poc` `/mcp`, drop the worker's `EDS_OAUTH_CLIENT_ID/SECRET`. Until that point, the service credential stays.
+"Use S2S for now" is satisfied by the **existing `/mcp`** (already S2S), kept as the untouched fallback — not by new code:
+
+- **Keep the existing OAuth-S2S `/mcp` (on `mcp-poc` / `-ci`) as the live MCP path.** Zero new work; the IDOR stays contained to the soon-retired POC.
+- **Prove forwarding first.** Make end-to-end verification of the user token (da-agent → bundle → worker, identity derived from it) the **first milestone** of the bundle build (Steps 1 + 3) — that *is* "confirming IMS token forwarding works." Most of the bundle (manifest, tool shells, SKILL) is auth-agnostic and reusable regardless of the outcome.
+- **Cut over only after it verifies:** switch Chat to the bundle, decommission `/mcp`, drop `EDS_OAUTH_CLIENT_ID/SECRET`. If it *doesn't* verify, nothing is lost — the S2S `/mcp` keeps serving and the bundle scaffolding waits on the forwarding fix.
 
 ### Steps (build + prove the user-token bundle; cut over last)
 
-1. **Verify the bundle can read the caller's bearer token.** `aem-agentic-plugins` capabilities receive per-request config via `env`, but the user's IMS token arrives as the request's `Authorization` header. Confirm the tool-handler runtime exposes the incoming request/headers to handlers; if not, extend the framework (`src/app.js` / `src/lib/registry.js`) to thread the inbound `Authorization` through to capability handlers. **This is the gating unknown.**
+1. **Verify the bundle can read the caller's bearer token — do this first, as a spike.** `aem-agentic-plugins` capabilities receive per-request config via `env`, but the user's IMS token arrives as the request's `Authorization` header. Confirm the tool-handler runtime exposes the incoming request/headers to handlers; if not, extend the framework (`src/app.js` / `src/lib/registry.js`) to thread the inbound `Authorization` through. **This is the gating unknown** — prove it with a single throwaway tool that echoes the forwarded identity (da-agent → bundle → worker) before building the full tool set, so a forwarding dead-end is found cheaply, not after building everything.
 2. **Build the `publish-workflow` bundle** under `src/plugins/publish-workflow/`:
    - `plugin.json` manifest.
    - `tools/*.tool.js` — thin tools mapping ~1:1 to REST endpoints (`request_publish`→`POST /api/requests`, `list_pending`→`GET /api/requests`, `get_approvers`→`GET /api/approvers`, `approve`/`reject`/`withdraw`→`POST /api/requests/*`, `get_request_details`→`GET /api/requests` + find). Each forwards `Authorization: Bearer <user>` and returns the REST response as the tool result. **No DA/email/sheet access.**
