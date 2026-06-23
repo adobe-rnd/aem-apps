@@ -1,6 +1,6 @@
 # Request-Publish — Implementation Plan
 
-> **Status (2026-06-23):** Phases 1, 1.5, and 2 (Tasks A–C) complete. `publish-requests-worker` is the single source of truth for the workflow; App, Plugin, and (POC) MCP all run on its logic. **Plugin verified against `-ci`; App pending `-ci` verification.** Next: re-home `/mcp` into `aem-agentic-plugins` as a thin REST client.
+> **Status (2026-06-23):** Phases 1, 1.5, and 2 (Tasks A–C) complete; **App and Plugin both verified against `-ci`.** `publish-requests-worker` is the single source of truth; App, Plugin, and (POC) MCP all run on its logic. **Next:** merge the REST layer to `main` and retire the `mcp` branch (see Release), then re-home `/mcp` into `aem-agentic-plugins`.
 
 Spec: [docs/superpowers/specs/2026-06-16-request-publish-agentic-chat-design.md](../specs/2026-06-16-request-publish-agentic-chat-design.md)
 
@@ -25,10 +25,29 @@ Consolidated the logic that was duplicated across app / plugin / MCP (specificit
   - `GET /api/requests` (+`?role=requester`), `GET /api/approvers`, `GET /api/config`
   - `POST /api/requests` (+`{resend:true}`), `POST /api/requests/approve|reject|withdraw`
   - Identity **derived from the IMS profile** via the forwarded user token (no IDOR); `checkAdminStatus` + registration gates (parity with legacy). Shared `src/mcp/operations.js` — MCP tools **and** REST handlers both delegate to it. Page-existence + org/site binding via `pageExists`. **186 tests, lint clean.**
-- **Task B — App** (`publish-requests-inbox`) is a thin REST client; Helix publish/preview stay client-side. Committed (`d381bad`); **pending `-ci` verification**.
+- **Task B — App** (`publish-requests-inbox`) is a thin REST client; Helix publish/preview stay client-side. Committed (`d381bad`); **✅ verified against `-ci`**.
 - **Task C — Plugin** (`request-for-publish`) is a thin REST client. Committed (`450a559`); **✅ verified against `-ci`**.
 
 App/Plugin READMEs updated to the thin-client model.
+
+---
+
+## Release: merge the REST layer to `main`, retire the `mcp` branch
+
+**Not a breaking change.** The legacy `/api/request-publish` + `/api/notify-*` handlers are **byte-unchanged** from `main` (verified — no diff lines touch them); the new endpoints are additive. So one worker serves the legacy app/plugin (and the customer) **and** the new app/plugin at the same time — no atomic app+plugin+worker merge, just **deploy order** (worker first; the new app/plugin depend on the new endpoints). The legacy app/plugin stay put and keep working unchanged.
+
+**No "v2" worker needed.** A side-by-side v2 protects *incompatible* consumers; there's no incompatibility here, so v2 would be two near-identical deployments of the same repo and would fork/freeze the customer's worker. Avoid it.
+
+**Config-free to ship.** The REST layer uses the user's forwarded token + existing KV/email config — **no new prod secret**. (`getServiceToken`/OAuth and `MCP_SHARED_SECRET` are MCP-only and never on the REST path — `getServiceToken` has zero refs in `index.js`.)
+
+**The `mcp` branch is a misnomer once `/mcp` moves out** — what remains is the REST / worker-as-single-authority work. Sequence (new session):
+
+1. **Preserve the MCP POC:** branch the current `mcp` tip as **`mcp-poc`**. This is the source material to port into the `aem-agentic-plugins` bundle, and a deployable POC during the transition. (Git history has it regardless; a named ref is convenient.)
+2. **Strip `/mcp` on the branch:** remove `tools.js`, `transport.js`, the `/mcp` route in `mcp/index.js`, `auth.js` (`x-mcp-secret`), `service-token.js`, `mcp-assets/`. Keep `operations.js`/`workflow.js`/`da-client.js` (the REST core) — ideally lift out of `src/mcp/` into e.g. `src/workflow/`. Confirm the REST/email tests stay green.
+3. **Rename:** `git branch -m mcp rest-api`.
+4. **PR `rest-api` → `main`** (deploys to the prod worker; legacy unaffected). Then the new App/Plugin (aem-apps `agentic-request-publish` branch) can go live pointing at prod — today they need `?env=ci`.
+
+**What comes off vs. stays:** the MCP-specific files (tool defs, transport, `x-mcp-secret` gate, service token, assets) are exactly what gets re-expressed as **thin tools in the `aem-agentic-plugins` bundle**. The orchestration (`operations.js`) and pure logic (`workflow.js`) **stay on the worker** — the bundle calls them over HTTP, it does not import them.
 
 ---
 
@@ -58,7 +77,7 @@ App/Plugin READMEs updated to the thin-client model.
    - `skills/request-publish/SKILL.md` — port `mcp-assets/request-publish.md` to the bundle's SKILL format.
    - Worker base URL as an `env` var on the aem-agentic-plugins worker.
 3. **Trusted domain + token forwarding (da-agent side).** da-agent already forwards `Authorization: Bearer <imsToken>` (+ `x-api-key`) to MCP servers whose URL is in `TRUSTED_MCP_DOMAINS` (`src/tool-assembly.ts`; gate in `src/mcp/token-allowlist.ts`). Add the `aem-agentic-plugins` domain to that allowlist so the user token reaches the bundle. (The bundle then forwards it to the worker, which is the locked whitelisting assumption.)
-4. **Decommission `/mcp` on `publish-requests-worker`.** Remove `tools.js`, the transport, `mcp-assets/`, and `x-mcp-secret`. Keep `operations.js`/`workflow.js`/`da-client.js`/`email.js` (the REST core — lift them out of `src/mcp/`). Drop the OAuth service credential.
+4. **`/mcp` is already removed from the worker at release** (see the Release section — stripped when `mcp` → `rest-api`). The `mcp-poc` branch holds the source to port. Once the bundle is the only MCP path, drop the worker's OAuth service credential.
 5. **Register + verify.** Point the test site's `mcp-servers` config at the bundle's `/mcp`; run the Chat lifecycle (request → list → approve/reject/withdraw) end-to-end against `publish-requests-ci`.
 
 ---
@@ -70,6 +89,6 @@ App/Plugin READMEs updated to the thin-client model.
 
 ---
 
-## Verify the App against `-ci` (immediate)
+## Immediate next action (new session)
 
-Ensure `-ci` is at the latest `mcp` commit, open the App with `?env=ci`, and run: inbox list → single/inbox/bulk approve → reject → my-requests (resend, withdraw).
+The **Release** sequence above: `mcp-poc` branch → strip `/mcp` → rename `mcp` → `rest-api` → PR to `main`. (App + Plugin already verified against `-ci`.)
