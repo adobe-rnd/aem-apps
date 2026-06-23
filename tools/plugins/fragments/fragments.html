@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fragments Tool</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="https://da.live/nx2/styles/styles.css">
+  <link rel="stylesheet" href="/tools/plugins/fragments/fragments.css">
+  <script src="https://da.live/nx/utils/sdk.js" type="module"></script>
+</head>
+<body>
+  <div class="fragments-container">
+    <div class="fragments-panel">
+      <input type="search"
+             class="fragment-search"
+             placeholder="Enter fragment name"
+             role="searchbox"
+             aria-label="Search fragments">
+
+      <div class="message-wrapper hidden">
+        <div class="feedback-message"></div>
+      </div>
+
+      <div class="fragments-list" role="list">
+        <div class="loading-state">Loading fragments...</div>
+      </div>
+    </div>
+
+    <div class="preview-panel">
+      <div class="panel-header preview-header">
+        <div class="preview-actions">
+          <button class="action-btn insert-btn" type="button" disabled aria-label="Insert selected fragment">Insert</button>
+        </div>
+      </div>
+
+      <div class="preview-panel-content">
+        <div class="preview-placeholder">
+          <svg class="preview-placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+            <polyline points="21 15 16 10 5 21"></polyline>
+          </svg>
+          <p>Select a fragment to preview</p>
+        </div>
+        <iframe class="preview-iframe hidden"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/tools/plugins/fragments/fragments.js"></script>
+</body>
+</html>
