@@ -10,65 +10,32 @@ When an author submits a publish request (via the [Request for Publish Plugin](.
 
 ### Architecture
 
-- **Web Component**: Built as a LitElement custom element (`<publish-requests-inbox>`)
-- **DA SDK**: Integrates with the DA.live SDK for authentication and context
-- **Helix Admin API**: Publishes content via `POST https://admin.hlx.page/live/{org}/{site}/main/{path}` (single) or the [bulk publish API](https://www.aem.live/docs/admin.html#tag/publish/operation/bulkPublish) `POST https://admin.hlx.page/live/{org}/{site}/main/*` (Approve All)
-- **DA Config API**: Reads the workflow configuration (approver rules and group-to-email mappings) via `GET https://admin.da.live/config/{org}/{site}/` with automatic fallback to `GET https://admin.da.live/config/{org}/` if not found at site level. See [DA Config API docs](https://docs.da.live/developers/api/config#get-config)
-- **DA Admin API**: Reads/writes the pending requests sheet at `/.da/publish-workflow-requests.json`
-- **Cloudflare Worker**: Sends rejection notifications (`/api/notify-rejection`) and publish-success notifications to authors (`/api/notify-published`)
-- **Adobe IMS**: Fetches the current user's email from the Adobe IMS profile endpoint
+The app is a **thin REST client of [`publish-requests-worker`](https://github.com/adobe-rnd/publish-requests-worker)** for all workflow bookkeeping. It still publishes content client-side via Helix (under the approver's session); approver resolution, sheet I/O, and email are the worker's job.
+
+- **Web Component**: LitElement custom element (`<publish-requests-inbox>`).
+- **DA SDK**: authentication and context.
+- **Helix Admin (client-side)**: publishes content — single `POST /live/{org}/{site}/main/{path}` or [bulk publish](https://www.aem.live/docs/admin.html#tag/publish/operation/bulkPublish) `POST /live/{org}/{site}/main/*` (Approve All) — under the approver's session.
+- **publish-requests-worker (REST)** — the app calls:
+  - `GET /api/requests` — pending requests the caller can approve; `?role=requester` for the caller's own
+  - `GET /api/approvers`, `GET /api/config` — resolved approvers / config (display)
+  - `POST /api/requests/approve` — record approval (remove rows + email authors) after publishing
+  - `POST /api/requests/reject` — reject (remove row + email author)
+  - `POST /api/requests` `{ resend: true }` and `POST /api/requests/withdraw` — for the my-requests view
+- **Adobe IMS**: the user's token is sent to the worker, which **derives identity from it**; the app also reads the user's email from the IMS profile for display.
 
 ### Two Operating Modes
 
 #### Inbox Mode (no `path` parameter)
 
-When the app is opened with just `org` and `site` parameters, it enters **inbox mode**:
-
-1. Fetches the user's email from Adobe IMS
-2. Reads the workflow config via the DA Config API (`/config/{org}/{site}/`, falling back to `/config/{org}/`) — if not found at either level, an error is displayed
-3. Reads all pending requests from `/.da/publish-workflow-requests.json`
-4. For each pending request, finds the best (most specific) matching rule for that path, resolves the approvers (including expanding DL groups via the `groups-to-email` tab), and checks if the current user is among them
-5. Displays only the requests the user is authorized to approve
-6. Provides individual approve, review, and diff links per request, plus an **Approve All** bulk action
+Opened with `org` and `site`: the app calls `GET /api/requests`, which returns only the pending requests the caller is **authorized to approve** (the worker does the matching, DL expansion, and `cc.can-approve` check). It renders per-request approve/review/diff actions plus an **Approve All** bulk action.
 
 #### Single-Review Mode (with `path` parameter)
 
-When the app is opened with a `path` parameter (e.g., from an approval email link), it enters **single-review mode**:
+Opened from an approval-email link with a `path`: the app finds that path in `GET /api/requests` to confirm it's pending and approvable, then renders the full review interface (diff, approve, reject).
 
-1. Fetches the user's email from Adobe IMS
-2. Validates that a pending request exists for the given path in the requests sheet
-3. Reads the workflow config via the DA Config API (site-level, then org-level fallback) — if not found, an error is displayed
-4. Finds the best (most specific) matching rule for the path, resolves the approvers (expanding DL groups), and verifies the user is authorized
-5. Renders the full review interface with content diff, approve, and reject options
+### Approver resolution (server-side)
 
-### Group-to-Email Resolution
-
-Approver entries in the config can be either direct email addresses or distribution list (DL) names. When a DL is encountered (e.g., `dl-reviewers@example.com`), it is resolved to individual email addresses using the `groups-to-email` tab in the DA config.
-
-### Pattern Matching (Specificity-Based)
-
-When multiple rules could match a given content path, the app selects the **most specific** (closest) match rather than the first match. Rules are scored by how closely their prefix matches the content path:
-
-1. **Exact match** (e.g., `/drafts/user1/sample-page`) — highest priority
-2. **Closest wildcard** (e.g., `/drafts/user1/*`) — most path segments matched
-3. **Parent wildcard** (e.g., `/drafts/*`) — fewer segments matched
-4. **Root wildcard** (`/*`) — lowest priority, catches everything
-
-**Example config:**
-| Pattern | Approvers |
-|---------|-----------|
-| `/drafts/user1/*` | `approver-a@example.com` |
-| `/drafts/*` | `approver-b@example.com` |
-| `/*` | `dl-reviewers@example.com` |
-
-**groups-to-email tab:**
-| group | email |
-|-------|-------|
-| `dl-reviewers@example.com` | `reviewer1@example.com` |
-
-For path `/drafts/user1/sample-page`, the rule `/drafts/user1/*` is selected (specificity 2) over `/drafts/*` (specificity 1) and `/*` (specificity 0). So `approver-a@example.com` is the resolved approver.
-
-For path `/about`, only `/*` matches, so `dl-reviewers@example.com` is resolved to `reviewer1@example.com`.
+Specificity-based pattern matching against `publish-workflow-config` and distribution-list expansion via `publish-workflow-groups-to-email` are performed by **`publish-requests-worker`** — `GET /api/requests` already returns only the caller's approvable requests, and `GET /api/approvers` returns the resolved list for a path. See that repo for the matching semantics and rule format.
 
 ### URL Parameters
 
@@ -102,24 +69,15 @@ The landing page when no `path` is specified. Displays a list of all pending pub
 From the inbox, the approver can click **"Approve All"** to bulk-publish all visible pending requests in a single operation using the [AEM Admin bulk publish API](https://www.aem.live/docs/admin.html#tag/publish/operation/bulkPublish).
 
 **How it works:**
-1. All pending paths are collected and sent in a single `POST` to `https://admin.hlx.page/live/{org}/{site}/main/*` with a `{ "paths": [...] }` body
-2. The API returns a job; the app polls `https://admin.hlx.page/job/{org}/{site}/main/{jobName}/details` until the job completes (up to 60 seconds, polling every 2 seconds)
+1. All pending paths are sent in a single `POST` to `https://admin.hlx.page/live/{org}/{site}/main/*`
+2. The API returns a job; the app polls it to completion (up to 60 seconds, every 2 seconds)
 3. On completion, the app checks the job details for per-resource status codes
-4. All successfully published requests are removed from the requests sheet in a single batch write (rather than N individual writes)
-5. If some paths failed, only the succeeded ones are removed and a summary is shown
-
-This approach is significantly faster than sequential per-path publishing and avoids race conditions on sheet writes.
+4. For the successfully published paths, the app makes a single `POST /api/requests/approve` — the **worker** removes those pending rows and emails the authors
+5. If some paths failed, only the succeeded ones are approved and a summary is shown
 
 ### 3. Author Email Notification on Publish
 
-Whenever content is successfully published — whether via single approve, inbox approve, or bulk "Approve All" — the app sends a **publish-success email** to the original author(s) via the worker's `/api/notify-published` endpoint.
-
-**How it works:**
-- After a successful publish, the app calls `notifyPublished()` with the published path(s) and each author's email
-- The worker groups paths by author, so each author receives **one consolidated email** listing all their pages that were just published
-- The email includes live links to the published pages
-- The notification is fire-and-forget — it does not block the UI since the publish itself already succeeded
-- On **bulk publish with partial failures**, only authors of successfully published pages are notified
+After a successful publish (single, inbox, or bulk), the app calls `POST /api/requests/approve` for the published paths; the **worker** emails the original author(s) — one consolidated email per author listing their just-published pages, with live links. On bulk publish with partial failures, only authors of succeeded pages are notified.
 
 ### 4. Approve a Single Request from Inbox
 
@@ -131,7 +89,7 @@ The full review page for a specific request. The approver sees the content path,
 
 ### 6. Reject a Publish Request
 
-From the single-review page, the approver expands the reject section, provides a mandatory reason, and clicks **"Reject Request"**. This sends a rejection notification to the author and DigiOps team via the Cloudflare Worker.
+From the single-review page, the approver provides a mandatory reason and clicks **"Reject Request"**. The app calls `POST /api/requests/reject`; the worker removes the pending row and emails the author (and DigiOps) the reason.
 
 ### 7. Review Content Diff
 
@@ -168,7 +126,7 @@ If the user's email cannot be determined from the Adobe IMS token, a warning is 
 | `publish-requests-inbox.html` | Entry HTML that loads DA SDK and the app module |
 | `publish-requests-inbox.js` | Main LitElement component with inbox and review modes, all UI states and event handlers |
 | `publish-requests-inbox.css` | Styles for all component states (inbox, review, approved, rejected, error, etc.) |
-| `api.js` | API layer — single & bulk publish via Helix Admin, job polling, rejection & publish-success notifications, DA Config API fetch with org fallback, requests sheet read/write (including batch removal), group resolution, approver lookup, IMS profile fetch |
+| `api.js` | Thin REST client over `publish-requests-worker` (list/approve/reject/withdraw/resend, approvers/config) + client-side Helix publish (single & bulk) + job polling + IMS profile fetch |
 
 ## Configuration
 
@@ -179,7 +137,7 @@ The workflow configuration is read from the **DA Config API** as tabs within the
 - **Site-level** (primary): `GET https://admin.da.live/config/{org}/{site}/`
 - **Org-level** (fallback): `GET https://admin.da.live/config/{org}/`
 
-The config is a multi-sheet JSON. The app uses these two tabs:
+These tabs are read by **`publish-requests-worker`** (approver resolution + rule enforcement); the app reads display-only settings via `GET /api/config`. The config is a multi-sheet JSON with these tabs:
 
 - **`publish-workflow-config`** tab: Path-based rules with `Pattern`, `Approvers`, `CC`, and `NotifyOnReject` columns
 - **`groups-to-email`** tab: Maps distribution list names to comma-separated individual email addresses
