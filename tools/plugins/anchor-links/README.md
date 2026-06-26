@@ -4,10 +4,9 @@ An EW plugin for generating anchor links to headings on your page. Useful for bu
 
 ## How to Use
 
-1. **Preview your page** in Franklin so headings get their generated IDs.
-2. Open the plugin and click **Scan Page Headings**.
-3. Check the headings you want to link to (optionally edit each link title).
-4. Click **Create Anchor Links** — the plugin inserts the HTML and closes.
+1. Open the plugin and click **Scan Page Headings**.
+2. Check the headings you want to link to (optionally edit each link title).
+3. Click **Create Anchor Links** — the plugin inserts the HTML and closes.
 
 ## Output
 
@@ -21,7 +20,7 @@ Register in your DA site config:
 
 | title         | path                                           | format   |
 | ------------- | ---------------------------------------------- | -------- |
-| `Anchor Links`  | `/tools/plugins/anchor-links/anchor-links.html`    | `dialog` |
+| `Anchor Links`  | `https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/anchor-links/anchor-links.html`    | `dialog` |
 
 ## Files
 

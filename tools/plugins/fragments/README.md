@@ -1,6 +1,6 @@
 # Fragment Picker Plugin
 
-A DA plugin for browsing and inserting fragments into your documents. Provides a split-pane interface with a searchable folder tree on the left and live preview on the right.
+A DA/EW plugin for browsing and inserting fragments into your documents. Provides a split-pane interface with a searchable folder tree on the left and live preview on the right.
 
 ## How to Use
 
@@ -21,7 +21,7 @@ Register in your DA site config library sheet:
 
 | title             | path                                        | experience        |
 | ----------------- | ------------------------------------------- | ----------------- |
-| `Fragment Picker` | `/tools/plugins/fragments/fragments.html`   | `fullsize-dialog` |
+| `Fragment Picker` | `https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/fragments/fragments.html`   | `fullsize-dialog` |
 
 ## Features
 
@@ -50,4 +50,4 @@ Register in your DA site config library sheet:
 
 ## Fragment Location
 
-By default, the plugin looks for fragments in `/fragments` within your repository. All `documents` files in this folder and its subfolders will be available for insertion.
+By default, the plugin looks for fragments in `/fragments` within your repository. All `document` files in this folder and its subfolders will be available for insertion.
