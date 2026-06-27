@@ -21,22 +21,11 @@
   </div>
 
   <script type="module">
-    const PLUGIN_REV = '2026-06-27-medialib2';
+    const PLUGIN_REV = '2026-06-27-medialib-plugin';
     console.info(`[ml-plugin] ${PLUGIN_REV}`);
 
-    // Support ?ref=branch parameter for testing (e.g., ?ref=medialib2, ?ref=local)
-    const params = new URLSearchParams(window.location.search);
-    const ref = params.get('ref') || 'main';
-
-    let daOrigin;
-    if (ref === 'main') {
-      daOrigin = 'https://da.live';
-    } else {
-      // Load from branch: ?ref=medialib2 → https://medialib2--da--da.aem.page
-      daOrigin = `https://${ref}--da--da.aem.page`;
-    }
-
-    console.log(`[ml-plugin] Loading from: ${daOrigin} (ref=${ref})`);
+    const daOrigin = 'https://medialib-plugin--da--da.aem.page';
+    console.log(`[ml-plugin] Loading from: ${daOrigin}`);
 
     import { setConfig } from `${daOrigin}/nx/scripts/nexter.js`;
     import DA_SDK from `${daOrigin}/nx/utils/sdk.js`;
