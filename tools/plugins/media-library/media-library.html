@@ -21,16 +21,32 @@
   </div>
 
   <script type="module">
-    const PLUGIN_REV = '2026-04-28-rev3';
-    console.info(`[ml-plugin] ${PLUGIN_REV} — if Network still shows da.live for media-library.js, the browser is not serving this file (push + wait for preview, then hard refresh).`);
+    const PLUGIN_REV = '2026-06-27-medialib2';
+    console.info(`[ml-plugin] ${PLUGIN_REV}`);
 
-    import { setConfig } from 'https://da.live/nx/scripts/nexter.js';
+    // Support ?ref=branch parameter for testing (e.g., ?ref=medialib2, ?ref=local)
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref') || 'main';
 
-    import DA_SDK from 'https://da.live/nx/utils/sdk.js';
+    let daOrigin;
+    if (ref === 'local') {
+      // For local testing: run `aem up` in da-nx repo on port 6456
+      // Then load this plugin from localhost:3000 in aem-apps repo
+      daOrigin = 'http://localhost:6456';
+    } else if (ref === 'main') {
+      daOrigin = 'https://da.live';
+    } else {
+      daOrigin = `https://${ref}--da--da.aem.page`;
+    }
+
+    console.log(`[ml-plugin] Loading from: ${daOrigin} (ref=${ref})`);
+
+    import { setConfig } from `${daOrigin}/nx/scripts/nexter.js`;
+    import DA_SDK from `${daOrigin}/nx/utils/sdk.js`;
 
     setConfig({ imsClientId: 'da-web', env: 'prod' });
 
-    await import('https://da.live/nx/blocks/media-library/media-library.js');
+    await import(`${daOrigin}/nx/blocks/media-library/media-library.js`);
 
     const { context } = await DA_SDK;
     const ml = document.createElement('nx-media-library');
