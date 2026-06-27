@@ -27,14 +27,14 @@
     const daOrigin = 'https://medialib-plugin--da--da.aem.page';
     console.log(`[ml-plugin] Loading from: ${daOrigin}`);
 
-    import { setConfig } from `${daOrigin}/nx/scripts/nexter.js`;
-    import DA_SDK from `${daOrigin}/nx/utils/sdk.js`;
+    const { setConfig } = await import(`${daOrigin}/nx/scripts/nexter.js`);
+    const DA_SDK = await import(`${daOrigin}/nx/utils/sdk.js`);
 
     setConfig({ imsClientId: 'da-web', env: 'prod' });
 
     await import(`${daOrigin}/nx/blocks/media-library/media-library.js`);
 
-    const { context } = await DA_SDK;
+    const { context } = await DA_SDK.default;
     const ml = document.createElement('nx-media-library');
     const org = context?.org;
     const repo = context?.repo;
