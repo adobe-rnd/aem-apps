@@ -29,13 +29,10 @@
     const ref = params.get('ref') || 'main';
 
     let daOrigin;
-    if (ref === 'local') {
-      // For local testing: run `aem up` in da-nx repo on port 6456
-      // Then load this plugin from localhost:3000 in aem-apps repo
-      daOrigin = 'http://localhost:6456';
-    } else if (ref === 'main') {
+    if (ref === 'main') {
       daOrigin = 'https://da.live';
     } else {
+      // Load from branch: ?ref=medialib2 → https://medialib2--da--da.aem.page
       daOrigin = `https://${ref}--da--da.aem.page`;
     }
 
