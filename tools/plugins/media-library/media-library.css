@@ -102,18 +102,7 @@ body {
 nx-media-library {
   display: block;
   width: 100%;
-  height: 100%;
+  height: 100vh;
   min-height: 0;
-  max-height: 100%;
   overflow: hidden;
-}
-
-/* Override 100vh usage in grid component - adjust for plugin iframe context */
-#ml-container nx-media-library .media-main {
-  height: calc(100vh - 30px);
-}
-
-#ml-container nx-media-library .empty-state,
-#ml-container nx-media-library .scanning-state {
-  height: calc(100vh - 200px);
 }
