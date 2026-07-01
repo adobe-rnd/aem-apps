@@ -108,12 +108,12 @@ nx-media-library {
   overflow: hidden;
 }
 
-/* Override 100vh usage in grid component */
+/* Override 100vh usage in grid component - adjust for plugin iframe context */
 nx-media-library .media-main {
-  height: 100%;
+  height: calc(100vh - 30px);
 }
 
 nx-media-library .empty-state,
 nx-media-library .scanning-state {
-  height: 100%;
+  height: calc(100vh - 200px);
 }
