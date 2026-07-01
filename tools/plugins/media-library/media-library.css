@@ -109,11 +109,11 @@ nx-media-library {
 }
 
 /* Override 100vh usage in grid component - adjust for plugin iframe context */
-nx-media-library .media-main {
+#ml-container nx-media-library .media-main {
   height: calc(100vh - 30px);
 }
 
-nx-media-library .empty-state,
-nx-media-library .scanning-state {
+#ml-container nx-media-library .empty-state,
+#ml-container nx-media-library .scanning-state {
   height: calc(100vh - 200px);
 }
