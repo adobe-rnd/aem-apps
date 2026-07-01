@@ -17,9 +17,9 @@ The plugin inserts media references appropriate to the selected item type (image
 
 Register in your DA site config library sheet:
 
-| title            | path                                          | experience        |
-| ---------------- | --------------------------------------------- | ----------------- |
-| `Media Library`  | `/tools/plugins/media-library/media-library.html` | `fullsize-dialog` |
+| title            | path                                                                                              | experience        |
+| ---------------- | ------------------------------------------------------------------------------------------------- | ----------------- |
+| `Media Library`  | `https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/media-library/media-library.html` | `fullsize-dialog` |
 
 ## Features
 
