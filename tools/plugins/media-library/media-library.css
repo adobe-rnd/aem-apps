@@ -105,4 +105,5 @@ nx-media-library {
   height: 100vh;
   min-height: 0;
   overflow: hidden;
+  --ml-chrome-height: 0px;
 }
