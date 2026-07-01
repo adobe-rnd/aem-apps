@@ -19,8 +19,11 @@
   </div>
 
   <script type="module">
-    import { setConfig } from 'https://da.live/nx/scripts/nexter.js';
+    import { setConfig, getColorScheme } from 'https://da.live/nx/scripts/nexter.js';
     import DA_SDK from 'https://da.live/nx/utils/sdk.js';
+
+    // Set color scheme for dark mode support
+    document.documentElement.dataset.colorScheme = getColorScheme();
 
     setConfig({ imsClientId: 'da-web', env: 'prod' });
 
