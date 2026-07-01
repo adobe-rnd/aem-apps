@@ -23,7 +23,14 @@
     import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 
     // Set color scheme for dark mode support
-    document.documentElement.dataset.colorScheme = getColorScheme();
+    const updateColorScheme = () => {
+      document.documentElement.dataset.colorScheme = getColorScheme();
+      console.log('[ml-plugin] Color scheme:', document.documentElement.dataset.colorScheme);
+    };
+    updateColorScheme();
+
+    // Listen for system preference changes
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateColorScheme);
 
     setConfig({ imsClientId: 'da-web', env: 'prod' });
 
