@@ -41,10 +41,10 @@
     const { context, token } = await DA_SDK;
 
     // Inject token for plugin mode
-    const { setImsDetails } = await import('https://medialib-plugin--da-nx--adobe.aem.live/nx/utils/daFetch.js');
+    const { setImsDetails } = await import('https://da.live/nx/utils/daFetch.js');
     if (token) setImsDetails(token);
 
-    await import('https://medialib-plugin--da-nx--adobe.aem.live/nx/blocks/media-library/media-library.js');
+    await import('https://da.live/nx/blocks/media-library/media-library.js');
 
     const ml = document.createElement('nx-media-library');
     const org = context?.org;
