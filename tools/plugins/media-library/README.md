@@ -21,6 +21,8 @@ Register in your DA site config library sheet:
 | ---------------- | ------------------------------------------------------------------------------------------------- | ----------------- |
 | `Media Library`  | `https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/media-library/media-library.html` | `fullsize-dialog` |
 
+**Important:** Always use `.aem.live` URLs for plugin registration, NOT `.aem.page`. The `.aem.page` domain will cause the plugin to use stage environment instead of production, resulting in authentication errors.
+
 ## Features
 
 - **Full media browsing** powered by the DA media library app
