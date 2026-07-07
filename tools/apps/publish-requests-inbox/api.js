@@ -1,26 +1,17 @@
-/* eslint-disable import/no-unresolved, no-console, no-restricted-syntax */
-/* eslint-disable no-continue, no-await-in-loop, prefer-destructuring */
+/* eslint-disable import/no-unresolved, no-console, no-await-in-loop */
 
 const WORKER_URL = 'https://publish-requests.aem-poc-lab.workers.dev';
 const CI_WORKER_URL = 'https://publish-requests-ci.aem-poc-lab.workers.dev';
 const LOCAL_WORKER_URL = 'http://localhost:8787';
 
-const APP_BASE_URL = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox';
-
 const CORS_PROXY = 'https://da-etc.adobeaem.workers.dev/cors';
-
-const { getDaAdmin } = await import('https://da.live/nx/public/utils/constants.js');
-const DA_ADMIN = getDaAdmin();
 
 // daFetch ensures a fresh IMS token is used on every request (handles token expiry)
 const { daFetch } = await import('https://da.live/nx/utils/daFetch.js');
 
-// DA sheet path for requests (read/written via Source API)
-const REQUESTS_SHEET_PATH = '/.da/publish-workflow-requests.json';
-
 /**
- * Get the Worker URL.
- * Falls back to localhost:8787 for local development.
+ * Get the Worker URL. Falls back to localhost:8787 for local development;
+ * `?env=ci` targets the CI worker.
  * @returns {string} Worker URL
  */
 function getWorkerUrl() {
@@ -35,7 +26,8 @@ function getWorkerUrl() {
 }
 
 /**
- * Get request options with authorization header
+ * Build fetch options with the user's IMS bearer token. The worker derives the
+ * caller's identity from this token; the client never sends an email/approver list.
  * @param {string} token - The authorization token
  * @param {string} method - HTTP method
  * @param {Object} body - Optional request body
@@ -56,63 +48,11 @@ function getOpts(token, method = 'GET', body = null) {
 }
 
 /**
- * Calculate the specificity of a pattern match against a path.
- * Higher values indicate a more specific (closer) match.
- * Matching priority: exact path > closest wildcard prefix > parent > root wildcard.
- * @param {string} path - The content path
- * @param {string} pattern - The pattern to score
- * @returns {number} Specificity score, or -1 if no match
- */
-function getPatternSpecificity(path, pattern) {
-  // Root-level wildcard — matches everything, lowest specificity
-  if (pattern === '/*' || pattern === '*') return 0;
-
-  // Wildcard prefix match (e.g., /drafts/rama/*)
-  if (pattern.endsWith('/*')) {
-    const prefix = pattern.slice(0, -2);
-    if (path.startsWith(prefix)) {
-      // Score by the number of segments in the prefix (more segments = more specific)
-      return prefix.split('/').filter(Boolean).length;
-    }
-    return -1; // No match
-  }
-
-  // Exact match — highest specificity
-  if (path === pattern) return 1000;
-
-  return -1; // No match
-}
-
-/**
- * Find the best (most specific) matching rule for a given path.
- * Prioritizes closest match → parent match → root-level match.
- * @param {string} path - The content path
- * @param {Array} rules - Array of rule objects with Pattern/pattern fields
- * @returns {Object|null} The best matching rule, or null if none match
- */
-function findBestMatchingRule(path, rules) {
-  let bestRule = null;
-  let bestSpecificity = -1;
-
-  for (const rule of rules) {
-    const pattern = rule.Pattern || rule.pattern;
-    if (!pattern) continue;
-
-    const specificity = getPatternSpecificity(path, pattern);
-    if (specificity > bestSpecificity) {
-      bestSpecificity = specificity;
-      bestRule = rule;
-    }
-  }
-
-  return bestRule;
-}
-
-/**
- * Extract a value from the publish-workflow-settings tab of the config.
- * @param {Object} config - Full config object from DA Config API
- * @param {string} key - Setting key to look up
- * @returns {string|null} Setting value or null if not found
+ * Extract a setting value from the publish-workflow-settings tab. Display-only;
+ * the worker enforces the authoritative rules.
+ * @param {Object} config - The workflow config returned by GET /api/config
+ * @param {string} key - The setting key to look up
+ * @returns {string|null} The setting value or null if not found
  */
 function extractSetting(config, key) {
   const settings = config?.['publish-workflow-settings']?.data || [];
@@ -120,83 +60,14 @@ function extractSetting(config, key) {
   return entry?.value || entry?.Value || null;
 }
 
-/**
- * Resolve approvers list by expanding distribution list (DL) groups to individual
- * emails using the publish-workflow-groups-to-email mapping from the config sheet.
- * @param {string[]} approversList - Raw approver entries (may include DL names)
- * @param {Array<{group: string, email: string}>} groupsData - Group-to-email mappings
- * @returns {string[]} Deduplicated list of individual email addresses
- */
-function resolveApproversWithGroups(approversList, groupsData) {
-  const resolved = [];
-  for (const approver of approversList) {
-    const group = groupsData.find(
-      (g) => g.group?.toLowerCase() === approver.toLowerCase(),
-    );
-    if (group) {
-      // This is a DL — expand to individual emails
-      const emails = group.email.split(',').map((e) => e.trim()).filter(Boolean);
-      resolved.push(...emails);
-    } else {
-      // Direct email address
-      resolved.push(approver);
-    }
-  }
-  // Deduplicate (case-insensitive)
-  const seen = new Set();
-  return resolved.filter((email) => {
-    const lower = email.toLowerCase();
-    if (seen.has(lower)) return false;
-    seen.add(lower);
-    return true;
-  });
-}
-
-/**
- * Fetch the workflow config via the DA Config API.
- * Tries site-level first: GET /config/{org}/{site}/publish-workflow-config
- * Falls back to org-level: GET /config/{org}/publish-workflow-config
- * See: https://docs.da.live/developers/api/config#get-config
- * @param {string} org - Organization
- * @param {string} site - Site
- * @param {string} token - Authorization token
- * @returns {Promise<Object|null>} Config data or null on failure
- */
-async function fetchWorkflowConfig(org, site, token) {
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    Accept: 'application/json',
-  };
-
-  // 1. Try site-level root config
-  const siteUrl = `${DA_ADMIN}/config/${org}/${site}/`;
-  const siteResp = await fetch(siteUrl, { headers });
-  if (siteResp.ok) {
-    const config = await siteResp.json();
-    if (config['publish-workflow-config']) {
-      return config;
-    }
-  }
-
-  // 2. Fallback to org-level root config
-  const orgUrl = `${DA_ADMIN}/config/${org}/`;
-  const orgResp = await fetch(orgUrl, { headers });
-  if (orgResp.ok) {
-    const config = await orgResp.json();
-    if (config['publish-workflow-config']) {
-      return config;
-    }
-  }
-
-  return null;
-}
+// ===========================================================================
+// Site config / live host (admin.hlx.page — unchanged, client-side)
+// ===========================================================================
 
 /**
  * Fetch site config from admin.hlx.page (CDN config, etc.) via CORS proxy.
- * GET https://admin.hlx.page/sidekick/${org}/${site}/main/config.json
  * @param {string} org - Organization
  * @param {string} site - Site (repo)
- * @param {string} token - Authorization token
  * @returns {Promise<Object|null>} Site config or null on failure
  */
 export async function fetchSiteConfig(org, site) {
@@ -231,20 +102,32 @@ export function getLiveHostFromConfig(org, site, config) {
 }
 
 /**
- * Fetch per-customer accent color overrides from workflow settings.
+ * Fetch per-customer accent color overrides from the workflow config (display).
  * @param {string} org - Organization
  * @param {string} site - Site
  * @param {string} token - Authorization token
  * @returns {Promise<{accentColor: string|null, accentColorHover: string|null}>}
  */
 export async function fetchAccentSettings(org, site, token) {
-  const config = await fetchWorkflowConfig(org, site, token);
-  if (!config) return { accentColor: null, accentColorHover: null };
-  return {
-    accentColor: extractSetting(config, 'theme.accent-color'),
-    accentColorHover: extractSetting(config, 'theme.accent-color-hover'),
-  };
+  try {
+    const url = `${getWorkerUrl()}/api/config?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
+    const resp = await fetch(url, getOpts(token, 'GET'));
+    if (!resp.ok) return { accentColor: null, accentColorHover: null };
+    const { config } = await resp.json();
+    if (!config) return { accentColor: null, accentColorHover: null };
+    return {
+      accentColor: extractSetting(config, 'theme.accent-color'),
+      accentColorHover: extractSetting(config, 'theme.accent-color-hover'),
+    };
+  } catch (error) {
+    console.warn('Failed to fetch accent settings:', error);
+    return { accentColor: null, accentColorHover: null };
+  }
 }
+
+// ===========================================================================
+// Helix publish (admin.hlx.page — unchanged, runs under the user's session)
+// ===========================================================================
 
 /**
  * Publish content via Helix Admin API
@@ -252,7 +135,6 @@ export async function fetchAccentSettings(org, site, token) {
  * @param {string} org - Organization
  * @param {string} site - Site
  * @param {string} path - Content path
- * @param {string} token - Authorization token
  * @returns {Promise<Object>} Result
  */
 export async function publishContent(org, site, path) {
@@ -288,338 +170,11 @@ export async function publishContent(org, site, path) {
 }
 
 /**
- * Send rejection notification via Worker
- * @param {Object} data - Rejection data
- * @param {string} token - Authorization token
- * @returns {Promise<Object>} Result
- */
-export async function notifyRejection(data, token) {
-  try {
-    const opts = getOpts(token, 'POST', data);
-    const response = await fetch(`${getWorkerUrl()}/api/notify-rejection`, opts);
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      return {
-        success: false,
-        error: result.error || 'Failed to send rejection notification',
-      };
-    }
-
-    return {
-      success: true,
-      message: result.message,
-      recipients: result.recipients,
-    };
-  } catch (error) {
-    console.error('Error sending rejection notification:', error);
-    return {
-      success: false,
-      error: error.message || 'An error occurred',
-    };
-  }
-}
-
-/**
- * Notify author(s) that their content has been published.
- * Sends a consolidated email per author via the Worker.
- * @param {Object} data - { org, site, paths: [{ path, authorEmail }],
- *                         approverEmail, approverName? }
- * @param {string} token - Authorization token
- * @returns {Promise<Object>} Result
- */
-export async function notifyPublished(data, token) {
-  try {
-    const opts = getOpts(token, 'POST', data);
-    const response = await fetch(`${getWorkerUrl()}/api/notify-published`, opts);
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      return {
-        success: false,
-        error: result.error || 'Failed to send publish notification',
-      };
-    }
-
-    return {
-      success: true,
-      message: result.message,
-      notifiedAuthors: result.notifiedAuthors,
-    };
-  } catch (error) {
-    console.error('Error sending publish notification:', error);
-    return {
-      success: false,
-      error: error.message || 'An error occurred',
-    };
-  }
-}
-
-/**
- * Get the list of resolved approvers and CC recipients for a given content path.
- * Both columns are included because CC recipients who receive the approval email
- * should be able to view and approve the request. DL groups in either column are
- * expanded via the groups-to-email tab.
- * @param {string} org - Organization
- * @param {string} site - Site
- * @param {string} path - Content path
- * @param {string} token - Authorization token
- * @returns {Promise<string[]>} Deduplicated array of authorized emails (empty if none found)
- */
-export async function getApproversForPath(org, site, path, token) {
-  const config = await fetchWorkflowConfig(org, site, token);
-  if (!config) {
-    throw new Error(
-      'Publish workflow configuration not found. Please ensure the "publish-workflow-config" tab '
-      + `exists in the DA config for site "${org}/${site}" or org "${org}".`,
-    );
-  }
-
-  const rules = config['publish-workflow-config']?.data || config.data || [];
-  const groupsData = config['publish-workflow-groups-to-email']?.data || [];
-
-  // 'approvals.cc.can-approve' controls whether CC recipients are authorized to
-  // view and approve requests. Defaults to false (opt-in); set to 'true' to
-  // grant CC recipients the same approval rights as Approvers.
-  const ccCanApprove = extractSetting(config, 'approvals.cc.can-approve')?.toLowerCase() === 'true';
-
-  // Find the best (most specific) matching rule for this path
-  const rule = findBestMatchingRule(path, rules);
-  if (rule) {
-    let approvers = rule.Approvers || rule.approvers || [];
-    if (typeof approvers === 'string') {
-      approvers = approvers.split(',').map((a) => a.trim()).filter(Boolean);
-    }
-    const resolvedApprovers = resolveApproversWithGroups(approvers, groupsData);
-
-    if (!ccCanApprove) return resolvedApprovers;
-
-    let cc = rule.CC || rule.cc || [];
-    if (typeof cc === 'string') {
-      cc = cc.split(',').map((c) => c.trim()).filter(Boolean);
-    }
-    const resolvedCC = cc.length > 0 ? resolveApproversWithGroups(cc, groupsData) : [];
-
-    // Merge approvers and CC recipients, deduplicated (case-insensitive)
-    const seen = new Set();
-    return [...resolvedApprovers, ...resolvedCC].filter((email) => {
-      const lower = email.toLowerCase();
-      if (seen.has(lower)) return false;
-      seen.add(lower);
-      return true;
-    });
-  }
-
-  return [];
-}
-
-/**
- * Get both the resolved approvers and CC recipients for a given content path.
- * Reads the same config as getApproversForPath but also resolves the CC column.
- * @param {string} org - Organization
- * @param {string} site - Site
- * @param {string} path - Content path
- * @param {string} token - Authorization token
- * @returns {Promise<{ approvers: string[], cc: string[] }>}
- */
-async function getApproversAndCCForPath(org, site, path, token) {
-  const config = await fetchWorkflowConfig(org, site, token);
-  if (!config) {
-    throw new Error(
-      'Publish workflow configuration not found. Please ensure the "publish-workflow-config" tab '
-      + `exists in the DA config for site "${org}/${site}" or org "${org}".`,
-    );
-  }
-
-  const rules = config['publish-workflow-config']?.data || config.data || [];
-  const groupsData = config['publish-workflow-groups-to-email']?.data || [];
-
-  const rule = findBestMatchingRule(path, rules);
-  if (!rule) return { approvers: [], cc: [] };
-
-  let approvers = rule.Approvers || rule.approvers || [];
-  if (typeof approvers === 'string') {
-    approvers = approvers.split(',').map((a) => a.trim()).filter(Boolean);
-  }
-
-  let cc = rule.CC || rule.cc || [];
-  if (typeof cc === 'string') {
-    cc = cc.split(',').map((c) => c.trim()).filter(Boolean);
-  }
-
-  return {
-    approvers: resolveApproversWithGroups(approvers, groupsData),
-    cc: cc.length > 0 ? resolveApproversWithGroups(cc, groupsData) : [],
-  };
-}
-
-/**
- * Check if a pending publish request exists for the given path in the requests sheet
- * @param {string} org - Organization
- * @param {string} site - Site
- * @param {string} path - Content path
- * @param {string} token - Authorization token
- * @returns {Promise<Object|null>} The matching pending request row, or null if not found
- */
-export async function checkPublishRequest(org, site, path, token) {
-  try {
-    const sheetUrl = `${DA_ADMIN}/source/${org}/${site}${REQUESTS_SHEET_PATH}`;
-    const opts = getOpts(token, 'GET');
-    const resp = await fetch(sheetUrl, opts);
-    if (!resp.ok) return null;
-
-    const sheet = await resp.json();
-    const requests = sheet.data || [];
-
-    return requests.find(
-      (r) => r.path === path && r.status === 'pending',
-    ) || null;
-  } catch (error) {
-    console.error('Error checking publish request:', error);
-    return null;
-  }
-}
-
-/**
- * Remove a pending publish request from the requests sheet (after approve or reject)
- * @param {string} org - Organization
- * @param {string} site - Site
- * @param {string} path - Content path to remove
- * @param {string} token - Authorization token
- * @returns {Promise<Object>} Result
- */
-export async function removePublishRequest(org, site, path, token) {
-  try {
-    const sheetUrl = `${DA_ADMIN}/source/${org}/${site}${REQUESTS_SHEET_PATH}`;
-    const opts = getOpts(token, 'GET');
-    const resp = await fetch(sheetUrl, opts);
-    if (!resp.ok) {
-      throw new Error(`Failed to read requests sheet: ${resp.status}`);
-    }
-
-    const sheet = await resp.json();
-    const requests = sheet.data || [];
-
-    // First row defines the column keys — extract them to preserve sheet structure
-    const keys = requests.length > 0 ? Object.keys(requests[0]) : [];
-    const emptyRow = Object.fromEntries(keys.map((k) => [k, '']));
-    const dataRows = requests.slice(1);
-
-    // Remove the pending request matching this path (only from data rows)
-    const filteredData = dataRows.filter(
-      (r) => !(r.path === path && r.status === 'pending'),
-    );
-
-    // If nothing was removed, nothing to update
-    if (filteredData.length === dataRows.length) {
-      return { success: true, message: 'No matching request found to remove' };
-    }
-
-    // Rebuild with an empty first row to preserve column keys
-    const filtered = [emptyRow, ...filteredData];
-
-    // Update sheet data (single-sheet format)
-    sheet.total = filtered.length;
-    sheet.offset = 0;
-    sheet.limit = filtered.length;
-    sheet.data = filtered;
-
-    // Write back to DA as multipart/form-data
-    const blob = new Blob([JSON.stringify(sheet)], { type: 'application/json' });
-    const formData = new FormData();
-    formData.append('data', blob);
-
-    const writeResp = await fetch(sheetUrl, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-    if (!writeResp.ok) {
-      throw new Error(`Failed to update requests sheet: ${writeResp.status}`);
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error('Error removing publish request from sheet:', error);
-    return { success: false, error: error.message };
-  }
-}
-
-/**
- * Get ALL pending requests that the given user is authorized to approve.
- * Fetches both the config sheet (for approver rules + group resolution) and
- * the requests sheet, then filters to only those paths where the user is
- * a resolved approver.
- * @param {string} org - Organization
- * @param {string} site - Site
- * @param {string} userEmail - The logged-in user's email
- * @param {string} token - Authorization token
- * @returns {Promise<Object[]>} Array of pending request objects the user can approve
- */
-export async function getAllPendingRequestsForUser(org, site, userEmail, token) {
-  // Fetch config and requests in parallel
-  const [config, requestsResp] = await Promise.all([
-    fetchWorkflowConfig(org, site, token),
-    fetch(
-      `${DA_ADMIN}/source/${org}/${site}${REQUESTS_SHEET_PATH}`,
-      getOpts(token, 'GET'),
-    ),
-  ]);
-
-  if (!config) {
-    throw new Error(
-      'Publish workflow configuration not found. Please ensure the "publish-workflow-config" tab '
-      + `exists in the DA config for site "${org}/${site}" or org "${org}".`,
-    );
-  }
-
-  if (!requestsResp.ok) return [];
-
-  const requestsSheet = await requestsResp.json();
-  const allRequests = requestsSheet.data || [];
-  const pendingRequests = allRequests.filter((r) => r.status === 'pending' && r.path);
-
-  if (pendingRequests.length === 0) return [];
-
-  const rules = config['publish-workflow-config']?.data || config.data || [];
-  const groupsData = config['publish-workflow-groups-to-email']?.data || [];
-  const normalizedUser = userEmail.toLowerCase();
-  const ccCanApprove = extractSetting(config, 'approvals.cc.can-approve')?.toLowerCase() === 'true';
-
-  // Filter to requests this user can approve — optionally checks CC column too
-  // based on the 'approvals.cc.can-approve' workflow setting (defaults to false).
-  return pendingRequests.filter((request) => {
-    const rule = findBestMatchingRule(request.path, rules);
-    if (!rule) return false;
-
-    let approvers = rule.Approvers || rule.approvers || [];
-    if (typeof approvers === 'string') {
-      approvers = approvers.split(',').map((a) => a.trim()).filter(Boolean);
-    }
-    const resolvedApprovers = resolveApproversWithGroups(approvers, groupsData);
-
-    if (!ccCanApprove) return resolvedApprovers.some((a) => a.toLowerCase() === normalizedUser);
-
-    let cc = rule.CC || rule.cc || [];
-    if (typeof cc === 'string') {
-      cc = cc.split(',').map((c) => c.trim()).filter(Boolean);
-    }
-    const resolvedCC = cc.length > 0 ? resolveApproversWithGroups(cc, groupsData) : [];
-    return [...resolvedApprovers, ...resolvedCC].some((a) => a.toLowerCase() === normalizedUser);
-  });
-}
-
-/**
  * Bulk publish multiple content paths via Helix Admin API
  * POST https://admin.hlx.page/live/{org}/{site}/main/*
- * Uses the bulk publish job API to publish all paths in a single request.
- * See: https://www.aem.live/docs/admin.html#tag/publish/operation/bulkPublish
  * @param {string} org - Organization
  * @param {string} site - Site
  * @param {string[]} paths - Array of content paths to publish
- * @param {string} token - Authorization token
  * @returns {Promise<Object>} Result with job info or error
  */
 export async function bulkPublishContent(org, site, paths) {
@@ -662,9 +217,7 @@ export async function bulkPublishContent(org, site, paths) {
 
 /**
  * Poll a bulk job until it completes or times out.
- * Appends /details to the job's self link returned in the bulk publish response.
  * @param {string} jobSelfUrl - The links.self URL from the bulk publish response
- * @param {string} token - Authorization token
  * @param {number} maxWaitMs - Maximum time to wait in milliseconds (default: 60s)
  * @param {number} intervalMs - Polling interval in milliseconds (default: 2s)
  * @returns {Promise<Object>} Final job status
@@ -701,110 +254,127 @@ export async function pollJobStatus(jobSelfUrl, maxWaitMs = 60000, intervalMs = 
   return { success: false, error: 'Job polling timed out or encountered an error' };
 }
 
+// ===========================================================================
+// Workflow bookkeeping — thin REST client over publish-requests-worker.
+// Identity is derived server-side from the user's IMS token; the worker does
+// approver resolution, sheet I/O, and email. Publish/preview stay client-side.
+// ===========================================================================
+
 /**
- * Remove multiple pending publish requests from the requests sheet in a single write.
- * More efficient than calling removePublishRequest() per path when doing bulk approvals.
- * @param {string} org - Organization
- * @param {string} site - Site
- * @param {string[]} paths - Array of content paths to remove
- * @param {string} token - Authorization token
- * @returns {Promise<Object>} Result
+ * Resolved approvers (incl. CC, when cc.can-approve) for a path.
+ * @returns {Promise<string[]>} Deduplicated authorized emails (empty if none).
  */
-export async function removeMultiplePublishRequests(org, site, paths, token) {
+export async function getApproversForPath(org, site, path, token) {
+  const url = `${getWorkerUrl()}/api/approvers?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}&path=${encodeURIComponent(path)}`;
+  const resp = await fetch(url, getOpts(token, 'GET'));
+  if (!resp.ok) return [];
+  const { approvers = [], cc = [] } = await resp.json();
+  return [...approvers, ...cc];
+}
+
+/**
+ * All pending requests the caller is authorized to approve.
+ * @param {string} userEmail - Unused; the worker derives identity from the token.
+ */
+export async function getAllPendingRequestsForUser(org, site, userEmail, token) {
+  const url = `${getWorkerUrl()}/api/requests?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
+  const resp = await fetch(url, getOpts(token, 'GET'));
+  if (!resp.ok) return [];
+  const { requests = [] } = await resp.json();
+  return requests;
+}
+
+/**
+ * All pending requests the caller submitted (their own queue).
+ * @param {string} userEmail - Unused; the worker scopes by the token identity.
+ */
+export async function getAllPendingRequestsByRequester(org, site, userEmail, token) {
+  const url = `${getWorkerUrl()}/api/requests?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}&role=requester`;
+  const resp = await fetch(url, getOpts(token, 'GET'));
+  if (!resp.ok) return [];
+  const { requests = [] } = await resp.json();
+  return requests;
+}
+
+/**
+ * The pending request at `path` if the caller can approve it, else null.
+ * @returns {Promise<Object|null>}
+ */
+export async function checkPublishRequest(org, site, path, token) {
   try {
-    const sheetUrl = `${DA_ADMIN}/source/${org}/${site}${REQUESTS_SHEET_PATH}`;
-    const opts = getOpts(token, 'GET');
-    const resp = await fetch(sheetUrl, opts);
-    if (!resp.ok) {
-      throw new Error(`Failed to read requests sheet: ${resp.status}`);
-    }
-
-    const sheet = await resp.json();
-    const requests = sheet.data || [];
-
-    // First row defines the column keys — extract them to preserve sheet structure
-    const keys = requests.length > 0 ? Object.keys(requests[0]) : [];
-    const emptyRow = Object.fromEntries(keys.map((k) => [k, '']));
-    const dataRows = requests.slice(1);
-
-    const pathSet = new Set(paths);
-    const filteredData = dataRows.filter(
-      (r) => !(pathSet.has(r.path) && r.status === 'pending'),
-    );
-
-    if (filteredData.length === dataRows.length) {
-      return { success: true, message: 'No matching requests found to remove' };
-    }
-
-    // Rebuild with an empty first row to preserve column keys
-    const filtered = [emptyRow, ...filteredData];
-
-    // Update sheet data (single-sheet format)
-    sheet.total = filtered.length;
-    sheet.offset = 0;
-    sheet.limit = filtered.length;
-    sheet.data = filtered;
-
-    const blob = new Blob([JSON.stringify(sheet)], { type: 'application/json' });
-    const formData = new FormData();
-    formData.append('data', blob);
-
-    const writeResp = await fetch(sheetUrl, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-    if (!writeResp.ok) {
-      throw new Error(`Failed to update requests sheet: ${writeResp.status}`);
-    }
-
-    return { success: true, removedCount: requests.length - filtered.length };
+    const pending = await getAllPendingRequestsForUser(org, site, null, token);
+    return pending.find((r) => r.path === path && r.status === 'pending') || null;
   } catch (error) {
-    console.error('Error removing publish requests from sheet:', error);
-    return { success: false, error: error.message };
+    console.error('Error checking publish request:', error);
+    return null;
   }
 }
 
 /**
- * Resend the publish request notification email to approvers for a given path.
- * Resolves the approvers from the workflow config, then calls the worker's
- * /api/request-publish endpoint to re-send the email. Does NOT modify the
- * requests sheet (the existing pending row is preserved).
- * @param {string} org - Organization
- * @param {string} site - Site
- * @param {string} path - Content path
- * @param {string} requesterEmail - The requester's email
- * @param {string} token - Authorization token
- * @returns {Promise<Object>} Result
+ * Record approval for already-published paths (sheet removal + author email).
+ * The publish itself is done client-side via publishContent/bulkPublishContent.
+ * @param {string[]} paths - Paths that were successfully published.
+ * @returns {Promise<Object>} { success, approved, notFound, unauthorized }
+ */
+export async function approveRequests(org, site, paths, token) {
+  try {
+    const resp = await fetch(`${getWorkerUrl()}/api/requests/approve`, getOpts(token, 'POST', { org, site, paths }));
+    const result = await resp.json();
+    if (!resp.ok) return { success: false, error: result.error || 'Failed to record approval' };
+    return { success: true, ...result };
+  } catch (error) {
+    console.error('Error recording approval:', error);
+    return { success: false, error: error.message || 'An error occurred' };
+  }
+}
+
+/**
+ * Reject a pending request (sheet removal + author notification).
+ * @returns {Promise<Object>} { success, error? }
+ */
+export async function rejectRequest(org, site, path, reason, token) {
+  try {
+    const resp = await fetch(`${getWorkerUrl()}/api/requests/reject`, getOpts(token, 'POST', {
+      org, site, path, reason,
+    }));
+    const result = await resp.json();
+    if (!resp.ok) return { success: false, error: result.error || 'Failed to reject request' };
+    return { success: true };
+  } catch (error) {
+    console.error('Error rejecting request:', error);
+    return { success: false, error: error.message || 'An error occurred' };
+  }
+}
+
+/**
+ * Withdraw the caller's own pending request.
+ * @returns {Promise<Object>} { success, error? }
+ */
+export async function withdrawRequest(org, site, path, token) {
+  try {
+    const resp = await fetch(`${getWorkerUrl()}/api/requests/withdraw`, getOpts(token, 'POST', { org, site, path }));
+    const result = await resp.json();
+    if (!resp.ok) return { success: false, error: result.error || 'Failed to withdraw request' };
+    return { success: true };
+  } catch (error) {
+    console.error('Error withdrawing request:', error);
+    return { success: false, error: error.message || 'An error occurred' };
+  }
+}
+
+/**
+ * Re-send the approval email for an existing request (no sheet change).
+ * @param {string} requesterEmail - Unused; the worker resolves approvers itself.
+ * @returns {Promise<Object>} { success, message, approvers? }
  */
 export async function resendPublishRequest(org, site, path, requesterEmail, token) {
   try {
-    const { approvers, cc } = await getApproversAndCCForPath(org, site, path, token);
-    if (!approvers || approvers.length === 0) {
-      return { success: false, error: 'No approvers found for this content path.' };
-    }
-
-    const pagePath = path?.replace(/\/index$/, '') || '';
-    const previewUrl = `https://main--${site}--${org}.aem.page${pagePath}`;
-
-    const opts = getOpts(token, 'POST', {
-      appBaseUrl: APP_BASE_URL,
-      org,
-      site,
-      path,
-      previewUrl,
-      authorEmail: requesterEmail,
-      approvers,
-      cc,
-    });
-    const response = await fetch(`${getWorkerUrl()}/api/request-publish`, opts);
-    const result = await response.json();
-
-    if (!response.ok) {
-      return { success: false, error: result.error || 'Failed to resend publish request' };
-    }
-
-    return { success: true, message: result.message || 'Publish request re-sent to approvers' };
+    const resp = await fetch(`${getWorkerUrl()}/api/requests`, getOpts(token, 'POST', {
+      org, site, path, resend: true,
+    }));
+    const result = await resp.json();
+    if (!resp.ok) return { success: false, error: result.error || 'Failed to resend publish request' };
+    return { success: true };
   } catch (error) {
     console.error('Error resending publish request:', error);
     return { success: false, error: error.message || 'An error occurred' };
@@ -812,33 +382,7 @@ export async function resendPublishRequest(org, site, path, requesterEmail, toke
 }
 
 /**
- * Get ALL pending requests that were submitted by the given user (requester).
- * Fetches the requests sheet and filters to rows where the requester matches
- * the current user's email. No approver-rule checking is performed.
- * @param {string} org - Organization
- * @param {string} site - Site
- * @param {string} userEmail - The logged-in user's email
- * @param {string} token - Authorization token
- * @returns {Promise<Object[]>} Array of pending request objects submitted by the user
- */
-export async function getAllPendingRequestsByRequester(org, site, userEmail, token) {
-  const sheetUrl = `${DA_ADMIN}/source/${org}/${site}${REQUESTS_SHEET_PATH}`;
-  const resp = await fetch(sheetUrl, getOpts(token, 'GET'));
-
-  if (!resp.ok) return [];
-
-  const requestsSheet = await resp.json();
-  const allRequests = requestsSheet.data || [];
-  const normalizedUser = userEmail.toLowerCase();
-
-  return allRequests.filter(
-    (r) => r.status === 'pending' && r.path && r.requester
-      && r.requester.toLowerCase() === normalizedUser,
-  );
-}
-
-/**
- * Fetch the current user's email from Adobe IMS profile
+ * Fetch the current user's email from Adobe IMS profile (for display).
  * @param {string} token - The authorization token
  * @returns {Promise<string>} User email or empty string if unavailable
  */

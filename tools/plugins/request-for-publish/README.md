@@ -10,73 +10,31 @@ When an author finishes editing content and wants to publish it, they open this 
 
 ### Architecture
 
-- **Web Component**: Built as a LitElement custom element (`<request-for-publish>`)
-- **DA SDK**: Integrates with the DA.live SDK for authentication, context (org, site, path), and dialog rendering
-- **DA Config API**: Reads the workflow configuration (approver rules and group-to-email mappings) via `GET https://admin.da.live/config/{org}/{site}/` with automatic fallback to `GET https://admin.da.live/config/{org}/` if not found at site level. See [DA Config API docs](https://docs.da.live/developers/api/config#get-config)
-- **DA Admin API**: Reads/writes the pending requests sheet at `/.da/publish-workflow-requests.json`
-- **Cloudflare Worker**: Submits publish requests to a worker (`/api/request-publish`) which sends email notifications to approvers with CC recipients copied
-- **Adobe IMS**: Fetches the current user's email from the Adobe IMS profile endpoint
-- **Dual Mode**: Can run as a fullsize-dialog (HTML entry point) or as a DA panel plugin (exported `init` function)
+The plugin is a **thin REST client of [`publish-requests-worker`](https://github.com/adobe-rnd/publish-requests-worker)**. It no longer resolves approvers or reads/writes the requests sheet itself — the worker is the single source of truth for approver resolution (pattern matching + DL-group expansion), sheet I/O, and email.
 
-### Initialization Flow
+- **Web Component**: LitElement custom element (`<request-for-publish>`).
+- **DA SDK**: authentication, context (org, site, path), and dialog rendering.
+- **publish-requests-worker (REST)** — the plugin calls:
+  - `GET /api/approvers` — resolved approvers + CC for the path
+  - `GET /api/config` — workflow config (for display-only settings, e.g. comment requirements)
+  - `POST /api/requests` — submit a request (worker resolves approvers, records the row, emails approvers + CC)
+  - `POST /api/requests/withdraw` — cancel the author's own pending request
+  - `GET /api/requests?role=requester` — the author's own pending requests
+- **Helix Admin (client-side)**: previews the page under the user's session before submitting; the worker never calls Helix.
+- **Adobe IMS**: the user's IMS token is sent to the worker, which **derives the caller's identity from it** (the plugin never sends an email/approver list). The plugin also reads the user's email from the IMS profile for display.
+- **Dual Mode**: fullsize-dialog (HTML entry point) or DA panel plugin (exported `init`).
 
-1. The plugin loads and fetches the current user's email from Adobe IMS
-2. The content path is derived from the DA SDK context (`/{org}/{site}{path}` → strips org/site prefix)
-3. It reads the workflow config via the DA Config API (`/config/{org}/{site}/`, falling back to `/config/{org}/`) — if the `publish-workflow-config` tab is not found at either level, an error message is displayed and the form is not shown
-4. Distribution list (DL) groups in the Approvers and CC fields are resolved to individual emails using the `groups-to-email` tab
-5. It checks the requests sheet (`/.da/publish-workflow-requests.json`) for any existing pending request by this user for this path
-6. If a pending request exists, it shows a "Request Pending" state instead of the form
-7. Otherwise, the submission form is rendered with pre-filled details
+### Initialization & submission flow
 
-### Approver Detection & Group Resolution
+1. The plugin reads the user's email (IMS profile, for display) and the content path from the DA SDK context.
+2. It calls `GET /api/config` (display settings) and `GET /api/approvers` (resolved approvers + CC). If the worker reports missing config or no matching rule, an error is shown and the form is hidden.
+3. It calls `GET /api/requests?role=requester` to detect an existing pending request by this user for this path; if found, a "Request Pending" state is shown instead of the form.
+4. The author optionally reviews the diff, adds a note, and clicks **Request Publish**.
+5. The plugin previews the page via Helix (client-side), then `POST /api/requests` — the worker resolves approvers, records the pending row, and emails approvers + CC. A success confirmation lists the notified recipients.
 
-Approvers are detected by matching the content path against rules defined in the DA config sheet:
+### Approver resolution (server-side)
 
-```
-DA Config API → /config/{org}/{site}/ → publish-workflow-config tab
-```
-
-Each rule has a **Pattern** (e.g., `/drafts/*`, `/*`), **Approvers** (comma-separated emails or DL names), and an optional **CC** column (comma-separated emails or DL names). If no rule matches the path, an error is shown.
-
-When an approver or CC entry matches a group in the `groups-to-email` tab, it is expanded to individual email addresses. CC recipients that overlap with approvers are automatically deduplicated by the worker to avoid sending duplicate emails.
-
-#### Pattern Matching (Specificity-Based)
-
-When multiple rules could match a given content path, the plugin selects the **most specific** (closest) match rather than the first match. Rules are scored by how closely their prefix matches the content path:
-
-1. **Exact match** (e.g., `/drafts/user1/sample-page`) — highest priority
-2. **Closest wildcard** (e.g., `/drafts/user1/*`) — most path segments matched
-3. **Parent wildcard** (e.g., `/drafts/*`) — fewer segments matched
-4. **Root wildcard** (`/*`) — lowest priority, catches everything
-
-**Example:**
-| Pattern | Approvers | CC |
-|---------|-----------|-----|
-| `/drafts/user1/*` | `user1@example.com` | `manager@example.com` |
-| `/drafts/*` | `user2@example.com` | `dl-leads@example.com` |
-| `/*` | `dl-reviewers@example.com` | `ops-team@example.com` |
-
-**groups-to-email tab:**
-| group | email |
-|-------|-------|
-| `dl-reviewers@example.com` | `reviewer1@example.com` |
-| `dl-leads@example.com` | `lead1@example.com, lead2@example.com` |
-
-For content at `/drafts/user1/my-page`, the rule `/drafts/user1/*` is selected (specificity 2) over `/drafts/*` (specificity 1) and `/*` (specificity 0). So `user1@example.com` is the approver and `manager@example.com` is CC'd.
-
-For content at `/about`, only `/*` matches, so `dl-reviewers@example.com` is resolved to `reviewer1@example.com` as the approver, and `ops-team@example.com` is included as CC.
-
-If no matching rule is found, an error message is shown prompting the user to add a matching pattern to the config.
-
-### Submission Flow
-
-1. Author opens the plugin and sees the pre-filled form (content path, preview link, detected approvers, and CC recipients)
-2. Author optionally reviews the content diff via the AEM Page Status diff tool link
-3. Author adds a note for the reviewers (optional by default; can be made mandatory with a minimum length via `publish-workflow-settings`)
-4. Author clicks **"Request Publish"**
-5. The plugin sends the request to the Cloudflare Worker (`/api/request-publish`), which triggers email notifications to all resolved approvers with CC recipients copied
-6. On success, it writes a new entry to `/.da/publish-workflow-requests.json` with status `pending`, including the author's comment
-7. A success confirmation is shown listing the notified approvers and CC'd recipients
+Approver/CC resolution — specificity-based pattern matching against the `publish-workflow-config` rules and distribution-list expansion via `publish-workflow-groups-to-email` — is performed by **`publish-requests-worker`**, not the plugin. See that repo for the matching semantics and rule format. The plugin only displays the approvers the worker returns; if no rule matches the path, the worker returns none and the plugin shows an error.
 
 ## Use Cases Handled
 
@@ -136,7 +94,7 @@ If the request fails to submit (network error, worker error, etc.), an error mes
 | `request-for-publish.html` | Entry HTML for fullsize-dialog mode; loads DA SDK and the plugin module |
 | `request-for-publish.js` | Main LitElement component with form, states, and event handlers; includes both dialog and panel mode initialization |
 | `request-for-publish.css` | Styles for all component states (form, pending, success, loading) |
-| `utils.js` | Utility layer — approver and CC detection with group resolution via DA Config API (with org fallback), publish request submission, DA sheet read/write, IMS profile fetch |
+| `utils.js` | Thin REST client over `publish-requests-worker` (approvers/config fetch, submit/resend/withdraw, existing-request check) + client-side Helix preview + IMS profile fetch |
 
 ## Configuration
 
@@ -147,7 +105,7 @@ The workflow configuration is read from the **DA Config API** as tabs within the
 - **Site-level** (primary): `GET https://admin.da.live/config/{org}/{site}/`
 - **Org-level** (fallback): `GET https://admin.da.live/config/{org}/`
 
-The config is a multi-sheet JSON. The plugin uses these tabs:
+These tabs are read by **`publish-requests-worker`** (for approver resolution and rule enforcement); the plugin only reads display-only settings from them via `GET /api/config`. The config is a multi-sheet JSON with these tabs:
 
 - **`publish-workflow-config`** tab: Path-based rules with `Pattern`, `Approvers`, `CC`, and `NotifyOnReject` columns. Patterns support wildcards (e.g., `/drafts/*`, `/*`)
 - **`publish-workflow-groups-to-email`** tab: Maps distribution list group names (e.g., `dl-reviewers@example.com`) to comma-separated individual email addresses
@@ -175,9 +133,9 @@ The `publish-workflow-settings` tab holds key-value pairs that control optional 
 
 Tracks pending publish requests with columns: `requester`, `approver`, `path`, `comment`, `status`, `created`
 
-**Access requirements:** All authors must have **write access** to `/{org}/{site}/.da/publish-workflow-requests.json` for the Request Publish workflow to work. The plugin reads this sheet to check for existing pending requests and writes new entries on submission.
+**Access requirements:** the worker reads and writes this sheet **on the author's behalf, using the author's forwarded IMS token** — so authors still need **write access** to `/{org}/{site}/.da/publish-workflow-requests.json` for the Request Publish workflow to work.
 
-Configure access in the DA config at `/config/{org}/` (or `/config/{org}/{site}/` if using site-level config). Grant the IMS group that contains your authors **write access** to the `/{org}/{site}/.da/publish-workflow-requests.json` sheet. Without this permission, authors will not be able to submit publish requests.
+Configure access in the DA config at `/config/{org}/` (or `/config/{org}/{site}/` if using site-level config). Grant the IMS group that contains your authors **write access** to the `/{org}/{site}/.da/publish-workflow-requests.json` sheet. Without this permission, the worker's write fails and the request is rejected.
 
 ## Plugin Modes
 

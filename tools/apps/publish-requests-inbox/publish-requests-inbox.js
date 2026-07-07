@@ -7,11 +7,10 @@ import {
   publishContent,
   bulkPublishContent,
   pollJobStatus,
-  notifyRejection,
-  notifyPublished,
   checkPublishRequest,
-  removePublishRequest,
-  removeMultiplePublishRequests,
+  approveRequests,
+  rejectRequest,
+  withdrawRequest,
   getApproversForPath,
   getAllPendingRequestsForUser,
   getAllPendingRequestsByRequester,
@@ -453,29 +452,15 @@ class PublishRequestsApp extends LitElement {
     this._message = null;
 
     try {
-      // Publish the content via Helix Admin API
+      // Publish the content via Helix Admin API (under the user's session)
       const result = await publishContent(this._org, this._site, this._path);
 
       if (result.success) {
-        // Remove the pending request from the requests sheet
-        await removePublishRequest(this._org, this._site, this._path, this.token);
-
         this._state = 'approved';
-
-        // Notify the author that their content has been published
-        if (this._authorEmail) {
-          const notifyResult = await notifyPublished(
-            {
-              org: this._org,
-              site: this._site,
-              paths: [{ path: this._path, authorEmail: this._authorEmail }],
-              approverEmail: this._userEmail,
-            },
-            this.token,
-          );
-          if (!notifyResult.success) {
-            this._message = { type: 'info', text: `Author notification failed: ${notifyResult.error}` };
-          }
+        // Record the approval server-side: removes the pending row + emails the author.
+        const bookkeep = await approveRequests(this._org, this._site, [this._path], this.token);
+        if (!bookkeep.success) {
+          this._message = { type: 'info', text: `Published, but recording the approval failed: ${bookkeep.error}` };
         }
       } else {
         this._message = { type: 'error', text: result.error };
@@ -503,23 +488,12 @@ class PublishRequestsApp extends LitElement {
     this._isProcessing = true;
     this._message = null;
 
-    // Send rejection notification
-    const result = await notifyRejection(
-      {
-        org: this._org,
-        site: this._site,
-        path: this._path,
-        authorEmail: this._authorEmail,
-        rejecterEmail: this._userEmail,
-        reason,
-      },
-      this.token,
-    );
+    // Reject server-side: removes the pending row + emails the author the reason.
+    const result = await rejectRequest(this._org, this._site, this._path, reason, this.token);
 
     this._isProcessing = false;
 
     if (result.success) {
-      await removePublishRequest(this._org, this._site, this._path, this.token);
       this._state = 'rejected';
     } else {
       this._message = { type: 'error', text: result.error };
@@ -536,28 +510,12 @@ class PublishRequestsApp extends LitElement {
     const result = await publishContent(this._org, this._site, request.path);
 
     if (result.success) {
-      await removePublishRequest(this._org, this._site, request.path, this.token);
-
       this._pendingRequests = this._pendingRequests.filter((r) => r.path !== request.path);
-
-      // Notify the author that their content has been published
-      const authorEmail = request.requester || request.authorEmail;
-      if (authorEmail) {
-        const notifyResult = await notifyPublished(
-          {
-            org: this._org,
-            site: this._site,
-            paths: [{ path: request.path, authorEmail }],
-            approverEmail: this._userEmail,
-          },
-          this.token,
-        );
-        this._message = notifyResult.success
-          ? { type: 'success', text: `Published: ${request.path}` }
-          : { type: 'info', text: `Published: ${request.path}. Author notification failed: ${notifyResult.error}` };
-      } else {
-        this._message = { type: 'success', text: `Published: ${request.path}` };
-      }
+      // Record approval server-side (sheet removal + author email).
+      const bookkeep = await approveRequests(this._org, this._site, [request.path], this.token);
+      this._message = bookkeep.success
+        ? { type: 'success', text: `Published: ${request.path}` }
+        : { type: 'info', text: `Published: ${request.path}. Recording approval failed: ${bookkeep.error}` };
     } else {
       this._message = { type: 'error', text: `Failed to publish ${request.path}: ${result.error}` };
     }
@@ -617,27 +575,10 @@ class PublishRequestsApp extends LitElement {
         const succeededPaths = allPaths.filter((p) => !failedPaths.includes(p));
         let partialNotifyError = null;
 
-        // Remove only succeeded requests from the sheet in one write
+        // Record approval for the succeeded paths (sheet removal + author email).
         if (succeededPaths.length > 0) {
-          await removeMultiplePublishRequests(this._org, this._site, succeededPaths, this.token);
-
-          // Notify authors of successfully published pages
-          const succeededSet = new Set(succeededPaths);
-          const succeededEntries = this._pendingRequests
-            .filter((r) => succeededSet.has(r.path))
-            .map((r) => ({ path: r.path, authorEmail: r.requester || r.authorEmail }));
-          if (succeededEntries.length > 0) {
-            const notifyResult = await notifyPublished(
-              {
-                org: this._org,
-                site: this._site,
-                paths: succeededEntries,
-                approverEmail: this._userEmail,
-              },
-              this.token,
-            );
-            if (!notifyResult.success) partialNotifyError = notifyResult.error;
-          }
+          const bookkeep = await approveRequests(this._org, this._site, succeededPaths, this.token);
+          if (!bookkeep.success) partialNotifyError = bookkeep.error;
         }
 
         const succeededSet = new Set(succeededPaths);
@@ -652,25 +593,9 @@ class PublishRequestsApp extends LitElement {
       }
     }
 
-    // All succeeded — remove all requests from the sheet in a single write
-    await removeMultiplePublishRequests(this._org, this._site, allPaths, this.token);
-
-    // Notify all authors that their content has been published
-    const publishedEntries = this._pendingRequests
-      .map((r) => ({ path: r.path, authorEmail: r.requester || r.authorEmail }));
-    let bulkNotifyError = null;
-    if (publishedEntries.length > 0) {
-      const notifyResult = await notifyPublished(
-        {
-          org: this._org,
-          site: this._site,
-          paths: publishedEntries,
-          approverEmail: this._userEmail,
-        },
-        this.token,
-      );
-      if (!notifyResult.success) bulkNotifyError = notifyResult.error;
-    }
+    // All succeeded — record approval for all paths (sheet removal + author email).
+    const bookkeep = await approveRequests(this._org, this._site, allPaths, this.token);
+    const bulkNotifyError = bookkeep.success ? null : bookkeep.error;
 
     this._pendingRequests = [];
     this._approveAllProcessing = false;
@@ -706,7 +631,7 @@ class PublishRequestsApp extends LitElement {
     this._myRequestActions = new Map([...this._myRequestActions, [request.path, 'withdrawing']]);
     this._message = null;
 
-    const result = await removePublishRequest(
+    const result = await withdrawRequest(
       this._org, this._site, request.path, this.token,
     );
 
