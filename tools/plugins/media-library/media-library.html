@@ -60,6 +60,8 @@
 
         const { context, token } = await DA_SDK;
 
+        console.log('[Plugin] Token received from DA_SDK:', token ? `${token.substring(0, 20)}...` : 'null');
+
         // Check if token is available
         if (!token) {
           showError('Please register this plugin in Library and use it within authoring context.');
@@ -68,6 +70,7 @@
 
         // Inject token for plugin mode
         const { setImsDetails } = await import('https://medialib-quality--da-nx--adobe.aem.live/nx/blocks/media-library/core/ims-adapter.js');
+        console.log('[Plugin] Calling setImsDetails with token');
         setImsDetails(token);
 
         await import('https://medialib-quality--da-nx--adobe.aem.live/nx/blocks/media-library/media-library.js');
