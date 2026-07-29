@@ -1,0 +1,249 @@
+/* Universal Editor Section Styles */
+
+.section-universal-editor {
+  padding: var(--spectrum-global-dimension-size-300);
+}
+
+.section-header {
+  margin-bottom: var(--spectrum-global-dimension-size-400);
+}
+
+.section-title {
+  font-size: var(--spectrum-global-dimension-font-size-500);
+  font-weight: var(--spectrum-global-font-weight-bold);
+  margin: 0 0 var(--spectrum-global-dimension-size-100);
+  color: var(--spectrum-global-color-gray-900);
+}
+
+.section-description {
+  font-size: var(--spectrum-global-dimension-font-size-200);
+  color: var(--spectrum-global-color-gray-700);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.section-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spectrum-global-dimension-size-300);
+}
+
+/* Config Field */
+.config-field {
+  background: var(--spectrum-global-color-gray-50);
+  border: 1px solid var(--spectrum-global-color-gray-300);
+  border-radius: var(--spectrum-global-dimension-size-50);
+  padding: var(--spectrum-global-dimension-size-300);
+  transition: border-color 0.2s ease;
+}
+
+.config-field.is-inherited {
+  border-left: 3px solid var(--spectrum-global-color-blue-500);
+}
+
+.config-field.is-editing {
+  border-color: var(--spectrum-global-color-blue-500);
+}
+
+.config-label {
+  display: block;
+  font-size: var(--spectrum-global-dimension-font-size-100);
+  font-weight: var(--spectrum-global-font-weight-bold);
+  color: var(--spectrum-global-color-gray-800);
+  margin-bottom: var(--spectrum-global-dimension-size-100);
+}
+
+.config-value-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spectrum-global-dimension-size-200);
+}
+
+.config-value-display {
+  display: flex;
+  align-items: center;
+  gap: var(--spectrum-global-dimension-size-150);
+  flex: 1;
+}
+
+.config-value {
+  font-family: var(--spectrum-global-font-family-code);
+  font-size: var(--spectrum-global-dimension-font-size-100);
+  color: var(--spectrum-global-color-gray-900);
+  word-break: break-all;
+}
+
+.config-empty {
+  color: var(--spectrum-global-color-gray-500);
+  font-style: italic;
+}
+
+.config-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--spectrum-global-color-blue-100);
+  color: var(--spectrum-global-color-blue-700);
+  border-radius: 12px;
+  font-size: var(--spectrum-global-dimension-font-size-50);
+  font-weight: var(--spectrum-global-font-weight-bold);
+  white-space: nowrap;
+}
+
+.config-edit-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spectrum-global-dimension-size-150);
+}
+
+.config-edit-controls input {
+  width: 100%;
+  padding: var(--spectrum-global-dimension-size-100);
+  border: 1px solid var(--spectrum-global-color-gray-400);
+  border-radius: var(--spectrum-global-dimension-size-50);
+  font-family: var(--spectrum-global-font-family-code);
+  font-size: var(--spectrum-global-dimension-font-size-100);
+}
+
+.config-edit-controls input:focus {
+  outline: none;
+  border-color: var(--spectrum-global-color-blue-500);
+  box-shadow: 0 0 0 1px var(--spectrum-global-color-blue-500);
+}
+
+.config-edit-controls input:disabled {
+  background: var(--spectrum-global-color-gray-200);
+  cursor: not-allowed;
+}
+
+.config-hint {
+  margin: var(--spectrum-global-dimension-size-100) 0 0;
+  font-size: var(--spectrum-global-dimension-font-size-75);
+  color: var(--spectrum-global-color-gray-600);
+}
+
+.config-info {
+  margin: var(--spectrum-global-dimension-size-100) 0 0;
+  padding: var(--spectrum-global-dimension-size-100);
+  background: var(--spectrum-global-color-gray-100);
+  border-radius: var(--spectrum-global-dimension-size-50);
+  font-size: var(--spectrum-global-dimension-font-size-75);
+  color: var(--spectrum-global-color-gray-700);
+}
+
+.config-actions {
+  display: flex;
+  gap: var(--spectrum-global-dimension-size-100);
+  flex-shrink: 0;
+}
+
+.config-btn {
+  padding: var(--spectrum-global-dimension-size-100) var(--spectrum-global-dimension-size-200);
+  border: none;
+  border-radius: var(--spectrum-global-dimension-size-50);
+  font-size: var(--spectrum-global-dimension-font-size-100);
+  font-weight: var(--spectrum-global-font-weight-medium);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.config-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.config-btn-primary {
+  background: var(--spectrum-global-color-blue-600);
+  color: white;
+}
+
+.config-btn-primary:hover:not(:disabled) {
+  background: var(--spectrum-global-color-blue-700);
+}
+
+.config-btn-secondary {
+  background: var(--spectrum-global-color-gray-200);
+  color: var(--spectrum-global-color-gray-800);
+}
+
+.config-btn-secondary:hover:not(:disabled) {
+  background: var(--spectrum-global-color-gray-300);
+}
+
+.config-btn-tertiary {
+  background: transparent;
+  color: var(--spectrum-global-color-red-600);
+  border: 1px solid var(--spectrum-global-color-red-600);
+}
+
+.config-btn-tertiary:hover:not(:disabled) {
+  background: var(--spectrum-global-color-red-600);
+  color: white;
+}
+
+.inheritance-notice {
+  margin-top: var(--spectrum-global-dimension-size-100);
+  padding: var(--spectrum-global-dimension-size-100);
+  background: var(--spectrum-global-color-blue-100);
+  border-radius: var(--spectrum-global-dimension-size-50);
+  font-size: var(--spectrum-global-dimension-font-size-75);
+  color: var(--spectrum-global-color-blue-700);
+}
+
+/* Messages */
+.message {
+  padding: var(--spectrum-global-dimension-size-200);
+  border-radius: var(--spectrum-global-dimension-size-50);
+  margin-bottom: var(--spectrum-global-dimension-size-300);
+  font-size: var(--spectrum-global-dimension-font-size-100);
+}
+
+.message.success {
+  background: var(--spectrum-global-color-green-100);
+  color: var(--spectrum-global-color-green-700);
+  border: 1px solid var(--spectrum-global-color-green-300);
+}
+
+.message.error {
+  background: var(--spectrum-global-color-red-100);
+  color: var(--spectrum-global-color-red-700);
+  border: 1px solid var(--spectrum-global-color-red-300);
+}
+
+/* Loading State */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spectrum-global-dimension-size-600);
+  gap: var(--spectrum-global-dimension-size-200);
+}
+
+.loading-label {
+  color: var(--spectrum-global-color-gray-700);
+  font-size: var(--spectrum-global-dimension-font-size-100);
+}
+
+/* Error State */
+.error-container {
+  padding: var(--spectrum-global-dimension-size-400);
+  text-align: center;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .config-value-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .config-actions {
+    width: 100%;
+  }
+
+  .config-btn {
+    flex: 1;
+  }
+}
