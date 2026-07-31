@@ -41,7 +41,8 @@ function pathLabel(path, site) {
     if (path === '/ + **' || path === '/+**') return 'All sites';
     return path;
   }
-  if (path === `/${site}/ + **` || path === `/${site}/+**`) return 'Entire site';
+  if (path === `/${site}/CONFIG`) return 'Site Configurations';
+  if (path === `/${site}/ + **` || path === `/${site}/+**`) return 'All content';
   const folderMatch = path.match(new RegExp(`^\\/${site}\\/(.+)\\/ ?\\+ ?\\*\\*$`));
   if (folderMatch) return `${folderMatch[1]}/`;
   return path;
@@ -49,6 +50,7 @@ function pathLabel(path, site) {
 
 function pathClass(path, site) {
   if (!site) return path === 'CONFIG' ? 'scope-config' : 'scope-org';
+  if (path === `/${site}/CONFIG`) return 'scope-config';
   if (path === `/${site}/ + **` || path === `/${site}/+**`) return 'scope-site';
   return 'scope-folder';
 }
@@ -181,7 +183,7 @@ class DaPermissionsApp extends LitElement {
   // Default paths that always appear for the current context (even if empty)
   get defaultPaths() {
     if (!this._site) return ['CONFIG', '/ + **'];
-    return [`/${this._site}/ + **`];
+    return [`/${this._site}/CONFIG`, `/${this._site}/ + **`];
   }
 
   // Group rules by path into Read/Write member lists
@@ -241,20 +243,25 @@ class DaPermissionsApp extends LitElement {
       slot[actionsToLevel(rule.actions)].push(...groups);
     });
 
-    // In site context, populate inherited members on the top-level site slot
-    // from org-level "All sites" (/ + **) rules, excluding anyone already listed.
+    // In site context, populate inherited members on the site's default slots
+    // from their org-level counterparts (CONFIG, and "All sites" / + **),
+    // excluding anyone already listed.
     if (site) {
-      const siteSlotKey = `/${site}/ + **`;
-      const siteSlot = slotMap.get(siteSlotKey);
-      if (siteSlot) {
-        this._rules.filter((r) => normPath(r.path) === '/ + **').forEach((rule) => {
+      const inheritancePairs = [
+        [`/${site}/CONFIG`, 'CONFIG'],
+        [`/${site}/ + **`, '/ + **'],
+      ];
+      inheritancePairs.forEach(([siteSlotKey, orgPath]) => {
+        const siteSlot = slotMap.get(siteSlotKey);
+        if (!siteSlot) return;
+        this._rules.filter((r) => normPath(r.path) === orgPath).forEach((rule) => {
           const groups = splitGroups(rule.groups);
           const lvl = actionsToLevel(rule.actions);
           const inheritedKey = `inherited${lvl.charAt(0).toUpperCase()}${lvl.slice(1)}`;
           groups.filter((g) => !siteSlot[lvl].includes(g))
             .forEach((g) => siteSlot[inheritedKey].push(g));
         });
-      }
+      });
     }
 
     return Array.from(slotMap.values());
@@ -284,8 +291,12 @@ class DaPermissionsApp extends LitElement {
       return;
     }
 
+    // Reloading the same org is a refresh — keep the site selection.
+    // Switching to a different org drops it, since the old site may not apply.
+    const siteToKeep = raw === this._org ? this._site : null;
+
     this._state = 'loading';
-    await this.loadOrg(raw);
+    await this.loadOrg(raw, siteToKeep);
   }
 
   async loadOrg(org, site = null) {
@@ -819,13 +830,18 @@ class DaPermissionsApp extends LitElement {
   // ---- Render: admin view ----
 
   renderAdmin() {
-    const orgSectionTitles = { CONFIG: 'Config Permissions', '/ + **': 'Content Permissions' };
+    const sectionTitles = this._site
+      ? {
+        [`/${this._site}/CONFIG`]: 'Config Permissions',
+        [`/${this._site}/ + **`]: 'Content Permissions',
+      }
+      : { CONFIG: 'Config Permissions', '/ + **': 'Content Permissions' };
     return html`
       ${this._readOnly ? html`
         <div class="message warning">You have read-only access to this configuration.</div>
       ` : nothing}
       <div class="slots-list">
-        ${this.permissionSlots.map((slot) => this.renderSlot(slot, orgSectionTitles[slot.path] ?? null))}
+        ${this.permissionSlots.map((slot) => this.renderSlot(slot, sectionTitles[slot.path] ?? null))}
         ${this._site && !this._newScopeOpen ? html`
           <button class="add-scope-btn" @click=${this.handleOpenNewScope}>
             + Add folder permission
