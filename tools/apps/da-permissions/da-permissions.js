@@ -38,11 +38,11 @@ try {
 function pathLabel(path, site) {
   if (!site) {
     if (path === 'CONFIG') return 'DA Configurations';
-    if (path === '/ + **' || path === '/+**') return 'All sites';
+    if (path === '/ + **' || path === '/+**') return 'All Sites';
     return path;
   }
   if (path === `/${site}/CONFIG`) return 'Site Configurations';
-  if (path === `/${site}/ + **` || path === `/${site}/+**`) return 'All content';
+  if (path === `/${site}/ + **` || path === `/${site}/+**`) return 'All Site Content';
   const folderMatch = path.match(new RegExp(`^\\/${site}\\/(.+)\\/ ?\\+ ?\\*\\*$`));
   if (folderMatch) return `${folderMatch[1]}/`;
   return path;
