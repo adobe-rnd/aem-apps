@@ -238,7 +238,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 .site-dropdown-item.is-selected {
   color: var(--pw-accent, #0265dc);
   font-weight: 600;
-  background: #e8f0ff;
+  background: light-dark(#e8f0ff, var(--s2-blue-950, #0a1f3d));
 }
 
 .site-dropdown-empty {
@@ -852,7 +852,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 
 .info-panel-term dt {
   font-weight: 600;
-  color: #1473e6;
+  color: light-dark(#1473e6, var(--s2-blue-400, #8AB4F8));
   white-space: nowrap;
 }
 
