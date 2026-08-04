@@ -198,17 +198,17 @@ class TemplatesSection extends LibraryItemsCRUDMixin(
             />
           </div>
           <button
-            class="action secondary"
+            class="btn-secondary"
             @click=${this._openPagePicker}
           >Select Page</button>
           <button
-            class="action primary"
+            class="btn-primary"
             @click=${this._handleAdd}
             ?disabled=${!this._isFormValid()}
           >${isEditing ? 'Update' : 'Add'}</button>
           ${isEditing ? html`
             <button
-              class="action secondary"
+              class="btn-secondary"
               @click=${this._handleCancelEdit}
             >Cancel</button>
           ` : nothing}

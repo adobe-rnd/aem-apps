@@ -41,49 +41,7 @@
   width: 100%;
 }
 
-/* Action Buttons */
-.action {
-  padding: 8px 20px;
-  border-radius: 6px;
-  font-size: var(--s2-body-size-200);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-  height: 36px;
-  border: 1px solid;
-}
-
-.action.primary {
-  background: light-dark(#1473E6, var(--s2-blue-600, #3478f5));
-  color: light-dark(#FFF, var(--s2-gray-100, #f0f0f0));
-  border-color: light-dark(#1473E6, var(--s2-blue-600, #3478f5));
-}
-
-.action.primary:disabled {
-  background: light-dark(#E0E0E0, var(--s2-gray-700, #444));
-  border-color: light-dark(#E0E0E0, var(--s2-gray-700, #444));
-  color: light-dark(#A0A0A0, var(--s2-gray-500, #888));
-  cursor: not-allowed;
-}
-
-.action.primary:hover:not(:disabled) {
-  background: light-dark(#0D66D0, var(--s2-blue-500, #4589ff));
-  border-color: light-dark(#0D66D0, var(--s2-blue-500, #4589ff));
-}
-
-.action.secondary {
-  background: light-dark(#FFF, var(--s2-gray-900, #1a1a1a));
-  color: light-dark(#505050, var(--s2-gray-300, #d0d0d0));
-  border-color: light-dark(#D6D6D6, var(--s2-gray-700, #444));
-}
-
-.action.secondary:hover:not(:disabled) {
-  background: light-dark(#F8F8F8, var(--s2-gray-850, #222));
-  border-color: light-dark(#A0A0A0, var(--s2-gray-600, #666));
-}
-
-
+/* Collection Search */
 .collection-search {
   padding: var(--s2-spacing-200) var(--s2-spacing-300);
   border: 1px solid light-dark(#D6D6D6, var(--s2-gray-700, #444));
