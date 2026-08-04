@@ -6,7 +6,7 @@
 }
 
 .info-card {
-  background: var(--s2-gray-50, #F9F9F9);
+  background: light-dark(var(--s2-gray-50, #F9F9F9), var(--s2-gray-850, #222));
   border: 1px solid var(--s2-blue-400, #8AB4F8);
   border-left: 3px solid var(--s2-blue-800, #0D47A1);
   border-radius: 8px;
@@ -47,18 +47,18 @@
 }
 
 .status-pill.not-configured {
-  background: #FFF4E5;
-  color: #B45309;
+  background: light-dark(#FFF4E5, var(--s2-orange-900, #663300));
+  color: light-dark(#B45309, var(--s2-orange-200, #ffcc99));
 }
 
 .status-pill.configured {
-  background: #E4F5E9;
-  color: #0B6027;
+  background: light-dark(#E4F5E9, var(--s2-green-900, #004d00));
+  color: light-dark(#0B6027, var(--s2-green-200, #99ff99));
 }
 
 .status-pill.inherited {
-  background: #F3F3F3;
-  color: #505050;
+  background: light-dark(#F3F3F3, var(--s2-gray-800, #333));
+  color: light-dark(#505050, var(--s2-gray-300, #d0d0d0));
 }
 
 .close-button {
@@ -110,10 +110,10 @@
   align-items: center;
   gap: var(--s2-spacing-150, 6px);
   padding: 8px 12px;
-  background: var(--s2-blue-50, #E8F0FE);
-  border: 1px solid var(--s2-blue-600, #1473E6);
+  background: light-dark(var(--s2-blue-50, #E8F0FE), var(--s2-blue-900, #0d3880));
+  border: 1px solid light-dark(var(--s2-blue-600, #1473E6), var(--s2-blue-500, #4589ff));
   border-radius: 6px;
-  color: var(--s2-blue-600, #1473E6);
+  color: light-dark(var(--s2-blue-600, #1473E6), var(--s2-blue-200, #99c1ff));
   font-size: var(--s2-body-size-200, 14px);
   font-weight: 500;
   cursor: pointer;
@@ -121,8 +121,8 @@
 }
 
 .show-info-button:hover {
-  background: var(--s2-blue-100, #D1E3FD);
-  border-color: var(--s2-blue-700, #0D66D0);
+  background: light-dark(var(--s2-blue-100, #D1E3FD), var(--s2-blue-800, #1a4d99));
+  border-color: light-dark(var(--s2-blue-700, #0D66D0), var(--s2-blue-400, #5c9fff));
 }
 
 .show-info-icon {
@@ -131,12 +131,12 @@
 }
 
 ::slotted(a) {
-  color: var(--s2-blue-600, #1473E6);
+  color: light-dark(var(--s2-blue-600, #1473E6), var(--s2-blue-400, #5c9fff));
   text-decoration: none;
   font-weight: 500;
 }
 
 ::slotted(a:hover) {
   text-decoration: underline;
-  color: var(--s2-blue-700, #0D66D0);
+  color: light-dark(var(--s2-blue-700, #0D66D0), var(--s2-blue-300, #80b3ff));
 }

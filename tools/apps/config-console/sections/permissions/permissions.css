@@ -41,20 +41,20 @@ sl-button.pw-fill-accent::part(base):hover:not(:disabled) {
 }
 
 sl-button.pw-quiet-secondary::part(base) {
-  background: #FFF;
-  border: 1px solid #D6D6D6;
-  color: #505050;
+  background: light-dark(#FFF, var(--s2-gray-900, #1a1a1a));
+  border: 1px solid light-dark(#D6D6D6, var(--s2-gray-700, #444));
+  color: light-dark(#505050, var(--s2-gray-300, #d0d0d0));
 }
 
 sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
-  background: #F8F8F8;
-  border-color: #A0A0A0;
+  background: light-dark(#F8F8F8, var(--s2-gray-850, #222));
+  border-color: light-dark(#A0A0A0, var(--s2-gray-600, #666));
 }
 
 sl-button.pw-quiet-danger::part(base) {
-  background: #FCE8E6;
-  border-color: #F4C7C3;
-  color: #C5221F;
+  background: light-dark(#FCE8E6, var(--s2-red-950, #330000));
+  border-color: light-dark(#F4C7C3, var(--s2-red-800, #8b0000));
+  color: light-dark(#C5221F, var(--s2-red-200, #ffb3b3));
 }
 
 sl-button.pw-quiet-danger::part(base):disabled {
@@ -63,8 +63,8 @@ sl-button.pw-quiet-danger::part(base):disabled {
 }
 
 sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
-  background: #FAD2CF;
-  border-color: #E8ADAA;
+  background: light-dark(#FAD2CF, var(--s2-red-900, #660000));
+  border-color: light-dark(#E8ADAA, var(--s2-red-700, #a00000));
 }
 
 .pw-action-sm::part(base) {
@@ -94,7 +94,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 
 .loading-label {
   margin: 0;
-  color: var(--s2-gray-700);
+  color: light-dark(var(--s2-gray-700), var(--s2-gray-400));
 }
 
 @keyframes da-perm-spin {
@@ -243,7 +243,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 
 .site-dropdown-empty {
   padding: 8px 14px;
-  color: #888;
+  color: light-dark(#888, var(--s2-gray-500, #888));
   font-size: 13px;
   font-style: italic;
   margin: 0;
@@ -331,7 +331,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 
 .perm-slot-header {
   padding: var(--s2-spacing-200) var(--s2-spacing-300);
-  background: var(--s2-gray-75, #f8f8f8);
+  background: light-dark(var(--s2-gray-75, #f8f8f8), var(--s2-gray-850, #222));
   border-bottom: 1px solid var(--s2-gray-200);
 }
 
@@ -339,7 +339,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   margin: var(--s2-spacing-500) 0 var(--s2-spacing-150) 0;
   font-size: var(--s2-body-size-l, 16px);
   font-weight: 700;
-  color: var(--s2-gray-800);
+  color: light-dark(var(--s2-gray-800), var(--s2-gray-200));
   letter-spacing: -0.01em;
 }
 
@@ -639,7 +639,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   align-items: center;
   gap: var(--s2-spacing-100);
   padding: var(--s2-spacing-100) var(--s2-spacing-200);
-  background: var(--s2-gray-75, #f8f8f8);
+  background: light-dark(var(--s2-gray-75, #f8f8f8), var(--s2-gray-850, #222));
   border-bottom: 1px solid var(--s2-gray-200);
   min-height: 32px;
 }
@@ -700,7 +700,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--s2-gray-500);
-  background: var(--s2-gray-75, #f8f8f8);
+  background: light-dark(var(--s2-gray-75, #f8f8f8), var(--s2-gray-850, #222));
   border-bottom: 1px solid var(--s2-gray-200);
   min-height: 32px;
   display: flex;
@@ -737,23 +737,23 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   border: none;
   cursor: pointer;
   font-family: var(--s2-font-family);
-  color: var(--s2-gray-800);
+  color: light-dark(var(--s2-gray-800), var(--s2-gray-200));
   text-align: left;
   min-height: 32px;
 }
 
 .folder-item:hover {
-  background: var(--s2-gray-100);
+  background: light-dark(var(--s2-gray-100), var(--s2-gray-800));
 }
 
 .folder-item.folder-item-selected {
-  background: var(--s2-blue-100, #e0ecff);
+  background: light-dark(var(--s2-blue-100, #e0ecff), var(--s2-blue-900, #0d3880));
   color: var(--pw-accent);
   font-weight: 600;
 }
 
 .folder-item.folder-item-selected:hover {
-  background: var(--s2-blue-200, #cce0ff);
+  background: light-dark(var(--s2-blue-200, #cce0ff), var(--s2-blue-800, #1a4d99));
 }
 
 .folder-item-name {
@@ -786,7 +786,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   gap: var(--s2-spacing-200);
   padding: var(--s2-spacing-200) var(--s2-spacing-300);
   border-top: 1px solid var(--s2-gray-200);
-  background: var(--s2-gray-75, #f8f8f8);
+  background: light-dark(var(--s2-gray-75, #f8f8f8), var(--s2-gray-850, #222));
 }
 
 /* ---- Info panel ---- */
@@ -797,13 +797,13 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   align-items: flex-start;
   padding: 12px 14px;
   margin-bottom: 16px;
-  background: var(--s2-gray-50);
+  background: light-dark(var(--s2-gray-50), var(--s2-gray-850));
   border: 1px solid var(--s2-blue-400);
   border-left: 3px solid var(--s2-blue-800);
   border-radius: 8px;
   font-size: 13px;
   line-height: 1.5;
-  color: var(--s2-gray-900);
+  color: light-dark(var(--s2-gray-900), var(--s2-gray-100));
 }
 
 
@@ -858,18 +858,18 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 
 .info-panel-term dt::after {
   content: ':';
-  color: #666;
+  color: light-dark(#666, var(--s2-gray-500, #888));
   font-weight: 400;
 }
 
 .info-panel-term dd {
   margin: 0;
-  color: var(--s2-gray-900);
+  color: light-dark(var(--s2-gray-900), var(--s2-gray-100));
 }
 
 .info-panel-note {
   margin: 0 0 4px;
-  color: #666;
+  color: light-dark(#666, var(--s2-gray-500, #888));
   font-size: 12px;
 }
 
@@ -888,7 +888,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--s2-gray-900);
+  color: light-dark(var(--s2-gray-900), var(--s2-gray-100));
   font-size: 14px;
   padding: 2px 5px;
   border-radius: 4px;
@@ -898,7 +898,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 }
 
 .info-panel-close:hover {
-  color: var(--s2-gray-1000);
+  color: light-dark(var(--s2-gray-1000), var(--s2-gray-50));
 }
 
 /* ---- Misc ---- */

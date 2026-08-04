@@ -12,7 +12,7 @@
 }
 
 .modal-dialog {
-  background: #FFF;
+  background: light-dark(#FFF, var(--s2-gray-900, #1a1a1a));
   border-radius: 8px;
   width: 90%;
   max-width: 600px;
@@ -27,7 +27,7 @@
   justify-content: space-between;
   align-items: center;
   padding: var(--s2-spacing-400);
-  border-bottom: 1px solid #D6D6D6;
+  border-bottom: 1px solid light-dark(#D6D6D6, var(--s2-gray-700, #444));
 }
 
 .modal-header h2 {
@@ -71,7 +71,7 @@
   justify-content: flex-end;
   gap: var(--s2-spacing-300);
   padding: var(--s2-spacing-400);
-  border-top: 1px solid #D6D6D6;
+  border-top: 1px solid light-dark(#D6D6D6, var(--s2-gray-700, #444));
 }
 
 .library-setup-note {
@@ -103,21 +103,21 @@
   display: flex;
   gap: var(--s2-spacing-300);
   padding: var(--s2-spacing-300);
-  border: 2px solid #D6D6D6;
+  border: 2px solid light-dark(#D6D6D6, var(--s2-gray-700, #444));
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
-  background: #FFF;
+  background: light-dark(#FFF, var(--s2-gray-900, #1a1a1a));
 }
 
 .library-option:hover {
-  border-color: #505050;
-  background: #F8F8F8;
+  border-color: light-dark(#505050, var(--s2-gray-500, #888));
+  background: light-dark(#F8F8F8, var(--s2-gray-850, #222));
 }
 
 .library-option.selected {
-  border-color: #1473E6;
-  background: #F0F7FF;
+  border-color: light-dark(#1473E6, var(--s2-blue-600, #3478f5));
+  background: light-dark(#F0F7FF, var(--s2-blue-950, #001a4d));
 }
 
 .library-option input[type="radio"] {
@@ -149,24 +149,26 @@
 .library-custom-input {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid #D6D6D6;
+  border: 1px solid light-dark(#D6D6D6, var(--s2-gray-700, #444));
   border-radius: 4px;
   font-size: var(--s2-body-size-100);
   font-family: 'Source Code Pro', monospace;
   margin-top: var(--s2-spacing-100);
+  background: light-dark(#FFF, var(--s2-gray-900, #1a1a1a));
+  color: light-dark(#2C2C2C, var(--s2-gray-100, #f0f0f0));
 }
 
 .library-custom-input:focus {
   outline: none;
-  border-color: #1473E6;
+  border-color: light-dark(#1473E6, var(--s2-blue-600, #3478f5));
   box-shadow: 0 0 0 2px rgba(20, 115, 230, 0.2);
 }
 
 .btn-primary {
   padding: 8px 20px;
-  background: #1473E6;
-  color: #FFF;
-  border: 1px solid #1473E6;
+  background: light-dark(#1473E6, var(--s2-blue-600, #3478f5));
+  color: light-dark(#FFF, var(--s2-gray-100, #f0f0f0));
+  border: 1px solid light-dark(#1473E6, var(--s2-blue-600, #3478f5));
   border-radius: 6px;
   font-size: var(--s2-body-size-200);
   font-weight: 600;
@@ -177,22 +179,22 @@
 }
 
 .btn-primary:disabled {
-  background: #E0E0E0;
-  border-color: #E0E0E0;
-  color: #A0A0A0;
+  background: light-dark(#E0E0E0, var(--s2-gray-700, #444));
+  border-color: light-dark(#E0E0E0, var(--s2-gray-700, #444));
+  color: light-dark(#A0A0A0, var(--s2-gray-500, #888));
   cursor: not-allowed;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #0D66D0;
-  border-color: #0D66D0;
+  background: light-dark(#0D66D0, var(--s2-blue-500, #4589ff));
+  border-color: light-dark(#0D66D0, var(--s2-blue-500, #4589ff));
 }
 
 .btn-secondary {
   padding: 8px 20px;
-  background: #FFF;
-  color: #505050;
-  border: 1px solid #D6D6D6;
+  background: light-dark(#FFF, var(--s2-gray-900, #1a1a1a));
+  color: light-dark(#505050, var(--s2-gray-300, #d0d0d0));
+  border: 1px solid light-dark(#D6D6D6, var(--s2-gray-700, #444));
   border-radius: 6px;
   font-size: var(--s2-body-size-200);
   font-weight: 500;
@@ -203,6 +205,6 @@
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: #F8F8F8;
-  border-color: #A0A0A0;
+  background: light-dark(#F8F8F8, var(--s2-gray-850, #222));
+  border-color: light-dark(#A0A0A0, var(--s2-gray-600, #666));
 }

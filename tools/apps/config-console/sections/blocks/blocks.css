@@ -858,7 +858,7 @@ sl-button[size="small"]::part(base) {
 }
 
 .block-management-item.has-update {
-  background: light-dark(#FFF9F5, rgb(255 140 0 / 10%));
+  background: light-dark(#FFF9F5, var(--s2-orange-950, #331a00));
 }
 
 .blocks-management-list .empty-state {
@@ -916,28 +916,28 @@ sl-button[size="small"]::part(base) {
 }
 
 .pill-update {
-  background: #FFF4E5;
-  color: #B45309;
+  background: light-dark(#FFF4E5, var(--s2-orange-900, #663300));
+  color: light-dark(#B45309, var(--s2-orange-200, #ffcc99));
 }
 
 .pill-external {
-  background: #F3F3F3;
-  color: #505050;
+  background: light-dark(#F3F3F3, var(--s2-gray-800, #333));
+  color: light-dark(#505050, var(--s2-gray-300, #d0d0d0));
 }
 
 .pill-local {
-  background: #E8F0FE;
-  color: #1473E6;
+  background: light-dark(#E8F0FE, var(--s2-blue-900, #0d3880));
+  color: light-dark(#1473E6, var(--s2-blue-200, #99c1ff));
 }
 
 .pill-examples {
-  background: #E4F5E9;
-  color: #0B6027;
+  background: light-dark(#E4F5E9, var(--s2-green-900, #004d00));
+  color: light-dark(#0B6027, var(--s2-green-200, #99ff99));
 }
 
 .pill-no-examples {
-  background: #F3F3F3;
-  color: #6B6B6B;
+  background: light-dark(#F3F3F3, var(--s2-gray-800, #333));
+  color: light-dark(#6B6B6B, var(--s2-gray-400, #aaa));
 }
 
 .block-update-details {
@@ -988,26 +988,26 @@ sl-button[size="small"]::part(base) {
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
-  border: 1px solid #D6D6D6;
-  background: #FFF;
-  color: #505050;
+  border: 1px solid light-dark(#D6D6D6, var(--s2-gray-700, #444));
+  background: light-dark(#FFF, var(--s2-gray-900, #1a1a1a));
+  color: light-dark(#505050, var(--s2-gray-300, #d0d0d0));
   white-space: nowrap;
 }
 
 .block-action-btn:hover {
-  background: #F8F8F8;
-  border-color: #A0A0A0;
+  background: light-dark(#F8F8F8, var(--s2-gray-850, #222));
+  border-color: light-dark(#A0A0A0, var(--s2-gray-600, #666));
 }
 
 .block-action-btn.remove {
-  color: #C5221F;
-  border-color: #F4C7C3;
-  background: #FCE8E6;
+  color: light-dark(#C5221F, var(--s2-red-200, #ffb3b3));
+  border-color: light-dark(#F4C7C3, var(--s2-red-800, #8b0000));
+  background: light-dark(#FCE8E6, var(--s2-red-950, #330000));
 }
 
 .block-action-btn.remove:hover {
-  background: #FAD2CF;
-  border-color: #E8ADAA;
+  background: light-dark(#FAD2CF, var(--s2-red-900, #660000));
+  border-color: light-dark(#E8ADAA, var(--s2-red-700, #a00000));
 }
 
 /* Block Updates */
@@ -1097,7 +1097,7 @@ sl-button[size="small"]::part(base) {
   align-items: center;
   justify-content: space-between;
   padding: var(--s2-spacing-200);
-  background: white;
+  background: light-dark(white, var(--s2-gray-900));
   border: 1px solid var(--s2-gray-200);
   border-radius: 4px;
 }
@@ -1105,18 +1105,18 @@ sl-button[size="small"]::part(base) {
 .scanned-pages-list .page-path {
   font-family: 'Source Code Pro', monospace;
   font-size: var(--s2-body-size-100);
-  color: var(--s2-gray-800);
+  color: light-dark(var(--s2-gray-800), var(--s2-gray-200));
 }
 
 /* Blocks Warning */
 .blocks-warning {
   padding: var(--s2-spacing-300);
-  background: #FFF4E5;
-  border: 1px solid #FFD580;
+  background: light-dark(#FFF4E5, var(--s2-orange-900, #663300));
+  border: 1px solid light-dark(#FFD580, var(--s2-orange-700, #996600));
   border-radius: 4px;
   margin-bottom: var(--s2-spacing-300);
   font-size: var(--s2-body-size-200);
-  color: #996600;
+  color: light-dark(#996600, var(--s2-orange-200, #ffcc99));
   display: flex;
   align-items: center;
   gap: var(--s2-spacing-200);
@@ -1124,8 +1124,8 @@ sl-button[size="small"]::part(base) {
 
 /* Block Card Updates for Conflicts and Variants */
 .block-card.has-conflict {
-  border-color: #FFD580;
-  background: #FFF8F0;
+  border-color: light-dark(#FFD580, var(--s2-orange-700, #996600));
+  background: light-dark(#FFF8F0, var(--s2-orange-950, #331a00));
 }
 
 .block-card-content {
@@ -1137,7 +1137,7 @@ sl-button[size="small"]::part(base) {
 
 .block-card-warning {
   font-size: var(--s2-body-size-50);
-  color: #996600;
+  color: light-dark(#996600, var(--s2-orange-200, #ffcc99));
   font-weight: 500;
 }
 

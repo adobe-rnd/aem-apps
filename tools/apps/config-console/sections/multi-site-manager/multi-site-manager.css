@@ -8,8 +8,8 @@
 
 /* Settings Card */
 .settings-card {
-  background: #FFF;
-  border: 1px solid #D6D6D6;
+  background: light-dark(#FFF, var(--s2-gray-900, #1a1a1a));
+  border: 1px solid light-dark(#D6D6D6, var(--s2-gray-700, #444));
   border-radius: 6px;
   padding: 20px;
   margin-bottom: var(--s2-spacing-500);
@@ -26,7 +26,7 @@
 .empty-state {
   padding: var(--s2-spacing-600);
   text-align: center;
-  background: #F8F8F8;
+  background: light-dark(#F8F8F8, var(--s2-gray-850, #222));
   border-radius: 6px;
 }
 
@@ -53,21 +53,21 @@
 }
 
 .message.success {
-  background: #E4F5E9;
-  color: #0B6027;
-  border: 1px solid #7FD99A;
+  background: light-dark(#E4F5E9, var(--s2-green-900, #004d00));
+  color: light-dark(#0B6027, var(--s2-green-200, #99ff99));
+  border: 1px solid light-dark(#7FD99A, var(--s2-green-700, #008000));
 }
 
 .message.error {
-  background: #FCE8E6;
-  color: #C5221F;
-  border: 1px solid #F4C7C3;
+  background: light-dark(#FCE8E6, var(--s2-red-950, #330000));
+  color: light-dark(#C5221F, var(--s2-red-200, #ffb3b3));
+  border: 1px solid light-dark(#F4C7C3, var(--s2-red-800, #8b0000));
 }
 
 .message.info {
-  background: #E8F0FE;
-  color: #174EA6;
-  border: 1px solid #AECBFA;
+  background: light-dark(#E8F0FE, var(--s2-blue-900, #0d3880));
+  color: light-dark(#174EA6, var(--s2-blue-200, #99c1ff));
+  border: 1px solid light-dark(#AECBFA, var(--s2-blue-700, #1a5cb8));
 }
 
 /* Loading State */
@@ -83,8 +83,8 @@
 .loading-indicator {
   width: 40px;
   height: 40px;
-  border: 4px solid #E0E0E0;
-  border-top-color: #1473E6;
+  border: 4px solid light-dark(#E0E0E0, var(--s2-gray-700, #444));
+  border-top-color: light-dark(#1473E6, var(--s2-blue-600, #3478f5));
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
