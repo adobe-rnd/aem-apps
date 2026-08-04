@@ -4,24 +4,26 @@
 import { html, nothing } from 'da-lit';
 import { BaseSectionElement } from '../../shared/components/base-section.js';
 import {
-  fetchLibraryJSON,
-  getSheetDataArray,
   updateIcons,
   removeLibraryItem,
 } from '../../shared/api/library-api.js';
-import { getLibraryPath } from '../../shared/api/config-api.js';
 import { MessageHandlerMixin, MessageHandlerProperties } from '../../shared/mixins/message-handler.js';
 import { FormHandlerMixin, FormHandlerProperties } from '../../shared/mixins/form-handler.js';
 import { LibrarySetupHandlerMixin, LibrarySetupHandlerProperties } from '../../shared/mixins/library-setup-handler.js';
+import { LibraryItemsCRUDMixin, LibraryItemsCRUDProperties } from '../../shared/mixins/library-items-crud.js';
 import '../../shared/components/library-items-list.js';
 import '../../shared/components/library-setup-modal.js';
 import '../../components/explainer-info-card.js';
 
 const NX = 'https://da.live/nx2';
 let sectionStyles = null;
+let commonStyles = null;
 
 try {
   const { default: getStyle } = await import(`${NX}/public/utils/styles.js`);
+  // Load common styles using absolute path from window.location
+  const commonStylesUrl = new URL('/tools/apps/config-console/shared/styles/common-section-styles.css', window.location.origin).href;
+  commonStyles = await getStyle(commonStylesUrl);
   sectionStyles = await getStyle(import.meta.url);
 } catch {
   // Styles failed to load - section will render without styles
@@ -30,16 +32,17 @@ try {
 /**
  * Icons section component
  */
-class IconsSection extends LibrarySetupHandlerMixin(
-  FormHandlerMixin(MessageHandlerMixin(BaseSectionElement)),
+class IconsSection extends LibraryItemsCRUDMixin(
+  LibrarySetupHandlerMixin(
+    FormHandlerMixin(MessageHandlerMixin(BaseSectionElement)),
+  ),
 ) {
   static properties = {
     ...BaseSectionElement.properties,
     ...MessageHandlerProperties,
     ...FormHandlerProperties,
     ...LibrarySetupHandlerProperties,
-    _icons: { state: true },
-    _searchQuery: { state: true },
+    ...LibraryItemsCRUDProperties,
     _showIconPicker: { state: true },
     _iconPickerFiles: { state: true },
     _iconPickerLoading: { state: true },
@@ -48,8 +51,7 @@ class IconsSection extends LibrarySetupHandlerMixin(
 
   constructor() {
     super();
-    this._icons = [];
-    this._searchQuery = '';
+    // _items and _searchQuery now provided by LibraryItemsCRUDMixin
     this._showIconPicker = false;
     this._iconPickerFiles = [];
     this._iconPickerLoading = false;
@@ -68,86 +70,26 @@ class IconsSection extends LibrarySetupHandlerMixin(
     return this._form.name.trim().length > 0 && this._form.path.trim().length > 0;
   }
 
-  _getStylesheets() {
-    return sectionStyles ? [sectionStyles] : [];
+  _getUpdateFunction() {
+    return updateIcons;
   }
 
-  async loadData() {
-    this._setLoading(true);
-    this._trackAction('icons-load', { org: this.org, site: this.site });
-
-    try {
-      const json = await fetchLibraryJSON(this.org, this.site, 'icons', this.token);
-      this._icons = getSheetDataArray(json);
-      this._setLoading(false);
-    } catch (error) {
-      this._setError(`Failed to load icons: ${error.message}`);
-    }
+  _getItemFromForm() {
+    return {
+      name: this._form.name.trim(),
+      path: this._form.path.trim(),
+    };
   }
 
-  _handleSearch(e) {
-    this._searchQuery = e.target.value;
-  }
-
-  async _handleAdd() {
-    if (!this._isFormValid()) return;
-
-    // Check if library is configured first
-    const libraryPath = await getLibraryPath(this.org, this.site, 'icons', this.token);
-    if (!libraryPath) {
-      // Library not configured - show setup modal
-      await this._showLibrarySetupModal();
-      return;
-    }
-
-    this._message = null;
-
-    try {
-      const newIcon = {
-        name: this._form.name.trim(),
-        path: this._form.path.trim(),
-      };
-
-      const result = await updateIcons(
-        this.org,
-        this.site,
-        [newIcon],
-        this.token,
-      );
-
-      if (result.success) {
-        const action = result.stats?.updated > 0 ? 'icon-update' : 'icon-add';
-        const message = result.stats?.updated > 0
-          ? 'Icon updated successfully'
-          : 'Icon added successfully';
-
-        this._trackAction(action, {
-          org: this.org,
-          site: this.site,
-          name: newIcon.name,
-        });
-        this._form = { name: '', path: '' };
-        this._editingIndex = -1;
-        this._showAddForm = false;
-        await this.loadData();
-        this._showMessage('success', message);
-      } else {
-        throw new Error(result.error || 'Failed to add icon');
-      }
-    } catch (error) {
-      this._setError(`Failed to add icon: ${error.message}`);
-    }
-  }
-
-  _handleEdit(item) {
-    const index = this._icons.indexOf(item);
-    this._editingIndex = index;
+  _populateFormFromItem(item) {
     this._form = {
       name: item.key,
       path: item.icon,
     };
-    this._showAddForm = true;
-    this._clearMessage();
+  }
+
+  _getStylesheets() {
+    return [commonStyles, sectionStyles].filter(Boolean);
   }
 
   async _handleRemove(item) {
@@ -322,7 +264,7 @@ class IconsSection extends LibrarySetupHandlerMixin(
   }
 
   _renderExplainerCard() {
-    const hasIcons = this._icons && this._icons.length > 0;
+    const hasIcons = this._items && this._items.length > 0;
     const status = hasIcons ? 'configured' : 'not-configured';
     const statusLabel = hasIcons ? 'Configured' : 'Not Configured';
 
@@ -350,15 +292,8 @@ class IconsSection extends LibrarySetupHandlerMixin(
     `;
   }
 
-  _getFilteredIcons() {
-    if (!this._searchQuery) return this._icons;
-    const query = this._searchQuery.toLowerCase();
-    return this._icons.filter((i) => i.key.toLowerCase().includes(query)
-      || i.icon.toLowerCase().includes(query));
-  }
-
   _renderCollectionCard() {
-    const filteredIcons = this._getFilteredIcons();
+    const filteredItems = this._getFilteredItems();
 
     return html`
       <div class="collection-card">
@@ -376,9 +311,9 @@ class IconsSection extends LibrarySetupHandlerMixin(
             clearable
           ></sl-input>
         </div>
-        ${filteredIcons.length === 0 ? html`
+        ${filteredItems.length === 0 ? html`
           <div class="empty-state">
-            ${this._icons.length === 0 ? html`
+            ${this._items.length === 0 ? html`
               <div class="empty-state-icon">
                 <img src="./icons/icons-image.svg" alt="Icons" width="48" height="48" />
               </div>
@@ -390,7 +325,7 @@ class IconsSection extends LibrarySetupHandlerMixin(
           </div>
         ` : html`
           <div class="icon-list">
-            ${filteredIcons.map((icon) => html`
+            ${filteredItems.map((icon) => html`
               <div class="icon-item">
                 <div class="icon-info">
                   <div class="icon-name">${icon.key}</div>

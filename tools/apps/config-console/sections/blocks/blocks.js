@@ -15,6 +15,7 @@ import '../../shared/components/page-picker.js';
 // Get stylesheet for this section
 const NX = 'https://da.live/nx2';
 let sectionStyles = null;
+let commonStyles = null;
 
 try {
   const [{ default: getStyle }, { loadStyle }] = await Promise.all([
@@ -26,7 +27,9 @@ try {
   await loadStyle(`${NX}/public/sl/styles.css`);
   await import(`${NX}/public/sl/components.js`);
 
-  // Get section-specific stylesheet
+  // Load common styles using absolute path from window.location
+  const commonStylesUrl = new URL('/tools/apps/config-console/shared/styles/common-section-styles.css', window.location.origin).href;
+  commonStyles = await getStyle(commonStylesUrl);
   sectionStyles = await getStyle(import.meta.url);
 } catch (err) {
   // Styles failed to load
@@ -109,7 +112,7 @@ class BlocksSection extends LibrarySetupHandlerMixin(BaseSectionElement) {
   }
 
   _getStylesheets() {
-    return sectionStyles ? [sectionStyles] : [];
+    return [commonStyles, sectionStyles].filter(Boolean);
   }
 
   async loadData() {

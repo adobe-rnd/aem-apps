@@ -4,24 +4,26 @@
 import { html, nothing } from 'da-lit';
 import { BaseSectionElement } from '../../shared/components/base-section.js';
 import {
-  fetchLibraryJSON,
-  getSheetDataArray,
   updatePlaceholders,
   removeLibraryItem,
 } from '../../shared/api/library-api.js';
-import { getLibraryPath } from '../../shared/api/config-api.js';
 import { MessageHandlerMixin, MessageHandlerProperties } from '../../shared/mixins/message-handler.js';
 import { FormHandlerMixin, FormHandlerProperties } from '../../shared/mixins/form-handler.js';
 import { LibrarySetupHandlerMixin, LibrarySetupHandlerProperties } from '../../shared/mixins/library-setup-handler.js';
+import { LibraryItemsCRUDMixin, LibraryItemsCRUDProperties } from '../../shared/mixins/library-items-crud.js';
 import '../../shared/components/library-items-list.js';
 import '../../shared/components/library-setup-modal.js';
 import '../../components/explainer-info-card.js';
 
 const NX = 'https://da.live/nx2';
 let sectionStyles = null;
+let commonStyles = null;
 
 try {
   const { default: getStyle } = await import(`${NX}/public/utils/styles.js`);
+  // Load common styles using absolute path from window.location
+  const commonStylesUrl = new URL('/tools/apps/config-console/shared/styles/common-section-styles.css', window.location.origin).href;
+  commonStyles = await getStyle(commonStylesUrl);
   sectionStyles = await getStyle(import.meta.url);
 } catch {
   // Styles failed to load - section will render without styles
@@ -30,23 +32,18 @@ try {
 /**
  * Placeholders section component
  */
-class PlaceholdersSection extends LibrarySetupHandlerMixin(
-  FormHandlerMixin(MessageHandlerMixin(BaseSectionElement)),
+class PlaceholdersSection extends LibraryItemsCRUDMixin(
+  LibrarySetupHandlerMixin(
+    FormHandlerMixin(MessageHandlerMixin(BaseSectionElement)),
+  ),
 ) {
   static properties = {
     ...BaseSectionElement.properties,
     ...MessageHandlerProperties,
     ...FormHandlerProperties,
     ...LibrarySetupHandlerProperties,
-    _placeholders: { state: true },
-    _searchQuery: { state: true },
+    ...LibraryItemsCRUDProperties,
   };
-
-  constructor() {
-    super();
-    this._placeholders = [];
-    this._searchQuery = '';
-  }
 
   _getLibraryType() {
     return 'Placeholders';
@@ -60,87 +57,26 @@ class PlaceholdersSection extends LibrarySetupHandlerMixin(
     return this._form.key.trim().length > 0 && this._form.value.trim().length > 0;
   }
 
-  _getStylesheets() {
-    return sectionStyles ? [sectionStyles] : [];
+  _getUpdateFunction() {
+    return updatePlaceholders;
   }
 
-  async loadData() {
-    this._setLoading(true);
-    this._trackAction('placeholders-load', { org: this.org, site: this.site });
-
-    try {
-      const json = await fetchLibraryJSON(this.org, this.site, 'placeholders', this.token);
-      this._placeholders = getSheetDataArray(json);
-      this._setLoading(false);
-    } catch (error) {
-      this._setError(`Failed to load placeholders: ${error.message}`);
-    }
+  _getItemFromForm() {
+    return {
+      key: this._form.key.trim(),
+      value: this._form.value.trim(),
+    };
   }
 
-  _handleSearch(e) {
-    this._searchQuery = e.target.value;
-  }
-
-  async _handleAdd() {
-    if (!this._isFormValid()) return;
-
-    // Check if library is configured first
-    const libraryPath = await getLibraryPath(this.org, this.site, 'placeholders', this.token);
-    if (!libraryPath) {
-      // Library not configured - show setup modal
-      await this._showLibrarySetupModal();
-      return;
-    }
-
-    this._message = null;
-
-    try {
-      const newPlaceholder = {
-        key: this._form.key.trim(),
-        value: this._form.value.trim(),
-      };
-
-      const result = await updatePlaceholders(
-        this.org,
-        this.site,
-        [newPlaceholder],
-        this.token,
-      );
-
-      if (result.success) {
-        const action = result.stats?.updated > 0 ? 'placeholder-update' : 'placeholder-add';
-        const message = result.stats?.updated > 0
-          ? 'Placeholder updated successfully'
-          : 'Placeholder added successfully';
-
-        this._trackAction(action, {
-          org: this.org,
-          site: this.site,
-          key: newPlaceholder.key,
-        });
-        this._form = { key: '', value: '' };
-        this._editingIndex = -1;
-        this._showAddForm = false;
-        await this.loadData();
-        this._showMessage('success', message);
-      } else {
-        throw new Error(result.error || 'Failed to add placeholder');
-      }
-    } catch (error) {
-      this._setError(`Failed to add placeholder: ${error.message}`);
-    }
-  }
-
-  _handleEdit(item) {
-    const index = this._placeholders.indexOf(item);
-    this._editingIndex = index;
-    // Note: placeholders have inverted key/value in storage
+  _populateFormFromItem(item) {
     this._form = {
       key: item.key,
       value: item.value,
     };
-    this._showAddForm = true;
-    this._clearMessage();
+  }
+
+  _getStylesheets() {
+    return [commonStyles, sectionStyles].filter(Boolean);
   }
 
   async _handleRemove(item) {
@@ -173,7 +109,7 @@ class PlaceholdersSection extends LibrarySetupHandlerMixin(
   }
 
   _renderExplainerCard() {
-    const hasPlaceholders = this._placeholders && this._placeholders.length > 0;
+    const hasPlaceholders = this._items && this._items.length > 0;
     const status = hasPlaceholders ? 'configured' : 'not-configured';
     const statusLabel = hasPlaceholders ? 'Configured' : 'Not Configured';
 
@@ -201,15 +137,8 @@ class PlaceholdersSection extends LibrarySetupHandlerMixin(
     `;
   }
 
-  _getFilteredPlaceholders() {
-    if (!this._searchQuery) return this._placeholders;
-    const query = this._searchQuery.toLowerCase();
-    return this._placeholders.filter((p) => p.key.toLowerCase().includes(query)
-      || p.value.toLowerCase().includes(query));
-  }
-
   _renderCollectionCard() {
-    const filteredPlaceholders = this._getFilteredPlaceholders();
+    const filteredItems = this._getFilteredItems();
 
     return html`
       <div class="collection-card">
@@ -227,9 +156,9 @@ class PlaceholdersSection extends LibrarySetupHandlerMixin(
             clearable
           ></sl-input>
         </div>
-        ${filteredPlaceholders.length === 0 ? html`
+        ${filteredItems.length === 0 ? html`
           <div class="empty-state">
-            ${this._placeholders.length === 0 ? html`
+            ${this._items.length === 0 ? html`
               <div class="empty-state-icon">
                 <img src="./icons/placeholders-variable.svg" alt="Placeholders" width="48" height="48" />
               </div>
@@ -241,7 +170,7 @@ class PlaceholdersSection extends LibrarySetupHandlerMixin(
           </div>
         ` : html`
           <div class="placeholder-list">
-            ${filteredPlaceholders.map((placeholder) => html`
+            ${filteredItems.map((placeholder) => html`
               <div class="placeholder-item">
                 <div class="placeholder-info">
                   <div class="placeholder-key">${placeholder.key}</div>

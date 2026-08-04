@@ -4,15 +4,13 @@
 import { html, nothing } from 'da-lit';
 import { BaseSectionElement } from '../../shared/components/base-section.js';
 import {
-  fetchLibraryJSON,
-  getSheetDataArray,
   updateTemplates,
   removeLibraryItem,
 } from '../../shared/api/library-api.js';
-import { getLibraryPath } from '../../shared/api/config-api.js';
 import { MessageHandlerMixin, MessageHandlerProperties } from '../../shared/mixins/message-handler.js';
 import { FormHandlerMixin, FormHandlerProperties } from '../../shared/mixins/form-handler.js';
 import { LibrarySetupHandlerMixin, LibrarySetupHandlerProperties } from '../../shared/mixins/library-setup-handler.js';
+import { LibraryItemsCRUDMixin, LibraryItemsCRUDProperties } from '../../shared/mixins/library-items-crud.js';
 import '../../shared/components/library-items-list.js';
 import '../../shared/components/library-setup-modal.js';
 import '../../shared/components/page-picker.js';
@@ -20,9 +18,13 @@ import '../../components/explainer-info-card.js';
 
 const NX = 'https://da.live/nx2';
 let sectionStyles = null;
+let commonStyles = null;
 
 try {
   const { default: getStyle } = await import(`${NX}/public/utils/styles.js`);
+  // Load common styles using absolute path from window.location
+  const commonStylesUrl = new URL('/tools/apps/config-console/shared/styles/common-section-styles.css', window.location.origin).href;
+  commonStyles = await getStyle(commonStylesUrl);
   sectionStyles = await getStyle(import.meta.url);
 } catch {
   // Styles failed to load - section will render without styles
@@ -31,24 +33,24 @@ try {
 /**
  * Templates section component
  */
-class TemplatesSection extends LibrarySetupHandlerMixin(
-  FormHandlerMixin(MessageHandlerMixin(BaseSectionElement)),
+class TemplatesSection extends LibraryItemsCRUDMixin(
+  LibrarySetupHandlerMixin(
+    FormHandlerMixin(MessageHandlerMixin(BaseSectionElement)),
+  ),
 ) {
   static properties = {
     ...BaseSectionElement.properties,
     ...MessageHandlerProperties,
     ...FormHandlerProperties,
     ...LibrarySetupHandlerProperties,
-    _templates: { state: true },
-    _searchQuery: { state: true },
+    ...LibraryItemsCRUDProperties,
     _showPagePicker: { state: true },
     _selectedPages: { state: true },
   };
 
   constructor() {
     super();
-    this._templates = [];
-    this._searchQuery = '';
+    // _items and _searchQuery now provided by LibraryItemsCRUDMixin
     this._showPagePicker = false;
     this._selectedPages = [];
   }
@@ -65,86 +67,26 @@ class TemplatesSection extends LibrarySetupHandlerMixin(
     return this._form?.name?.trim()?.length > 0 && this._form?.path?.trim()?.length > 0;
   }
 
-  _getStylesheets() {
-    return sectionStyles ? [sectionStyles] : [];
+  _getUpdateFunction() {
+    return updateTemplates;
   }
 
-  async loadData() {
-    this._setLoading(true);
-    this._trackAction('templates-load', { org: this.org, site: this.site });
-
-    try {
-      const json = await fetchLibraryJSON(this.org, this.site, 'templates', this.token);
-      this._templates = getSheetDataArray(json);
-      this._setLoading(false);
-    } catch (error) {
-      this._setError(`Failed to load templates: ${error.message}`);
-    }
+  _getItemFromForm() {
+    return {
+      name: this._form.name.trim(),
+      path: this._form.path.trim(),
+    };
   }
 
-  _handleSearch(e) {
-    this._searchQuery = e.target.value;
-  }
-
-  async _handleAdd() {
-    if (!this._isFormValid()) return;
-
-    // Check if library is configured first
-    const libraryPath = await getLibraryPath(this.org, this.site, 'templates', this.token);
-    if (!libraryPath) {
-      // Library not configured - show setup modal
-      await this._showLibrarySetupModal();
-      return;
-    }
-
-    this._message = null;
-
-    try {
-      const newTemplate = {
-        name: this._form.name.trim(),
-        path: this._form.path.trim(),
-      };
-
-      const result = await updateTemplates(
-        this.org,
-        this.site,
-        [newTemplate],
-        this.token,
-      );
-
-      if (result.success) {
-        const action = result.stats?.updated > 0 ? 'template-update' : 'template-add';
-        const message = result.stats?.updated > 0
-          ? 'Template updated successfully'
-          : 'Template added successfully';
-
-        this._trackAction(action, {
-          org: this.org,
-          site: this.site,
-          name: newTemplate.name,
-        });
-        this._form = { name: '', path: '' };
-        this._editingIndex = -1;
-        this._showAddForm = false;
-        await this.loadData();
-        this._showMessage('success', message);
-      } else {
-        throw new Error(result.error || 'Failed to add template');
-      }
-    } catch (error) {
-      this._setError(`Failed to add template: ${error.message}`);
-    }
-  }
-
-  _handleEdit(item) {
-    const index = this._templates.indexOf(item);
-    this._editingIndex = index;
+  _populateFormFromItem(item) {
     this._form = {
       name: item.key,
       path: item.value,
     };
-    this._showAddForm = true;
-    this._clearMessage();
+  }
+
+  _getStylesheets() {
+    return [commonStyles, sectionStyles].filter(Boolean);
   }
 
   async _handleRemove(item) {
@@ -288,7 +230,7 @@ class TemplatesSection extends LibrarySetupHandlerMixin(
   }
 
   _renderExplainerCard() {
-    const hasTemplates = this._templates && this._templates.length > 0;
+    const hasTemplates = this._items && this._items.length > 0;
     const status = hasTemplates ? 'configured' : 'not-configured';
     const statusLabel = hasTemplates ? 'Configured' : 'Not Configured';
 
@@ -316,15 +258,8 @@ class TemplatesSection extends LibrarySetupHandlerMixin(
     `;
   }
 
-  _getFilteredTemplates() {
-    if (!this._searchQuery) return this._templates;
-    const query = this._searchQuery.toLowerCase();
-    return this._templates.filter((t) => t.key.toLowerCase().includes(query)
-      || t.value.toLowerCase().includes(query));
-  }
-
   _renderCollectionCard() {
-    const filteredTemplates = this._getFilteredTemplates();
+    const filteredItems = this._getFilteredItems();
 
     return html`
       <div class="collection-card">
@@ -342,9 +277,9 @@ class TemplatesSection extends LibrarySetupHandlerMixin(
             clearable
           ></sl-input>
         </div>
-        ${filteredTemplates.length === 0 ? html`
+        ${filteredItems.length === 0 ? html`
           <div class="empty-state">
-            ${this._templates.length === 0 ? html`
+            ${this._items.length === 0 ? html`
               <div class="empty-state-icon">📄</div>
               <p class="empty-state-text">No templates yet</p>
               <p>Add a named template to make it available to authors.</p>
@@ -354,7 +289,7 @@ class TemplatesSection extends LibrarySetupHandlerMixin(
           </div>
         ` : html`
           <div class="template-list">
-            ${filteredTemplates.map((template) => html`
+            ${filteredItems.map((template) => html`
               <div class="template-item">
                 <div class="template-info">
                   <div class="template-name">${template.key}</div>
