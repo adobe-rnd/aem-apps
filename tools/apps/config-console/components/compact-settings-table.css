@@ -192,8 +192,8 @@
 
 .setting-input:focus {
   outline: none;
-  border-color: #1473E6;
-  box-shadow: 0 0 0 1px #1473E6;
+  border-color: light-dark(#1473E6, var(--s2-blue-400, #8AB4F8));
+  box-shadow: 0 0 0 1px light-dark(#1473E6, var(--s2-blue-400, #8AB4F8));
 }
 
 /* Actions Column */
