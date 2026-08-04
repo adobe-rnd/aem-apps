@@ -61,7 +61,6 @@ export class BaseSectionElement extends LitElement {
     this.context = null;
     this._loading = false;
     this._error = null;
-    this._loadingTimeout = null; // For debounced loading state
   }
 
   connectedCallback() {
@@ -84,15 +83,6 @@ export class BaseSectionElement extends LitElement {
     }
     // Load data when component connects
     this.loadData();
-  }
-
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    // Clean up loading timeout to prevent memory leaks
-    if (this._loadingTimeout) {
-      clearTimeout(this._loadingTimeout);
-      this._loadingTimeout = null;
-    }
   }
 
   /**
@@ -190,30 +180,13 @@ export class BaseSectionElement extends LitElement {
   }
 
   /**
-   * Helper: Set loading state with debouncing
-   * Only shows loading indicator if operation takes > 300ms
-   * This prevents flash for fast operations
+   * Helper: Set loading state
    * @param {boolean} isLoading
    */
   _setLoading(isLoading) {
-    // Clear any pending timeout
-    if (this._loadingTimeout) {
-      clearTimeout(this._loadingTimeout);
-      this._loadingTimeout = null;
-    }
-
+    this._loading = isLoading;
     if (isLoading) {
-      // Delay showing loading indicator by 300ms
-      // If operation completes quickly, loading indicator never shows
-      this._loadingTimeout = setTimeout(() => {
-        this._loading = true;
-        this._loadingTimeout = null;
-        this.requestUpdate(); // Trigger re-render
-      }, 300);
-      this._error = null; // Clear errors when loading starts
-    } else {
-      // Immediately hide loading indicator
-      this._loading = false;
+      this._error = null; // Clear errors when loading
     }
   }
 
