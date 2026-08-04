@@ -64,7 +64,7 @@
 }
 
 /* Responsive adjustments */
-@media (max-width: 900px) {
+@media (width <= 900px) {
   .section-container {
     padding: var(--s2-spacing-300) var(--s2-spacing-100);
   }

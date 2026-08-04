@@ -164,14 +164,6 @@ export async function updateLibraryJSON(org, site, type, config, token) {
 
   const url = `${DA_ADMIN}/source/${pathForWrite}`;
 
-  // eslint-disable-next-line no-console
-  console.log(`[updateLibraryJSON] Writing ${type}.json to:`, {
-    url,
-    libraryPath,
-    pathForWrite,
-    dataCount: config.data?.length || 0,
-  });
-
   try {
     const formData = new FormData();
     const blob = new Blob([JSON.stringify(config)], { type: 'application/json' });
@@ -180,13 +172,6 @@ export async function updateLibraryJSON(org, site, type, config, token) {
     const response = await daFetch(url, {
       method: 'POST',
       body: formData,
-    });
-
-    // eslint-disable-next-line no-console
-    console.log(`[updateLibraryJSON] ${type}.json response:`, {
-      ok: response.ok,
-      status: response.status,
-      statusText: response.statusText,
     });
 
     if (!response.ok) {
@@ -352,18 +337,7 @@ export async function updateIcons(org, site, icons, token) {
     data: mergeResult.merged,
   };
 
-  // eslint-disable-next-line no-console
-  console.log('[updateIcons] Writing icons JSON:', {
-    org,
-    site,
-    iconsJSON,
-    mergeResult,
-  });
-
   const updateResult = await updateLibraryJSON(org, site, 'icons', iconsJSON, token);
-
-  // eslint-disable-next-line no-console
-  console.log('[updateIcons] Update result:', updateResult);
 
   return {
     ...updateResult,
@@ -404,18 +378,7 @@ export async function updatePlaceholders(org, site, placeholders, token) {
     data: mergeResult.merged,
   };
 
-  // eslint-disable-next-line no-console
-  console.log('[updatePlaceholders] Writing placeholders JSON:', {
-    org,
-    site,
-    placeholdersJSON,
-    mergeResult,
-  });
-
   const updateResult = await updateLibraryJSON(org, site, 'placeholders', placeholdersJSON, token);
-
-  // eslint-disable-next-line no-console
-  console.log('[updatePlaceholders] Update result:', updateResult);
 
   return {
     ...updateResult,

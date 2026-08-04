@@ -844,42 +844,20 @@ class ConfigConsoleApp extends LitElement {
         sectionEl.token = this.token;
         sectionEl.context = this.context;
 
-        // eslint-disable-next-line no-console
-        console.log('[ConfigConsole] Section element created:', {
-          component: this._sectionComponent,
-          org: this._org,
-          site: this._site,
-          hasToken: !!this.token,
-        });
-
         // Append to container
         container.appendChild(sectionEl);
       }
     } else if ((changedProperties.has('_org') || changedProperties.has('_site'))
         && this._sectionComponent) {
       // If org/site changed and we have a section loaded, update the section element
-      // eslint-disable-next-line no-console
-      console.log('[ConfigConsole] Org/site changed, updating section:', {
-        component: this._sectionComponent,
-        org: this._org,
-        site: this._site,
-        changedProps: Array.from(changedProperties.keys()),
-      });
-
       const container = this.shadowRoot.querySelector('.section-container');
       const sectionEl = container?.querySelector(this._sectionComponent);
-
-      // eslint-disable-next-line no-console
-      console.log('[ConfigConsole] Found section element:', !!sectionEl);
 
       if (sectionEl) {
         sectionEl.org = this._org;
         sectionEl.site = this._site;
         sectionEl.token = this.token;
         sectionEl.context = this.context;
-
-        // eslint-disable-next-line no-console
-        console.log('[ConfigConsole] Updated section props, calling loadData');
 
         // Trigger loadData if the section has it
         if (typeof sectionEl.loadData === 'function') {

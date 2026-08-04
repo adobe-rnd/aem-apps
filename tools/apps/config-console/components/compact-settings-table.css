@@ -212,7 +212,7 @@
 }
 
 /* Responsive */
-@media (max-width: 900px) {
+@media (width <= 900px) {
   .settings-header,
   .setting-row {
     grid-template-columns: 1fr;

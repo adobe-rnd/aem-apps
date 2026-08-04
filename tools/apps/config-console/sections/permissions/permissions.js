@@ -136,13 +136,6 @@ class PermissionsSection extends BaseSectionElement {
 
   // Override loadData from BaseSectionElement
   async loadData() {
-    // eslint-disable-next-line no-console
-    console.log('[Permissions] loadData called:', {
-      org: this.org,
-      site: this.site,
-      token: !!this.token,
-    });
-
     if (!this.org) {
       this._state = 'idle';
       return;
@@ -166,13 +159,6 @@ class PermissionsSection extends BaseSectionElement {
         fetchOrgConfig(this.org),
         fetchSiteList(this.org),
       ]);
-
-      // eslint-disable-next-line no-console
-      console.log('[Permissions] Data loaded:', {
-        canAccess: orgResult.canAccess,
-        rulesCount: orgResult.config?.permissions?.data?.length || 0,
-        siteListCount: siteList?.length || 0,
-      });
 
       this._siteList = siteList;
 

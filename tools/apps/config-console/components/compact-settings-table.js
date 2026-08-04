@@ -107,8 +107,6 @@ class CompactSettingsTable extends LitElement {
       newValue = '';
     }
     this._editedValues[key] = newValue;
-    // eslint-disable-next-line no-console
-    console.log('[CompactSettingsTable] Input changed:', { key, newValue, editedValues: this._editedValues });
     this.requestUpdate();
   }
 
@@ -139,20 +137,6 @@ class CompactSettingsTable extends LitElement {
     const originalNormalized = normalizeValue(originalValue);
 
     const hasChanged = editedNormalized !== null && editedNormalized !== originalNormalized;
-
-    // eslint-disable-next-line no-console
-    console.log('[CompactSettingsTable] Render row:', {
-      key: setting.key,
-      editedValue,
-      originalValue,
-      hasNoValue,
-      currentValue,
-      editedNormalized,
-      originalNormalized,
-      hasChanged,
-      isInherited,
-      isSiteOverride,
-    });
 
     // Build tooltip text
     const tooltipText = setting.hint || 'No description available';
