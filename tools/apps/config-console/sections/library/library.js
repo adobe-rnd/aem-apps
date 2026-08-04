@@ -322,7 +322,7 @@ export default class LibrarySection extends BaseSectionElement {
     }
 
     if (this._error) {
-      return this._renderError(this._error, () => this.loadData());
+      return this._renderError(this._error);
     }
 
     return html`

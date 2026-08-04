@@ -1,0 +1,71 @@
+/* Experience Workspace Section Styles */
+
+.section-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2-spacing-400);
+  padding: var(--s2-spacing-400) var(--s2-spacing-200);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Message display */
+.message {
+  padding: var(--s2-spacing-300);
+  border-radius: var(--s2-corner-radius-100);
+  font-size: 14px;
+  margin-bottom: var(--s2-spacing-300);
+}
+
+.message.success {
+  background-color: var(--s2-green-100);
+  color: var(--s2-green-900);
+  border-left: 4px solid var(--s2-green-600);
+}
+
+.message.error {
+  background-color: var(--s2-red-100);
+  color: var(--s2-red-900);
+  border-left: 4px solid var(--s2-red-600);
+}
+
+/* Button styles in explainer card actions */
+.btn-small {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: var(--s2-corner-radius-100);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  gap: 6px;
+}
+
+.btn-primary {
+  background-color: #1473E6;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #0D66D0;
+}
+
+.btn-secondary {
+  background-color: var(--s2-gray-200);
+  color: var(--s2-gray-900);
+}
+
+.btn-secondary:hover {
+  background-color: var(--s2-gray-300);
+}
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+  .section-container {
+    padding: var(--s2-spacing-300) var(--s2-spacing-100);
+  }
+}

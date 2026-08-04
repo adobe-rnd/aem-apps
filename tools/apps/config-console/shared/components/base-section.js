@@ -4,18 +4,36 @@
 /* eslint-disable no-underscore-dangle, class-methods-use-this */
 import { LitElement, html } from 'da-lit';
 
-// Load global stylesheets that all sections need
+// Load global stylesheets and components that all sections need
 const NX = 'https://da.live/nx2';
 let nexter = null;
 let sl = null;
 
 try {
-  const { default: getStyle } = await import(`${NX}/public/utils/styles.js`);
+  const [{ default: getStyle }, { loadStyle }] = await Promise.all([
+    import(`${NX}/public/utils/styles.js`),
+    import(`${NX}/scripts/nx.js`),
+  ]);
+
+  // Load Shoelace styles and components
+  await loadStyle(`${NX}/public/sl/styles.css`);
+  await import(`${NX}/public/sl/components.js`);
+
+  // Get stylesheets
   [nexter, sl] = await Promise.all([
     getStyle(`${NX}/styles/styles.css`),
     getStyle(`${NX}/public/sl/styles.css`),
   ]);
-} catch {
+
+  // eslint-disable-next-line no-console
+  // console.log('[DEBUG] base-section.js loaded:', {
+  //   hasNexter: !!nexter,
+  //   hasSl: !!sl,
+  //   slInputDefined: !!customElements.get('sl-input'),
+  // });
+} catch (err) {
+  // eslint-disable-next-line no-console
+  // console.error('[DEBUG] base-section.js failed to load:', err);
   // Global styles failed to load - sections will render without base styles
 }
 
@@ -50,6 +68,16 @@ export class BaseSectionElement extends LitElement {
     // Combine global styles (nexter, sl) with section-specific styles
     const sectionStyles = this._getStylesheets();
     const allStyles = [nexter, sl, ...sectionStyles].filter(Boolean);
+
+    // eslint-disable-next-line no-console
+    // console.log('[DEBUG] BaseSectionElement connectedCallback:', {
+    //   sectionName: this.constructor.name,
+    //   hasNexter: !!nexter,
+    //   hasSl: !!sl,
+    //   sectionStylesCount: sectionStyles.length,
+    //   totalStyles: allStyles.length,
+    // });
+
     if (allStyles.length > 0) {
       this.shadowRoot.adoptedStyleSheets = allStyles;
     }
@@ -92,21 +120,15 @@ export class BaseSectionElement extends LitElement {
   /**
    * Helper: Show error state
    * @param {string} message - Error message
-   * @param {Function} onRetry - Optional retry callback
    * @returns {TemplateResult}
    */
-  _renderError(message, onRetry = null) {
+  _renderError(message) {
     const errorMessage = message || this._error;
     return html`
       <div class="error-container">
         <div class="message error">
           ${errorMessage}
         </div>
-        ${onRetry ? html`
-          <button class="retry-button" @click=${onRetry}>
-            Retry
-          </button>
-        ` : ''}
       </div>
     `;
   }

@@ -136,6 +136,13 @@ class PermissionsSection extends BaseSectionElement {
 
   // Override loadData from BaseSectionElement
   async loadData() {
+    // eslint-disable-next-line no-console
+    console.log('[Permissions] loadData called:', {
+      org: this.org,
+      site: this.site,
+      token: !!this.token,
+    });
+
     if (!this.org) {
       this._state = 'idle';
       return;
@@ -154,18 +161,31 @@ class PermissionsSection extends BaseSectionElement {
     this._selectedFolderPath = '';
     this._readOnly = false;
 
-    const [orgResult, siteList] = await Promise.all([
-      fetchOrgConfig(this.org),
-      fetchSiteList(this.org),
-    ]);
+    try {
+      const [orgResult, siteList] = await Promise.all([
+        fetchOrgConfig(this.org),
+        fetchSiteList(this.org),
+      ]);
 
-    this._siteList = siteList;
+      // eslint-disable-next-line no-console
+      console.log('[Permissions] Data loaded:', {
+        canAccess: orgResult.canAccess,
+        rulesCount: orgResult.config?.permissions?.data?.length || 0,
+        siteListCount: siteList?.length || 0,
+      });
 
-    if (orgResult.canAccess) {
-      this._rules = orgResult.config?.permissions?.data || [];
-      this._state = 'admin';
-    } else {
-      this._state = 'user';
+      this._siteList = siteList;
+
+      if (orgResult.canAccess) {
+        this._rules = orgResult.config?.permissions?.data || [];
+        this._state = 'admin';
+      } else {
+        this._state = 'user';
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[Permissions] Load error:', error);
+      this._state = 'idle';
     }
   }
 

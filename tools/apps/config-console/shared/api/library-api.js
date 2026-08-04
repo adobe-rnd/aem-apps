@@ -2,7 +2,20 @@
  * Shared API utilities for library items (templates, icons, placeholders)
  */
 
+// External imports from da.live CDN - unresolved at lint time
+/* eslint-disable import/no-unresolved */
+
+import { getLibraryPath } from './config-api.js';
+import { uploadTemplateDoc } from '../utils/da-api.js';
+
+// Use DA's daFetch which automatically handles IMS tokens
+const { daFetch: daFetchUtil } = await import('https://da.live/nx/utils/daFetch.js');
 const DA_ADMIN = 'https://admin.da.live';
+
+// Wrapper for daFetch
+async function daFetch(url, options = {}) {
+  return daFetchUtil(url, options);
+}
 
 /**
  * Normalize identifier for comparison
@@ -41,18 +54,26 @@ export function mergeLibraryItems(existingItems, newItems, identifierKey) {
     newItems.map((item) => normalizeIdentifier(item[identifierKey])),
   );
 
+  // Keep existing items that are NOT being updated
   const preserved = existingItems.filter(
     (item) => !newItemsSet.has(normalizeIdentifier(item[identifierKey])),
   );
 
+  // Find truly new items (don't exist yet)
   const itemsToAdd = newItems.filter(
     (item) => !existingMap.has(normalizeIdentifier(item[identifierKey])),
   );
 
+  // Find items being updated (exist in both) - use new version
+  const itemsToUpdate = newItems.filter(
+    (item) => existingMap.has(normalizeIdentifier(item[identifierKey])),
+  );
+
   return {
-    merged: [...preserved, ...itemsToAdd],
+    merged: [...preserved, ...itemsToUpdate, ...itemsToAdd],
     added: itemsToAdd.length,
-    skipped: newItems.length - itemsToAdd.length,
+    skipped: 0, // We update instead of skip
+    updated: itemsToUpdate.length,
     existing: existingItems.length,
   };
 }
@@ -76,27 +97,28 @@ export function getSheetDataArray(json) {
  * @returns {Promise<Object|null>}
  */
 export async function fetchLibraryJSON(org, site, type, token) {
-  // For now, use default paths - can be enhanced to use config paths later
-  const pathMap = {
-    templates: `${org}/${site}/library/templates.json`,
-    icons: `${org}/${site}/library/icons.json`,
-    placeholders: `${org}/${site}/placeholders.json`,
-  };
+  // Use library path from config
+  const libraryPath = await getLibraryPath(org, site, type, token);
 
-  const path = pathMap[type];
-  if (!path) {
-    throw new Error(`Unknown library type: ${type}`);
+  if (!libraryPath) {
+    // No library path configured - return null
+    return null;
   }
 
-  const url = `${DA_ADMIN}/source/${path}`;
+  // Extract path from URL (e.g., https://content.da.live/org/site/library/templates.json -> org/site/library/templates.json)
+  let pathForRead;
+  try {
+    const urlObj = new URL(libraryPath);
+    pathForRead = urlObj.pathname.replace(/^\//, '');
+  } catch (error) {
+    // If already a path without protocol, use as-is
+    pathForRead = libraryPath.replace(/^\//, '');
+  }
+
+  const url = `${DA_ADMIN}/source/${pathForRead}`;
 
   try {
-    const headers = {};
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
-    const response = await fetch(url, { headers });
+    const response = await daFetch(url, {});
 
     if (response.status === 404) {
       return null;
@@ -123,33 +145,48 @@ export async function fetchLibraryJSON(org, site, type, token) {
  * @returns {Promise<Object>}
  */
 export async function updateLibraryJSON(org, site, type, config, token) {
-  const pathMap = {
-    templates: `${org}/${site}/library/templates.json`,
-    icons: `${org}/${site}/library/icons.json`,
-    placeholders: `${org}/${site}/placeholders.json`,
-  };
+  // Use library path from config
+  const libraryPath = await getLibraryPath(org, site, type, token);
 
-  const path = pathMap[type];
-  if (!path) {
-    throw new Error(`Unknown library type: ${type}`);
+  if (!libraryPath) {
+    throw new Error(`No library path configured for ${type}`);
   }
 
-  const url = `${DA_ADMIN}/source/${path}`;
+  // Extract path from URL (e.g., https://content.da.live/org/site/library/templates.json -> org/site/library/templates.json)
+  let pathForWrite;
+  try {
+    const urlObj = new URL(libraryPath);
+    pathForWrite = urlObj.pathname.replace(/^\//, '');
+  } catch (error) {
+    // If already a path without protocol, use as-is
+    pathForWrite = libraryPath.replace(/^\//, '');
+  }
+
+  const url = `${DA_ADMIN}/source/${pathForWrite}`;
+
+  // eslint-disable-next-line no-console
+  console.log(`[updateLibraryJSON] Writing ${type}.json to:`, {
+    url,
+    libraryPath,
+    pathForWrite,
+    dataCount: config.data?.length || 0,
+  });
 
   try {
     const formData = new FormData();
     const blob = new Blob([JSON.stringify(config)], { type: 'application/json' });
     formData.set('data', blob);
 
-    const headers = {};
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
-    const response = await fetch(url, {
+    const response = await daFetch(url, {
       method: 'POST',
       body: formData,
-      headers,
+    });
+
+    // eslint-disable-next-line no-console
+    console.log(`[updateLibraryJSON] ${type}.json response:`, {
+      ok: response.ok,
+      status: response.status,
+      statusText: response.statusText,
     });
 
     if (!response.ok) {
@@ -162,6 +199,8 @@ export async function updateLibraryJSON(org, site, type, config, token) {
       status: response.status,
     };
   } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error(`[updateLibraryJSON] Error writing ${type}.json:`, error);
     return {
       success: false,
       error: error.message,
@@ -209,7 +248,7 @@ export async function removeLibraryItem(org, site, type, itemKey, token) {
  * Update templates JSON
  * @param {string} org - Organization
  * @param {string} site - Site
- * @param {Array} templates - Templates to add/update
+ * @param {Array} templates - Templates to add/update (each with name and path)
  * @param {string} token - Auth token
  * @returns {Promise<Object>}
  */
@@ -217,26 +256,32 @@ export async function updateTemplates(org, site, templates, token) {
   const existingJSON = await fetchLibraryJSON(org, site, 'templates', token);
   const existingData = getSheetDataArray(existingJSON);
 
-  const normalizedNew = templates.map((template) => {
-    let templatePath = template.path.replace(/\.html$/, '');
+  // Process templates: copy source files to templates folder with kebab-case names
+  const normalizedNew = await Promise.all(templates.map(async (template) => {
+    // Convert template name to kebab-case (e.g., "Home Page" -> "home")
+    const kebabName = normalizeIdentifier(template.name);
 
-    if (templatePath.startsWith('https://')) {
-      return {
-        key: template.name,
-        value: templatePath,
-      };
+    // Remove .html extension and leading slash from source path
+    let sourcePath = template.path.replace(/\.html$/, '');
+    if (!sourcePath.startsWith('/')) {
+      sourcePath = `/${sourcePath}`;
     }
 
-    const orgSitePrefix = `/${org}/${site}`;
-    if (templatePath.startsWith(orgSitePrefix)) {
-      templatePath = templatePath.substring(orgSitePrefix.length);
+    // Copy the source file to library/templates/{kebab-name}.html
+    const uploadResult = await uploadTemplateDoc(org, site, kebabName, sourcePath);
+
+    if (!uploadResult.success) {
+      throw new Error(`Failed to copy template "${template.name}": ${uploadResult.error}`);
     }
+
+    // Use the copied file path (e.g., /library/templates/home.html)
+    const copiedPath = uploadResult.path.replace(/\.html$/, '');
 
     return {
       key: template.name,
-      value: `https://content.da.live/${org}/${site}${templatePath}`,
+      value: `https://content.da.live${copiedPath}`,
     };
-  });
+  }));
 
   const mergeResult = mergeLibraryItems(existingData, normalizedNew, 'key');
 
@@ -266,7 +311,7 @@ export async function updateTemplates(org, site, templates, token) {
  * Update icons JSON
  * @param {string} org - Organization
  * @param {string} site - Site
- * @param {Array} icons - Icons to add/update
+ * @param {Array} icons - Icons to add/update (each with name and path)
  * @param {string} token - Auth token
  * @returns {Promise<Object>}
  */
@@ -274,6 +319,7 @@ export async function updateIcons(org, site, icons, token) {
   const existingJSON = await fetchLibraryJSON(org, site, 'icons', token);
   const existingData = getSheetDataArray(existingJSON);
 
+  // Icons are referenced directly from /icons path (not copied)
   const normalizedNew = icons.map((icon) => {
     let iconPath = icon.path;
 
@@ -306,7 +352,18 @@ export async function updateIcons(org, site, icons, token) {
     data: mergeResult.merged,
   };
 
+  // eslint-disable-next-line no-console
+  console.log('[updateIcons] Writing icons JSON:', {
+    org,
+    site,
+    iconsJSON,
+    mergeResult,
+  });
+
   const updateResult = await updateLibraryJSON(org, site, 'icons', iconsJSON, token);
+
+  // eslint-disable-next-line no-console
+  console.log('[updateIcons] Update result:', updateResult);
 
   return {
     ...updateResult,
@@ -347,7 +404,18 @@ export async function updatePlaceholders(org, site, placeholders, token) {
     data: mergeResult.merged,
   };
 
+  // eslint-disable-next-line no-console
+  console.log('[updatePlaceholders] Writing placeholders JSON:', {
+    org,
+    site,
+    placeholdersJSON,
+    mergeResult,
+  });
+
   const updateResult = await updateLibraryJSON(org, site, 'placeholders', placeholdersJSON, token);
+
+  // eslint-disable-next-line no-console
+  console.log('[updatePlaceholders] Update result:', updateResult);
 
   return {
     ...updateResult,

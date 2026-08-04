@@ -1,22 +1,14 @@
+// External imports from da.live CDN - unresolved at lint time
+/* eslint-disable import/no-unresolved */
+
 import { CONTENT_DA_LIVE_BASE } from '../constants.js';
 
-const FETCH_TIMEOUT_MS = 10000;
-const LIBRARY_BLOCKS_PATH = 'library/blocks';
+// Use DA's daFetch which automatically handles IMS tokens
+const { getDaAdmin } = await import('https://da.live/nx/public/utils/constants.js');
+const { daFetch: daFetchUtil } = await import('https://da.live/nx/utils/daFetch.js');
 
-/**
- * Wrapper around fetch that rejects after `ms` milliseconds.
- * Uses AbortController so the in-flight request is also cancelled.
- * @param {string} url
- * @param {RequestInit} options
- * @param {number} [ms]
- * @returns {Promise<Response>}
- */
-function fetchWithTimeout(url, options = {}, ms = FETCH_TIMEOUT_MS) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  return fetch(url, { ...options, signal: controller.signal })
-    .finally(() => clearTimeout(timer));
-}
+const DA_ADMIN = getDaAdmin();
+const LIBRARY_BLOCKS_PATH = 'library/blocks';
 
 /**
  * Sanitize a DA path segment to prevent path traversal.
@@ -33,8 +25,6 @@ export function sanitizePath(path) {
   // Normalise: strip leading slash, collapse double-slashes
   return path.replace(/\/+/g, '/').replace(/^\//, '');
 }
-
-const DA_ADMIN = 'https://admin.da.live';
 
 // Library item order priority (Blocks must always be first)
 const LIBRARY_ORDER = {
@@ -193,25 +183,16 @@ function sortLibraryData(libraryData) {
   });
 }
 
-async function daFetch(url, options = {}, token = null) {
-  const headers = {
-    ...options.headers,
-  };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  const response = await fetchWithTimeout(url, { ...options, headers });
-
-  return response;
+// Use DA's daFetch which handles IMS tokens automatically
+async function daFetch(url, options = {}) {
+  return daFetchUtil(url, options);
 }
 
-export async function fetchSiteConfig(org, site, token = null) {
+export async function fetchSiteConfig(org, site) {
   const url = `${DA_ADMIN}/config/${org}/${site}`;
 
   try {
-    const response = await daFetch(url, {}, token);
+    const response = await daFetch(url);
 
     if (response.status === 404) {
       return null;
@@ -259,8 +240,8 @@ function getLibraryBaseFromPath(pathStr) {
  * @param {string} token
  * @returns {Promise<string>} Path for DA source API (e.g. 'org/site/docs/library/blocks.json')
  */
-export async function getLibraryPathForType(org, site, type, token = null) {
-  const config = await fetchSiteConfig(org, site, token);
+export async function getLibraryPathForType(org, site, type) {
+  const config = await fetchSiteConfig(org, site);
   const entry = config?.library?.data?.find((e) => e.title === type);
   if (entry?.path) {
     return entry.path.replace(/^https:\/\/content\.da\.live\/?/i, '').replace(/^\//, '');
@@ -281,46 +262,46 @@ export async function getLibraryPathForType(org, site, type, token = null) {
  * @param {string} token
  * @returns {Promise<string>} e.g. 'org/site/docs/library' or 'org/site/library'
  */
-export async function getLibraryBase(org, site, token = null) {
-  const pathForBlocks = await getLibraryPathForType(org, site, 'Blocks', token);
+export async function getLibraryBase(org, site) {
+  const pathForBlocks = await getLibraryPathForType(org, site, 'Blocks');
   const base = getLibraryBaseFromPath(pathForBlocks);
   return base || `${org}/${site}/library`;
 }
 
-async function checkBlockDocExists(blocksDirPath, blockName, token = null) {
+async function checkBlockDocExists(blocksDirPath, blockName) {
   const path = `${blocksDirPath}/${blockName}`;
   const url = `${DA_ADMIN}/source${path}.html`;
 
   try {
-    const response = await daFetch(url, { method: 'HEAD' }, token);
+    const response = await daFetch(url, { method: 'HEAD' });
     return response.ok;
   } catch (error) {
     return false;
   }
 }
 
-async function createBlockDocVersion(blocksDirPath, blockName, token = null) {
+async function createBlockDocVersion(blocksDirPath, blockName) {
   const path = `${blocksDirPath}/${blockName}`;
   const url = `${DA_ADMIN}/versionsource${path}.html`;
 
   try {
-    const response = await daFetch(url, { method: 'POST' }, token);
+    const response = await daFetch(url, { method: 'POST' });
     return response.ok;
   } catch (error) {
     return false;
   }
 }
 
-export async function uploadBlockDoc(org, site, blockName, htmlContent, token = null) {
-  const base = await getLibraryBase(org, site, token);
+export async function uploadBlockDoc(org, site, blockName, htmlContent) {
+  const base = await getLibraryBase(org, site);
   const blocksDirPath = `/${base}/blocks`;
   const path = `${blocksDirPath}/${blockName}`;
   const url = `${DA_ADMIN}/source${path}.html`;
 
   try {
-    const exists = await checkBlockDocExists(blocksDirPath, blockName, token);
+    const exists = await checkBlockDocExists(blocksDirPath, blockName);
     if (exists) {
-      await createBlockDocVersion(blocksDirPath, blockName, token);
+      await createBlockDocVersion(blocksDirPath, blockName);
     }
 
     const formData = new FormData();
@@ -330,7 +311,7 @@ export async function uploadBlockDoc(org, site, blockName, htmlContent, token = 
     const response = await daFetch(url, {
       method: 'POST',
       body: formData,
-    }, token);
+    });
 
     if (!response.ok) {
       throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
@@ -350,12 +331,12 @@ export async function uploadBlockDoc(org, site, blockName, htmlContent, token = 
   }
 }
 
-export async function fetchBlocksJSON(org, site, token = null) {
-  const path = await getLibraryPathForType(org, site, 'Blocks', token);
+export async function fetchBlocksJSON(org, site) {
+  const path = await getLibraryPathForType(org, site, 'Blocks');
   const url = `${DA_ADMIN}/source/${path}`;
 
   try {
-    const response = await daFetch(url, {}, token);
+    const response = await daFetch(url, {});
 
     if (response.status === 404) {
       return null;
@@ -371,8 +352,8 @@ export async function fetchBlocksJSON(org, site, token = null) {
   }
 }
 
-export async function updateBlocksJSON(org, site, config, token = null) {
-  const path = await getLibraryPathForType(org, site, 'Blocks', token);
+export async function updateBlocksJSON(org, site, config) {
+  const path = await getLibraryPathForType(org, site, 'Blocks');
   const url = `${DA_ADMIN}/source/${path}`;
 
   try {
@@ -383,7 +364,7 @@ export async function updateBlocksJSON(org, site, config, token = null) {
     const response = await daFetch(url, {
       method: 'POST',
       body: formData,
-    }, token);
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to update blocks.json: ${response.status}`);
@@ -465,18 +446,18 @@ export async function batchUploadBlocks(
   return results;
 }
 
-export async function validateSite(org, site, token = null) {
+export async function validateSite(org, site) {
   const url = `https://admin.hlx.page/config/${org}/sites/${site}.json`;
 
   try {
-    const response = await daFetch(url, { method: 'HEAD' }, token);
+    const response = await daFetch(url, { method: 'HEAD' });
     return response.ok;
   } catch (error) {
     return false;
   }
 }
 
-export async function updateSiteConfig(org, site, config, token = null) {
+export async function updateSiteConfig(org, site, config) {
   const url = `${DA_ADMIN}/config/${org}/${site}`;
 
   try {
@@ -486,7 +467,7 @@ export async function updateSiteConfig(org, site, config, token = null) {
     const response = await daFetch(url, {
       method: 'PUT',
       body: formData,
-    }, token);
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to update config.json: ${response.status}`);
@@ -504,9 +485,9 @@ export async function updateSiteConfig(org, site, config, token = null) {
   }
 }
 
-export async function registerLibrary(org, site, token = null) {
+export async function registerLibrary(org, site) {
   try {
-    let config = await fetchSiteConfig(org, site, token);
+    let config = await fetchSiteConfig(org, site);
     const blocksPath = `${CONTENT_DA_LIVE_BASE}/${org}/${site}/${LIBRARY_BLOCKS_PATH}.json`;
     let wasCreated = false;
 
@@ -528,7 +509,7 @@ export async function registerLibrary(org, site, token = null) {
         },
       };
 
-      const result = await updateSiteConfig(org, site, config, token);
+      const result = await updateSiteConfig(org, site, config);
       return {
         success: result.success,
         created: true,
@@ -637,7 +618,7 @@ export async function registerLibrary(org, site, token = null) {
       config[':version'] = 3;
     }
 
-    const result = await updateSiteConfig(org, site, config, token);
+    const result = await updateSiteConfig(org, site, config);
     return {
       success: result.success,
       created: wasCreated,
@@ -660,17 +641,17 @@ export async function registerLibrary(org, site, token = null) {
  * @param {string} token
  * @returns {Promise<{ success: boolean, created?: boolean, error?: string }>}
  */
-export async function ensureLibraryRegistered(org, site, token = null) {
-  const config = await fetchSiteConfig(org, site, token);
+export async function ensureLibraryRegistered(org, site) {
+  const config = await fetchSiteConfig(org, site);
   if (config?.library) {
     return { success: true, created: false };
   }
-  return registerLibrary(org, site, token);
+  return registerLibrary(org, site);
 }
 
-export async function registerTemplatesInConfig(org, site, token = null) {
+export async function registerTemplatesInConfig(org, site) {
   try {
-    const config = await fetchSiteConfig(org, site, token);
+    const config = await fetchSiteConfig(org, site);
 
     if (!config || !config.library) {
       return {
@@ -679,7 +660,7 @@ export async function registerTemplatesInConfig(org, site, token = null) {
       };
     }
 
-    const pathSegment = await getLibraryPathForType(org, site, 'Templates', token);
+    const pathSegment = await getLibraryPathForType(org, site, 'Templates');
     const templatesPath = `${CONTENT_DA_LIVE_BASE}/${pathSegment}`;
 
     const libraryData = config.library.data || [];
@@ -700,7 +681,7 @@ export async function registerTemplatesInConfig(org, site, token = null) {
     config.library.total = sortedData.length;
     config.library.limit = sortedData.length;
 
-    const result = await updateSiteConfig(org, site, config, token);
+    const result = await updateSiteConfig(org, site, config);
     return {
       success: result.success,
       error: result.error,
@@ -713,14 +694,14 @@ export async function registerTemplatesInConfig(org, site, token = null) {
   }
 }
 
-export async function uploadTemplateDoc(org, site, templateName, sourcePath, token = null) {
-  const base = await getLibraryBase(org, site, token);
+export async function uploadTemplateDoc(org, site, templateName, sourcePath) {
+  const base = await getLibraryBase(org, site);
   const sourceUrl = `${DA_ADMIN}/source/${org}/${site}${sourcePath}.html`;
   const targetPath = `/${base}/templates/${templateName}`;
-  const targetUrl = `${DA_ADMIN}/source/${targetPath}.html`;
+  const targetUrl = `${DA_ADMIN}/source${targetPath}.html`;
 
   try {
-    const sourceResponse = await daFetch(sourceUrl, {}, token);
+    const sourceResponse = await daFetch(sourceUrl, {});
     if (!sourceResponse.ok) {
       throw new Error(`Failed to fetch source page: ${sourceResponse.status}`);
     }
@@ -734,7 +715,7 @@ export async function uploadTemplateDoc(org, site, templateName, sourcePath, tok
     const targetResponse = await daFetch(targetUrl, {
       method: 'POST',
       body: formData,
-    }, token);
+    });
 
     if (!targetResponse.ok) {
       throw new Error(`Upload failed: ${targetResponse.status}`);
@@ -754,12 +735,12 @@ export async function uploadTemplateDoc(org, site, templateName, sourcePath, tok
   }
 }
 
-export async function fetchTemplatesJSON(org, site, token = null) {
-  const path = await getLibraryPathForType(org, site, 'Templates', token);
+export async function fetchTemplatesJSON(org, site) {
+  const path = await getLibraryPathForType(org, site, 'Templates');
   const url = `${DA_ADMIN}/source/${path}`;
 
   try {
-    const response = await daFetch(url, {}, token);
+    const response = await daFetch(url, {});
 
     if (response.status === 404) {
       return null;
@@ -775,8 +756,8 @@ export async function fetchTemplatesJSON(org, site, token = null) {
   }
 }
 
-export async function updateTemplatesJSON(org, site, config, token = null) {
-  const path = await getLibraryPathForType(org, site, 'Templates', token);
+export async function updateTemplatesJSON(org, site, config) {
+  const path = await getLibraryPathForType(org, site, 'Templates');
   const url = `${DA_ADMIN}/source/${path}`;
 
   try {
@@ -787,7 +768,7 @@ export async function updateTemplatesJSON(org, site, config, token = null) {
     const response = await daFetch(url, {
       method: 'POST',
       body: formData,
-    }, token);
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to update templates.json: ${response.status}`);
@@ -805,12 +786,12 @@ export async function updateTemplatesJSON(org, site, config, token = null) {
   }
 }
 
-export async function fetchIconsJSON(org, site, token = null) {
-  const path = await getLibraryPathForType(org, site, 'Icons', token);
+export async function fetchIconsJSON(org, site) {
+  const path = await getLibraryPathForType(org, site, 'Icons');
   const url = `${DA_ADMIN}/source/${path}`;
 
   try {
-    const response = await daFetch(url, {}, token);
+    const response = await daFetch(url, {});
 
     if (response.status === 404) {
       return null;
@@ -826,8 +807,8 @@ export async function fetchIconsJSON(org, site, token = null) {
   }
 }
 
-export async function updateIconsJSON(org, site, config, token = null) {
-  const path = await getLibraryPathForType(org, site, 'Icons', token);
+export async function updateIconsJSON(org, site, config) {
+  const path = await getLibraryPathForType(org, site, 'Icons');
   const url = `${DA_ADMIN}/source/${path}`;
 
   try {
@@ -838,7 +819,7 @@ export async function updateIconsJSON(org, site, config, token = null) {
     const response = await daFetch(url, {
       method: 'POST',
       body: formData,
-    }, token);
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to update icons.json: ${response.status}`);
@@ -856,14 +837,14 @@ export async function updateIconsJSON(org, site, config, token = null) {
   }
 }
 
-export async function uploadIconDoc(org, site, iconName, sourcePath, token = null) {
-  const base = await getLibraryBase(org, site, token);
+export async function uploadIconDoc(org, site, iconName, sourcePath) {
+  const base = await getLibraryBase(org, site);
   const sourceUrl = `${DA_ADMIN}/source/${org}/${site}${sourcePath}`;
   const targetPath = `/${base}/icons/${iconName}`;
   const targetUrl = `${DA_ADMIN}/source${targetPath}.svg`;
 
   try {
-    const sourceResponse = await daFetch(sourceUrl, {}, token);
+    const sourceResponse = await daFetch(sourceUrl, {});
     if (!sourceResponse.ok) {
       throw new Error(`Failed to fetch source icon: ${sourceResponse.status}`);
     }
@@ -877,7 +858,7 @@ export async function uploadIconDoc(org, site, iconName, sourcePath, token = nul
     const targetResponse = await daFetch(targetUrl, {
       method: 'POST',
       body: formData,
-    }, token);
+    });
 
     if (!targetResponse.ok) {
       throw new Error(`Upload failed: ${targetResponse.status}`);
@@ -897,12 +878,12 @@ export async function uploadIconDoc(org, site, iconName, sourcePath, token = nul
   }
 }
 
-export async function fetchPlaceholdersJSON(org, site, token = null) {
-  const path = await getLibraryPathForType(org, site, 'Placeholders', token);
+export async function fetchPlaceholdersJSON(org, site) {
+  const path = await getLibraryPathForType(org, site, 'Placeholders');
   const url = `${DA_ADMIN}/source/${path}`;
 
   try {
-    const response = await daFetch(url, {}, token);
+    const response = await daFetch(url, {});
 
     if (response.status === 404) {
       return null;
@@ -918,8 +899,8 @@ export async function fetchPlaceholdersJSON(org, site, token = null) {
   }
 }
 
-export async function updatePlaceholdersJSON(org, site, config, token = null) {
-  const path = await getLibraryPathForType(org, site, 'Placeholders', token);
+export async function updatePlaceholdersJSON(org, site, config) {
+  const path = await getLibraryPathForType(org, site, 'Placeholders');
   const url = `${DA_ADMIN}/source/${path}`;
 
   try {
@@ -930,7 +911,7 @@ export async function updatePlaceholdersJSON(org, site, config, token = null) {
     const response = await daFetch(url, {
       method: 'POST',
       body: formData,
-    }, token);
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to update placeholders.json: ${response.status}`);
@@ -948,9 +929,9 @@ export async function updatePlaceholdersJSON(org, site, config, token = null) {
   }
 }
 
-export async function registerIconsInConfig(org, site, token = null) {
+export async function registerIconsInConfig(org, site) {
   try {
-    const config = await fetchSiteConfig(org, site, token);
+    const config = await fetchSiteConfig(org, site);
 
     if (!config || !config.library) {
       return {
@@ -959,7 +940,7 @@ export async function registerIconsInConfig(org, site, token = null) {
       };
     }
 
-    const pathSegment = await getLibraryPathForType(org, site, 'Icons', token);
+    const pathSegment = await getLibraryPathForType(org, site, 'Icons');
     const iconsPath = `${CONTENT_DA_LIVE_BASE}/${pathSegment}`;
 
     const libraryData = config.library.data || [];
@@ -982,7 +963,7 @@ export async function registerIconsInConfig(org, site, token = null) {
     config.library.total = sortedData.length;
     config.library.limit = sortedData.length;
 
-    const result = await updateSiteConfig(org, site, config, token);
+    const result = await updateSiteConfig(org, site, config);
     return {
       success: result.success,
       error: result.error,
@@ -995,9 +976,9 @@ export async function registerIconsInConfig(org, site, token = null) {
   }
 }
 
-export async function registerPlaceholdersInConfig(org, site, token = null) {
+export async function registerPlaceholdersInConfig(org, site) {
   try {
-    const config = await fetchSiteConfig(org, site, token);
+    const config = await fetchSiteConfig(org, site);
 
     if (!config || !config.library) {
       return {
@@ -1006,7 +987,7 @@ export async function registerPlaceholdersInConfig(org, site, token = null) {
       };
     }
 
-    const pathSegment = await getLibraryPathForType(org, site, 'Placeholders', token);
+    const pathSegment = await getLibraryPathForType(org, site, 'Placeholders');
     const placeholdersPath = `${CONTENT_DA_LIVE_BASE}/${pathSegment}`;
 
     const libraryData = config.library.data || [];
@@ -1029,7 +1010,7 @@ export async function registerPlaceholdersInConfig(org, site, token = null) {
     config.library.total = sortedData.length;
     config.library.limit = sortedData.length;
 
-    const result = await updateSiteConfig(org, site, config, token);
+    const result = await updateSiteConfig(org, site, config);
     return {
       success: result.success,
       error: result.error,
@@ -1042,9 +1023,9 @@ export async function registerPlaceholdersInConfig(org, site, token = null) {
   }
 }
 
-export async function fetchAemAssetsConfig(org, site, token = null) {
+export async function fetchAemAssetsConfig(org, site) {
   try {
-    const config = await fetchSiteConfig(org, site, token);
+    const config = await fetchSiteConfig(org, site);
 
     if (!config || !config.data || !config.data.data) {
       return {
@@ -1106,9 +1087,9 @@ export async function fetchAemAssetsConfig(org, site, token = null) {
   }
 }
 
-export async function updateAemAssetsConfig(org, site, aemConfig, token = null) {
+export async function updateAemAssetsConfig(org, site, aemConfig) {
   try {
-    let config = await fetchSiteConfig(org, site, token);
+    let config = await fetchSiteConfig(org, site);
 
     if (!config) {
       config = {
@@ -1224,7 +1205,7 @@ export async function updateAemAssetsConfig(org, site, aemConfig, token = null) 
       config[':names'].push('data');
     }
 
-    const result = await updateSiteConfig(org, site, config, token);
+    const result = await updateSiteConfig(org, site, config);
     return {
       success: result.success,
       error: result.error,
@@ -1237,9 +1218,9 @@ export async function updateAemAssetsConfig(org, site, aemConfig, token = null) 
   }
 }
 
-export async function fetchTranslationConfig(org, site, token = null) {
+export async function fetchTranslationConfig(org, site) {
   try {
-    const config = await fetchSiteConfig(org, site, token);
+    const config = await fetchSiteConfig(org, site);
     if (!config || !config.data || !config.data.data) {
       return {
         translateBehavior: 'overwrite',
@@ -1265,9 +1246,9 @@ export async function fetchTranslationConfig(org, site, token = null) {
   }
 }
 
-export async function updateTranslationConfig(org, site, translationConfig, token = null) {
+export async function updateTranslationConfig(org, site, translationConfig) {
   try {
-    let config = await fetchSiteConfig(org, site, token);
+    let config = await fetchSiteConfig(org, site);
 
     if (!config) {
       config = {
@@ -1344,7 +1325,7 @@ export async function updateTranslationConfig(org, site, translationConfig, toke
       config[':names'].push('data');
     }
 
-    const result = await updateSiteConfig(org, site, config, token);
+    const result = await updateSiteConfig(org, site, config);
     return {
       success: result.success,
       error: result.error,
@@ -1357,9 +1338,9 @@ export async function updateTranslationConfig(org, site, translationConfig, toke
   }
 }
 
-export async function fetchUniversalEditorConfig(org, site, token = null) {
+export async function fetchUniversalEditorConfig(org, site) {
   try {
-    const config = await fetchSiteConfig(org, site, token);
+    const config = await fetchSiteConfig(org, site);
     if (!config || !config.data || !config.data.data) {
       return {
         editorPath: '',
@@ -1379,9 +1360,9 @@ export async function fetchUniversalEditorConfig(org, site, token = null) {
   }
 }
 
-export async function updateUniversalEditorConfig(org, site, ueConfig, token = null) {
+export async function updateUniversalEditorConfig(org, site, ueConfig) {
   try {
-    let config = await fetchSiteConfig(org, site, token);
+    let config = await fetchSiteConfig(org, site);
 
     if (!config) {
       config = {
@@ -1446,7 +1427,7 @@ export async function updateUniversalEditorConfig(org, site, ueConfig, token = n
       config[':names'].push('data');
     }
 
-    const result = await updateSiteConfig(org, site, config, token);
+    const result = await updateSiteConfig(org, site, config);
     return {
       success: result.success,
       error: result.error,

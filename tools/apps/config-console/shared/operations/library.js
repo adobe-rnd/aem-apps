@@ -137,7 +137,8 @@ export async function updateLibraryBlocksJSON(org, site, blockNames) {
     };
   });
 
-  const mergedBlocks = [...preservedBlocks, ...newBlocks];
+  // Put new blocks at the top, preserved blocks below
+  const mergedBlocks = [...newBlocks, ...preservedBlocks];
 
   const blocksJSON = generateBlocksJSON(
     mergedBlocks.map((block) => ({ name: block.name, path: block.path })),

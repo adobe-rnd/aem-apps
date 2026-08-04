@@ -1,0 +1,142 @@
+/* Explainer Info Card Component Styles */
+
+:host {
+  display: block;
+  margin-bottom: var(--s2-spacing-500, 20px);
+}
+
+.info-card {
+  background: var(--s2-gray-50, #F9F9F9);
+  border: 1px solid var(--s2-blue-400, #8AB4F8);
+  border-left: 3px solid var(--s2-blue-800, #0D47A1);
+  border-radius: 8px;
+  padding: 12px 14px;
+  position: relative;
+}
+
+.info-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--s2-spacing-300, 12px);
+  gap: var(--s2-spacing-300, 12px);
+}
+
+.info-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2-spacing-300, 12px);
+  flex: 1;
+}
+
+.info-card-title {
+  margin: 0;
+  font-size: var(--s2-body-size-300, 16px);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: light-dark(var(--s2-gray-900), var(--s2-gray-100));
+}
+
+.status-pill {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: var(--s2-body-size-100, 12px);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.status-pill.not-configured {
+  background: #FFF4E5;
+  color: #B45309;
+}
+
+.status-pill.configured {
+  background: #E4F5E9;
+  color: #0B6027;
+}
+
+.status-pill.inherited {
+  background: #F3F3F3;
+  color: #505050;
+}
+
+.close-button {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  color: light-dark(var(--s2-gray-600), var(--s2-gray-400));
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.close-button:hover {
+  background: light-dark(var(--s2-gray-100), var(--s2-gray-800));
+  color: light-dark(var(--s2-gray-900), var(--s2-gray-100));
+}
+
+.info-card-content {
+  color: light-dark(var(--s2-gray-700), var(--s2-gray-300));
+  font-size: var(--s2-body-size-200, 14px);
+  line-height: 1.6;
+  margin-bottom: var(--s2-spacing-400, 16px);
+}
+
+.info-card-content p {
+  margin: 0 0 var(--s2-spacing-200, 8px) 0;
+}
+
+.info-card-content p:last-child {
+  margin-bottom: 0;
+}
+
+.info-card-actions {
+  display: flex;
+  gap: var(--s2-spacing-300, 12px);
+  flex-wrap: wrap;
+}
+
+.show-info-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2-spacing-150, 6px);
+  padding: 8px 12px;
+  background: var(--s2-blue-50, #E8F0FE);
+  border: 1px solid var(--s2-blue-600, #1473E6);
+  border-radius: 6px;
+  color: var(--s2-blue-600, #1473E6);
+  font-size: var(--s2-body-size-200, 14px);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.show-info-button:hover {
+  background: var(--s2-blue-100, #D1E3FD);
+  border-color: var(--s2-blue-700, #0D66D0);
+}
+
+.show-info-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+::slotted(a) {
+  color: var(--s2-blue-600, #1473E6);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+::slotted(a:hover) {
+  text-decoration: underline;
+  color: var(--s2-blue-700, #0D66D0);
+}

@@ -6,9 +6,12 @@ import { BaseSectionElement } from '../../shared/components/base-section.js';
 import {
   fetchInheritedConfig,
   updateSiteConfig,
+  updateOrgConfig,
   deleteSiteConfigValue,
 } from '../../shared/api/config-api.js';
 import { CONFIG_KEYS } from '../../shared/constants.js';
+import '../../components/explainer-info-card.js';
+import '../../components/compact-settings-table.js';
 
 // Get stylesheet for this section
 const NX = 'https://da.live/nx2';
@@ -99,27 +102,60 @@ export default class AemAssetsSection extends BaseSectionElement {
   _validateValue(key, value) {
     const trimmed = value.trim();
 
-    // Repository ID is required
-    if (key === CONFIG_KEYS.AEM_REPOSITORY_ID && !trimmed) {
-      return { valid: false, message: 'Repository ID is required' };
-    }
-
-    // URLs should be valid
-    if (key === CONFIG_KEYS.AEM_PROD_ORIGIN && trimmed) {
-      try {
-        const url = new URL(trimmed);
-        if (!url.protocol) {
-          return { valid: false, message: 'Must be a valid URL' };
-        }
-      } catch {
-        return { valid: false, message: 'Must be a valid URL' };
+    // Repository ID validation
+    if (key === CONFIG_KEYS.AEM_REPOSITORY_ID) {
+      if (!trimmed) {
+        return { valid: false, message: 'Repository ID is required' };
+      }
+      // Must match author-pXXXX-eYYYY or delivery-pXXXX-eYYYY format
+      const repoPattern = /^(author|delivery)-p\d+-e\d+\.adobeaemcloud\.com$/;
+      if (!repoPattern.test(trimmed)) {
+        return { valid: false, message: 'Must be format: author-p12345-e67890.adobeaemcloud.com' };
       }
     }
 
-    // Boolean values
+    // Production origin - just domain, no protocol required
+    if (key === CONFIG_KEYS.AEM_PROD_ORIGIN && trimmed) {
+      // Accept domain with or without protocol
+      const domainPattern = /^([a-z0-9-]+\.)*[a-z0-9-]+\.[a-z]{2,}$/i;
+      const urlPattern = /^https?:\/\//;
+
+      if (urlPattern.test(trimmed)) {
+        return { valid: false, message: 'Enter domain only without protocol (e.g., production-domain.com)' };
+      }
+      if (!domainPattern.test(trimmed)) {
+        return { valid: false, message: 'Must be a valid domain' };
+      }
+    }
+
+    // DM Delivery validation
     if (key === CONFIG_KEYS.AEM_DM_DELIVERY && trimmed) {
-      if (trimmed !== 'true' && trimmed !== 'false') {
-        return { valid: false, message: 'Must be "true" or "false"' };
+      if (trimmed !== 'on') {
+        return { valid: false, message: 'Must be "on" or empty' };
+      }
+    }
+
+    // Smart Crop validation
+    if (key === CONFIG_KEYS.AEM_SMARTCROP_SELECT && trimmed) {
+      if (trimmed !== 'on') {
+        return { valid: false, message: 'Must be "on" or empty' };
+      }
+    }
+
+    // Image Type validation
+    if (key === CONFIG_KEYS.AEM_IMAGE_TYPE && trimmed) {
+      if (trimmed !== 'link') {
+        return { valid: false, message: 'Must be "link" or empty' };
+      }
+    }
+
+    // MIME Renditions validation
+    if (key === CONFIG_KEYS.AEM_MIME_RENDITIONS && trimmed) {
+      // Format: mimetype:renditiontype, mimetype:renditiontype
+      const pairs = trimmed.split(',').map((p) => p.trim());
+      const invalidPair = pairs.find((pair) => !pair.includes(':'));
+      if (invalidPair) {
+        return { valid: false, message: 'Format: mimetype:renditiontype (e.g., image/jpeg:avif)' };
       }
     }
 
@@ -164,17 +200,14 @@ export default class AemAssetsSection extends BaseSectionElement {
     this._saveMessage = null;
 
     try {
-      const result = await updateSiteConfig(
-        this.org,
-        this.site,
-        key,
-        trimmedValue,
-        this.token,
-      );
+      // Use appropriate API based on context (org vs site)
+      const result = this.site
+        ? await updateSiteConfig(this.org, this.site, key, trimmedValue, this.token)
+        : await updateOrgConfig(this.org, key, trimmedValue, this.token);
 
       if (result.success) {
         this._configs[key].value = trimmedValue;
-        this._configs[key].source = 'site';
+        this._configs[key].source = this.site ? 'site' : 'org';
         this._editingKey = null;
         this._editedValue = '';
         this._saveMessage = { type: 'success', text: `${this._configs[key].label} updated successfully` };
@@ -253,89 +286,150 @@ export default class AemAssetsSection extends BaseSectionElement {
     }
   }
 
-  _renderConfigField(key) {
-    const config = this._configs[key];
-    if (!config) return '';
+  _prepareSettings() {
+    // Transform configs into settings array for compact table
+    const settingsConfig = [
+      {
+        key: CONFIG_KEYS.AEM_REPOSITORY_ID,
+        required: true,
+        placeholder: 'author-p12345-e67890.adobeaemcloud.com',
+        helpUrl: 'https://docs.da.live/administrators/guides/setup-aem-assets#repository-id',
+      },
+      {
+        key: CONFIG_KEYS.AEM_PROD_ORIGIN,
+        required: false,
+        placeholder: 'production-domain.com',
+        helpUrl: 'https://docs.da.live/administrators/guides/setup-aem-assets#production-origin',
+      },
+      {
+        key: CONFIG_KEYS.AEM_PROD_BASEPATH,
+        required: false,
+        placeholder: '/content/dam/mysite',
+        helpUrl: 'https://docs.da.live/administrators/guides/setup-aem-assets#base-path',
+      },
+      {
+        key: CONFIG_KEYS.AEM_IMAGE_TYPE,
+        required: false,
+        type: 'select',
+        options: [
+          { value: '', label: 'Default (image tag)' },
+          { value: 'link', label: 'Link' },
+        ],
+        defaultLabel: 'Select...',
+        helpUrl: 'https://docs.da.live/administrators/guides/setup-aem-assets#image-type',
+      },
+      {
+        key: CONFIG_KEYS.AEM_DM_DELIVERY,
+        required: false,
+        type: 'select',
+        options: [
+          { value: '', label: 'Disabled' },
+          { value: 'on', label: 'Enabled' },
+        ],
+        defaultLabel: 'Select...',
+        helpUrl: 'https://docs.da.live/administrators/guides/setup-aem-assets#dynamic-media',
+      },
+      {
+        key: CONFIG_KEYS.AEM_SMARTCROP_SELECT,
+        required: false,
+        type: 'select',
+        options: [
+          { value: '', label: 'Disabled' },
+          { value: 'on', label: 'Enabled' },
+        ],
+        defaultLabel: 'Select...',
+        helpUrl: 'https://docs.da.live/administrators/guides/setup-aem-assets#smart-crop',
+      },
+      {
+        key: CONFIG_KEYS.AEM_MIME_RENDITIONS,
+        required: false,
+        placeholder: 'image/vnd.adobe.photoshop:avif, video/*:original',
+        helpUrl: 'https://docs.da.live/administrators/guides/setup-aem-assets#renditions',
+      },
+    ];
 
-    const isEditing = this._editingKey === key;
-    const isInherited = this.site && config.source === 'org';
-    const canRevert = this.site && config.source === 'site' && config.inheritedValue;
-    const inputClass = `config-input-${key.replace(/\./g, '-')}`;
+    return settingsConfig.map(({
+      key,
+      required,
+      placeholder,
+      helpUrl,
+      type,
+      options,
+      defaultLabel,
+    }) => {
+      const config = this._configs[key];
+      if (!config) return null;
 
-    if (isEditing) {
-      return html`
-        <div class="config-field is-editing">
-          <label class="config-label" for="${key}">${config.label}</label>
-          <div class="config-edit-controls">
-            <input
-              type="text"
-              id="${key}"
-              class="${inputClass}"
-              .value=${this._editedValue}
-              @input=${this._handleInputChange}
-              @keydown=${(e) => this._handleKeyDown(e, key)}
-              ?disabled=${this._isSaving}
-              placeholder="${isInherited && config.inheritedValue ? config.inheritedValue : config.hint}"
-            />
-            <div class="config-actions">
-              <button
-                class="config-btn config-btn-primary"
-                @click=${() => this._handleSave(key)}
-                ?disabled=${this._isSaving}
-              >
-                ${this._isSaving ? 'Saving...' : 'Save'}
-              </button>
-              <button
-                class="config-btn config-btn-secondary"
-                @click=${this._handleCancel}
-                ?disabled=${this._isSaving}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-          <p class="config-hint">${config.hint}</p>
-        </div>
-      `;
-    }
+      return {
+        key,
+        label: config.label,
+        value: config.value,
+        source: config.source,
+        inheritedValue: config.inheritedValue,
+        required,
+        type: type || 'text',
+        options,
+        defaultLabel,
+        placeholder,
+        hint: config.hint,
+        helpUrl,
+      };
+    }).filter(Boolean);
+  }
+
+  _renderExplainerCard() {
+    // Check if Repository ID is configured (required for AEM Assets)
+    const repositoryId = this._configs[CONFIG_KEYS.AEM_REPOSITORY_ID]?.value;
+    const isConfigured = !!repositoryId;
+    const hasSiteConfig = Object.values(this._configs).some((c) => c.source === 'site');
+
+    const status = isConfigured ? 'configured' : 'not-configured';
+    const statusLabel = (() => {
+      if (!isConfigured) return 'Not Configured';
+      if (this.site && hasSiteConfig) return 'Site Scoped';
+      if (this.site) return 'Inherited from Org';
+      return 'Configured';
+    })();
 
     return html`
-      <div class="config-field ${isInherited ? 'is-inherited' : ''}">
-        <label class="config-label">${config.label}</label>
-        <div class="config-value-row">
-          <div class="config-value-display">
-            <span class="config-value">${config.value || html`<span class="config-empty">Not set</span>`}</span>
-            ${isInherited ? html`
-              <span class="config-badge">Inherited</span>
-            ` : ''}
-          </div>
-          <div class="config-actions">
-            ${this.site ? html`
-              <button
-                class="config-btn config-btn-secondary"
-                @click=${() => this._handleEdit(key)}
-              >
-                ${isInherited ? 'Override' : 'Edit'}
-              </button>
-              ${canRevert ? html`
-                <button
-                  class="config-btn config-btn-tertiary"
-                  @click=${() => this._handleRevert(key)}
-                  ?disabled=${this._isSaving}
-                  title="Revert to organization default"
-                >
-                  Revert to Default
-                </button>
-              ` : ''}
-            ` : ''}
-          </div>
+      <explainer-info-card
+        cardId="aem-assets-integration"
+        title="AEM Assets Integration"
+        status="${status}"
+        statusLabel="${statusLabel}"
+      >
+        <div slot="content">
+          <p>Connect this ${this.site ? 'site' : 'organization'} to AEM Assets so authors can browse, select, and deliver approved assets directly in their workflow.</p>
+          <p>Required first: Repository ID and Production Origin. Optional: Dynamic Media delivery, smart crops, image types.</p>
+          <p>${!isConfigured ? 'Without configuration, authors cannot access AEM Assets from the authoring environment.' : 'Asset delivery is active. Authors can browse and insert assets.'}</p>
         </div>
-        ${isInherited && config.inheritedValue ? html`
-          <div class="inheritance-notice">
-            Inherited from organization: ${config.inheritedValue}
-          </div>
-        ` : ''}
-      </div>
+        <div slot="actions">
+          <a
+            href="https://docs.da.live/administrators/guides/setup-aem-assets"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-small btn-secondary"
+          >Setup AEM Assets</a>
+        </div>
+      </explainer-info-card>
+    `;
+  }
+
+  async _handleTableSave(key, value) {
+    this._editedValue = value;
+    return this._handleSave(key);
+  }
+
+  _renderSettingsCard() {
+    const settings = this._prepareSettings();
+
+    return html`
+      <compact-settings-table
+        .settings=${settings}
+        .onSave=${(key, value) => this._handleTableSave(key, value)}
+        .onRevert=${(key) => this._handleRevert(key)}
+        .isSaving=${this._isSaving}
+      ></compact-settings-table>
     `;
   }
 
@@ -345,20 +439,12 @@ export default class AemAssetsSection extends BaseSectionElement {
     }
 
     if (this._error) {
-      return this._renderError(this._error, () => this.loadData());
+      return this._renderError(this._error);
     }
 
     return html`
-      <div class="section-aem-assets">
-        <div class="section-header">
-          <h2 class="section-title">AEM Assets Integration</h2>
-          <p class="section-description">
-            Configure AEM Assets integration for asset delivery.
-            ${this.site
-    ? 'Site-level settings override organization defaults.'
-    : 'These settings will be inherited by all sites.'}
-          </p>
-        </div>
+      <div class="section-container">
+        ${this._renderExplainerCard()}
 
         ${this._saveMessage ? html`
           <div class="message ${this._saveMessage.type}">
@@ -366,9 +452,7 @@ export default class AemAssetsSection extends BaseSectionElement {
           </div>
         ` : ''}
 
-        <div class="section-content">
-          ${Object.keys(this._configs).map((key) => this._renderConfigField(key))}
-        </div>
+        ${this._renderSettingsCard()}
       </div>
     `;
   }

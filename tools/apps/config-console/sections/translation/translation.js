@@ -6,9 +6,12 @@ import { BaseSectionElement } from '../../shared/components/base-section.js';
 import {
   fetchInheritedConfig,
   updateSiteConfig,
+  updateOrgConfig,
   deleteSiteConfigValue,
 } from '../../shared/api/config-api.js';
 import { CONFIG_KEYS } from '../../shared/constants.js';
+import '../../components/explainer-info-card.js';
+import '../../components/compact-settings-table.js';
 
 // Get stylesheet for this section
 const NX = 'https://da.live/nx2';
@@ -62,44 +65,42 @@ export default class TranslationSection extends BaseSectionElement {
         {
           key: CONFIG_KEYS.TRANSLATE_BEHAVIOR,
           label: 'Translation Behavior',
-          hint: 'Translation behavior setting (e.g., auto, manual)',
+          hint: 'How to handle old content when new docs come back from translation',
           type: 'select',
           options: [
-            { value: '', label: 'Not set' },
-            { value: 'auto', label: 'Auto' },
-            { value: 'manual', label: 'Manual' },
-            { value: 'disabled', label: 'Disabled' },
+            { value: 'overwrite', label: 'Overwrite - Replace existing content' },
+            { value: 'merge', label: 'Merge - Combine old and new content' },
           ],
+          defaultLabel: 'Select...',
         },
         {
           key: CONFIG_KEYS.TRANSLATE_STAGING,
           label: 'Translation Staging',
-          hint: 'Enable translation staging environment (true/false)',
+          hint: 'Stage content in separate area before sending to translation',
           type: 'select',
           options: [
-            { value: '', label: 'Not set' },
-            { value: 'true', label: 'Enabled' },
-            { value: 'false', label: 'Disabled' },
+            { value: 'on', label: 'On - Stage before translation' },
+            { value: 'off', label: 'Off - Send directly to translation' },
           ],
+          defaultLabel: 'Select...',
         },
         {
           key: CONFIG_KEYS.ROLLOUT_BEHAVIOR,
           label: 'Rollout Behavior',
-          hint: 'Content rollout behavior (e.g., sync, async, disabled)',
+          hint: 'How to handle old content during rollout to locale',
           type: 'select',
           options: [
-            { value: '', label: 'Not set' },
-            { value: 'sync', label: 'Synchronous' },
-            { value: 'async', label: 'Asynchronous' },
-            { value: 'disabled', label: 'Disabled' },
+            { value: 'overwrite', label: 'Overwrite - Replace existing content' },
+            { value: 'merge', label: 'Merge - Combine old and new content' },
           ],
+          defaultLabel: 'Select...',
         },
       ];
 
       const configs = {};
       await Promise.all(
         configKeys.map(async ({
-          key, label, hint, type, options,
+          key, label, hint, type, options, defaultLabel,
         }) => {
           const config = await fetchInheritedConfig(
             this.org,
@@ -113,6 +114,7 @@ export default class TranslationSection extends BaseSectionElement {
             hint,
             type,
             options,
+            defaultLabel,
           };
         }),
       );
@@ -131,25 +133,26 @@ export default class TranslationSection extends BaseSectionElement {
   _validateValue(key, value) {
     const trimmed = value.trim();
 
-    // Boolean values
+    // Translation staging validation
     if (key === CONFIG_KEYS.TRANSLATE_STAGING && trimmed) {
-      if (trimmed !== 'true' && trimmed !== 'false' && trimmed !== '') {
-        return { valid: false, message: 'Must be "true", "false", or empty' };
+      if (trimmed !== 'on' && trimmed !== 'off') {
+        return { valid: false, message: 'Must be "on" or "off"' };
       }
     }
 
-    // Enum values
+    // Translation behavior validation
     if (key === CONFIG_KEYS.TRANSLATE_BEHAVIOR && trimmed) {
-      const validValues = ['auto', 'manual', 'disabled', ''];
+      const validValues = ['overwrite', 'merge'];
       if (!validValues.includes(trimmed)) {
-        return { valid: false, message: 'Must be "auto", "manual", "disabled", or empty' };
+        return { valid: false, message: 'Must be "overwrite" or "merge"' };
       }
     }
 
+    // Rollout behavior validation
     if (key === CONFIG_KEYS.ROLLOUT_BEHAVIOR && trimmed) {
-      const validValues = ['sync', 'async', 'disabled', ''];
+      const validValues = ['overwrite', 'merge'];
       if (!validValues.includes(trimmed)) {
-        return { valid: false, message: 'Must be "sync", "async", "disabled", or empty' };
+        return { valid: false, message: 'Must be "overwrite" or "merge"' };
       }
     }
 
@@ -194,17 +197,14 @@ export default class TranslationSection extends BaseSectionElement {
     this._saveMessage = null;
 
     try {
-      const result = await updateSiteConfig(
-        this.org,
-        this.site,
-        key,
-        trimmedValue,
-        this.token,
-      );
+      // Use appropriate API based on context (org vs site)
+      const result = this.site
+        ? await updateSiteConfig(this.org, this.site, key, trimmedValue, this.token)
+        : await updateOrgConfig(this.org, key, trimmedValue, this.token);
 
       if (result.success) {
         this._configs[key].value = trimmedValue;
-        this._configs[key].source = 'site';
+        this._configs[key].source = this.site ? 'site' : 'org';
         this._editingKey = null;
         this._editedValue = '';
         this._saveMessage = { type: 'success', text: `${this._configs[key].label} updated successfully` };
@@ -273,106 +273,115 @@ export default class TranslationSection extends BaseSectionElement {
     this._saveMessage = null;
   }
 
-  _getDisplayValue(config) {
-    if (!config.value) return html`<span class="config-empty">Not set</span>`;
-
-    // Find the label for the value
-    if (config.options) {
-      const option = config.options.find((opt) => opt.value === config.value);
-      return option?.label || config.value;
-    }
-
-    return config.value;
+  async _handleTableSave(key, value) {
+    this._editedValue = value;
+    return this._handleSave(key);
   }
 
-  _renderConfigField(key) {
-    const config = this._configs[key];
-    if (!config) return '';
+  _prepareSettings() {
+    // Transform configs into settings array for compact table
+    const settingsConfig = [
+      {
+        key: CONFIG_KEYS.TRANSLATE_BEHAVIOR,
+        required: false,
+        helpUrl: 'https://docs.da.live/administrators/guides/setup-translation#behavior',
+      },
+      {
+        key: CONFIG_KEYS.TRANSLATE_STAGING,
+        required: false,
+        helpUrl: 'https://docs.da.live/administrators/guides/setup-translation#staging',
+      },
+      {
+        key: CONFIG_KEYS.ROLLOUT_BEHAVIOR,
+        required: false,
+        helpUrl: 'https://docs.da.live/administrators/guides/setup-translation#rollout',
+      },
+    ];
 
-    const isEditing = this._editingKey === key;
-    const isInherited = this.site && config.source === 'org';
-    const canRevert = this.site && config.source === 'site' && config.inheritedValue;
-    const selectClass = `config-select-${key.replace(/\./g, '-')}`;
+    return settingsConfig.map(({
+      key,
+      required,
+      helpUrl,
+    }) => {
+      const config = this._configs[key];
+      if (!config) return null;
 
-    if (isEditing) {
-      return html`
-        <div class="config-field is-editing">
-          <label class="config-label" for="${key}">${config.label}</label>
-          <div class="config-edit-controls">
-            ${config.type === 'select' ? html`
-              <select
-                id="${key}"
-                class="${selectClass}"
-                .value=${this._editedValue}
-                @change=${this._handleSelectChange}
-                ?disabled=${this._isSaving}
-              >
-                ${config.options.map((option) => html`
-                  <option value="${option.value}" ?selected=${this._editedValue === option.value}>
-                    ${option.label}
-                  </option>
-                `)}
-              </select>
-            ` : ''}
-            <div class="config-actions">
-              <button
-                class="config-btn config-btn-primary"
-                @click=${() => this._handleSave(key)}
-                ?disabled=${this._isSaving}
-              >
-                ${this._isSaving ? 'Saving...' : 'Save'}
-              </button>
-              <button
-                class="config-btn config-btn-secondary"
-                @click=${this._handleCancel}
-                ?disabled=${this._isSaving}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-          <p class="config-hint">${config.hint}</p>
-        </div>
-      `;
-    }
+      return {
+        key,
+        label: config.label,
+        value: config.value,
+        source: config.source,
+        inheritedValue: config.inheritedValue,
+        required,
+        type: config.type || 'text',
+        options: config.options,
+        defaultLabel: config.defaultLabel,
+        hint: config.hint,
+        helpUrl,
+      };
+    }).filter(Boolean);
+  }
+
+  _renderExplainerCard() {
+    // Check if any translation/rollout settings are configured
+    const hasAnyValue = Object.values(this._configs).some((c) => c.value);
+    const isConfigured = hasAnyValue;
+    const hasSiteConfig = Object.values(this._configs).some((c) => c.source === 'site');
+
+    const status = isConfigured ? 'configured' : 'not-configured';
+    const statusLabel = (() => {
+      if (!isConfigured) return 'Not Configured';
+      if (this.site && hasSiteConfig) return 'Site Scoped';
+      if (this.site) return 'Inherited from Org';
+      return 'Configured';
+    })();
 
     return html`
-      <div class="config-field ${isInherited ? 'is-inherited' : ''}">
-        <label class="config-label">${config.label}</label>
-        <div class="config-value-row">
-          <div class="config-value-display">
-            <span class="config-value">${this._getDisplayValue(config)}</span>
-            ${isInherited ? html`
-              <span class="config-badge">Inherited</span>
-            ` : ''}
-          </div>
-          <div class="config-actions">
-            ${this.site ? html`
-              <button
-                class="config-btn config-btn-secondary"
-                @click=${() => this._handleEdit(key)}
-              >
-                ${isInherited ? 'Override' : 'Edit'}
-              </button>
-              ${canRevert ? html`
-                <button
-                  class="config-btn config-btn-tertiary"
-                  @click=${() => this._handleRevert(key)}
-                  ?disabled=${this._isSaving}
-                  title="Revert to organization default"
-                >
-                  Revert to Default
-                </button>
-              ` : ''}
-            ` : ''}
-          </div>
+      <explainer-info-card
+        cardId="translation-integration"
+        title="Translation Integration"
+        status="${status}"
+        statusLabel="${statusLabel}"
+      >
+        <div slot="content">
+          <p>Use this when your site needs localized pages, translation service routing, or rollout behavior.</p>
+          <p>Configure staging, translation behavior, and rollout rules. If not configured, authors can still create content, but localization workflows will use defaults or may be unavailable.</p>
+          <p>Recommended next step: Choose translation behavior first, then define rollout behavior.</p>
         </div>
-        ${isInherited && config.inheritedValue ? html`
-          <div class="inheritance-notice">
-            Inherited from organization: ${this._getDisplayValue({ ...config, value: config.inheritedValue })}
-          </div>
-        ` : ''}
-      </div>
+        <div slot="actions">
+          <a
+            href="https://docs.da.live/administrators/guides/setup-translation"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-small btn-secondary"
+          >Setup Translation</a>
+          <a
+            href="https://docs.da.live/administrators/guides/translation-strategy"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-small btn-secondary"
+          >Translation Strategy</a>
+          <a
+            href="https://docs.da.live/administrators/reference/localization"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-small btn-secondary"
+          >Localization Reference</a>
+        </div>
+      </explainer-info-card>
+    `;
+  }
+
+  _renderSettingsCard() {
+    const settings = this._prepareSettings();
+
+    return html`
+      <compact-settings-table
+        .settings=${settings}
+        .onSave=${(key, value) => this._handleTableSave(key, value)}
+        .onRevert=${(key) => this._handleRevert(key)}
+        .isSaving=${this._isSaving}
+      ></compact-settings-table>
     `;
   }
 
@@ -382,20 +391,12 @@ export default class TranslationSection extends BaseSectionElement {
     }
 
     if (this._error) {
-      return this._renderError(this._error, () => this.loadData());
+      return this._renderError(this._error);
     }
 
     return html`
-      <div class="section-translation">
-        <div class="section-header">
-          <h2 class="section-title">Translation & Rollout</h2>
-          <p class="section-description">
-            Configure translation and content rollout settings.
-            ${this.site
-    ? 'Site-level settings override organization defaults.'
-    : 'These settings will be inherited by all sites.'}
-          </p>
-        </div>
+      <div class="section-container">
+        ${this._renderExplainerCard()}
 
         ${this._saveMessage ? html`
           <div class="message ${this._saveMessage.type}">
@@ -403,9 +404,7 @@ export default class TranslationSection extends BaseSectionElement {
           </div>
         ` : ''}
 
-        <div class="section-content">
-          ${Object.keys(this._configs).map((key) => this._renderConfigField(key))}
-        </div>
+        ${this._renderSettingsCard()}
       </div>
     `;
   }

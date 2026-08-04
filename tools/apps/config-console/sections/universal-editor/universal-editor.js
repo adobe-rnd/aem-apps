@@ -9,6 +9,8 @@ import {
   deleteSiteConfigValue,
 } from '../../shared/api/config-api.js';
 import { CONFIG_KEYS } from '../../shared/constants.js';
+import '../../components/explainer-info-card.js';
+import '../../components/compact-settings-table.js';
 
 // Get stylesheet for this section
 const NX = 'https://da.live/nx2';
@@ -259,102 +261,79 @@ export default class UniversalEditorSection extends BaseSectionElement {
     }
   }
 
-  _renderInheritanceInfo() {
-    if (!this.site || !this._inheritedValue || this._source !== 'org') {
-      return '';
-    }
+  async _handleTableSave(key, value) {
+    this._editedPath = value;
+    return this._handleSave();
+  }
+
+  _prepareSettings() {
+    // Transform single editor path into settings array for compact table
+    return [{
+      key: CONFIG_KEYS.EDITOR_PATH,
+      label: 'Universal Editor Path',
+      value: this._editorPath,
+      source: this._source,
+      inheritedValue: this._inheritedValue,
+      required: false,
+      type: 'text',
+      placeholder: 'https://experience.adobe.com/editor or /universal-editor',
+      hint: 'Specify the Universal Editor path or URL to enable inline content editing',
+      helpUrl: 'https://docs.da.live/about/early-access/experience-workspace',
+    }];
+  }
+
+  _renderExplainerCard() {
+    const isConfigured = !!this._editorPath;
+    const hasSiteConfig = this.site && this._source === 'site';
+
+    const status = isConfigured ? 'configured' : 'not-configured';
+    const statusLabel = (() => {
+      if (!isConfigured) return 'Not Configured';
+      if (this.site && hasSiteConfig) return 'Site Scoped';
+      if (this.site) return 'Inherited from Org';
+      return 'Configured';
+    })();
 
     return html`
-      <div class="inheritance-notice">
-        Inherited from organization: ${this._inheritedValue}
-      </div>
+      <explainer-info-card
+        cardId="experience-workspace-integration"
+        title="Experience Workspace"
+        status="${status}"
+        statusLabel="${statusLabel}"
+      >
+        <div slot="content">
+          <p>Enable visual editing where authors can edit, preview, and publish without switching tools. Combines inline editing with real-time preview.</p>
+          <p>If not enabled, authors use the standard document-based authoring flow. Once enabled, authors get a unified workspace with Quick Edit and visual page editing.</p>
+          <p>This feature is in early access. Configuration opens the Experience Workspace enablement flow.</p>
+        </div>
+        <div slot="actions">
+          <a
+            href="https://docs.da.live/about/early-access/experience-workspace"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-small btn-secondary"
+          >Experience Workspace Docs</a>
+          <a
+            href="https://docs.da.live/about/early-access/quick-edit"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-small btn-secondary"
+          >Quick Edit</a>
+        </div>
+      </explainer-info-card>
     `;
   }
 
-  _renderConfigField() {
-    const isInherited = this.site && this._source === 'org';
-    const canRevert = this.site && this._source === 'site' && this._inheritedValue;
-
-    if (this._isEditing) {
-      return html`
-        <div class="config-field is-editing">
-          <label class="config-label" for="editor-path">Universal Editor Path</label>
-          <div class="config-edit-controls">
-            <input
-              type="text"
-              id="editor-path"
-              class="editor-path-input"
-              .value=${this._editedPath}
-              @input=${this._handleInputChange}
-              @keydown=${this._handleKeyDown}
-              ?disabled=${this._isSaving}
-              placeholder="${isInherited && this._inheritedValue ? this._inheritedValue : 'e.g., https://experience.adobe.com/editor or /universal-editor'}"
-            />
-            <div class="config-actions">
-              <button
-                class="config-btn config-btn-primary"
-                @click=${this._handleSave}
-                ?disabled=${this._isSaving}
-              >
-                ${this._isSaving ? 'Saving...' : 'Save'}
-              </button>
-              <button
-                class="config-btn config-btn-secondary"
-                @click=${this._handleCancel}
-                ?disabled=${this._isSaving}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-          <p class="config-hint">
-            Specify the Universal Editor path or URL. This enables inline editing of content.
-            Leave empty to disable Universal Editor integration.
-          </p>
-        </div>
-      `;
-    }
+  _renderSettingsCard() {
+    const settings = this._prepareSettings();
 
     return html`
-      <div class="config-field ${isInherited ? 'is-inherited' : ''}">
-        <label class="config-label">Universal Editor Path</label>
-        <div class="config-value-row">
-          <div class="config-value-display">
-            <span class="config-value">
-              ${this._editorPath || html`<span class="config-empty">Not configured</span>`}
-            </span>
-            ${isInherited ? html`
-              <span class="config-badge">Inherited</span>
-            ` : ''}
-          </div>
-          <div class="config-actions">
-            ${this.site ? html`
-              <button
-                class="config-btn config-btn-secondary"
-                @click=${this._handleEdit}
-              >
-                ${isInherited ? 'Override' : 'Edit'}
-              </button>
-              ${canRevert ? html`
-                <button
-                  class="config-btn config-btn-tertiary"
-                  @click=${this._handleRevert}
-                  ?disabled=${this._isSaving}
-                  title="Revert to organization default"
-                >
-                  Revert to Default
-                </button>
-              ` : ''}
-            ` : ''}
-          </div>
-        </div>
-        ${this._renderInheritanceInfo()}
-        ${!this._editorPath && !isInherited ? html`
-          <p class="config-info">
-            Universal Editor is not configured. Add a path to enable inline content editing.
-          </p>
-        ` : ''}
-      </div>
+      <compact-settings-table
+        .settings=${settings}
+        .onSave=${(key, value) => this._handleTableSave(key, value)}
+        .onRevert=${() => this._handleRevert()}
+        .isSaving=${this._isSaving}
+      ></compact-settings-table>
     `;
   }
 
@@ -364,20 +343,12 @@ export default class UniversalEditorSection extends BaseSectionElement {
     }
 
     if (this._error) {
-      return this._renderError(this._error, () => this.loadData());
+      return this._renderError(this._error);
     }
 
     return html`
-      <div class="section-universal-editor">
-        <div class="section-header">
-          <h2 class="section-title">Universal Editor Integration</h2>
-          <p class="section-description">
-            Configure Adobe Universal Editor for inline content editing.
-            ${this.site
-    ? 'Site-level settings override organization defaults.'
-    : 'This setting will be inherited by all sites.'}
-          </p>
-        </div>
+      <div class="section-container">
+        ${this._renderExplainerCard()}
 
         ${this._saveMessage ? html`
           <div class="message ${this._saveMessage.type}">
@@ -385,9 +356,7 @@ export default class UniversalEditorSection extends BaseSectionElement {
           </div>
         ` : ''}
 
-        <div class="section-content">
-          ${this._renderConfigField()}
-        </div>
+        ${this._renderSettingsCard()}
       </div>
     `;
   }

@@ -217,4 +217,35 @@ export default class GitHubAPI {
       return null;
     }
   }
+
+  /**
+   * Gets commit history for a specific path
+   * @param {string} path - File or folder path in repository
+   * @param {number} perPage - Number of commits to fetch (default 10, max 100)
+   * @returns {Promise<Array>} Array of commit objects
+   */
+  async getCommits(path, perPage = 10) {
+    try {
+      const url = new URL(`https://api.github.com/repos/${this.org}/${this.repo}/commits`);
+      url.searchParams.set('path', path);
+      url.searchParams.set('per_page', Math.min(perPage, 100).toString());
+      url.searchParams.set('sha', this.branch);
+
+      const response = await fetchWithTimeout(url.toString(), {
+        headers: GitHubAPI.getHeaders(this.token),
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          // Path doesn't exist in repo
+          return [];
+        }
+        throw new Error(`Failed to fetch commits: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw new Error(`Failed to get commits for ${path}: ${error.message}`);
+    }
+  }
 }

@@ -1,9 +1,9 @@
 :host {
-  --pw-accent: var(--s2-blue-900);
-  --pw-accent-hover: var(--s2-blue-1000);
+  --pw-accent: #1473E6;
+  --pw-accent-hover: #0D66D0;
 
   display: block;
-  max-width: var(--se-grid-container-width);
+  max-width: 1200px;
   margin: var(--s2-spacing-800) auto;
   -webkit-font-smoothing: antialiased;
   font-family: var(--s2-font-family);
@@ -41,30 +41,30 @@ sl-button.pw-fill-accent::part(base):hover:not(:disabled) {
 }
 
 sl-button.pw-quiet-secondary::part(base) {
-  background: transparent;
-  border: 1px solid var(--s2-gray-300);
-  color: var(--s2-gray-800);
+  background: #FFF;
+  border: 1px solid #D6D6D6;
+  color: #505050;
 }
 
 sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
-  background: var(--s2-gray-75);
-  border-color: var(--s2-gray-400);
+  background: #F8F8F8;
+  border-color: #A0A0A0;
 }
 
 sl-button.pw-quiet-danger::part(base) {
-  background: var(--s2-red-800);
-  border-color: var(--s2-red-800);
-  color: #fff;
+  background: #FCE8E6;
+  border-color: #F4C7C3;
+  color: #C5221F;
 }
 
 sl-button.pw-quiet-danger::part(base):disabled {
-  opacity: 0.4;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
 sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
-  background: var(--s2-red-900);
-  border-color: var(--s2-red-900);
+  background: #FAD2CF;
+  border-color: #E8ADAA;
 }
 
 .pw-action-sm::part(base) {

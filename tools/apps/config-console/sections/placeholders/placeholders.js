@@ -9,55 +9,59 @@ import {
   updatePlaceholders,
   removeLibraryItem,
 } from '../../shared/api/library-api.js';
+import { getLibraryPath } from '../../shared/api/config-api.js';
+import { MessageHandlerMixin, MessageHandlerProperties } from '../../shared/mixins/message-handler.js';
+import { FormHandlerMixin, FormHandlerProperties } from '../../shared/mixins/form-handler.js';
+import { LibrarySetupHandlerMixin, LibrarySetupHandlerProperties } from '../../shared/mixins/library-setup-handler.js';
 import '../../shared/components/library-items-list.js';
+import '../../shared/components/library-setup-modal.js';
+import '../../components/explainer-info-card.js';
 
 const NX = 'https://da.live/nx2';
-let nexter = null;
-let sl = null;
-let styles = null;
+let sectionStyles = null;
 
 try {
   const { default: getStyle } = await import(`${NX}/public/utils/styles.js`);
-  [nexter, sl, styles] = await Promise.all([
-    getStyle(`${NX}/styles/styles.css`),
-    getStyle(`${NX}/public/sl/styles.css`),
-    getStyle(import.meta.url),
-  ]);
+  sectionStyles = await getStyle(import.meta.url);
 } catch {
   // Styles failed to load - section will render without styles
-
 }
 
 /**
  * Placeholders section component
  */
-class PlaceholdersSection extends BaseSectionElement {
+class PlaceholdersSection extends LibrarySetupHandlerMixin(
+  FormHandlerMixin(MessageHandlerMixin(BaseSectionElement)),
+) {
   static properties = {
     ...BaseSectionElement.properties,
+    ...MessageHandlerProperties,
+    ...FormHandlerProperties,
+    ...LibrarySetupHandlerProperties,
     _placeholders: { state: true },
     _searchQuery: { state: true },
-    _form: { state: true },
-    _editingIndex: { state: true },
-    _message: { state: true },
   };
 
   constructor() {
     super();
     this._placeholders = [];
     this._searchQuery = '';
-    this._form = { key: '', value: '' };
-    this._editingIndex = -1;
-    this._message = null;
   }
 
-  connectedCallback() {
-    super.connectedCallback();
-    this.shadowRoot.adoptedStyleSheets = [nexter, sl, styles].filter(Boolean);
+  _getLibraryType() {
+    return 'Placeholders';
   }
 
-  // eslint-disable-next-line class-methods-use-this
+  _getDefaultFormState() {
+    return { key: '', value: '' };
+  }
+
+  _isFormValid() {
+    return this._form.key.trim().length > 0 && this._form.value.trim().length > 0;
+  }
+
   _getStylesheets() {
-    return [nexter, sl, styles].filter(Boolean);
+    return sectionStyles ? [sectionStyles] : [];
   }
 
   async loadData() {
@@ -77,18 +81,17 @@ class PlaceholdersSection extends BaseSectionElement {
     this._searchQuery = e.target.value;
   }
 
-  _handleFormChange(field, value) {
-    this._form = { ...this._form, [field]: value };
-  }
-
-  _isFormValid() {
-    return this._form.key.trim().length > 0 && this._form.value.trim().length > 0;
-  }
-
   async _handleAdd() {
     if (!this._isFormValid()) return;
 
-    this._setLoading(true);
+    // Check if library is configured first
+    const libraryPath = await getLibraryPath(this.org, this.site, 'placeholders', this.token);
+    if (!libraryPath) {
+      // Library not configured - show setup modal
+      await this._showLibrarySetupModal();
+      return;
+    }
+
     this._message = null;
 
     try {
@@ -105,15 +108,21 @@ class PlaceholdersSection extends BaseSectionElement {
       );
 
       if (result.success) {
-        this._trackAction('placeholder-add', {
+        const action = result.stats?.updated > 0 ? 'placeholder-update' : 'placeholder-add';
+        const message = result.stats?.updated > 0
+          ? 'Placeholder updated successfully'
+          : 'Placeholder added successfully';
+
+        this._trackAction(action, {
           org: this.org,
           site: this.site,
           key: newPlaceholder.key,
         });
         this._form = { key: '', value: '' };
         this._editingIndex = -1;
+        this._showAddForm = false;
         await this.loadData();
-        this._message = { type: 'success', text: 'Placeholder added successfully' };
+        this._showMessage('success', message);
       } else {
         throw new Error(result.error || 'Failed to add placeholder');
       }
@@ -130,17 +139,11 @@ class PlaceholdersSection extends BaseSectionElement {
       key: item.key,
       value: item.value,
     };
-    this._message = null;
-  }
-
-  _handleCancelEdit() {
-    this._editingIndex = -1;
-    this._form = { key: '', value: '' };
-    this._message = null;
+    this._showAddForm = true;
+    this._clearMessage();
   }
 
   async _handleRemove(item) {
-    this._setLoading(true);
     this._message = null;
 
     try {
@@ -160,7 +163,7 @@ class PlaceholdersSection extends BaseSectionElement {
           key: item.value,
         });
         await this.loadData();
-        this._message = { type: 'success', text: 'Placeholder removed successfully' };
+        this._showMessage('success', 'Placeholder removed successfully');
       } else {
         throw new Error(result.error || 'Failed to remove placeholder');
       }
@@ -169,53 +172,169 @@ class PlaceholdersSection extends BaseSectionElement {
     }
   }
 
-  _renderForm() {
-    const isEditing = this._editingIndex >= 0;
+  _renderExplainerCard() {
+    const hasPlaceholders = this._placeholders && this._placeholders.length > 0;
+    const status = hasPlaceholders ? 'configured' : 'not-configured';
+    const statusLabel = hasPlaceholders ? 'Configured' : 'Not Configured';
+
     return html`
-      <div class="add-new-section">
-        <h3>${isEditing ? 'Edit Placeholder' : 'Add New Placeholder'}</h3>
-        <div class="library-item-form placeholders-form">
-          <div class="input-group">
-            <label for="placeholder-key">Placeholder Key</label>
-            <input
+      <explainer-info-card
+        cardId="placeholders-library-setup"
+        title="Placeholders"
+        status="${status}"
+        statusLabel="${statusLabel}"
+      >
+        <div slot="content">
+          <p>Placeholders are text substitutions that keep repeated content consistent. Use them for product names, legal copy, version numbers, or any text used across pages.</p>
+          <p>${!hasPlaceholders ? 'Without placeholders, authors must copy-paste or retype repeated text.' : 'Authors can now insert these placeholders from the library picker.'} When the placeholder value changes, it updates everywhere.</p>
+          <p>Each placeholder needs a key and value. Placeholders show in the author's library picker for quick insertion.</p>
+        </div>
+        <div slot="actions">
+          <a
+            href="https://docs.da.live/administrators/guides/setup-library"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-small btn-secondary"
+          >Setup Library Docs</a>
+        </div>
+      </explainer-info-card>
+    `;
+  }
+
+  _getFilteredPlaceholders() {
+    if (!this._searchQuery) return this._placeholders;
+    const query = this._searchQuery.toLowerCase();
+    return this._placeholders.filter((p) => p.key.toLowerCase().includes(query)
+      || p.value.toLowerCase().includes(query));
+  }
+
+  _renderCollectionCard() {
+    const filteredPlaceholders = this._getFilteredPlaceholders();
+
+    return html`
+      <div class="collection-card">
+        <div class="collection-header">
+          <h3 class="collection-title">Placeholders</h3>
+          <sl-input
+            type="search"
+            size="small"
+            placeholder="Search placeholders..."
+            .value=${this._searchQuery}
+            @sl-input=${this._handleSearch}
+            @sl-change=${this._handleSearch}
+            @input=${this._handleSearch}
+            @keyup=${this._handleSearch}
+            clearable
+          ></sl-input>
+        </div>
+        ${filteredPlaceholders.length === 0 ? html`
+          <div class="empty-state">
+            ${this._placeholders.length === 0 ? html`
+              <div class="empty-state-icon">
+                <img src="./icons/placeholders-variable.svg" alt="Placeholders" width="48" height="48" />
+              </div>
+              <p class="empty-state-text">No placeholders yet</p>
+              <p>Add a text placeholder to make it available to authors.</p>
+            ` : html`
+              <p>No placeholders found</p>
+            `}
+          </div>
+        ` : html`
+          <div class="placeholder-list">
+            ${filteredPlaceholders.map((placeholder) => html`
+              <div class="placeholder-item">
+                <div class="placeholder-info">
+                  <div class="placeholder-key">${placeholder.key}</div>
+                  <div class="placeholder-value">${placeholder.value}</div>
+                </div>
+                <div class="placeholder-actions">
+                  <button
+                    class="placeholder-action-btn"
+                    @click=${() => this._handleEdit(placeholder)}
+                  >Edit</button>
+                  <button
+                    class="placeholder-action-btn remove"
+                    @click=${() => this._handleRemove(placeholder)}
+                  >Remove</button>
+                </div>
+              </div>
+            `)}
+          </div>
+        `}
+      </div>
+    `;
+  }
+
+  _renderAddCard() {
+    const isEditing = this._editingIndex >= 0;
+
+    if (!this._showAddForm) {
+      return html`
+        <div class="add-button-container">
+          <button class="add-scope-btn" @click=${this._toggleAddForm}>
+            + Add placeholder
+          </button>
+        </div>
+      `;
+    }
+
+    return html`
+      <div class="add-placeholder-card">
+        <div class="add-placeholder-header">
+          <h3 class="add-placeholder-title">${isEditing ? 'Edit Placeholder' : 'Add New Placeholder'}</h3>
+          <button class="btn-icon" @click=${this._toggleAddForm} title="Close">×</button>
+        </div>
+        <p class="add-placeholder-description">Placeholder key and value are captured in a guided form.</p>
+        <div class="add-placeholder-form">
+          <div class="form-field">
+            <label class="form-label">Placeholder key</label>
+            <sl-input
               type="text"
-              id="placeholder-key"
+              size="medium"
+              placeholder="{{placeholder-key}}"
               .value=${this._form.key}
               @input=${(e) => this._handleFormChange('key', e.target.value)}
-              placeholder="{{placeholder-key}}"
-            />
+              @sl-input=${(e) => this._handleFormChange('key', e.target.value)}
+            ></sl-input>
           </div>
-          <div class="input-group">
-            <label for="placeholder-value">Placeholder Value</label>
-            <input
+          <div class="form-field">
+            <label class="form-label">Placeholder value</label>
+            <sl-input
               type="text"
-              id="placeholder-value"
+              size="medium"
+              placeholder="Replacement text"
               .value=${this._form.value}
               @input=${(e) => this._handleFormChange('value', e.target.value)}
-              placeholder="Replacement text"
-            />
+              @sl-input=${(e) => this._handleFormChange('value', e.target.value)}
+            ></sl-input>
           </div>
-          <button
-            class="action primary"
-            @click=${this._handleAdd}
-            ?disabled=${!this._isFormValid()}
-          >${isEditing ? 'Update' : 'Add'}</button>
-          ${isEditing ? html`
-            <button
-              class="action secondary"
-              @click=${this._handleCancelEdit}
-            >Cancel</button>
-          ` : nothing}
+          <div class="form-actions">
+            <sl-button
+              variant="primary"
+              size="small"
+              @click=${this._handleAdd}
+              ?disabled=${!this._isFormValid()}
+            >${isEditing ? 'Update' : 'Add Placeholder'}</sl-button>
+            ${isEditing ? html`
+              <sl-button
+                size="small"
+                @click=${this._handleCancelEdit}
+              >Cancel</sl-button>
+            ` : ''}
+          </div>
         </div>
       </div>
     `;
   }
 
   _renderMessage() {
-    if (!this._message) return nothing;
     return html`
-      <div class="message ${this._message.type}">
-        ${this._message.text}
+      <div class="message-container">
+        ${this._message ? html`
+          <div class="message ${this._message.type}">
+            ${this._message.text}
+          </div>
+        ` : nothing}
       </div>
     `;
   }
@@ -226,41 +345,24 @@ class PlaceholdersSection extends BaseSectionElement {
     }
 
     if (this._error) {
-      return this._renderError(this._error, () => this.loadData());
+      return this._renderError(this._error);
     }
 
     return html`
       <div class="section-container">
-        <div class="section-header">
-          <div>
-            <h2>Placeholders</h2>
-            <p class="section-description">Manage text placeholders for your site</p>
-          </div>
-          <div class="search-container">
-            <input
-              type="search"
-              class="library-search"
-              placeholder="Search placeholders..."
-              .value=${this._searchQuery}
-              @input=${this._handleSearch}
-            />
-          </div>
-        </div>
-
+        ${this._renderExplainerCard()}
         ${this._renderMessage()}
-
-        <div class="existing-items-list">
-          <h3>Existing Placeholders (${this._placeholders.length})</h3>
-          <library-items-list
-            .items=${this._placeholders}
-            itemType="placeholder"
-            .searchQuery=${this._searchQuery}
-            .onEdit=${(item) => this._handleEdit(item)}
-            .onRemove=${(item) => this._handleRemove(item)}
-          ></library-items-list>
-        </div>
-
-        ${this._renderForm()}
+        ${this._renderCollectionCard()}
+        ${this._renderAddCard()}
+        <library-setup-modal
+          .open=${this._showLibrarySetup}
+          .libraryType=${'Placeholders'}
+          .options=${this._librarySetupOptions}
+          .selectedPath=${this._selectedLibraryPath}
+          .customPath=${this._customLibraryPathInput}
+          @confirm=${this._handleLibrarySetupConfirm}
+          @cancel=${this._handleLibrarySetupCancel}
+        ></library-setup-modal>
       </div>
     `;
   }

@@ -64,7 +64,7 @@ function toDisplayName(name) {
   return name
     .split('-')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+    .join('');
 }
 
 export function generateBlocksJSON(blocks, org, site) {

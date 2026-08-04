@@ -1,0 +1,106 @@
+/* Multi-Site Manager Section Styles - Permissions Pattern */
+
+.section-container {
+  padding: var(--s2-spacing-400) var(--s2-spacing-200);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Settings Card */
+.settings-card {
+  background: #FFF;
+  border: 1px solid #D6D6D6;
+  border-radius: 6px;
+  padding: 20px;
+  margin-bottom: var(--s2-spacing-500);
+}
+
+.settings-card-title {
+  margin: 0 0 var(--s2-spacing-400) 0;
+  font-size: var(--s2-body-size-300);
+  font-weight: 600;
+  color: light-dark(var(--s2-gray-900), var(--s2-gray-100));
+}
+
+/* Empty State */
+.empty-state {
+  padding: var(--s2-spacing-600);
+  text-align: center;
+  background: #F8F8F8;
+  border-radius: 6px;
+}
+
+.empty-state-title {
+  font-size: var(--s2-body-size-300);
+  font-weight: 600;
+  color: light-dark(var(--s2-gray-900), var(--s2-gray-100));
+  margin: 0 0 var(--s2-spacing-200) 0;
+}
+
+.empty-state-description {
+  font-size: var(--s2-body-size-200);
+  color: light-dark(var(--s2-gray-600), var(--s2-gray-400));
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* Message Styles */
+.message {
+  padding: var(--s2-spacing-400) var(--s2-spacing-200);
+  border-radius: 6px;
+  margin-bottom: var(--s2-spacing-400);
+  font-size: var(--s2-body-size-200);
+}
+
+.message.success {
+  background: #E4F5E9;
+  color: #0B6027;
+  border: 1px solid #7FD99A;
+}
+
+.message.error {
+  background: #FCE8E6;
+  color: #C5221F;
+  border: 1px solid #F4C7C3;
+}
+
+.message.info {
+  background: #E8F0FE;
+  color: #174EA6;
+  border: 1px solid #AECBFA;
+}
+
+/* Loading State */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s2-spacing-800);
+  gap: var(--s2-spacing-400);
+}
+
+.loading-indicator {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #E0E0E0;
+  border-top-color: #1473E6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-label {
+  color: light-dark(var(--s2-gray-600), var(--s2-gray-400));
+  font-size: var(--s2-body-size-200);
+}
+
+/* Responsive */
+@media (width <= 900px) {
+  .section-container {
+    padding: var(--s2-spacing-300) var(--s2-spacing-200);
+  }
+}

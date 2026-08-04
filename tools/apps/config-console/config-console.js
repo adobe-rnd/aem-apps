@@ -45,74 +45,131 @@ function sampleRUM(checkpoint, data = {}) {
   } catch { /* noop */ }
 }
 
-// Section definitions
+// Spectrum icon mapping (SVG files from Adobe Spectrum CDN)
+const SPECTRUM_ICONS = {
+  permissions: './icons/permissions-lock-closed.svg',
+  library: './icons/library-cc-library.svg',
+  integrations: './icons/integrations-plug.svg',
+  blocks: './icons/blocks-box.svg',
+  templates: './icons/templates-file-template.svg',
+  icons: './icons/icons-image.svg',
+  placeholders: './icons/placeholders-variable.svg',
+  'aem-assets': './icons/aem-assets-asset.svg',
+  translation: './icons/translation-globe.svg',
+  'universal-editor': './icons/universal-editor-edit.svg',
+  'multi-site-manager': './icons/multi-site-manager-branch.svg',
+  collapse: './icons/collapse-menu-rail-right-close.svg',
+  expand: './icons/collapse-menu-rail-right-open.svg',
+};
+
+// Section definitions with Spectrum icon references
 const SECTIONS = {
   ORG: [
     {
-      id: 'permissions',
+      id: 'permissions-group',
       title: 'Permissions',
-      icon: '🔒',
-      scope: 'org',
-      inheritable: false,
+      iconKey: 'permissions',
+      type: 'group',
+      children: [
+        {
+          id: 'permissions',
+          title: 'Permissions',
+          iconKey: 'permissions',
+          scope: 'org',
+          inheritable: false,
+        },
+      ],
+    },
+    {
+      id: 'multi-site-manager-group',
+      title: 'Multi-Site Manager',
+      iconKey: 'multi-site-manager',
+      type: 'group',
+      children: [
+        {
+          id: 'multi-site-manager',
+          title: 'Multi-Site Manager',
+          iconKey: 'multi-site-manager',
+          scope: 'org',
+          inheritable: false,
+        },
+      ],
     },
   ],
 
   SITE: [
     {
-      id: 'library',
-      title: 'Library Settings',
-      icon: '⚙️',
-      scope: 'site',
-      inheritable: true,
+      id: 'library-group',
+      title: 'Library',
+      iconKey: 'library',
+      type: 'group',
+      children: [
+        {
+          id: 'blocks',
+          title: 'Blocks',
+          iconKey: 'blocks',
+          scope: 'site',
+          inheritable: false,
+        },
+        {
+          id: 'templates',
+          title: 'Templates',
+          iconKey: 'templates',
+          scope: 'site',
+          inheritable: false,
+        },
+        {
+          id: 'icons',
+          title: 'Icons',
+          iconKey: 'icons',
+          scope: 'site',
+          inheritable: false,
+        },
+        {
+          id: 'placeholders',
+          title: 'Placeholders',
+          iconKey: 'placeholders',
+          scope: 'site',
+          inheritable: false,
+        },
+      ],
     },
     {
-      id: 'blocks',
-      title: 'Blocks',
-      icon: '🧱',
-      scope: 'site',
-      inheritable: false,
+      id: 'authoring-experience-group',
+      title: 'Authoring Experience',
+      iconKey: 'universal-editor',
+      type: 'group',
+      children: [
+        {
+          id: 'experience-workspace',
+          title: 'Experience Workspace',
+          iconKey: 'universal-editor',
+          scope: 'both',
+          inheritable: true,
+        },
+      ],
     },
     {
-      id: 'templates',
-      title: 'Templates',
-      icon: '📄',
-      scope: 'site',
-      inheritable: false,
-    },
-    {
-      id: 'icons',
-      title: 'Icons',
-      icon: '🎨',
-      scope: 'site',
-      inheritable: false,
-    },
-    {
-      id: 'placeholders',
-      title: 'Placeholders',
-      icon: '🏷️',
-      scope: 'site',
-      inheritable: false,
-    },
-    {
-      id: 'aem-assets',
-      title: 'AEM Assets',
-      icon: '📦',
-      scope: 'both',
-      inheritable: true,
-    },
-    {
-      id: 'translation',
-      title: 'Translation',
-      icon: '🌐',
-      scope: 'both',
-      inheritable: true,
-    },
-    {
-      id: 'universal-editor',
-      title: 'Universal Editor',
-      icon: '✏️',
-      scope: 'both',
-      inheritable: true,
+      id: 'integrations-group',
+      title: 'Integrations',
+      iconKey: 'integrations',
+      type: 'group',
+      children: [
+        {
+          id: 'aem-assets',
+          title: 'AEM Assets',
+          iconKey: 'aem-assets',
+          scope: 'both',
+          inheritable: true,
+        },
+        {
+          id: 'translation',
+          title: 'Translation',
+          iconKey: 'translation',
+          scope: 'both',
+          inheritable: true,
+        },
+      ],
     },
   ],
 };
@@ -124,11 +181,12 @@ class ConfigConsoleApp extends LitElement {
     _state: { state: true },
     _org: { state: true },
     _site: { state: true },
-    _orgInput: { state: true },
-    _siteInput: { state: true },
+    _pathInput: { state: true },
     _currentSection: { state: true },
     _sectionComponent: { state: true },
     _error: { state: true },
+    _expandedGroups: { state: true },
+    _sidebarCollapsed: { state: true },
   };
 
   constructor() {
@@ -136,11 +194,68 @@ class ConfigConsoleApp extends LitElement {
     this._state = 'idle';
     this._org = '';
     this._site = '';
-    this._orgInput = '';
-    this._siteInput = '';
+    this._pathInput = '';
     this._currentSection = null;
     this._sectionComponent = null;
     this._error = null;
+    this._expandedGroups = this._loadExpandedState();
+    this._sidebarCollapsed = this._loadSidebarState();
+  }
+
+  // eslint-disable-next-line class-methods-use-this -- sessionStorage access is stateless
+  _loadExpandedState() {
+    try {
+      const saved = sessionStorage.getItem('config-console-expanded');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  _saveExpandedState() {
+    try {
+      sessionStorage.setItem('config-console-expanded', JSON.stringify(this._expandedGroups));
+    } catch {
+      // SessionStorage failed - continue without persistence
+    }
+  }
+
+  // eslint-disable-next-line class-methods-use-this -- localStorage access is stateless
+  _loadSidebarState() {
+    try {
+      const saved = localStorage.getItem('config-console-sidebar-collapsed');
+      // If no saved state, default to collapsed
+      if (saved === null) return true;
+      return saved === 'true';
+    } catch {
+      return true; // Default to collapsed
+    }
+  }
+
+  _saveSidebarState() {
+    try {
+      localStorage.setItem('config-console-sidebar-collapsed', String(this._sidebarCollapsed));
+    } catch {
+      // localStorage failed - continue without persistence
+    }
+  }
+
+  _toggleSidebar() {
+    this._sidebarCollapsed = !this._sidebarCollapsed;
+    this._saveSidebarState();
+  }
+
+  _toggleGroup(groupId) {
+    // If sidebar is collapsed, expand it first
+    if (this._sidebarCollapsed) {
+      this._sidebarCollapsed = false;
+      this._saveSidebarState();
+    }
+    this._expandedGroups = {
+      ...this._expandedGroups,
+      [groupId]: !this._expandedGroups[groupId],
+    };
+    this._saveExpandedState();
   }
 
   connectedCallback() {
@@ -157,64 +272,188 @@ class ConfigConsoleApp extends LitElement {
   }
 
   async _initContext() {
-    // Try DA SDK first
+    // Get token from DA SDK if available (but don't use org/site context)
     try {
-      const { context, token } = await Promise.race([
+      const { token } = await Promise.race([
         DA_SDK,
         new Promise((_, reject) => {
           setTimeout(() => reject(new Error('DA SDK timeout')), 2000);
         }),
       ]);
-
-      if (context?.org) {
-        this.context = context;
-        this.token = token;
-        this._org = context.org;
-        this._site = context.repo || '';
-        this._orgInput = this._org;
-        this._siteInput = this._site;
-        this._state = 'ready';
-        sampleRUM('config-console-load', { org: this._org, site: this._site, source: 'sdk' });
-        return;
-      }
-    } catch {
-      // DA SDK failed or timed out, fall back to URL params
+      this.token = token;
+      // eslint-disable-next-line no-console
+      // console.log('[DEBUG] Got token from DA SDK');
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      // console.log('[DEBUG] DA SDK failed, no token:', err);
     }
 
-    // Fall back to URL parameters
+    // Check URL parameters
     const urlParams = new URLSearchParams(window.location.search);
-    const org = (urlParams.get('org') || '').trim();
-    const site = (urlParams.get('site') || '').trim();
+    const urlOrg = (urlParams.get('org') || '').trim();
+    const urlSite = (urlParams.get('site') || '').trim();
 
-    if (org) {
-      this._orgInput = org;
-      this._siteInput = site;
-      this._loadContext(org, site);
-    } else {
-      // No context available - show manual entry
-      this._state = 'idle';
+    // If URL params provided, use them
+    if (urlOrg) {
+      // Construct path input from URL params
+      this._pathInput = urlSite ? `/${urlOrg}/${urlSite}` : `/${urlOrg}`;
+      this._loadContext(urlOrg, urlSite);
+      return;
     }
+
+    // No URL params - wait for manual entry
+    // eslint-disable-next-line no-console
+    // console.log('[DEBUG] No URL params, waiting for manual entry');
+    this._state = 'idle';
   }
 
-  _loadContext(org, site = '') {
+  async _loadContext(org, site = '') {
     this._state = 'loading';
-    this._org = org;
-    this._site = site;
     this._error = null;
 
+    // Step 1: Always validate org first
+    const orgValid = await this._validateOrg(org);
+    if (!orgValid) {
+      this._state = 'idle';
+      this._org = '';
+      this._site = '';
+      // Error already set by _validateOrg
+      return;
+    }
+
+    // Org is valid, set it
+    this._org = org;
+    this._site = ''; // Clear site when loading new org
+
+    // Step 2: If site provided, validate it
+    if (site) {
+      const siteValid = await this._validateSite(org, site);
+      if (siteValid) {
+        // Site is valid, set it
+        this._site = site;
+      }
+      // If site invalid, error is set but we continue with org-only sections
+    }
+
     // Update URL
-    this._updateURL(org, site);
+    this._updateURL(this._org, this._site);
 
     // Track load
-    sampleRUM('config-console-load', { org, site, source: 'manual' });
+    sampleRUM('config-console-load', { org: this._org, site: this._site, source: 'manual' });
 
     this._state = 'ready';
 
-    // eslint-disable-next-line no-console
-    console.log('[DEBUG] Context loaded:', { org, site, availableSections: this._availableSections.length });
-
     // Re-process hash navigation now that context is loaded
     this._handleRouteChange();
+  }
+
+  async _validateOrg(org) {
+    try {
+      const listUrl = `https://admin.da.live/list/${org}/`;
+      const response = await fetch(listUrl, {
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          this._error = `Organization not found: /${org}. Please check the path.`;
+          return false;
+        }
+        if (response.status === 403) {
+          this._error = `Access denied to /${org}. Check your token permissions.`;
+          return false;
+        }
+        this._error = `Failed to access /${org}: ${response.status}`;
+        return false;
+      }
+
+      // Check response body - org returns direct array of sites
+      const data = await response.json();
+
+      if (data?.error || !Array.isArray(data)) {
+        this._error = `Organization not found: /${org}. Please check the path.`;
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      this._error = `Failed to validate org: ${error.message}`;
+      return false;
+    }
+  }
+
+  async _validateSite(org, site) {
+    try {
+      const listUrl = `https://admin.da.live/list/${org}/${site}/`;
+      const response = await fetch(listUrl, {
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          this._error = `Site not found: /${org}/${site}. Showing org-level sections only.`;
+          return false;
+        }
+        if (response.status === 403) {
+          this._error = `Access denied to /${org}/${site}. Showing org-level sections only.`;
+          return false;
+        }
+        this._error = `Failed to access /${org}/${site}: ${response.status}`;
+        return false;
+      }
+
+      // Check response body - site returns { data: {...} }
+      const data = await response.json();
+
+      // Site validation is trickier - the list endpoint returns different structures
+      // For sites, we should get { data: {...} } but might get an array or other structure
+      const isValidSite = (data?.data && typeof data.data === 'object')
+        || (Array.isArray(data) && data.length > 0);
+
+      if (data?.error || !isValidSite) {
+        this._error = `Site not found: /${org}/${site}. Showing org-level sections only.`;
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      this._error = `Failed to validate site: ${error.message}`;
+      return false;
+    }
+  }
+
+  _getFirstAvailableSection() {
+    // Default to "blocks" section
+    const blocksSection = this._availableSections.find((section) => {
+      if (section.type === 'group' && section.children) {
+        return section.children.some((child) => child.id === 'blocks');
+      }
+      return section.id === 'blocks';
+    });
+
+    if (blocksSection) {
+      if (blocksSection.type === 'group' && blocksSection.children) {
+        return blocksSection.children.find((child) => child.id === 'blocks');
+      }
+      return blocksSection;
+    }
+
+    // Fallback to first available section if blocks not found
+    const fallbackSection = this._availableSections.find((section) => {
+      if (section.type === 'group' && section.children && section.children.length > 0) {
+        return true;
+      }
+      return section.type !== 'group';
+    });
+
+    if (fallbackSection?.type === 'group' && fallbackSection.children) {
+      return fallbackSection.children[0];
+    }
+    return fallbackSection || null;
   }
 
   // eslint-disable-next-line class-methods-use-this -- URL update is stateless utility
@@ -234,13 +473,23 @@ class ConfigConsoleApp extends LitElement {
   }
 
   _handleLoadClick() {
-    const org = this._orgInput.trim();
-    const site = this._siteInput.trim();
+    const path = this._pathInput.trim();
 
-    if (!org) {
-      this._error = 'Please enter an organization';
+    if (!path) {
+      this._error = 'Please enter a path in format: /org/site';
       return;
     }
+
+    // Parse path: /org/site or /org
+    const parts = path.split('/').filter(Boolean);
+
+    if (parts.length === 0) {
+      this._error = 'Please enter a path in format: /org/site';
+      return;
+    }
+
+    const org = parts[0];
+    const site = parts[1] || '';
 
     this._loadContext(org, site);
   }
@@ -249,12 +498,12 @@ class ConfigConsoleApp extends LitElement {
     const hash = window.location.hash.slice(1); // Remove #
 
     // eslint-disable-next-line no-console
-    console.log('[DEBUG] Route change:', {
-      hash,
-      currentSection: this._currentSection,
-      willNavigate: hash && hash !== this._currentSection,
-      availableSections: this._availableSections.map((s) => s.id),
-    });
+    // console.log('[DEBUG] Route change:', {
+    //   hash,
+    //   currentSection: this._currentSection,
+    //   willNavigate: hash && hash !== this._currentSection,
+    //   availableSections: this._availableSections.map((s) => s.id),
+    // });
 
     if (hash && hash !== this._currentSection) {
       this._navigateToSection(hash);
@@ -269,13 +518,42 @@ class ConfigConsoleApp extends LitElement {
   }
 
   async _navigateToSection(sectionId) {
-    // Validate section exists and is available
-    const section = this._availableSections.find((s) => s.id === sectionId);
+    // Find section in hierarchical structure (could be in children)
+    let section = null;
+    const foundItem = this._availableSections.find((item) => {
+      if (item.id === sectionId) {
+        return true;
+      }
+      if (item.type === 'group' && item.children) {
+        return item.children.some((c) => c.id === sectionId);
+      }
+      return false;
+    });
+
+    if (foundItem) {
+      if (foundItem.id === sectionId) {
+        section = foundItem;
+      } else if (foundItem.type === 'group' && foundItem.children) {
+        const child = foundItem.children.find((c) => c.id === sectionId);
+        if (child) {
+          section = child;
+          // Auto-expand parent group when navigating to child
+          if (!this._expandedGroups[foundItem.id]) {
+            this._expandedGroups = {
+              ...this._expandedGroups,
+              [foundItem.id]: true,
+            };
+            this._saveExpandedState();
+          }
+        }
+      }
+    }
 
     // eslint-disable-next-line no-console
-    console.log('[DEBUG] Navigate to section:', { sectionId, found: !!section });
+    // console.log('[DEBUG] Navigate to section:', { sectionId, found: !!section });
 
-    if (!section) {
+    if (!section || section.type === 'group') {
+      // Don't navigate to group items, only to actual sections
       return;
     }
 
@@ -291,24 +569,41 @@ class ConfigConsoleApp extends LitElement {
 
     // Dynamic import
     try {
-      // eslint-disable-next-line no-console
-      console.log('[DEBUG] Loading module:', `./sections/${sectionId}/${sectionId}.js`);
       await import(`./sections/${sectionId}/${sectionId}.js`);
       // Store the tag name instead of the class reference
       this._sectionComponent = `${sectionId}-section`;
-      // eslint-disable-next-line no-console
-      console.log('[DEBUG] Module loaded successfully, tag:', this._sectionComponent);
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.error('[DEBUG] Failed to load module:', err);
+      console.error('[ConfigConsole] Failed to load section:', sectionId, err);
       this._error = `Failed to load ${section.title} section. Please try again.`;
     }
   }
 
-  // Navigation handler doesn't need instance state
-  // eslint-disable-next-line class-methods-use-this
   _handleNavClick(sectionId) {
+    // If sidebar is collapsed, expand it first
+    if (this._sidebarCollapsed) {
+      this._sidebarCollapsed = false;
+      this._saveSidebarState();
+    }
     window.location.hash = sectionId;
+  }
+
+  // Helper to render Spectrum SVG icons
+  // eslint-disable-next-line class-methods-use-this
+  _renderIcon(iconKey, title = '') {
+    const iconPath = SPECTRUM_ICONS[iconKey];
+    if (!iconPath) return nothing;
+
+    return html`
+      <img
+        class="nav-icon"
+        src="${iconPath}"
+        alt="${title || iconKey}"
+        width="18"
+        height="18"
+        aria-hidden="true"
+      />
+    `;
   }
 
   _renderToolbar() {
@@ -317,21 +612,14 @@ class ConfigConsoleApp extends LitElement {
         <div class="console-toolbar-fields">
           <sl-input
             type="text"
-            placeholder="Organization"
-            .value=${this._orgInput}
-            @input=${(e) => { this._orgInput = e.target.value; }}
-            @keydown=${(e) => { if (e.key === 'Enter') this._handleLoadClick(); }}
-          ></sl-input>
-          <sl-input
-            type="text"
-            placeholder="Site (optional)"
-            .value=${this._siteInput}
-            @input=${(e) => { this._siteInput = e.target.value; }}
+            placeholder="/org/site"
+            .value=${this._pathInput}
+            @input=${(e) => { this._pathInput = e.target.value; }}
             @keydown=${(e) => { if (e.key === 'Enter') this._handleLoadClick(); }}
           ></sl-input>
           <sl-button
             @click=${this._handleLoadClick}
-            ?disabled=${!this._orgInput.trim()}
+            ?disabled=${!this._pathInput.trim()}
           >
             Load
           </sl-button>
@@ -346,28 +634,146 @@ class ConfigConsoleApp extends LitElement {
   _renderNav() {
     return html`
       <div class="console-nav-header">
-        <h1 class="console-title">Configuration Console</h1>
-        <div class="console-context">
-          ${this._org ? html`<span class="context-org">${this._org}</span>` : nothing}
-          ${this._site ? html`<span class="context-separator">/</span><span class="context-site">${this._site}</span>` : nothing}
-        </div>
+        ${!this._sidebarCollapsed ? html`
+          <div class="console-title-small">Config Console</div>
+        ` : nothing}
+        <button
+          class="nav-collapse-button"
+          @click=${this._toggleSidebar}
+          title="${this._sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}"
+          aria-label="${this._sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}"
+        >
+          ${this._renderIcon(this._sidebarCollapsed ? 'expand' : 'collapse')}
+        </button>
       </div>
 
       <nav class="console-nav-items">
-        ${this._availableSections.length === 0 ? html`
-          <p class="nav-empty">No sections available. Please select an org/site.</p>
-        ` : nothing}
-
-        ${this._availableSections.map((section) => html`
-          <button
-            class="nav-item ${this._currentSection === section.id ? 'active' : ''}"
-            @click=${() => this._handleNavClick(section.id)}
-          >
-            <span class="nav-icon">${section.icon}</span>
-            <span class="nav-title">${section.title}</span>
-          </button>
-        `)}
+        ${this._availableSections.map((section) => this._renderNavItem(section))}
       </nav>
+    `;
+  }
+
+  _renderNavItem(section) {
+    if (section.type === 'group') {
+      const isExpanded = this._expandedGroups[section.id];
+      return html`
+        <div class="nav-group">
+          <button
+            class="nav-group-header"
+            @click=${() => this._toggleGroup(section.id)}
+            title="${this._sidebarCollapsed ? section.title : ''}"
+          >
+            ${this._renderIcon(section.iconKey, section.title)}
+            <span class="nav-expand-icon">${isExpanded ? '▼' : '▶'}</span>
+            ${!this._sidebarCollapsed ? html`<span class="nav-title">${section.title}</span>` : nothing}
+          </button>
+          ${isExpanded && section.children && !this._sidebarCollapsed ? html`
+            <div class="nav-group-children">
+              ${section.children.map((child) => html`
+                <button
+                  class="nav-item nav-item-child ${this._currentSection === child.id ? 'active' : ''}"
+                  @click=${() => this._handleNavClick(child.id)}
+                  title="${this._sidebarCollapsed ? child.title : ''}"
+                >
+                  ${this._renderIcon(child.iconKey, child.title)}
+                  ${!this._sidebarCollapsed ? html`<span class="nav-title">${child.title}</span>` : nothing}
+                </button>
+              `)}
+            </div>
+          ` : nothing}
+        </div>
+      `;
+    }
+    // Fallback for non-grouped items (backward compatibility)
+    return html`
+      <button
+        class="nav-item ${this._currentSection === section.id ? 'active' : ''}"
+        @click=${() => this._handleNavClick(section.id)}
+        title="${this._sidebarCollapsed ? section.title : ''}"
+      >
+        ${this._renderIcon(section.iconKey, section.title)}
+        ${!this._sidebarCollapsed ? html`<span class="nav-title">${section.title}</span>` : nothing}
+      </button>
+    `;
+  }
+
+  _renderWelcome() {
+    const hasOrg = this._org && this._state === 'ready';
+    const hasSite = hasOrg && this._site;
+
+    return html`
+      <div class="welcome-container">
+        <div class="welcome-hero">
+          <p class="welcome-eyebrow">Configuration Console</p>
+          <h1 class="welcome-title">Set up and manage your site</h1>
+          <p class="welcome-body">Choose an organization and site to manage permissions, authoring library items, and integrations for your authoring experience.</p>
+
+          ${!hasOrg || !hasSite ? html`
+            <div class="welcome-actions">
+              <button class="welcome-cta-primary" @click=${() => {
+    const input = this.shadowRoot.querySelector('.console-toolbar sl-input');
+    input?.focus();
+  }}>Select site</button>
+              <a
+                href="https://docs.da.live"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="welcome-cta-secondary"
+              >DA documentation</a>
+            </div>
+          ` : nothing}
+        </div>
+
+        ${hasOrg && hasSite ? html`
+          <div class="welcome-cards">
+            <div class="welcome-card">
+              <div class="welcome-card-header">
+                <div class="welcome-card-icon">
+                  ${this._renderIcon('permissions')}
+                </div>
+                <h3 class="welcome-card-title">Permissions & Sites</h3>
+              </div>
+              <p class="welcome-card-body">Control user access to repositories and configure Multi-Site Manager for enterprise content workflows.</p>
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('permissions')}
+              >Manage access</button>
+            </div>
+
+            <div class="welcome-card">
+              <div class="welcome-card-header">
+                <div class="welcome-card-icon">
+                  ${this._renderIcon('library')}
+                </div>
+                <h3 class="welcome-card-title">Library setup</h3>
+              </div>
+              <p class="welcome-card-body">Configure blocks, templates, icons, and placeholders that authors use while creating pages.</p>
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('blocks')}
+              >Review library</button>
+            </div>
+
+            <div class="welcome-card">
+              <div class="welcome-card-header">
+                <div class="welcome-card-icon">
+                  ${this._renderIcon('universal-editor')}
+                </div>
+                <h3 class="welcome-card-title">Authoring & Integrations</h3>
+              </div>
+              <p class="welcome-card-body">Configure Experience Workspace for AI-powered authoring, and connect services like AEM Assets and Translation.</p>
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('experience-workspace')}
+              >Configure authoring</button>
+            </div>
+          </div>
+        ` : html`
+          <div class="welcome-empty-state">
+            <p>Select an organization and site above to view available configuration options.</p>
+          </div>
+        `}
+      </div>
     `;
   }
 
@@ -381,7 +787,8 @@ class ConfigConsoleApp extends LitElement {
       `;
     }
 
-    if (this._state === 'loading') {
+    // Show loading only if we don't have a section loaded yet
+    if (this._state === 'loading' && !this._sectionComponent) {
       return html`
         <div class="loading-container">
           <div class="spectrum-loading-indicator"></div>
@@ -399,24 +806,12 @@ class ConfigConsoleApp extends LitElement {
     }
 
     if (!this._currentSection) {
-      return html`
-        <div class="empty-state">
-          <h2>Welcome to Configuration Console</h2>
-          <p>Select a section from the navigation to get started.</p>
-        </div>
-      `;
+      return this._renderWelcome();
     }
 
-    if (this._error && this._currentSection) {
-      return html`
-        <div class="section-error">
-          <p>${this._error}</p>
-          <button @click=${() => { this._error = null; this._navigateToSection(this._currentSection); }}>
-            Retry
-          </button>
-        </div>
-      `;
-    }
+    // Don't block section rendering just because there's an error
+    // (e.g., site invalid but org valid - should still show org sections)
+    // Errors are already displayed in the toolbar
 
     if (!this._sectionComponent) {
       return html`
@@ -449,29 +844,65 @@ class ConfigConsoleApp extends LitElement {
         sectionEl.token = this.token;
         sectionEl.context = this.context;
 
+        // eslint-disable-next-line no-console
+        console.log('[ConfigConsole] Section element created:', {
+          component: this._sectionComponent,
+          org: this._org,
+          site: this._site,
+          hasToken: !!this.token,
+        });
+
         // Append to container
         container.appendChild(sectionEl);
+      }
+    } else if ((changedProperties.has('_org') || changedProperties.has('_site'))
+        && this._sectionComponent) {
+      // If org/site changed and we have a section loaded, update the section element
+      // eslint-disable-next-line no-console
+      console.log('[ConfigConsole] Org/site changed, updating section:', {
+        component: this._sectionComponent,
+        org: this._org,
+        site: this._site,
+        changedProps: Array.from(changedProperties.keys()),
+      });
+
+      const container = this.shadowRoot.querySelector('.section-container');
+      const sectionEl = container?.querySelector(this._sectionComponent);
+
+      // eslint-disable-next-line no-console
+      console.log('[ConfigConsole] Found section element:', !!sectionEl);
+
+      if (sectionEl) {
+        sectionEl.org = this._org;
+        sectionEl.site = this._site;
+        sectionEl.token = this.token;
+        sectionEl.context = this.context;
 
         // eslint-disable-next-line no-console
-        console.log('[DEBUG] Section element created and attached:', this._sectionComponent);
+        console.log('[ConfigConsole] Updated section props, calling loadData');
+
+        // Trigger loadData if the section has it
+        if (typeof sectionEl.loadData === 'function') {
+          sectionEl.loadData();
+        }
       }
     }
   }
 
   render() {
     // eslint-disable-next-line no-console
-    console.log('[DEBUG] Render:', {
-      state: this._state,
-      org: this._org,
-      site: this._site,
-      currentSection: this._currentSection,
-      hasComponent: !!this._sectionComponent,
-    });
+    // console.log('[DEBUG] Render:', {
+    //   state: this._state,
+    //   org: this._org,
+    //   site: this._site,
+    //   currentSection: this._currentSection,
+    //   hasComponent: !!this._sectionComponent,
+    // });
 
     return html`
       <div class="console-layout">
         ${this._renderToolbar()}
-        <aside class="console-nav">
+        <aside class="console-nav ${this._sidebarCollapsed ? 'collapsed' : ''}">
           ${this._renderNav()}
         </aside>
         <main class="console-main">
@@ -489,4 +920,4 @@ const app = document.createElement('config-console-app');
 document.body.appendChild(app);
 
 // eslint-disable-next-line no-console
-console.log('[DEBUG] App initialized and appended to body');
+// console.log('[DEBUG] App initialized and appended to body');

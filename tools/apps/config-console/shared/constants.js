@@ -25,6 +25,10 @@ export const CONFIG_KEYS = {
   TRANSLATE_STAGING: 'translate.staging',
   ROLLOUT_BEHAVIOR: 'rollout.behavior',
   EDITOR_PATH: 'editor.path',
+  EW_ENABLED: 'ew.enabled',
+  EW_CHAT: 'ew.chat',
+  EW_CANVAS_DEFAULT: 'ew.canvas.default',
+  EW_PANEL_DEFAULT: 'ew.panel.default',
 };
 
 // Error messages
