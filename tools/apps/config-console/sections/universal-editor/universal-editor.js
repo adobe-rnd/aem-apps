@@ -15,12 +15,16 @@ import '../../components/compact-settings-table.js';
 // Get stylesheet for this section
 const NX = 'https://da.live/nx2';
 let sectionStyles = null;
+let commonStyles = null;
+
 try {
   const { default: getStyle } = await import(`${NX}/public/utils/styles.js`);
+  // Load common styles using absolute path from window.location
+  const commonStylesUrl = new URL('/tools/apps/config-console/shared/styles/common-section-styles.css', window.location.origin).href;
+  commonStyles = await getStyle(commonStylesUrl);
   sectionStyles = await getStyle(import.meta.url);
 } catch {
   // Styles failed to load - section will render without styles
-
 }
 
 /**
@@ -51,7 +55,7 @@ export default class UniversalEditorSection extends BaseSectionElement {
   }
 
   _getStylesheets() {
-    return sectionStyles ? [sectionStyles] : [];
+    return [commonStyles, sectionStyles].filter(Boolean);
   }
 
   async loadData() {

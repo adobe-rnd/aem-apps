@@ -111,7 +111,7 @@ export class BaseSectionElement extends LitElement {
   _renderLoading(message = 'Loading...') {
     return html`
       <div class="loading-container">
-        <div class="spectrum-loading-indicator"></div>
+        <div class="loading-indicator"></div>
         <p class="loading-label">${message}</p>
       </div>
     `;
