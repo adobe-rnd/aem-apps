@@ -3,8 +3,6 @@
   --pw-accent-hover: #0D66D0;
 
   display: block;
-  max-width: 1200px;
-  margin: var(--s2-spacing-800) auto;
   -webkit-font-smoothing: antialiased;
   font-family: var(--s2-font-family);
   color: var(--s2-gray-800);
@@ -52,7 +50,7 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
 }
 
 sl-button.pw-quiet-danger::part(base) {
-  background: light-dark(#FCE8E6, var(--s2-red-950, #330000));
+  background: light-dark(#FCE8E6, var(--s2-red-950, #300));
   border-color: light-dark(#F4C7C3, var(--s2-red-800, #8b0000));
   color: light-dark(#C5221F, var(--s2-red-200, #ffb3b3));
 }
@@ -63,12 +61,26 @@ sl-button.pw-quiet-danger::part(base):disabled {
 }
 
 sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
-  background: light-dark(#FAD2CF, var(--s2-red-900, #660000));
+  background: light-dark(#FAD2CF, var(--s2-red-900, #600));
   border-color: light-dark(#E8ADAA, var(--s2-red-700, #a00000));
 }
 
 .pw-action-sm::part(base) {
   padding: var(--s2-spacing-75) var(--s2-spacing-200);
+}
+
+/* ---- Permissions Grid ---- */
+
+.permissions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s2-spacing-300, 12px);
+}
+
+@media (width <= 900px) {
+  .permissions-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ---- Loading ---- */

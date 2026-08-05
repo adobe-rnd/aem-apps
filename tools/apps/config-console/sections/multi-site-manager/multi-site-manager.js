@@ -7,10 +7,17 @@ import '../../components/explainer-info-card.js';
 
 // Get stylesheet for this section
 const NX = 'https://da.live/nx2';
+let commonStyles = null;
 let sectionStyles = null;
 try {
   const { default: getStyle } = await import(`${NX}/public/utils/styles.js`);
-  sectionStyles = await getStyle(import.meta.url);
+
+  // Load common styles using absolute path from window.location
+  const commonStylesUrl = new URL('/tools/apps/config-console/shared/styles/common-section-styles.css', window.location.origin).href;
+  [commonStyles, sectionStyles] = await Promise.all([
+    getStyle(commonStylesUrl),
+    getStyle(import.meta.url),
+  ]);
 } catch {
   // Styles failed to load - section will render without styles
 }
@@ -25,7 +32,7 @@ export default class MultiSiteManagerSection extends BaseSectionElement {
   };
 
   _getStylesheets() {
-    return sectionStyles ? [sectionStyles] : [];
+    return [commonStyles, sectionStyles].filter(Boolean);
   }
 
   async loadData() {
@@ -40,7 +47,7 @@ export default class MultiSiteManagerSection extends BaseSectionElement {
         cardId="multi-site-manager-integration"
         title="Multi-Site Manager"
         status="not-configured"
-        statusLabel="Early Access"
+        statusLabel="Not Configured"
       >
         <div slot="content">
           <p>Manage relationships between multiple sites, share content and configuration, and control inheritance rules from one place.</p>

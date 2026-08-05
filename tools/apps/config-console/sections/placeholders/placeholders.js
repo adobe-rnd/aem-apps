@@ -257,13 +257,10 @@ class PlaceholdersSection extends LibraryItemsCRUDMixin(
   }
 
   _renderMessage() {
+    if (!this._message) return nothing;
     return html`
-      <div class="message-container">
-        ${this._message ? html`
-          <div class="message ${this._message.type}">
-            ${this._message.text}
-          </div>
-        ` : nothing}
+      <div class="message ${this._message.type}">
+        ${this._message.text}
       </div>
     `;
   }

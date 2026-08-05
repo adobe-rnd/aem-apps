@@ -10,10 +10,12 @@ import {
   listFolders,
 } from './api.js';
 import { icon } from './icons.js';
+import '../../components/explainer-info-card.js';
 
 const NX = 'https://da.live/nx2';
 let nexter = null;
 let sl = null;
+let commonStyles = null;
 let styles = null;
 try {
   const [{ default: getStyle }, { loadStyle, getColorScheme }] = await Promise.all([
@@ -26,9 +28,13 @@ try {
     loadStyle(`${NX}/public/sl/styles.css`),
   ]);
   await import(`${NX}/public/sl/components.js`);
-  [nexter, sl, styles] = await Promise.all([
+
+  // Load common styles using absolute path from window.location
+  const commonStylesUrl = new URL('/tools/apps/config-console/shared/styles/common-section-styles.css', window.location.origin).href;
+  [nexter, sl, commonStyles, styles] = await Promise.all([
     getStyle(`${NX}/styles/styles.css`),
     getStyle(`${NX}/public/sl/styles.css`),
+    getStyle(commonStylesUrl),
     getStyle(import.meta.url),
   ]);
 } catch {
@@ -93,13 +99,12 @@ class PermissionsSection extends BaseSectionElement {
     _folderColumns: { state: true },
     _folderLoading: { state: true },
     _selectedFolderPath: { state: true },
-    _infoDismissed: { state: true },
     _confirmRemove: { state: true },
     _readOnly: { state: true },
   };
 
   _getStylesheets() {
-    return [nexter, sl, styles].filter(Boolean);
+    return [nexter, sl, commonStyles, styles].filter(Boolean);
   }
 
   connectedCallback() {
@@ -118,7 +123,6 @@ class PermissionsSection extends BaseSectionElement {
     this._folderColumns = [];
     this._folderLoading = false;
     this._selectedFolderPath = '';
-    this._infoDismissed = localStorage.getItem('da-permissions-info-dismissed') === 'true';
     this._confirmRemove = null;
     this._readOnly = false;
 
@@ -624,50 +628,57 @@ class PermissionsSection extends BaseSectionElement {
     }
   }
 
-  dismissInfo() {
-    this._infoDismissed = true;
-    localStorage.setItem('da-permissions-info-dismissed', 'true');
-  }
+  _renderExplainerCard() {
+    const hasPermissions = this._rules && this._rules.length > 0;
+    const status = hasPermissions ? 'configured' : 'not-configured';
+    const statusLabel = hasPermissions
+      ? `${this._rules.length} Permission${this._rules.length === 1 ? '' : 's'} Configured`
+      : 'Not Configured';
 
-  renderInfoPanel() {
-    if (this._infoDismissed || this._state !== 'admin') return nothing;
     return html`
-      <div class="info-panel" role="note">
-        <div class="info-panel-body">
-          <div class="info-panel-sections">
-            <div class="info-panel-section">
-              <span class="info-panel-section-label">Content</span>
-              <dl class="info-panel-terms">
-                <div class="info-panel-term"><dt>Read</dt><dd>View content.</dd></div>
-                <div class="info-panel-term"><dt>Write</dt><dd>Create, edit &amp; delete — includes Read.</dd></div>
-                <div class="info-panel-term"><dt>None</dt><dd>Explicitly denies access.</dd></div>
-              </dl>
+      <explainer-info-card
+        cardId="permissions-setup"
+        title="Permissions"
+        status="${status}"
+        statusLabel="${statusLabel}"
+      >
+        <div slot="content">
+          <div class="permissions-grid">
+            <div>
+              <p><strong>CONTENT:</strong> Control who can read or write content in your site.</p>
+              <ul>
+                <li><strong>Read:</strong> View content</li>
+                <li><strong>Write:</strong> Create, edit & delete — includes Read</li>
+                <li><strong>None:</strong> Explicitly denies access</li>
+              </ul>
             </div>
-            <div class="info-panel-section">
-              <span class="info-panel-section-label">Config</span>
-              <dl class="info-panel-terms">
-                <div class="info-panel-term"><dt>Read</dt><dd>Read DA configurations — recommended for content authors as using the block library or plugins in your DA project require it.</dd></div>
-                <div class="info-panel-term"><dt>Write</dt><dd>Modify DA configurations — recommended for power users who need to manage org and site level configurations in DA.</dd></div>
-              </dl>
+            <div>
+              <p><strong>CONFIG:</strong> Control access to DA configurations.</p>
+              <ul>
+                <li><strong>Read:</strong> Read DA configurations — recommended for content authors as using the block library or plugins requires it</li>
+                <li><strong>Write:</strong> Modify DA configurations — recommended for power users who manage org and site level configurations</li>
+              </ul>
             </div>
           </div>
-          <p class="info-panel-note">Identity via Adobe IMS — use email addresses or IMS group IDs.</p>
-          <sl-button
-            class="pw-fill-accent"
-            size="small"
-            @click=${() => window.open('https://docs.da.live/administrators/guides/permissions', '_blank', 'noopener')}
-          >DA permissions docs</sl-button>
+          <p>Identity via Adobe IMS — use email addresses or IMS group IDs.</p>
         </div>
-        <button class="info-panel-close" aria-label="Dismiss" @click=${this.dismissInfo}>✕</button>
-      </div>
+        <div slot="actions">
+          <a
+            href="https://docs.da.live/administrators/guides/permissions"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-small btn-secondary"
+          >DA Permissions Docs</a>
+        </div>
+      </explainer-info-card>
     `;
   }
 
   render() {
     return html`
-      ${this.renderInfoPanel()}
-      ${this.renderMessage()}
-      <div class="da-content">
+      <div class="section-container">
+        ${this._renderExplainerCard()}
+        ${this.renderMessage()}
         ${this.renderContent()}
       </div>
     `;
