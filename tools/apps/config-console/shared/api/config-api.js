@@ -1,4 +1,8 @@
+/* eslint-disable import/no-unresolved */
 import { ADMIN_DA_LIVE_BASE } from '../constants.js';
+
+// daFetch for token-refreshed requests
+const { daFetch } = await import('https://da.live/nx/utils/daFetch.js');
 
 /**
  * Fetch site configuration
@@ -718,5 +722,132 @@ export async function updatePlaceholdersJSON(org, site, placeholdersData, token)
     return { success: true, path };
   } catch (error) {
     return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Fetch MSM (Multi-Site Manager) config from organization
+ * @param {string} org
+ * @param {string} token - DA token
+ * @returns {Promise<Array>} MSM config data array with base, satellite, title
+ */
+export async function fetchMSMConfig(org, token) {
+  try {
+    const url = `${ADMIN_DA_LIVE_BASE}/config/${org}`;
+    const response = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) return [];
+      throw new Error(`Failed to fetch MSM config: ${response.status}`);
+    }
+
+    const config = await response.json();
+    return config?.msm?.data || [];
+  } catch (error) {
+    throw new Error(`Failed to fetch MSM config: ${error.message}`);
+  }
+}
+
+/**
+ * Update MSM (Multi-Site Manager) config
+ * @param {string} org
+ * @param {Array} msmData - Array of MSM entries with base, satellite, title
+ * @param {string} token - DA token
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function updateMSMConfig(org, msmData, token) {
+  try {
+    const url = `${ADMIN_DA_LIVE_BASE}/config/${org}`;
+
+    // Fetch existing config
+    let config;
+    const response = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+
+    if (response.ok) {
+      config = await response.json();
+    } else if (response.status === 404) {
+      // Create new config structure
+      config = {
+        ':version': 3,
+        ':names': ['msm'],
+        ':type': 'multi-sheet',
+        msm: {
+          total: 0,
+          limit: 0,
+          offset: 0,
+          data: [],
+        },
+      };
+    } else {
+      throw new Error(`Failed to fetch config: ${response.status}`);
+    }
+
+    // If msmData is empty, remove the MSM sheet entirely
+    if (msmData.length === 0) {
+      // Remove msm from :names array
+      if (config[':names']) {
+        config[':names'] = config[':names'].filter((name) => name !== 'msm');
+      }
+      // Delete msm sheet
+      delete config.msm;
+    } else {
+      // Ensure MSM sheet exists
+      if (!config.msm) {
+        if (!config[':names']) config[':names'] = [];
+        if (!config[':names'].includes('msm')) {
+          config[':names'].push('msm');
+        }
+        config.msm = {
+          total: 0,
+          limit: 0,
+          offset: 0,
+          data: [],
+        };
+      }
+
+      // Update MSM data
+      config.msm.data = msmData;
+      config.msm.total = msmData.length;
+      config.msm.limit = msmData.length;
+    }
+
+    // Save config
+    const formData = new FormData();
+    formData.append('config', JSON.stringify(config));
+
+    const updateResponse = await fetch(url, {
+      method: 'PUT',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+
+    if (!updateResponse.ok) {
+      throw new Error(`Failed to update MSM config: ${updateResponse.status}`);
+    }
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Fetch list of sites in an organization
+ * @param {string} org - Organization name
+ * @returns {Promise<Array<string>>} Array of site names
+ */
+export async function fetchSiteList(org) {
+  try {
+    const response = await daFetch(`${ADMIN_DA_LIVE_BASE}/list/${org}/`);
+    if (!response.ok) return [];
+    const items = await response.json();
+    if (!Array.isArray(items)) return [];
+    return items.filter((item) => !item.ext).map((item) => item.name);
+  } catch {
+    return [];
   }
 }
