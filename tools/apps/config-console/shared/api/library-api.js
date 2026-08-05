@@ -54,17 +54,14 @@ export function mergeLibraryItems(existingItems, newItems, identifierKey) {
     newItems.map((item) => normalizeIdentifier(item[identifierKey])),
   );
 
-  // Keep existing items that are NOT being updated
   const preserved = existingItems.filter(
     (item) => !newItemsSet.has(normalizeIdentifier(item[identifierKey])),
   );
 
-  // Find truly new items (don't exist yet)
   const itemsToAdd = newItems.filter(
     (item) => !existingMap.has(normalizeIdentifier(item[identifierKey])),
   );
 
-  // Find items being updated (exist in both) - use new version
   const itemsToUpdate = newItems.filter(
     (item) => existingMap.has(normalizeIdentifier(item[identifierKey])),
   );
@@ -111,7 +108,6 @@ export async function fetchLibraryJSON(org, site, type, token) {
     const urlObj = new URL(libraryPath);
     pathForRead = urlObj.pathname.replace(/^\//, '');
   } catch (error) {
-    // If already a path without protocol, use as-is
     pathForRead = libraryPath.replace(/^\//, '');
   }
 
@@ -158,7 +154,6 @@ export async function updateLibraryJSON(org, site, type, config, token) {
     const urlObj = new URL(libraryPath);
     pathForWrite = urlObj.pathname.replace(/^\//, '');
   } catch (error) {
-    // If already a path without protocol, use as-is
     pathForWrite = libraryPath.replace(/^\//, '');
   }
 

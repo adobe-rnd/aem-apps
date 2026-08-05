@@ -12,7 +12,7 @@ const { daFetch } = await import('https://da.live/nx/utils/daFetch.js');
  * @returns {Promise<Object>}
  */
 export async function fetchSiteConfig(org, site, token) {
-  const url = `${ADMIN_DA_LIVE_BASE}/source/${org}/${site}/config.json`;
+  const url = `${ADMIN_DA_LIVE_BASE}/config/${org}/${site}`;
   const response = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
@@ -32,7 +32,7 @@ export async function fetchSiteConfig(org, site, token) {
  * @returns {Promise<Object>}
  */
 export async function fetchOrgConfig(org, token) {
-  const url = `${ADMIN_DA_LIVE_BASE}/config/${org}.json`;
+  const url = `${ADMIN_DA_LIVE_BASE}/config/${org}`;
   const response = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
@@ -40,6 +40,47 @@ export async function fetchOrgConfig(org, token) {
   if (!response.ok) {
     if (response.status === 404) return null;
     throw new Error(`Failed to fetch org config: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch site translate configuration from .da/translate
+ * @param {string} org
+ * @param {string} site
+ * @param {string} token - DA token
+ * @returns {Promise<Object>}
+ */
+export async function fetchSiteTranslateConfig(org, site, token) {
+  const url = `${ADMIN_DA_LIVE_BASE}/source/${org}/${site}/.da/translate.json`;
+  const response = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) return null;
+    throw new Error(`Failed to fetch site translate config: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch organization translate configuration from .da/translate
+ * @param {string} org
+ * @param {string} token - DA token
+ * @returns {Promise<Object>}
+ */
+export async function fetchOrgTranslateConfig(org, token) {
+  const url = `${ADMIN_DA_LIVE_BASE}/source/${org}/.da/translate.json`;
+  const response = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) return null;
+    throw new Error(`Failed to fetch org translate config: ${response.status}`);
   }
 
   return response.json();
@@ -55,6 +96,43 @@ function getConfigValue(config, key) {
   if (!config?.data?.data) return null;
 
   const entry = config.data.data.find((item) => item.key === key);
+  return entry?.value || null;
+}
+
+/**
+ * Get a translate value from translate config (sheet name is "config", not "data")
+ * @param {Object} config - Translate config object
+ * @param {string} key - Translate key (e.g., 'translate.behavior')
+ * @returns {string|null}
+ */
+function getTranslateValue(config, key) {
+  if (!config?.config?.data) return null;
+
+  const entry = config.config.data.find((item) => item.key === key);
+  return entry?.value || null;
+}
+
+/**
+ * Get a sheet's data from translate config
+ * @param {Object} config - Translate config object
+ * @param {string} sheetName - Sheet name (e.g., 'languages', 'custom-doc-rules')
+ * @returns {Array}
+ */
+function getTranslateSheetData(config, sheetName) {
+  if (!config?.[sheetName]?.data) return [];
+  return config[sheetName].data;
+}
+
+/**
+ * Get a flag value from flags sheet
+ * @param {Object} config - Site/org config object
+ * @param {string} key - Flag key (e.g., 'ew.enabled')
+ * @returns {string|null}
+ */
+function getFlagValue(config, key) {
+  if (!config?.flags?.data) return null;
+
+  const entry = config.flags.data.find((item) => item.key === key);
   return entry?.value || null;
 }
 
@@ -96,6 +174,92 @@ export async function fetchInheritedConfig(org, site, configKey, token) {
 }
 
 /**
+ * Fetch a flag value with inheritance: check site flags, fall back to org flags
+ * @param {string} org
+ * @param {string} site - optional, if null fetches org-level only
+ * @param {string} flagKey - e.g., 'ew.enabled'
+ * @param {string} token - DA token
+ * @returns {Promise<{value: string|null, source: 'org'|'site'|null, inheritedValue: string|null}>}
+ */
+export async function fetchInheritedFlag(org, site, flagKey, token) {
+  let siteValue = null;
+  let orgValue = null;
+
+  // Try site-level first (if site provided)
+  if (site) {
+    const siteConfig = await fetchSiteConfig(org, site, token);
+    siteValue = getFlagValue(siteConfig, flagKey);
+  }
+
+  // Always fetch org-level (needed for inheritance display)
+  const orgConfig = await fetchOrgConfig(org, token);
+  orgValue = getFlagValue(orgConfig, flagKey);
+
+  // Determine source without nested ternary
+  let source = null;
+  if (siteValue) {
+    source = 'site';
+  } else if (orgValue) {
+    source = 'org';
+  }
+
+  return {
+    value: siteValue || orgValue || null,
+    source,
+    inheritedValue: orgValue,
+  };
+}
+
+/**
+ * Fetch a translate value from .da/translate (site-level only, no org inheritance)
+ * @param {string} org
+ * @param {string} site - required for translate config
+ * @param {string} translateKey - e.g., 'translate.behavior'
+ * @param {string} token - DA token
+ * @returns {Promise<{value: string|null, source: 'site'|null, inheritedValue: null}>}
+ */
+export async function fetchInheritedTranslate(org, site, translateKey, token) {
+  if (!site) {
+    // Translation is always at site level
+    return {
+      value: null,
+      source: null,
+      inheritedValue: null,
+    };
+  }
+
+  const siteConfig = await fetchSiteTranslateConfig(org, site, token);
+  const siteValue = getTranslateValue(siteConfig, translateKey);
+
+  return {
+    value: siteValue,
+    source: siteValue ? 'site' : null,
+    inheritedValue: null, // No org-level inheritance for translate
+  };
+}
+
+/**
+ * Fetch all translate sheets from .da/translate
+ * @param {string} org
+ * @param {string} site - required for translate config
+ * @param {string} token - DA token
+ * @returns {Promise<Object>} Object with all sheet data
+ */
+export async function fetchAllTranslateSheets(org, site, token) {
+  if (!site) return null;
+
+  const config = await fetchSiteTranslateConfig(org, site, token);
+  if (!config) return null;
+
+  return {
+    languages: getTranslateSheetData(config, 'languages'),
+    customDocRules: getTranslateSheetData(config, 'custom-doc-rules'),
+    dntContentRules: getTranslateSheetData(config, 'dnt-content-rules'),
+    dntSheetRules: getTranslateSheetData(config, 'dnt-sheet-rules'),
+  };
+}
+
+/**
  * Update site configuration value
  * @param {string} org
  * @param {string} site
@@ -108,11 +272,9 @@ export async function updateSiteConfig(org, site, key, value, token) {
   try {
     const config = await fetchSiteConfig(org, site, token) || { data: { data: [] } };
 
-    // Ensure data structure exists
     if (!config.data) config.data = {};
     if (!config.data.data) config.data.data = [];
 
-    // Update or add the config entry
     const existingIndex = config.data.data.findIndex((item) => item.key === key);
     if (existingIndex >= 0) {
       config.data.data[existingIndex].value = value;
@@ -120,11 +282,9 @@ export async function updateSiteConfig(org, site, key, value, token) {
       config.data.data.push({ key, value });
     }
 
-    // Update total and limit
     config.data.total = config.data.data.length;
     config.data.limit = config.data.data.length;
 
-    // Save to DA
     const url = `${ADMIN_DA_LIVE_BASE}/source/${org}/${site}/config.json`;
     const response = await fetch(url, {
       method: 'PUT',
@@ -157,11 +317,9 @@ export async function updateOrgConfig(org, key, value, token) {
   try {
     const config = await fetchOrgConfig(org, token) || { data: { data: [] } };
 
-    // Ensure data structure exists
     if (!config.data) config.data = {};
     if (!config.data.data) config.data.data = [];
 
-    // Update or add the config entry
     const existingIndex = config.data.data.findIndex((item) => item.key === key);
     if (existingIndex >= 0) {
       config.data.data[existingIndex].value = value;
@@ -169,11 +327,9 @@ export async function updateOrgConfig(org, key, value, token) {
       config.data.data.push({ key, value });
     }
 
-    // Update total and limit
     config.data.total = config.data.data.length;
     config.data.limit = config.data.data.length;
 
-    // Save to DA
     const url = `${ADMIN_DA_LIVE_BASE}/config/${org}.json`;
     const response = await fetch(url, {
       method: 'PUT',
@@ -206,17 +362,14 @@ export async function deleteSiteConfigValue(org, site, key, token) {
   try {
     const config = await fetchSiteConfig(org, site, token);
     if (!config?.data?.data) {
-      return { success: true }; // Nothing to delete
+      return { success: true };
     }
 
-    // Remove the entry
     config.data.data = config.data.data.filter((item) => item.key !== key);
 
-    // Update total and limit
     config.data.total = config.data.data.length;
     config.data.limit = config.data.data.length;
 
-    // Save to DA
     const url = `${ADMIN_DA_LIVE_BASE}/source/${org}/${site}/config.json`;
     const response = await fetch(url, {
       method: 'PUT',
@@ -229,6 +382,379 @@ export async function deleteSiteConfigValue(org, site, key, token) {
 
     if (!response.ok) {
       throw new Error(`Failed to delete site config value: ${response.status}`);
+    }
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Update site flags value
+ * @param {string} org
+ * @param {string} site
+ * @param {string} key - Flag key
+ * @param {string} value - Flag value
+ * @param {string} token - DA token
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function updateSiteFlag(org, site, key, value, token) {
+  try {
+    // Fetch entire config to preserve all sheets
+    const config = await fetchSiteConfig(org, site, token) || {
+      ':version': 3,
+      ':names': [],
+      ':type': 'multi-sheet',
+    };
+
+    if (!config.flags) {
+      if (!config[':names']) config[':names'] = [];
+      if (!config[':names'].includes('flags')) {
+        config[':names'].push('flags');
+      }
+      config.flags = { data: [] };
+    }
+    if (!config.flags.data) config.flags.data = [];
+
+    const existingIndex = config.flags.data.findIndex((item) => item.key === key);
+    if (existingIndex >= 0) {
+      config.flags.data[existingIndex].value = value;
+    } else {
+      config.flags.data.push({ key, value });
+    }
+
+    config.flags.total = config.flags.data.length;
+    config.flags.limit = config.flags.data.length;
+
+    // Save entire config to DA (preserves library and other sheets)
+    const url = `${ADMIN_DA_LIVE_BASE}/source/${org}/${site}/config.json`;
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(config),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update site flags: ${response.status}`);
+    }
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Update organization flags value
+ * @param {string} org
+ * @param {string} key - Flag key
+ * @param {string} value - Flag value
+ * @param {string} token - DA token
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function updateOrgFlag(org, key, value, token) {
+  try {
+    // Fetch entire config to preserve all sheets
+    const config = await fetchOrgConfig(org, token) || {
+      ':version': 3,
+      ':names': [],
+      ':type': 'multi-sheet',
+    };
+
+    if (!config.flags) {
+      if (!config[':names']) config[':names'] = [];
+      if (!config[':names'].includes('flags')) {
+        config[':names'].push('flags');
+      }
+      config.flags = { data: [] };
+    }
+    if (!config.flags.data) config.flags.data = [];
+
+    const existingIndex = config.flags.data.findIndex((item) => item.key === key);
+    if (existingIndex >= 0) {
+      config.flags.data[existingIndex].value = value;
+    } else {
+      config.flags.data.push({ key, value });
+    }
+
+    config.flags.total = config.flags.data.length;
+    config.flags.limit = config.flags.data.length;
+
+    // Save entire config to DA (preserves other sheets)
+    const url = `${ADMIN_DA_LIVE_BASE}/config/${org}.json`;
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(config),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update org flags: ${response.status}`);
+    }
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Delete a flag from site config (revert to org default)
+ * @param {string} org
+ * @param {string} site
+ * @param {string} key - Flag key to remove
+ * @param {string} token - DA token
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function deleteSiteFlag(org, site, key, token) {
+  try {
+    const config = await fetchSiteConfig(org, site, token);
+    if (!config?.flags?.data) {
+      return { success: true };
+    }
+
+    config.flags.data = config.flags.data.filter((item) => item.key !== key);
+
+    config.flags.total = config.flags.data.length;
+    config.flags.limit = config.flags.data.length;
+
+    // Save entire config to DA
+    const url = `${ADMIN_DA_LIVE_BASE}/source/${org}/${site}/config.json`;
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(config),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete site flag: ${response.status}`);
+    }
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Update site translate configuration in .da/translate
+ * @param {string} org
+ * @param {string} site
+ * @param {string} key - Translate key
+ * @param {string} value - Translate value
+ * @param {string} token - DA token
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function updateSiteTranslate(org, site, key, value, token) {
+  try {
+    // Fetch entire translate config to preserve all sheets
+    const existingConfig = await fetchSiteTranslateConfig(org, site, token);
+
+    let config;
+    if (existingConfig && existingConfig[':type'] === 'multi-sheet') {
+      config = existingConfig;
+    } else {
+      config = {
+        ':version': 3,
+        ':type': 'multi-sheet',
+        ':names': ['config'],
+        config: { data: [] },
+      };
+    }
+
+    if (!config[':names'].includes('config')) {
+      config[':names'].push('config');
+    }
+
+    if (!config.config) {
+      config.config = { data: [] };
+    }
+    if (!config.config.data) {
+      config.config.data = [];
+    }
+
+    const existingIndex = config.config.data.findIndex((item) => item.key === key);
+    if (existingIndex >= 0) {
+      config.config.data[existingIndex].value = value;
+    } else {
+      config.config.data.push({ key, value });
+    }
+
+    config.config.total = config.config.data.length;
+    config.config.offset = 0;
+    config.config.limit = config.config.data.length;
+
+    // Save entire translate config to DA (preserves all sheets)
+    const url = `${ADMIN_DA_LIVE_BASE}/source/${org}/${site}/.da/translate.json`;
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(config, null, 2),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update site translate config: ${response.status}`);
+    }
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Update organization translate configuration in .da/translate
+ * @param {string} org
+ * @param {string} key - Translate key
+ * @param {string} value - Translate value
+ * @param {string} token - DA token
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function updateOrgTranslate(org, key, value, token) {
+  try {
+    const config = await fetchOrgTranslateConfig(org, token) || {
+      config: { data: [] },
+    };
+
+    if (!config.config) config.config = {};
+    if (!config.config.data) config.config.data = [];
+
+    const existingIndex = config.config.data.findIndex((item) => item.key === key);
+    if (existingIndex >= 0) {
+      config.config.data[existingIndex].value = value;
+    } else {
+      config.config.data.push({ key, value });
+    }
+
+    config.config.total = config.config.data.length;
+    config.config.limit = config.config.data.length;
+
+    // Save entire translate config to DA (preserves other keys)
+    const url = `${ADMIN_DA_LIVE_BASE}/source/${org}/.da/translate`;
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(config),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update org translate config: ${response.status}`);
+    }
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Update an entire sheet in translate config
+ * @param {string} org
+ * @param {string} site
+ * @param {string} sheetName - Sheet name (e.g., 'languages', 'custom-doc-rules')
+ * @param {Array} data - Array of row objects for the sheet
+ * @param {string} token - DA token
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function updateTranslateSheet(org, site, sheetName, data, token) {
+  try {
+    // Fetch entire translate config to preserve all sheets
+    const existingConfig = await fetchSiteTranslateConfig(org, site, token);
+
+    let config;
+    if (existingConfig && existingConfig[':type'] === 'multi-sheet') {
+      config = existingConfig;
+    } else {
+      // Create new multi-sheet structure if doesn't exist
+      config = {
+        ':version': 3,
+        ':type': 'multi-sheet',
+        ':names': [],
+      };
+    }
+
+    if (!config[':names'].includes(sheetName)) {
+      config[':names'].push(sheetName);
+    }
+
+    config[sheetName] = {
+      total: data.length,
+      offset: 0,
+      limit: data.length,
+      data,
+    };
+
+    // Save entire translate config to DA (preserves all other sheets)
+    const url = `${ADMIN_DA_LIVE_BASE}/source/${org}/${site}/.da/translate.json`;
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(config, null, 2),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update translate sheet: ${response.status}`);
+    }
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Delete site translate configuration value (revert to org default) from .da/translate
+ * @param {string} org
+ * @param {string} site
+ * @param {string} key - Translate key to delete
+ * @param {string} token - DA token
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function deleteSiteTranslate(org, site, key, token) {
+  try {
+    const config = await fetchSiteTranslateConfig(org, site, token);
+    if (!config?.config?.data) {
+      return { success: true };
+    }
+
+    config.config.data = config.config.data.filter((item) => item.key !== key);
+
+    config.config.total = config.config.data.length;
+    config.config.offset = 0;
+    config.config.limit = config.config.data.length;
+
+    // Save entire translate config to DA (preserves all other sheets)
+    const url = `${ADMIN_DA_LIVE_BASE}/source/${org}/${site}/.da/translate.json`;
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(config, null, 2),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete site translate config: ${response.status}`);
     }
 
     return { success: true };
@@ -471,7 +997,6 @@ export async function registerLibraryType(org, site, libraryType, relativePath, 
       throw new Error(`Failed to fetch config: ${response.status}`);
     }
 
-    // Ensure library sheet exists
     if (!config.library) {
       if (!config[':names']) config[':names'] = [];
       if (!config[':names'].includes('library')) {
@@ -495,7 +1020,6 @@ export async function registerLibraryType(org, site, libraryType, relativePath, 
       (item) => item.title?.toLowerCase() !== normalizedType,
     );
 
-    // Add new entry at the beginning
     config.library.data.unshift({
       title: libraryType,
       path: fullPath,
@@ -509,27 +1033,21 @@ export async function registerLibraryType(org, site, libraryType, relativePath, 
       const aIndex = priorityOrder.indexOf(aTitle);
       const bIndex = priorityOrder.indexOf(bTitle);
 
-      // Both are priority items - sort by priority order
       if (aIndex !== -1 && bIndex !== -1) {
         return aIndex - bIndex;
       }
-      // Only a is priority - a comes first
       if (aIndex !== -1) {
         return -1;
       }
-      // Only b is priority - b comes first
       if (bIndex !== -1) {
         return 1;
       }
-      // Neither is priority - maintain existing order
       return 0;
     });
 
-    // Update counts
     config.library.total = config.library.data.length;
     config.library.limit = config.library.data.length;
 
-    // Save config
     return updateFullSiteConfig(org, site, config, token);
   } catch (error) {
     return { success: false, error: error.message };
@@ -788,14 +1306,11 @@ export async function updateMSMConfig(org, msmData, token) {
 
     // If msmData is empty, remove the MSM sheet entirely
     if (msmData.length === 0) {
-      // Remove msm from :names array
       if (config[':names']) {
         config[':names'] = config[':names'].filter((name) => name !== 'msm');
       }
-      // Delete msm sheet
       delete config.msm;
     } else {
-      // Ensure MSM sheet exists
       if (!config.msm) {
         if (!config[':names']) config[':names'] = [];
         if (!config[':names'].includes('msm')) {
@@ -809,13 +1324,10 @@ export async function updateMSMConfig(org, msmData, token) {
         };
       }
 
-      // Update MSM data
       config.msm.data = msmData;
       config.msm.total = msmData.length;
       config.msm.limit = msmData.length;
     }
-
-    // Save config
     const formData = new FormData();
     formData.append('config', JSON.stringify(config));
 

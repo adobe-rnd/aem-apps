@@ -2,6 +2,7 @@
 /* eslint-disable import/no-unresolved */
 
 import { CONTENT_DA_LIVE_BASE } from '../constants.js';
+import { normalizeLibraryData } from './url-normalizer.js';
 
 // Use DA's daFetch which automatically handles IMS tokens
 const { getDaAdmin } = await import('https://da.live/nx/public/utils/constants.js');
@@ -18,11 +19,9 @@ const LIBRARY_BLOCKS_PATH = 'library/blocks';
  */
 export function sanitizePath(path) {
   if (!path) return '';
-  // Reject traversal attempts
   if (path.includes('..')) {
     throw new Error(`Invalid path: '${path}' contains path traversal sequence`);
   }
-  // Normalise: strip leading slash, collapse double-slashes
   return path.replace(/\/+/g, '/').replace(/^\//, '');
 }
 
@@ -68,10 +67,8 @@ export async function validateRepositoryId(repositoryId) {
     return { valid: false, normalized: '', error: 'Repository ID is required' };
   }
 
-  // Strip protocol if user accidentally included it
   const normalized = stripProtocol(repositoryId);
 
-  // Check format: must start with author- or delivery-
   if (!normalized.startsWith('author-') && !normalized.startsWith('delivery-')) {
     return {
       valid: false,
@@ -80,7 +77,6 @@ export async function validateRepositoryId(repositoryId) {
     };
   }
 
-  // Validate by attempting to reach it with https://
   const testUrl = `https://${normalized}`;
 
   try {
@@ -91,7 +87,6 @@ export async function validateRepositoryId(repositoryId) {
       cache: 'no-cache',
     });
 
-    // Accept both 200 (success) and 401 (unauthorized but exists)
     const valid = response.ok || response.status === 401;
     return {
       valid,
@@ -99,7 +94,6 @@ export async function validateRepositoryId(repositoryId) {
       error: valid ? null : `Server returned ${response.status}`,
     };
   } catch (error) {
-    // CORS errors or network errors - try with no-cors as fallback
     try {
       await fetch(testUrl, {
         method: 'HEAD',
@@ -107,7 +101,6 @@ export async function validateRepositoryId(repositoryId) {
         credentials: 'omit',
         cache: 'no-cache',
       });
-      // If no-cors succeeds, we assume the URL is valid
       return {
         valid: true,
         normalized,
@@ -143,7 +136,6 @@ export async function validateProductionOrigin(url) {
       cache: 'no-cache',
     });
 
-    // Accept both 200 (success) and 401 (unauthorized but exists)
     const valid = response.ok || response.status === 401;
     return {
       valid,
@@ -151,7 +143,6 @@ export async function validateProductionOrigin(url) {
       error: valid ? null : `Server returned ${response.status}`,
     };
   } catch (error) {
-    // CORS errors or network errors - try with no-cors as fallback
     try {
       await fetch(normalized, {
         method: 'HEAD',
@@ -159,7 +150,6 @@ export async function validateProductionOrigin(url) {
         credentials: 'omit',
         cache: 'no-cache',
       });
-      // If no-cors succeeds, we assume the URL is valid
       return {
         valid: true,
         normalized,
@@ -346,8 +336,22 @@ export async function fetchBlocksJSON(org, site) {
       throw new Error(`Failed to fetch blocks.json: ${response.status}`);
     }
 
-    return response.json();
-  } catch (error) {
+    const data = await response.json();
+
+    // Transparently normalize preview URLs to content.da.live format
+    // This handles blocks.json from migrated projects
+    if (data?.blocks?.data && Array.isArray(data.blocks.data)) {
+      const normalized = normalizeLibraryData(data.blocks.data);
+      return { ...data, blocks: { ...data.blocks, data: normalized.data } };
+    }
+
+    if (data?.data && Array.isArray(data.data)) {
+      const normalized = normalizeLibraryData(data.data);
+      return { ...data, data: normalized.data };
+    }
+
+    return data;
+  } catch {
     return null;
   }
 }
@@ -675,7 +679,6 @@ export async function registerTemplatesInConfig(org, site) {
       libraryData[templatesIndex].path = templatesPath;
     }
 
-    // Ensure correct order (Blocks must be first)
     const sortedData = sortLibraryData(libraryData);
     config.library.data = sortedData;
     config.library.total = sortedData.length;
@@ -750,7 +753,16 @@ export async function fetchTemplatesJSON(org, site) {
       throw new Error(`Failed to fetch templates.json: ${response.status}`);
     }
 
-    return response.json();
+    const data = await response.json();
+
+    // Transparently normalize preview URLs to content.da.live format
+    // This handles templates.json from migrated projects
+    if (data?.data && Array.isArray(data.data)) {
+      const normalized = normalizeLibraryData(data.data);
+      return { ...data, data: normalized.data };
+    }
+
+    return data;
   } catch (error) {
     return null;
   }
@@ -957,7 +969,6 @@ export async function registerIconsInConfig(org, site) {
       libraryData[iconsIndex].format = ':<content>:';
     }
 
-    // Ensure correct order (Blocks must be first)
     const sortedData = sortLibraryData(libraryData);
     config.library.data = sortedData;
     config.library.total = sortedData.length;
@@ -1004,7 +1015,6 @@ export async function registerPlaceholdersInConfig(org, site) {
       libraryData[placeholdersIndex].format = '{{<content>}}';
     }
 
-    // Ensure correct order (Blocks must be first)
     const sortedData = sortLibraryData(libraryData);
     config.library.data = sortedData;
     config.library.total = sortedData.length;
@@ -1041,19 +1051,15 @@ export async function fetchAemAssetsConfig(org, site) {
 
     const dataItems = config.data.data;
 
-    // Filter out header row (Key/Value) and empty objects
     const configMap = new Map(
       dataItems
         .filter((item) => {
-          // Filter out empty objects
           if (!item || typeof item !== 'object' || Object.keys(item).length === 0) {
             return false;
           }
-          // Filter out header row
           if (item.key === 'Key' || item.key === 'key') {
             return false;
           }
-          // Filter out items with empty key
           if (!item.key || item.key.trim() === '') {
             return false;
           }
@@ -1134,7 +1140,6 @@ export async function updateAemAssetsConfig(org, site, aemConfig) {
       if (!item || typeof item !== 'object') return true;
       const keys = Object.keys(item);
       if (keys.length === 0) return true;
-      // Check if item has a key property that's empty or undefined
       if ('key' in item && (!item.key || item.key.trim() === '')) return true;
       return false;
     };
@@ -1145,13 +1150,10 @@ export async function updateAemAssetsConfig(org, site, aemConfig) {
       (item) => {
         if (isEmptyOrInvalid(item)) return false;
         if (aemKeys.includes(item.key)) return false;
-        // Filter out any existing header rows (Key/Value or key/value)
         if (item.key === 'Key' || item.key === 'key') return false;
         return true;
       },
     );
-
-    // Add AEM configuration values (only if they're set)
     if (aemConfig.repositoryId) {
       filteredData.push({
         key: 'aem.repositoryId',
@@ -1279,7 +1281,6 @@ export async function updateTranslationConfig(org, site, translationConfig) {
 
     const dataItems = [...config.data.data];
 
-    // Check if we need to add header row (empty data sheet)
     const needsHeader = dataItems.length === 0;
 
     const translationKeys = [
@@ -1288,10 +1289,7 @@ export async function updateTranslationConfig(org, site, translationConfig) {
       'rollout.behavior',
     ];
 
-    // Filter out translation-specific keys, preserving other entries
     const filteredData = dataItems.filter((item) => !translationKeys.includes(item.key));
-
-    // Add header row if needed (empty data sheet)
     if (needsHeader) {
       filteredData.push({
         key: 'Key',
@@ -1393,15 +1391,11 @@ export async function updateUniversalEditorConfig(org, site, ueConfig) {
 
     const dataItems = [...config.data.data];
 
-    // Check if we need to add header row (empty data sheet)
     const needsHeader = dataItems.length === 0;
 
     const ueKeys = ['editor.path'];
 
-    // Filter out UE-specific keys, preserving other entries
     const filteredData = dataItems.filter((item) => !ueKeys.includes(item.key));
-
-    // Add header row if needed (empty data sheet)
     if (needsHeader) {
       filteredData.push({
         key: 'Key',

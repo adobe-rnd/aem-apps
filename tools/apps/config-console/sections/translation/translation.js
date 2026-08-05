@@ -4,16 +4,16 @@
 import { html } from 'da-lit';
 import { BaseSectionElement } from '../../shared/components/base-section.js';
 import {
-  fetchInheritedConfig,
-  updateSiteConfig,
-  updateOrgConfig,
-  deleteSiteConfigValue,
+  fetchInheritedTranslate,
+  updateSiteTranslate,
+  deleteSiteTranslate,
+  fetchAllTranslateSheets,
+  updateTranslateSheet,
 } from '../../shared/api/config-api.js';
 import { CONFIG_KEYS } from '../../shared/constants.js';
 import '../../components/explainer-info-card.js';
 import '../../components/compact-settings-table.js';
 
-// Get stylesheet for this section
 const NX = 'https://da.live/nx2';
 let sectionStyles = null;
 let commonStyles = null;
@@ -40,6 +40,10 @@ export default class TranslationSection extends BaseSectionElement {
     _editedValue: { state: true },
     _isSaving: { state: true },
     _saveMessage: { state: true },
+    _sheets: { state: true },
+    _editingSheet: { state: true },
+    _editingRowIndex: { state: true },
+    _editedRow: { state: true },
   };
 
   constructor() {
@@ -49,6 +53,15 @@ export default class TranslationSection extends BaseSectionElement {
     this._editedValue = '';
     this._isSaving = false;
     this._saveMessage = null;
+    this._sheets = {
+      languages: [],
+      customDocRules: [],
+      dntContentRules: [],
+      dntSheetRules: [],
+    };
+    this._editingSheet = null;
+    this._editingRowIndex = null;
+    this._editedRow = null;
   }
 
   _getStylesheets() {
@@ -61,52 +74,47 @@ export default class TranslationSection extends BaseSectionElement {
       return;
     }
 
+    if (!this.site) {
+      this._setError('Site is required for translation configuration');
+      return;
+    }
+
     try {
       this._setLoading(true);
 
-      // Load all translation config keys
       const configKeys = [
         {
-          key: CONFIG_KEYS.TRANSLATE_BEHAVIOR,
-          label: 'Translation Behavior',
-          hint: 'How to handle old content when new docs come back from translation',
-          type: 'select',
-          options: [
-            { value: 'overwrite', label: 'Overwrite - Replace existing content' },
-            { value: 'merge', label: 'Merge - Combine old and new content' },
-          ],
-          defaultLabel: 'Select...',
+          key: CONFIG_KEYS.SYNC_CONFLICT_BEHAVIOR,
+          label: 'Sync Conflict Behavior',
+          hint: 'How to handle old content when it is pulled into the send for translation folder',
+          type: 'text',
         },
         {
-          key: CONFIG_KEYS.TRANSLATE_STAGING,
-          label: 'Translation Staging',
-          hint: 'Stage content in separate area before sending to translation',
-          type: 'select',
-          options: [
-            { value: 'on', label: 'On - Stage before translation' },
-            { value: 'off', label: 'Off - Send directly to translation' },
-          ],
-          defaultLabel: 'Select...',
+          key: CONFIG_KEYS.TRANSLATE_CONFLICT_BEHAVIOR,
+          label: 'Translate Conflict Behavior',
+          hint: 'How to handle old content when new content returns from translation',
+          type: 'text',
         },
         {
-          key: CONFIG_KEYS.ROLLOUT_BEHAVIOR,
-          label: 'Rollout Behavior',
-          hint: 'How to handle old content during rollout to locale',
-          type: 'select',
-          options: [
-            { value: 'overwrite', label: 'Overwrite - Replace existing content' },
-            { value: 'merge', label: 'Merge - Combine old and new content' },
-          ],
-          defaultLabel: 'Select...',
+          key: CONFIG_KEYS.ROLLOUT_CONFLICT_BEHAVIOR,
+          label: 'Rollout Conflict Behavior',
+          hint: 'How to handle old content when new content gets rolled out to the locale',
+          type: 'text',
+        },
+        {
+          key: CONFIG_KEYS.COPY_CONFLICT_BEHAVIOR,
+          label: 'Copy Conflict Behavior',
+          hint: 'How to handle when source content is copied into a region',
+          type: 'text',
         },
       ];
 
       const configs = {};
       await Promise.all(
         configKeys.map(async ({
-          key, label, hint, type, options, defaultLabel,
+          key, label, hint, type,
         }) => {
-          const config = await fetchInheritedConfig(
+          const config = await fetchInheritedTranslate(
             this.org,
             this.site,
             key,
@@ -117,13 +125,17 @@ export default class TranslationSection extends BaseSectionElement {
             label,
             hint,
             type,
-            options,
-            defaultLabel,
           };
         }),
       );
 
       this._configs = configs;
+
+      const sheets = await fetchAllTranslateSheets(this.org, this.site, this.token);
+      if (sheets) {
+        this._sheets = sheets;
+      }
+
       this._setLoading(false);
 
       this._trackAction('translation-config-loaded', {
@@ -134,32 +146,8 @@ export default class TranslationSection extends BaseSectionElement {
     }
   }
 
-  _validateValue(key, value) {
-    const trimmed = value.trim();
-
-    // Translation staging validation
-    if (key === CONFIG_KEYS.TRANSLATE_STAGING && trimmed) {
-      if (trimmed !== 'on' && trimmed !== 'off') {
-        return { valid: false, message: 'Must be "on" or "off"' };
-      }
-    }
-
-    // Translation behavior validation
-    if (key === CONFIG_KEYS.TRANSLATE_BEHAVIOR && trimmed) {
-      const validValues = ['overwrite', 'merge'];
-      if (!validValues.includes(trimmed)) {
-        return { valid: false, message: 'Must be "overwrite" or "merge"' };
-      }
-    }
-
-    // Rollout behavior validation
-    if (key === CONFIG_KEYS.ROLLOUT_BEHAVIOR && trimmed) {
-      const validValues = ['overwrite', 'merge'];
-      if (!validValues.includes(trimmed)) {
-        return { valid: false, message: 'Must be "overwrite" or "merge"' };
-      }
-    }
-
+  _validateValue() {
+    // Allow any text value for translation config
     return { valid: true };
   }
 
@@ -168,7 +156,6 @@ export default class TranslationSection extends BaseSectionElement {
     this._editedValue = this._configs[key]?.value || '';
     this._saveMessage = null;
     this.requestUpdate();
-    // Focus select after render
     this.updateComplete.then(() => {
       this.shadowRoot.querySelector(`.config-select-${key.replace(/\./g, '-')}`)?.focus();
     });
@@ -201,14 +188,18 @@ export default class TranslationSection extends BaseSectionElement {
     this._saveMessage = null;
 
     try {
-      // Use appropriate API based on context (org vs site)
-      const result = this.site
-        ? await updateSiteConfig(this.org, this.site, key, trimmedValue, this.token)
-        : await updateOrgConfig(this.org, key, trimmedValue, this.token);
+      // Translation is always at site level
+      if (!this.site) {
+        this._saveMessage = { type: 'error', text: 'Site is required for translation configuration' };
+        this._isSaving = false;
+        return;
+      }
+
+      const result = await updateSiteTranslate(this.org, this.site, key, trimmedValue, this.token);
 
       if (result.success) {
         this._configs[key].value = trimmedValue;
-        this._configs[key].source = this.site ? 'site' : 'org';
+        this._configs[key].source = 'site';
         this._editingKey = null;
         this._editedValue = '';
         this._saveMessage = { type: 'success', text: `${this._configs[key].label} updated successfully` };
@@ -217,7 +208,6 @@ export default class TranslationSection extends BaseSectionElement {
           key,
         });
 
-        // Clear success message after 3 seconds
         setTimeout(() => {
           this._saveMessage = null;
           this.requestUpdate();
@@ -239,7 +229,7 @@ export default class TranslationSection extends BaseSectionElement {
     this._saveMessage = null;
 
     try {
-      const result = await deleteSiteConfigValue(
+      const result = await deleteSiteTranslate(
         this.org,
         this.site,
         key,
@@ -247,17 +237,16 @@ export default class TranslationSection extends BaseSectionElement {
       );
 
       if (result.success) {
-        this._configs[key].value = this._configs[key].inheritedValue || null;
-        this._configs[key].source = this._configs[key].inheritedValue ? 'org' : null;
+        this._configs[key].value = null;
+        this._configs[key].source = null;
         this._editingKey = null;
         this._editedValue = '';
-        this._saveMessage = { type: 'success', text: `${this._configs[key].label} reverted to organization default` };
+        this._saveMessage = { type: 'success', text: `${this._configs[key].label} removed` };
 
         this._trackAction('translation-config-reverted', {
           key,
         });
 
-        // Clear success message after 3 seconds
         setTimeout(() => {
           this._saveMessage = null;
           this.requestUpdate();
@@ -282,23 +271,133 @@ export default class TranslationSection extends BaseSectionElement {
     return this._handleSave(key);
   }
 
+  _handleSheetAddRow(sheetName, template) {
+    this._editingSheet = sheetName;
+    this._editingRowIndex = -1; // -1 means adding new
+    this._editedRow = { ...template };
+  }
+
+  _handleSheetEditRow(sheetName, index, row) {
+    this._editingSheet = sheetName;
+    this._editingRowIndex = index;
+    this._editedRow = { ...row };
+  }
+
+  _handleSheetCancelEdit() {
+    this._editingSheet = null;
+    this._editingRowIndex = null;
+    this._editedRow = null;
+  }
+
+  async _handleSheetSaveRow(sheetKey, sheetName) {
+    if (this._isSaving) return;
+
+    this._isSaving = true;
+    this._saveMessage = null;
+
+    try {
+      const updatedData = [...this._sheets[sheetKey]];
+
+      if (this._editingRowIndex === -1) {
+        updatedData.push(this._editedRow);
+      } else {
+        updatedData[this._editingRowIndex] = this._editedRow;
+      }
+
+      const result = await updateTranslateSheet(
+        this.org,
+        this.site,
+        sheetName,
+        updatedData,
+        this.token,
+      );
+
+      if (result.success) {
+        this._sheets[sheetKey] = updatedData;
+        this._editingSheet = null;
+        this._editingRowIndex = null;
+        this._editedRow = null;
+        this._saveMessage = { type: 'success', text: 'Sheet updated successfully' };
+
+        setTimeout(() => {
+          this._saveMessage = null;
+          this.requestUpdate();
+        }, 3000);
+      } else {
+        this._saveMessage = { type: 'error', text: result.error || 'Failed to save sheet' };
+      }
+    } catch (error) {
+      this._saveMessage = { type: 'error', text: `Error saving: ${error.message}` };
+    } finally {
+      this._isSaving = false;
+    }
+  }
+
+  async _handleSheetDeleteRow(sheetKey, sheetName, index) {
+    if (this._isSaving) return;
+    // eslint-disable-next-line no-alert, no-restricted-globals
+    if (!confirm('Are you sure you want to delete this entry?')) return;
+
+    this._isSaving = true;
+    this._saveMessage = null;
+
+    try {
+      const updatedData = this._sheets[sheetKey].filter((_, i) => i !== index);
+
+      const result = await updateTranslateSheet(
+        this.org,
+        this.site,
+        sheetName,
+        updatedData,
+        this.token,
+      );
+
+      if (result.success) {
+        this._sheets[sheetKey] = updatedData;
+        this._saveMessage = { type: 'success', text: 'Entry deleted successfully' };
+
+        setTimeout(() => {
+          this._saveMessage = null;
+          this.requestUpdate();
+        }, 3000);
+      } else {
+        this._saveMessage = { type: 'error', text: result.error || 'Failed to delete entry' };
+      }
+    } catch (error) {
+      this._saveMessage = { type: 'error', text: `Error deleting: ${error.message}` };
+    } finally {
+      this._isSaving = false;
+    }
+  }
+
+  _handleSheetFieldChange(field, value) {
+    this._editedRow = {
+      ...this._editedRow,
+      [field]: value,
+    };
+  }
+
   _prepareSettings() {
-    // Transform configs into settings array for compact table
     const settingsConfig = [
       {
-        key: CONFIG_KEYS.TRANSLATE_BEHAVIOR,
+        key: CONFIG_KEYS.SYNC_CONFLICT_BEHAVIOR,
         required: false,
-        helpUrl: 'https://docs.da.live/administrators/guides/setup-translation#behavior',
+        helpUrl: 'https://docs.da.live/administrators/guides/setup-translation',
       },
       {
-        key: CONFIG_KEYS.TRANSLATE_STAGING,
+        key: CONFIG_KEYS.TRANSLATE_CONFLICT_BEHAVIOR,
         required: false,
-        helpUrl: 'https://docs.da.live/administrators/guides/setup-translation#staging',
+        helpUrl: 'https://docs.da.live/administrators/guides/setup-translation',
       },
       {
-        key: CONFIG_KEYS.ROLLOUT_BEHAVIOR,
+        key: CONFIG_KEYS.ROLLOUT_CONFLICT_BEHAVIOR,
         required: false,
-        helpUrl: 'https://docs.da.live/administrators/guides/setup-translation#rollout',
+        helpUrl: 'https://docs.da.live/administrators/guides/setup-translation',
+      },
+      {
+        key: CONFIG_KEYS.COPY_CONFLICT_BEHAVIOR,
+        required: false,
+        helpUrl: 'https://docs.da.live/administrators/guides/setup-translation',
       },
     ];
 
@@ -318,8 +417,6 @@ export default class TranslationSection extends BaseSectionElement {
         inheritedValue: config.inheritedValue,
         required,
         type: config.type || 'text',
-        options: config.options,
-        defaultLabel: config.defaultLabel,
         hint: config.hint,
         helpUrl,
       };
@@ -327,18 +424,11 @@ export default class TranslationSection extends BaseSectionElement {
   }
 
   _renderExplainerCard() {
-    // Check if any translation/rollout settings are configured
     const hasAnyValue = Object.values(this._configs).some((c) => c.value);
     const isConfigured = hasAnyValue;
-    const hasSiteConfig = Object.values(this._configs).some((c) => c.source === 'site');
 
     const status = isConfigured ? 'configured' : 'not-configured';
-    const statusLabel = (() => {
-      if (!isConfigured) return 'Not Configured';
-      if (this.site && hasSiteConfig) return 'Site Scoped';
-      if (this.site) return 'Inherited from Org';
-      return 'Configured';
-    })();
+    const statusLabel = isConfigured ? 'Configured' : 'Not Configured';
 
     return html`
       <explainer-info-card
@@ -380,12 +470,173 @@ export default class TranslationSection extends BaseSectionElement {
     const settings = this._prepareSettings();
 
     return html`
-      <compact-settings-table
-        .settings=${settings}
-        .onSave=${(key, value) => this._handleTableSave(key, value)}
-        .onRevert=${(key) => this._handleRevert(key)}
-        .isSaving=${this._isSaving}
-      ></compact-settings-table>
+      <div class="settings-card">
+        <h2 class="settings-card-title">Rollout Config</h2>
+        <compact-settings-table
+          .settings=${settings}
+          .onSave=${(key, value) => this._handleTableSave(key, value)}
+          .onRevert=${(key) => this._handleRevert(key)}
+          .isSaving=${this._isSaving}
+        ></compact-settings-table>
+      </div>
+    `;
+  }
+
+  _renderEditableSheet(title, sheetKey, sheetName, data, columns, template) {
+    const isEditing = this._editingSheet === sheetName;
+
+    return html`
+      <div class="settings-card">
+        <div class="card-header">
+          <h2 class="settings-card-title">${title}</h2>
+          <button
+            class="btn-small btn-primary"
+            @click=${() => this._handleSheetAddRow(sheetName, template)}
+            ?disabled=${this._isSaving || isEditing}
+          >Add Entry</button>
+        </div>
+
+        ${data.length === 0 && !isEditing ? html`
+          <p class="empty-state">No entries configured. Click "Add Entry" to get started.</p>
+        ` : html`
+          <div class="table-wrapper">
+            <table class="data-table editable">
+              <thead>
+                <tr>
+                  ${columns.map((col) => html`<th>${col}</th>`)}
+                  <th class="actions-col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${data.map((row, index) => {
+    const editingThis = isEditing && this._editingRowIndex === index;
+    if (editingThis) {
+      return html`
+                      <tr class="editing-row">
+                        ${columns.map((col) => html`
+                          <td>
+                            <input
+                              type="text"
+                              class="inline-input"
+                              .value=${this._editedRow[col] || ''}
+                              @input=${(e) => this._handleSheetFieldChange(col, e.target.value)}
+                              ?disabled=${this._isSaving}
+                            />
+                          </td>
+                        `)}
+                        <td class="actions-col">
+                          <button
+                            class="btn-small btn-primary"
+                            @click=${() => this._handleSheetSaveRow(sheetKey, sheetName)}
+                            ?disabled=${this._isSaving}
+                          >Save</button>
+                          <button
+                            class="btn-small btn-secondary"
+                            @click=${() => this._handleSheetCancelEdit()}
+                            ?disabled=${this._isSaving}
+                          >Cancel</button>
+                        </td>
+                      </tr>
+                    `;
+    }
+    return html`
+                    <tr>
+                      ${columns.map((col) => html`<td>${row[col] || ''}</td>`)}
+                      <td class="actions-col">
+                        <button
+                          class="btn-small btn-secondary"
+                          @click=${() => this._handleSheetEditRow(sheetName, index, row)}
+                          ?disabled=${this._isSaving || isEditing}
+                        >Edit</button>
+                        <button
+                          class="btn-small btn-tertiary"
+                          @click=${() => this._handleSheetDeleteRow(sheetKey, sheetName, index)}
+                          ?disabled=${this._isSaving || isEditing}
+                        >Delete</button>
+                      </td>
+                    </tr>
+                  `;
+  })}
+                ${isEditing && this._editingRowIndex === -1 ? html`
+                  <tr class="editing-row">
+                    ${columns.map((col) => html`
+                      <td>
+                        <input
+                          type="text"
+                          class="inline-input"
+                          .value=${this._editedRow[col] || ''}
+                          @input=${(e) => this._handleSheetFieldChange(col, e.target.value)}
+                          ?disabled=${this._isSaving}
+                          placeholder=${col}
+                        />
+                      </td>
+                    `)}
+                    <td class="actions-col">
+                      <button
+                        class="btn-small btn-primary"
+                        @click=${() => this._handleSheetSaveRow(sheetKey, sheetName)}
+                        ?disabled=${this._isSaving}
+                      >Save</button>
+                      <button
+                        class="btn-small btn-secondary"
+                        @click=${() => this._handleSheetCancelEdit()}
+                        ?disabled=${this._isSaving}
+                      >Cancel</button>
+                    </td>
+                  </tr>
+                ` : ''}
+              </tbody>
+            </table>
+          </div>
+        `}
+      </div>
+    `;
+  }
+
+  _renderAllSheets() {
+    return html`
+      ${this._renderEditableSheet(
+    'Languages',
+    'languages',
+    'languages',
+    this._sheets.languages,
+    ['name', 'code', 'translate type', 'location', 'locales', 'actions'],
+    {
+      name: '',
+      code: '',
+      'translate type': '',
+      location: '',
+      locales: '',
+      actions: '',
+    },
+  )}
+
+      ${this._renderEditableSheet(
+    'Custom Document Rules',
+    'customDocRules',
+    'custom-doc-rules',
+    this._sheets.customDocRules,
+    ['block', 'rule'],
+    { block: '', rule: '' },
+  )}
+
+      ${this._renderEditableSheet(
+    'Do Not Translate Content Rules',
+    'dntContentRules',
+    'dnt-content-rules',
+    this._sheets.dntContentRules,
+    ['content'],
+    { content: '' },
+  )}
+
+      ${this._renderEditableSheet(
+    'Do Not Translate Sheet Rules',
+    'dntSheetRules',
+    'dnt-sheet-rules',
+    this._sheets.dntSheetRules,
+    ['pattern', 'action'],
+    { pattern: '', action: '' },
+  )}
     `;
   }
 
@@ -409,6 +660,8 @@ export default class TranslationSection extends BaseSectionElement {
         ` : ''}
 
         ${this._renderSettingsCard()}
+
+        ${this._renderAllSheets()}
       </div>
     `;
   }
