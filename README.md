@@ -5,6 +5,7 @@ A collection of Adobe owned apps & plugins for Experience Workspace & Document A
 
 | App | Path | Entry point | Description | Type |
 |-----------|------|-------------|-------------|-------------|
+| **CUG** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/cug/cug | `tools/apps/cug` | Apply or remove closed user group (page access) restrictions  | App |
 | **DA Permissions** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/da-permissions/da-permissions | `tools/apps/da-permissions` | Manage DA Permissions and configuration access  | App |
 | **MSM** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/msm/msm | `tools/apps/msm` `tools/plugins/msm` | Manage multi-site manager for your org/site  | App & Plugin |
 | **Request Publish** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-request-inbox | `tools/apps/publish-reqquest-inbox` `tools/plugins/publish-reqquest-inbox` | Manage request publish approvals, etc  | App & Plugin |
