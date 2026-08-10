@@ -1,3 +1,4 @@
+/* eslint-disable import/no-unresolved */
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 
 const DA_SOURCE_BASE = 'https://admin.da.live/source';
@@ -28,10 +29,9 @@ async function fetchCugSheet(org, site, token) {
 function transformToHeadersConfig(rows) {
   const config = {};
 
-  for (const row of rows) {
+  rows.forEach((row) => {
     const path = (row.url || '').trim();
-    if (!path || !path.startsWith('/')) continue;
-    if (config[path]) continue;
+    if (!path || !path.startsWith('/') || config[path]) return;
 
     const headers = [];
     const required = (row['cug-required'] || '').trim().toLowerCase();
@@ -52,7 +52,7 @@ function transformToHeadersConfig(rows) {
     if (headers.length > 0) {
       config[path] = headers;
     }
-  }
+  });
 
   return config;
 }
@@ -73,14 +73,14 @@ async function fetchExistingNonCugHeaders(org, site, token) {
   const existing = config.headers || {};
   const filtered = {};
 
-  for (const [path, headerList] of Object.entries(existing)) {
+  Object.entries(existing).forEach(([path, headerList]) => {
     const nonCug = Array.isArray(headerList)
       ? headerList.filter((h) => !isCugHeader(h.key))
       : [];
     if (nonCug.length > 0) {
       filtered[path] = nonCug;
     }
-  }
+  });
 
   return filtered;
 }
@@ -88,10 +88,10 @@ async function fetchExistingNonCugHeaders(org, site, token) {
 function mergeHeaders(nonCugHeaders, cugHeaders) {
   const merged = { ...nonCugHeaders };
 
-  for (const [path, cugList] of Object.entries(cugHeaders)) {
+  Object.entries(cugHeaders).forEach(([path, cugList]) => {
     const existing = merged[path] || [];
     merged[path] = [...existing, ...cugList];
-  }
+  });
 
   return merged;
 }
