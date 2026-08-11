@@ -757,6 +757,7 @@ class ConfigConsoleApp extends LitElement {
 
     this._currentSection = sectionId;
     this._sectionComponent = null;
+    this._error = null; // Clear any previous errors
 
     // Track section view
     sampleRUM('config-section', {
