@@ -4,6 +4,7 @@
 /* eslint-disable no-underscore-dangle */
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from 'da-lit';
+import { fetchSiteList } from './shared/api/config-api.js';
 
 const NX = 'https://da.live/nx2';
 let nexter = null;
@@ -95,6 +96,43 @@ const SECTIONS = {
         },
       ],
     },
+    {
+      id: 'authoring-experience-group',
+      title: 'Authoring Experience',
+      iconKey: 'universal-editor',
+      type: 'group',
+      children: [
+        {
+          id: 'experience-workspace',
+          title: 'Experience Workspace',
+          iconKey: 'universal-editor',
+          scope: 'both',
+          inheritable: true,
+        },
+        {
+          id: 'editor-config',
+          title: 'Editor Config',
+          iconKey: 'universal-editor',
+          scope: 'both',
+          inheritable: true,
+        },
+      ],
+    },
+    {
+      id: 'integrations-group',
+      title: 'Integrations',
+      iconKey: 'integrations',
+      type: 'group',
+      children: [
+        {
+          id: 'aem-assets',
+          title: 'AEM Assets',
+          iconKey: 'aem-assets',
+          scope: 'both',
+          inheritable: true,
+        },
+      ],
+    },
   ],
 
   SITE: [
@@ -147,6 +185,13 @@ const SECTIONS = {
           scope: 'both',
           inheritable: true,
         },
+        {
+          id: 'editor-config',
+          title: 'Editor Config',
+          iconKey: 'universal-editor',
+          scope: 'both',
+          inheritable: true,
+        },
       ],
     },
     {
@@ -181,12 +226,16 @@ class ConfigConsoleApp extends LitElement {
     _state: { state: true },
     _org: { state: true },
     _site: { state: true },
-    _pathInput: { state: true },
+    _orgInput: { state: true },
+    _siteInput: { state: true },
     _currentSection: { state: true },
     _sectionComponent: { state: true },
     _error: { state: true },
     _expandedGroups: { state: true },
     _sidebarCollapsed: { state: true },
+    _recentPaths: { state: true },
+    _availableSites: { state: true },
+    _fetchingSites: { state: true },
   };
 
   constructor() {
@@ -194,12 +243,17 @@ class ConfigConsoleApp extends LitElement {
     this._state = 'idle';
     this._org = '';
     this._site = '';
-    this._pathInput = '';
+    this._orgInput = '';
+    this._siteInput = '';
     this._currentSection = null;
     this._sectionComponent = null;
     this._error = null;
     this._expandedGroups = this._loadExpandedState();
     this._sidebarCollapsed = this._loadSidebarState();
+    this._recentPaths = this._loadRecentPaths();
+    this._availableSites = [];
+    this._fetchingSites = false;
+    this._fetchSitesDebounceTimer = null;
   }
 
   // eslint-disable-next-line class-methods-use-this -- sessionStorage access is stateless
@@ -238,6 +292,100 @@ class ConfigConsoleApp extends LitElement {
     } catch {
       // localStorage failed - continue without persistence
     }
+  }
+
+  // eslint-disable-next-line class-methods-use-this -- localStorage access is stateless
+  _loadRecentPaths() {
+    try {
+      // Load from our own storage (config-console-recent)
+      // NOTE: We cannot read da.live's "da-sites" localStorage due to cross-origin policy
+      // since this app is never loaded from da.live domain. Sites are fetched from API instead.
+      // Try sessionStorage first (more reliable), fallback to localStorage
+      const rawValue = sessionStorage.getItem('config-console-recent')
+        || localStorage.getItem('config-console-recent');
+
+      const configSites = JSON.parse(rawValue || '[]');
+
+      const parsed = configSites.map((path) => {
+        const parts = path.split('/');
+        return {
+          path,
+          org: parts[0] || '',
+          site: parts[1] || '',
+        };
+      }).filter((item) => item.org);
+
+      return parsed;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[ConfigConsole] Failed to load recent paths:', error);
+      return [];
+    }
+  }
+
+  _saveRecentPath(org, site) {
+    const path = site ? `${org}/${site}` : org;
+
+    try {
+      // Load from both storages to merge
+      const sessionRecent = JSON.parse(sessionStorage.getItem('config-console-recent') || '[]');
+      const localRecent = JSON.parse(localStorage.getItem('config-console-recent') || '[]');
+      const recent = [...new Set([...sessionRecent, ...localRecent])];
+
+      const updated = [path, ...recent.filter((p) => p !== path)].slice(0, 10);
+
+      // Always save to sessionStorage (more reliable)
+      sessionStorage.setItem('config-console-recent', JSON.stringify(updated));
+
+      // Try to save to localStorage as well (for persistence across sessions)
+      try {
+        localStorage.setItem('config-console-recent', JSON.stringify(updated));
+      } catch {
+        // localStorage full, sessionStorage still works
+      }
+
+      this._recentPaths = this._loadRecentPaths();
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[ConfigConsole] Failed to save recent path:', error);
+
+      // Update in-memory only as last resort
+      this._recentPaths = [{
+        path,
+        org,
+        site: site || '',
+      }];
+    }
+  }
+
+  async _fetchSitesForOrg(org) {
+    // Clear previous timer
+    if (this._fetchSitesDebounceTimer) {
+      clearTimeout(this._fetchSitesDebounceTimer);
+    }
+
+    // Don't fetch if org is too short
+    if (!org || org.length < 2) {
+      this._availableSites = [];
+      return;
+    }
+
+    // Debounce: wait 500ms after last keystroke
+    this._fetchSitesDebounceTimer = setTimeout(async () => {
+      try {
+        this._fetchingSites = true;
+
+        const sites = await fetchSiteList(org);
+
+        this._availableSites = sites || [];
+        this._fetchingSites = false;
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('[ConfigConsole] Failed to fetch sites:', error);
+        this._availableSites = [];
+        this._fetchingSites = false;
+      }
+    }, 500);
   }
 
   _toggleSidebar() {
@@ -281,11 +429,8 @@ class ConfigConsoleApp extends LitElement {
         }),
       ]);
       this.token = token;
-      // eslint-disable-next-line no-console
-      // console.log('[DEBUG] Got token from DA SDK');
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      // console.log('[DEBUG] DA SDK failed, no token:', err);
+    } catch {
+      // DA SDK not available
     }
 
     // Check URL parameters
@@ -295,15 +440,34 @@ class ConfigConsoleApp extends LitElement {
 
     // If URL params provided, use them
     if (urlOrg) {
-      // Construct path input from URL params
-      this._pathInput = urlSite ? `/${urlOrg}/${urlSite}` : `/${urlOrg}`;
+      this._orgInput = urlOrg;
+      this._siteInput = urlSite;
       this._loadContext(urlOrg, urlSite);
       return;
     }
 
-    // No URL params - wait for manual entry
-    // eslint-disable-next-line no-console
-    // console.log('[DEBUG] No URL params, waiting for manual entry');
+    // No URL params - auto-load from most recent localStorage entry
+    if (this._recentPaths.length > 0) {
+      const mostRecent = this._recentPaths[0];
+      const org = mostRecent.org || '';
+      const site = mostRecent.site || '';
+
+      // Pre-populate inputs and auto-load context
+      this._orgInput = org;
+      this._siteInput = site;
+
+      // Trigger site fetch for autocomplete
+      if (org) {
+        this._fetchSitesForOrg(org);
+      }
+
+      // Auto-load the context (same as if user clicked Load)
+      if (org) {
+        this._loadContext(org, site);
+        return;
+      }
+    }
+
     this._state = 'idle';
   }
 
@@ -337,6 +501,9 @@ class ConfigConsoleApp extends LitElement {
 
     // Update URL
     this._updateURL(this._org, this._site);
+
+    // Save to recent paths
+    this._saveRecentPath(this._org, this._site);
 
     // Track load
     sampleRUM('config-console-load', { org: this._org, site: this._site, source: 'manual' });
@@ -472,38 +639,72 @@ class ConfigConsoleApp extends LitElement {
     }
   }
 
+  _handleOrgInput(e) {
+    this._orgInput = e.target.value;
+
+    // Find the most recent site used with this org
+    const lastUsedSite = this._recentPaths.find((p) => p.org === e.target.value)?.site || '';
+
+    // Pre-populate site input with last used site for this org
+    this._siteInput = lastUsedSite;
+
+    // Fetch sites for autocomplete
+    this._fetchSitesForOrg(e.target.value);
+  }
+
   _handleLoadClick() {
-    const path = this._pathInput.trim();
+    const org = this._orgInput.trim();
 
-    if (!path) {
-      this._error = 'Please enter a path in format: /org/site';
+    if (!org) {
+      this._error = 'Please enter an organization';
       return;
     }
 
-    // Parse path: /org/site or /org
-    const parts = path.split('/').filter(Boolean);
-
-    if (parts.length === 0) {
-      this._error = 'Please enter a path in format: /org/site';
-      return;
-    }
-
-    const org = parts[0];
-    const site = parts[1] || '';
-
+    const site = this._siteInput.trim();
     this._loadContext(org, site);
+  }
+
+  async _handleBrowseSites() {
+    const org = this._orgInput.trim();
+
+    if (!org) {
+      this._error = 'Please enter an organization first';
+      return;
+    }
+
+    // Validate org exists
+    this._state = 'loading';
+    const orgValid = await this._validateOrg(org);
+    this._state = 'idle';
+
+    if (!orgValid) {
+      return; // Error already set by _validateOrg
+    }
+
+    // Open site picker
+    this._openSitePicker(org);
+  }
+
+  async _openSitePicker(org) {
+    // Import and show site picker modal
+    await import('./shared/components/site-picker.js');
+
+    const picker = document.createElement('site-picker');
+    picker.org = org;
+    picker.open = true;
+    picker.addEventListener('site-selected', (e) => {
+      this._siteInput = e.detail.site;
+      picker.remove();
+      this.requestUpdate();
+    });
+    picker.addEventListener('close', () => {
+      picker.remove();
+    });
+    document.body.appendChild(picker);
   }
 
   _handleRouteChange() {
     const hash = window.location.hash.slice(1); // Remove #
-
-    // eslint-disable-next-line no-console
-    // console.log('[DEBUG] Route change:', {
-    //   hash,
-    //   currentSection: this._currentSection,
-    //   willNavigate: hash && hash !== this._currentSection,
-    //   availableSections: this._availableSections.map((s) => s.id),
-    // });
 
     if (hash && hash !== this._currentSection) {
       this._navigateToSection(hash);
@@ -548,9 +749,6 @@ class ConfigConsoleApp extends LitElement {
         }
       }
     }
-
-    // eslint-disable-next-line no-console
-    // console.log('[DEBUG] Navigate to section:', { sectionId, found: !!section });
 
     if (!section || section.type === 'group') {
       // Don't navigate to group items, only to actual sections
@@ -607,21 +805,55 @@ class ConfigConsoleApp extends LitElement {
   }
 
   _renderToolbar() {
+    const orgSuggestions = [...new Set(this._recentPaths.map((p) => p.org))];
+
+    // Merge API-fetched sites with recent sites for the current org
+    const recentSitesForOrg = this._recentPaths
+      .filter((p) => p.org === this._orgInput && p.site)
+      .map((p) => p.site);
+
+    const siteSuggestions = this._orgInput
+      ? [...new Set([...recentSitesForOrg, ...this._availableSites])]
+      : [];
+
     return html`
       <div class="console-toolbar">
         <div class="console-toolbar-fields">
-          <sl-input
-            type="text"
-            placeholder="/org/site"
-            .value=${this._pathInput}
-            @input=${(e) => { this._pathInput = e.target.value; }}
-            @keydown=${(e) => { if (e.key === 'Enter') this._handleLoadClick(); }}
-          ></sl-input>
+          <div class="console-toolbar-input-group">
+            <label for="org-input">Organization</label>
+            <input
+              id="org-input"
+              type="text"
+              placeholder="org"
+              list="org-suggestions"
+              .value=${this._orgInput}
+              @input=${this._handleOrgInput}
+              @keydown=${(e) => { if (e.key === 'Enter') this._handleLoadClick(); }}
+            />
+            <datalist id="org-suggestions">
+              ${orgSuggestions.map((org) => html`<option value="${org}"></option>`)}
+            </datalist>
+          </div>
+          <div class="console-toolbar-input-group">
+            <label for="site-input">Site (optional)</label>
+            <input
+              id="site-input"
+              type="text"
+              placeholder="site"
+              list="site-suggestions"
+              .value=${this._siteInput}
+              @input=${(e) => { this._siteInput = e.target.value; }}
+              @keydown=${(e) => { if (e.key === 'Enter') this._handleLoadClick(); }}
+            />
+            <datalist id="site-suggestions">
+              ${siteSuggestions.map((site) => html`<option value="${site}"></option>`)}
+            </datalist>
+          </div>
           <sl-button
             @click=${this._handleLoadClick}
-            ?disabled=${!this._pathInput.trim()}
+            ?disabled=${!this._orgInput.trim() || this._state === 'loading'}
           >
-            Load
+            ${this._state === 'loading' ? 'Loading...' : 'Load'}
           </sl-button>
         </div>
         ${this._error ? html`
@@ -705,15 +937,15 @@ class ConfigConsoleApp extends LitElement {
       <div class="welcome-container">
         <div class="welcome-hero">
           <p class="welcome-eyebrow">Configuration Console</p>
-          <h1 class="welcome-title">Set up and manage your site</h1>
-          <p class="welcome-body">Choose an organization and site to manage permissions, authoring library items, and integrations for your authoring experience.</p>
+          <h1 class="welcome-title">Set up and manage your ${hasSite ? 'site' : 'sites'}</h1>
+          <p class="welcome-body">Choose an organization${hasSite ? ' and site' : ''} to manage permissions, authoring library items, and integrations for your authoring experience.</p>
 
-          ${!hasOrg || !hasSite ? html`
+          ${!hasOrg ? html`
             <div class="welcome-actions">
               <button class="welcome-cta-primary" @click=${() => {
     const input = this.shadowRoot.querySelector('.console-toolbar sl-input');
     input?.focus();
-  }}>Select site</button>
+  }}>Select organization</button>
               <a
                 href="https://docs.da.live"
                 target="_blank"
@@ -724,7 +956,7 @@ class ConfigConsoleApp extends LitElement {
           ` : nothing}
         </div>
 
-        ${hasOrg && hasSite ? html`
+        ${hasOrg ? html`
           <div class="welcome-cards">
             <div class="welcome-card">
               <div class="welcome-card-header">
@@ -745,13 +977,13 @@ class ConfigConsoleApp extends LitElement {
                 <div class="welcome-card-icon">
                   ${this._renderIcon('library')}
                 </div>
-                <h3 class="welcome-card-title">Library setup</h3>
+                <h3 class="welcome-card-title">${hasSite ? 'Library Setup' : 'Editor Configuration'}</h3>
               </div>
-              <p class="welcome-card-body">Configure blocks, templates, icons, and placeholders that authors use while creating pages.</p>
+              <p class="welcome-card-body">Configure blocks, templates, icons, and placeholders${hasSite ? ' that authors use while creating pages' : ' at organization or site level'}.</p>
               <button
                 class="welcome-card-action"
-                @click=${() => this._handleNavClick('blocks')}
-              >Review library</button>
+                @click=${() => this._handleNavClick(hasSite ? 'blocks' : 'editor-config')}
+              >${hasSite ? 'Review library' : 'Configure editor'}</button>
             </div>
 
             <div class="welcome-card">
@@ -761,7 +993,7 @@ class ConfigConsoleApp extends LitElement {
                 </div>
                 <h3 class="welcome-card-title">Authoring & Integrations</h3>
               </div>
-              <p class="welcome-card-body">Configure Experience Workspace for AI-powered authoring, and connect services like AEM Assets and Translation.</p>
+              <p class="welcome-card-body">Configure Experience Workspace for AI-powered authoring and connect services like AEM Assets${hasSite ? ' and Translation' : ''}.</p>
               <button
                 class="welcome-card-action"
                 @click=${() => this._handleNavClick('experience-workspace')}
@@ -868,15 +1100,6 @@ class ConfigConsoleApp extends LitElement {
   }
 
   render() {
-    // eslint-disable-next-line no-console
-    // console.log('[DEBUG] Render:', {
-    //   state: this._state,
-    //   org: this._org,
-    //   site: this._site,
-    //   currentSection: this._currentSection,
-    //   hasComponent: !!this._sectionComponent,
-    // });
-
     return html`
       <div class="console-layout">
         ${this._renderToolbar()}
@@ -896,6 +1119,3 @@ customElements.define('config-console-app', ConfigConsoleApp);
 // Initialize app
 const app = document.createElement('config-console-app');
 document.body.appendChild(app);
-
-// eslint-disable-next-line no-console
-// console.log('[DEBUG] App initialized and appended to body');

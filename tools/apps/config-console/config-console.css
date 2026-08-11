@@ -54,12 +54,50 @@
 .console-toolbar-fields {
   display: flex;
   gap: var(--s2-spacing-200, 8px);
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
   width: 100%;
-  max-width: min(800px, 100%);
+  max-width: min(900px, 100%);
   overflow-x: hidden;
   box-sizing: border-box;
+}
+
+.console-toolbar-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2-spacing-100, 4px);
+  min-width: 0;
+  flex: 1;
+}
+
+.console-toolbar-input-group label {
+  font-size: var(--s2-body-size-100, 12px);
+  font-weight: 600;
+  color: light-dark(var(--s2-gray-700, #505050), var(--s2-gray-300, #d0d0d0));
+  margin-bottom: 0;
+}
+
+.console-toolbar-input-group input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid light-dark(var(--s2-gray-400, #b0b0b0), var(--s2-gray-600, #606060));
+  border-radius: var(--s2-corner-radius-100, 4px);
+  font-size: var(--s2-body-size-200, 14px);
+  font-family: inherit;
+  background: light-dark(#fff, var(--s2-gray-900, #1a1a1a));
+  color: light-dark(var(--s2-gray-900, #1a1a1a), var(--s2-gray-100, #f0f0f0));
+  transition: border-color 0.15s ease;
+  box-sizing: border-box;
+}
+
+.console-toolbar-input-group input:focus {
+  outline: none;
+  border-color: light-dark(var(--s2-blue-600, #2680eb), var(--s2-blue-500, #4a90e2));
+  box-shadow: 0 0 0 1px light-dark(var(--s2-blue-600, #2680eb), var(--s2-blue-500, #4a90e2));
+}
+
+.console-toolbar-input-group input::placeholder {
+  color: light-dark(var(--s2-gray-500, #909090), var(--s2-gray-500, #909090));
 }
 
 .console-toolbar-fields sl-input {
