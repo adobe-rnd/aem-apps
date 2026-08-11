@@ -173,46 +173,17 @@ const SECTIONS = {
       ],
     },
     {
-      id: 'authoring-experience-group',
-      title: 'Authoring Experience',
-      iconKey: 'universal-editor',
+      id: 'translation-group',
+      title: 'Translation',
+      iconKey: 'translation',
       type: 'group',
       children: [
-        {
-          id: 'experience-workspace',
-          title: 'Experience Workspace',
-          iconKey: 'universal-editor',
-          scope: 'both',
-          inheritable: true,
-        },
-        {
-          id: 'editor-config',
-          title: 'Editor Config',
-          iconKey: 'universal-editor',
-          scope: 'both',
-          inheritable: true,
-        },
-      ],
-    },
-    {
-      id: 'integrations-group',
-      title: 'Integrations',
-      iconKey: 'integrations',
-      type: 'group',
-      children: [
-        {
-          id: 'aem-assets',
-          title: 'AEM Assets',
-          iconKey: 'aem-assets',
-          scope: 'both',
-          inheritable: true,
-        },
         {
           id: 'translation',
           title: 'Translation',
           iconKey: 'translation',
-          scope: 'both',
-          inheritable: true,
+          scope: 'site',
+          inheritable: false,
         },
       ],
     },
@@ -738,14 +709,9 @@ class ConfigConsoleApp extends LitElement {
         const child = foundItem.children.find((c) => c.id === sectionId);
         if (child) {
           section = child;
-          // Auto-expand parent group when navigating to child
-          if (!this._expandedGroups[foundItem.id]) {
-            this._expandedGroups = {
-              ...this._expandedGroups,
-              [foundItem.id]: true,
-            };
-            this._saveExpandedState();
-          }
+          // Accordion behavior: collapse all groups, expand only this one
+          this._expandedGroups = { [foundItem.id]: true };
+          this._saveExpandedState();
         }
       }
     }
@@ -967,10 +933,12 @@ class ConfigConsoleApp extends LitElement {
                 <h3 class="welcome-card-title">Permissions & Sites</h3>
               </div>
               <p class="welcome-card-body">Control user access to repositories and configure Multi-Site Manager for enterprise content workflows.</p>
-              <button
-                class="welcome-card-action"
-                @click=${() => this._handleNavClick('permissions')}
-              >Manage access</button>
+              <div class="welcome-card-actions">
+                <button
+                  class="welcome-card-action"
+                  @click=${() => this._handleNavClick('permissions')}
+                >Manage access</button>
+              </div>
             </div>
 
             <div class="welcome-card">
@@ -981,10 +949,12 @@ class ConfigConsoleApp extends LitElement {
                 <h3 class="welcome-card-title">${hasSite ? 'Library Setup' : 'Editor Configuration'}</h3>
               </div>
               <p class="welcome-card-body">Configure blocks, templates, icons, and placeholders${hasSite ? ' that authors use while creating pages' : ' at organization or site level'}.</p>
-              <button
-                class="welcome-card-action"
-                @click=${() => this._handleNavClick(hasSite ? 'blocks' : 'editor-config')}
-              >${hasSite ? 'Review library' : 'Configure editor'}</button>
+              <div class="welcome-card-actions">
+                <button
+                  class="welcome-card-action"
+                  @click=${() => this._handleNavClick(hasSite ? 'blocks' : 'editor-config')}
+                >${hasSite ? 'Review library' : 'Configure editor'}</button>
+              </div>
             </div>
 
             <div class="welcome-card">
@@ -995,10 +965,16 @@ class ConfigConsoleApp extends LitElement {
                 <h3 class="welcome-card-title">Authoring & Integrations</h3>
               </div>
               <p class="welcome-card-body">Configure Experience Workspace for AI-powered authoring and connect services like AEM Assets${hasSite ? ' and Translation' : ''}.</p>
-              <button
-                class="welcome-card-action"
-                @click=${() => this._handleNavClick('experience-workspace')}
-              >Configure authoring</button>
+              <div class="welcome-card-actions">
+                <button
+                  class="welcome-card-action"
+                  @click=${() => this._handleNavClick('experience-workspace')}
+                >Configure authoring</button>
+                <button
+                  class="welcome-card-action"
+                  @click=${() => this._handleNavClick('aem-assets')}
+                >Configure integrations</button>
+              </div>
             </div>
           </div>
         ` : html`
