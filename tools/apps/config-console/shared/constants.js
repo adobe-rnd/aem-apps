@@ -26,9 +26,21 @@ export const CONFIG_KEYS = {
   ROLLOUT_BEHAVIOR: 'rollout.behavior',
   EDITOR_PATH: 'editor.path',
   EW_ENABLED: 'ew.enabled',
-  EW_CHAT: 'ew.chat',
-  EW_CANVAS_DEFAULT: 'ew.canvas.default',
-  EW_PANEL_DEFAULT: 'ew.panel.default',
+  EW_DISABLE_CHAT: 'ew.disableChat',
+  EW_CANVAS_DEFAULT_VIEW: 'ew.canvasDefaultView',
+  EW_CANVAS_DEFAULT_PANEL: 'ew.canvasDefaultPanel',
+};
+
+// Editor types for path-based editor configuration
+export const EDITOR_TYPES = {
+  'experience-workspace': {
+    label: 'Experience Workspace (Canvas)',
+    url: 'https://da.live/canvas#',
+  },
+  'structured-content': {
+    label: 'Structured Content (Form)',
+    url: 'https://da.live/form#',
+  },
 };
 
 // Error messages

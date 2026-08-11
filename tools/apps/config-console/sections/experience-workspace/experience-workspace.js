@@ -4,10 +4,10 @@
 import { html } from 'da-lit';
 import { BaseSectionElement } from '../../shared/components/base-section.js';
 import {
-  fetchInheritedConfig,
-  updateSiteConfig,
-  updateOrgConfig,
-  deleteSiteConfigValue,
+  fetchInheritedFlag,
+  updateSiteFlag,
+  updateOrgFlag,
+  deleteSiteFlag,
 } from '../../shared/api/config-api.js';
 import { CONFIG_KEYS } from '../../shared/constants.js';
 import '../../components/explainer-info-card.js';
@@ -69,43 +69,45 @@ export default class ExperienceWorkspaceSection extends BaseSectionElement {
           type: 'select',
           options: [
             { value: '', label: 'Disabled' },
-            { value: 'on', label: 'Enabled' },
+            { value: 'true', label: 'Enabled' },
           ],
           defaultLabel: 'Select...',
         },
         {
-          key: CONFIG_KEYS.EW_CHAT,
-          label: 'AI Chat',
-          hint: 'Enable AI assistant in Experience Workspace',
+          key: CONFIG_KEYS.EW_DISABLE_CHAT,
+          label: 'Disable AI Chat',
+          hint: 'Disable AI assistant in Experience Workspace',
           type: 'select',
           options: [
-            { value: '', label: 'Disabled' },
-            { value: 'on', label: 'Enabled' },
+            { value: '', label: 'Chat Enabled' },
+            { value: 'true', label: 'Chat Disabled' },
           ],
           defaultLabel: 'Select...',
         },
         {
-          key: CONFIG_KEYS.EW_CANVAS_DEFAULT,
-          label: 'Default Canvas Mode',
+          key: CONFIG_KEYS.EW_CANVAS_DEFAULT_VIEW,
+          label: 'Default Canvas View',
           hint: 'Default canvas view when opening EW',
           type: 'select',
           options: [
-            { value: '', label: 'Standard' },
+            { value: 'layout', label: 'Layout (default)' },
+            { value: 'content', label: 'Content' },
             { value: 'split', label: 'Split View' },
           ],
-          defaultLabel: 'Select...',
+          defaultLabel: 'Layout',
         },
         {
-          key: CONFIG_KEYS.EW_PANEL_DEFAULT,
-          label: 'Default Panel',
+          key: CONFIG_KEYS.EW_CANVAS_DEFAULT_PANEL,
+          label: 'Default Canvas Panel',
           hint: 'Default panel shown when opening EW',
           type: 'select',
           options: [
-            { value: '', label: 'None' },
-            { value: 'chat', label: 'AI Chat' },
-            { value: 'properties', label: 'Properties' },
+            { value: 'outline', label: 'Outline (default)' },
+            { value: 'files', label: 'Files' },
+            { value: 'blocks', label: 'Blocks' },
+            { value: 'templates', label: 'Templates' },
           ],
-          defaultLabel: 'Select...',
+          defaultLabel: 'Outline',
         },
       ];
 
@@ -114,7 +116,7 @@ export default class ExperienceWorkspaceSection extends BaseSectionElement {
         configKeys.map(async ({
           key, label, hint, type, options, defaultLabel,
         }) => {
-          const config = await fetchInheritedConfig(
+          const config = await fetchInheritedFlag(
             this.org,
             this.site,
             key,
@@ -158,8 +160,8 @@ export default class ExperienceWorkspaceSection extends BaseSectionElement {
     try {
       // Use appropriate API based on context (org vs site)
       const result = this.site
-        ? await updateSiteConfig(this.org, this.site, key, trimmedValue, this.token)
-        : await updateOrgConfig(this.org, key, trimmedValue, this.token);
+        ? await updateSiteFlag(this.org, this.site, key, trimmedValue, this.token)
+        : await updateOrgFlag(this.org, key, trimmedValue, this.token);
 
       if (result.success) {
         this._configs[key].value = trimmedValue;
@@ -192,7 +194,7 @@ export default class ExperienceWorkspaceSection extends BaseSectionElement {
     this._saveMessage = null;
 
     try {
-      const result = await deleteSiteConfigValue(
+      const result = await deleteSiteFlag(
         this.org,
         this.site,
         key,
@@ -229,22 +231,22 @@ export default class ExperienceWorkspaceSection extends BaseSectionElement {
       {
         key: CONFIG_KEYS.EW_ENABLED,
         required: false,
-        helpUrl: 'https://docs.da.live/about/early-access/experience-workspace#setup',
+        helpUrl: 'https://docs.da.live/about/early-access/experience-workspace#experience-workspace',
       },
       {
-        key: CONFIG_KEYS.EW_CHAT,
+        key: CONFIG_KEYS.EW_DISABLE_CHAT,
         required: false,
-        helpUrl: 'https://docs.da.live/about/early-access/experience-workspace#ai-chat',
+        helpUrl: 'https://docs.da.live/about/early-access/experience-workspace#experience-workspace',
       },
       {
-        key: CONFIG_KEYS.EW_CANVAS_DEFAULT,
+        key: CONFIG_KEYS.EW_CANVAS_DEFAULT_VIEW,
         required: false,
-        helpUrl: 'https://docs.da.live/about/early-access/experience-workspace#canvas',
+        helpUrl: 'https://docs.da.live/about/early-access/experience-workspace#experience-workspace',
       },
       {
-        key: CONFIG_KEYS.EW_PANEL_DEFAULT,
+        key: CONFIG_KEYS.EW_CANVAS_DEFAULT_PANEL,
         required: false,
-        helpUrl: 'https://docs.da.live/about/early-access/experience-workspace#panels',
+        helpUrl: 'https://docs.da.live/about/early-access/experience-workspace#experience-workspace',
       },
     ];
 
@@ -274,7 +276,8 @@ export default class ExperienceWorkspaceSection extends BaseSectionElement {
 
   _renderExplainerCard() {
     // Check if EW is enabled
-    const isEnabled = this._configs[CONFIG_KEYS.EW_ENABLED]?.value === 'on';
+    const ewEnabledConfig = this._configs[CONFIG_KEYS.EW_ENABLED];
+    const isEnabled = ewEnabledConfig?.value === 'true';
     const hasSiteConfig = Object.values(this._configs).some((c) => c.source === 'site');
 
     const status = isEnabled ? 'configured' : 'not-configured';

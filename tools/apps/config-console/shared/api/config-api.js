@@ -1348,6 +1348,301 @@ export async function updateMSMConfig(org, msmData, token) {
 }
 
 /**
+ * Parse editor path value format: "path=url"
+ * @param {string} value - Editor path value
+ * @returns {{path: string, editorUrl: string}|null}
+ */
+function parseEditorPathValue(value) {
+  if (!value || typeof value !== 'string') return null;
+  const separatorIndex = value.indexOf('=');
+  if (separatorIndex === -1) return null;
+  return {
+    path: value.substring(0, separatorIndex),
+    editorUrl: value.substring(separatorIndex + 1),
+  };
+}
+
+/**
+ * Format editor path value: "path=url"
+ * @param {string} path - Folder path
+ * @param {string} editorUrl - Editor URL
+ * @returns {string}
+ */
+function formatEditorPathValue(path, editorUrl) {
+  return `${path}=${editorUrl}`;
+}
+
+/**
+ * Fetch all editor.path entries from org and site config
+ * @param {string} org
+ * @param {string} site - Optional, if provided includes site-level paths
+ * @param {string} token
+ * @returns {Promise<Array>} Array of {path, editorUrl, source}
+ */
+export async function fetchAllEditorPaths(org, site, token) {
+  const paths = [];
+
+  const orgConfig = await fetchOrgConfig(org, token);
+  if (orgConfig?.data?.data) {
+    const orgPaths = orgConfig.data.data
+      .filter((item) => item.key === 'editor.path')
+      .map((item) => {
+        const parsed = parseEditorPathValue(item.value);
+        return parsed ? { ...parsed, source: 'org' } : null;
+      })
+      .filter(Boolean);
+    paths.push(...orgPaths);
+  }
+
+  if (site) {
+    const siteConfig = await fetchSiteConfig(org, site, token);
+    if (siteConfig?.data?.data) {
+      const sitePaths = siteConfig.data.data
+        .filter((item) => item.key === 'editor.path')
+        .map((item) => {
+          const parsed = parseEditorPathValue(item.value);
+          return parsed ? { ...parsed, source: 'site' } : null;
+        })
+        .filter(Boolean);
+      paths.push(...sitePaths);
+    }
+  }
+
+  return paths;
+}
+
+/**
+ * Add new editor.path entry
+ * @param {string} org
+ * @param {string} site - Optional, if provided adds to site config
+ * @param {string} path - Folder path
+ * @param {string} editorUrl - Editor URL
+ * @param {string} token
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function addEditorPath(org, site, path, editorUrl, token) {
+  try {
+    const value = formatEditorPathValue(path, editorUrl);
+
+    if (site) {
+      const config = await fetchSiteConfig(org, site, token) || { data: { data: [] } };
+      if (!config.data) config.data = {};
+      if (!config.data.data) config.data.data = [];
+
+      config.data.data.push({ key: 'editor.path', value });
+
+      config.data.total = config.data.data.length;
+      config.data.limit = config.data.data.length;
+
+      const url = `${ADMIN_DA_LIVE_BASE}/source/${org}/${site}/config.json`;
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(config),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to add editor path: ${response.status}`);
+      }
+    } else {
+      const config = await fetchOrgConfig(org, token) || { data: { data: [] } };
+      if (!config.data) config.data = {};
+      if (!config.data.data) config.data.data = [];
+
+      config.data.data.push({ key: 'editor.path', value });
+
+      config.data.total = config.data.data.length;
+      config.data.limit = config.data.data.length;
+
+      const url = `${ADMIN_DA_LIVE_BASE}/config/${org}.json`;
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(config),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to add editor path: ${response.status}`);
+      }
+    }
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Update existing editor.path entry (identified by old path)
+ * @param {string} org
+ * @param {string} site - Optional, if provided updates site config
+ * @param {string} oldPath - Current folder path to find
+ * @param {string} newPath - New folder path
+ * @param {string} editorUrl - New editor URL
+ * @param {string} token
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function updateEditorPath(org, site, oldPath, newPath, editorUrl, token) {
+  try {
+    const newValue = formatEditorPathValue(newPath, editorUrl);
+
+    if (site) {
+      const config = await fetchSiteConfig(org, site, token);
+      if (!config?.data?.data) {
+        return { success: false, error: 'Config not found' };
+      }
+
+      const entryIndex = config.data.data.findIndex((item) => {
+        if (item.key !== 'editor.path') return false;
+        const parsed = parseEditorPathValue(item.value);
+        return parsed && parsed.path === oldPath;
+      });
+
+      if (entryIndex === -1) {
+        return { success: false, error: 'Editor path not found' };
+      }
+
+      config.data.data[entryIndex].value = newValue;
+
+      config.data.total = config.data.data.length;
+      config.data.limit = config.data.data.length;
+
+      const url = `${ADMIN_DA_LIVE_BASE}/source/${org}/${site}/config.json`;
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(config),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to update editor path: ${response.status}`);
+      }
+    } else {
+      const config = await fetchOrgConfig(org, token);
+      if (!config?.data?.data) {
+        return { success: false, error: 'Config not found' };
+      }
+
+      const entryIndex = config.data.data.findIndex((item) => {
+        if (item.key !== 'editor.path') return false;
+        const parsed = parseEditorPathValue(item.value);
+        return parsed && parsed.path === oldPath;
+      });
+
+      if (entryIndex === -1) {
+        return { success: false, error: 'Editor path not found' };
+      }
+
+      config.data.data[entryIndex].value = newValue;
+
+      config.data.total = config.data.data.length;
+      config.data.limit = config.data.data.length;
+
+      const url = `${ADMIN_DA_LIVE_BASE}/config/${org}.json`;
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(config),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to update editor path: ${response.status}`);
+      }
+    }
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Delete editor.path entry (identified by path)
+ * @param {string} org
+ * @param {string} site - Optional, if provided deletes from site config
+ * @param {string} path - Folder path to remove
+ * @param {string} token
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function deleteEditorPath(org, site, path, token) {
+  try {
+    if (site) {
+      const config = await fetchSiteConfig(org, site, token);
+      if (!config?.data?.data) {
+        return { success: true };
+      }
+
+      config.data.data = config.data.data.filter((item) => {
+        if (item.key !== 'editor.path') return true;
+        const parsed = parseEditorPathValue(item.value);
+        return !parsed || parsed.path !== path;
+      });
+
+      config.data.total = config.data.data.length;
+      config.data.limit = config.data.data.length;
+
+      const url = `${ADMIN_DA_LIVE_BASE}/source/${org}/${site}/config.json`;
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(config),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete editor path: ${response.status}`);
+      }
+    } else {
+      const config = await fetchOrgConfig(org, token);
+      if (!config?.data?.data) {
+        return { success: true };
+      }
+
+      config.data.data = config.data.data.filter((item) => {
+        if (item.key !== 'editor.path') return true;
+        const parsed = parseEditorPathValue(item.value);
+        return !parsed || parsed.path !== path;
+      });
+
+      config.data.total = config.data.data.length;
+      config.data.limit = config.data.data.length;
+
+      const url = `${ADMIN_DA_LIVE_BASE}/config/${org}.json`;
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(config),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete editor path: ${response.status}`);
+      }
+    }
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Fetch list of sites in an organization
  * @param {string} org - Organization name
  * @returns {Promise<Array<string>>} Array of site names
