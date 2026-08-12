@@ -296,14 +296,15 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 }
 
 .miller-column-header {
+  min-height: 64px;
   padding: var(--s2-spacing-200) var(--s2-spacing-200) var(--s2-spacing-100);
   background: var(--s2-gray-50, var(--s2-gray-75));
   border-bottom: 1px solid var(--s2-gray-200);
+  box-sizing: border-box;
 }
 
 .miller-column-title {
   display: block;
-  padding: 6px 8px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
