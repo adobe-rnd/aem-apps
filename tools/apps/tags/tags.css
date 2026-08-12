@@ -311,6 +311,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   flex: 0 0 240px;
   width: 240px;
   min-height: 0;
+  box-sizing: border-box;
 }
 
 .miller-column + .miller-column {
