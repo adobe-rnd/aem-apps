@@ -195,6 +195,18 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   color: var(--s2-orange-900);
 }
 
+.editor-item-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s2-spacing-200);
+  margin-bottom: var(--s2-spacing-300);
+}
+
+.pw-action-sm::part(base) {
+  padding: var(--s2-spacing-75) var(--s2-spacing-200);
+  font-size: 12px;
+}
+
 /* ---- Miller columns ---- */
 
 .miller-columns {
@@ -221,23 +233,15 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 }
 
 .miller-column-header {
-  padding: var(--s2-spacing-150) var(--s2-spacing-150) 0;
+  padding: var(--s2-spacing-200) var(--s2-spacing-200) var(--s2-spacing-100);
 }
 
 .miller-column-title {
   display: block;
-  padding: 4px 6px;
+  padding: 6px 8px;
   font-size: 14px;
   font-weight: 700;
   color: var(--s2-gray-900);
-}
-
-.miller-column-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: var(--s2-spacing-100) var(--s2-spacing-150) var(--s2-spacing-150);
-  border-bottom: 1px solid var(--s2-gray-200);
 }
 
 .miller-column-items {
@@ -245,13 +249,6 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   min-height: 0;
   overflow-y: auto;
   padding: 4px;
-}
-
-.miller-column-empty {
-  margin: var(--s2-spacing-200);
-  color: var(--s2-gray-500);
-  font-size: 13px;
-  font-style: italic;
 }
 
 .miller-item {
@@ -281,10 +278,6 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   font-size: 14px;
 }
 
-.miller-item.has-children .miller-item-label {
-  font-weight: 600;
-}
-
 .miller-item-chevron {
   color: inherit;
   opacity: 0.6;
@@ -309,7 +302,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   color: var(--s2-gray-900);
   border: 1px solid transparent;
   border-radius: var(--s2-corner-radius-100);
-  padding: 4px 6px;
+  padding: 6px 8px;
   background: transparent;
 }
 
@@ -318,31 +311,6 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   border-color: var(--s2-gray-300);
   background: var(--s2-gray-25);
   outline: none;
-}
-
-.tax-action-btn {
-  background: none;
-  border: 1px solid var(--s2-gray-300);
-  border-radius: var(--s2-corner-radius-100);
-  padding: 3px 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--s2-gray-700);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.tax-action-btn:hover {
-  background: var(--s2-gray-100);
-}
-
-.tax-action-danger {
-  color: var(--s2-red-900);
-  border-color: var(--s2-red-200, var(--s2-gray-300));
-}
-
-.tax-action-danger:hover {
-  background: var(--s2-red-100);
 }
 
 .tax-desc-input {
@@ -364,23 +332,13 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   outline: none;
 }
 
-/* ---- Column meta (description + find pages/delete for the column's owner) ---- */
+/* ---- Column meta (description for the column's owner) ---- */
 
 .miller-column-meta {
   padding: 0 var(--s2-spacing-150) var(--s2-spacing-150);
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-
-.miller-column-meta-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.pw-action-sm::part(base) {
-  padding: var(--s2-spacing-75) var(--s2-spacing-200);
-  font-size: 12px;
 }
 
 /* ---- Modals (delete confirm, find pages) ---- */

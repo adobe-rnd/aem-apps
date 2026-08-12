@@ -515,9 +515,36 @@ class TaggerApp extends LitElement {
           </sl-button>
           ${this._dirty ? html`<span class="dirty-hint">Unsaved changes — publish is disabled until you save.</span>` : nothing}
         </div>
+        ${this.renderItemToolbar()}
         <div class="miller-columns">
           ${this.buildColumns().map((col, i) => this.renderColumn(col, i))}
         </div>
+      </div>
+    `;
+  }
+
+  // Acts on the deepest selected node — no selection means the implicit
+  // selection is the namespace level itself, so Add still works (it creates
+  // a new top-level namespace), while Delete/Find pages need an actual node
+  // and stay disabled.
+  renderItemToolbar() {
+    const hasSelection = this._selection.length > 0;
+    const selected = hasSelection ? this._selection[this._selection.length - 1] : null;
+    const selectedIndex = this._selection.length - 1;
+
+    return html`
+      <div class="editor-item-actions">
+        <sl-button class="pw-quiet-secondary pw-action-sm" @click=${() => this.handleAddChild(selected)}>
+          + Add
+        </sl-button>
+        <sl-button class="pw-quiet-secondary pw-action-sm" ?disabled=${!hasSelection}
+          @click=${() => this.openSearchModal(this.pathForSelectionIndex(selectedIndex))}>
+          Find pages
+        </sl-button>
+        <sl-button class="pw-quiet-danger pw-action-sm" ?disabled=${!hasSelection}
+          @click=${() => this.openDeleteConfirm(this.parentListFor(selectedIndex), selected)}>
+          Delete
+        </sl-button>
       </div>
     `;
   }
@@ -541,22 +568,12 @@ class TaggerApp extends LitElement {
     `;
   }
 
-  renderColumnMeta(col, colIndex) {
+  renderColumnMeta(col) {
     if (!col.owner) return nothing;
     return html`
       <div class="miller-column-meta">
         <input class="tax-desc-input" placeholder="Description" .value=${col.owner.description} @keydown=${commitOnEnter}
           @change=${(e) => this.updateNodeField(col.owner, 'description', e.target.value)} />
-        <div class="miller-column-meta-actions">
-          <sl-button class="pw-quiet-secondary pw-action-sm"
-            @click=${() => this.openSearchModal(this.pathForSelectionIndex(colIndex - 1))}>
-            Find pages
-          </sl-button>
-          <sl-button class="pw-quiet-danger pw-action-sm"
-            @click=${() => this.openDeleteConfirm(this.parentListFor(colIndex - 1), col.owner)}>
-            Delete
-          </sl-button>
-        </div>
       </div>
     `;
   }
@@ -566,14 +583,10 @@ class TaggerApp extends LitElement {
     return html`
       <div class="miller-column">
         <div class="miller-column-header">${this.renderColumnHeader(col)}</div>
-        ${this.renderColumnMeta(col, colIndex)}
-        <div class="miller-column-actions">
-          <button class="tax-action-btn" @click=${() => this.handleAddChild(col.owner)}>+ Add</button>
-        </div>
+        ${this.renderColumnMeta(col)}
         <div class="miller-column-items"
           @dragover=${this.onDragOverRow}
           @drop=${(e) => this.onDropInColumn(e, col.owner)}>
-          ${col.items.length === 0 ? html`<p class="miller-column-empty">Empty</p>` : nothing}
           ${col.items.map((node) => this.renderColumnItem(node, colIndex, ownerList))}
         </div>
       </div>
@@ -585,7 +598,7 @@ class TaggerApp extends LitElement {
     const hasChildren = node.children.length > 0;
 
     return html`
-      <div class="miller-item ${hasChildren ? 'has-children' : ''} ${isSelected ? 'is-selected' : ''}"
+      <div class="miller-item ${isSelected ? 'is-selected' : ''}"
         draggable="true"
         @dragstart=${(e) => this.onDragStart(e, ownerList, node)}
         @dragend=${() => this.onDragEnd()}
@@ -594,7 +607,7 @@ class TaggerApp extends LitElement {
         @click=${() => this.handleColumnItemClick(node, colIndex)}>
         <span class="drag-handle" aria-hidden="true">⠿</span>
         <span class="miller-item-label">${node.name}</span>
-        <span class="miller-item-chevron" aria-hidden="true">›</span>
+        ${hasChildren ? html`<span class="miller-item-chevron" aria-hidden="true">›</span>` : nothing}
       </div>
     `;
   }
