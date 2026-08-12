@@ -594,7 +594,6 @@ class TaggerApp extends LitElement {
     const hasSelection = this._selection.length > 0;
     const selected = hasSelection ? this._selection[this._selection.length - 1] : null;
     const selectedIndex = this._selection.length - 1;
-    const context = hasSelection ? this._selection.map((n) => n.name).join(' / ') : 'Namespaces';
 
     return html`
       <div class="miller-actionbar">
@@ -602,8 +601,8 @@ class TaggerApp extends LitElement {
           ${hasSelection ? html`
             <button class="icon-btn" aria-label="Clear selection"
               @click=${() => { this._selection = []; }}>&times;</button>
+            <span class="miller-actionbar-label">${this._selection.map((n) => n.name).join(' / ')}</span>
           ` : nothing}
-          <span class="miller-actionbar-label">${context}</span>
         </div>
         <div class="miller-actionbar-actions">
           <sl-button class="pw-quiet-secondary pw-action-sm" @click=${() => this.handleAddChild(selected)}>
