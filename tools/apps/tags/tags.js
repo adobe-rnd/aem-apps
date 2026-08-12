@@ -784,7 +784,7 @@ class TaggerApp extends LitElement {
         <span class="miller-item-label">${node.name}</span>
         <button class="icon-btn" aria-label="Edit ${node.name}"
           @click=${(e) => { e.stopPropagation(); this.startEditing(node, ownerList); }}>✎</button>
-        ${hasChildren ? html`<span class="miller-item-chevron" aria-hidden="true">›</span>` : nothing}
+        <span class="miller-item-chevron ${hasChildren ? '' : 'is-hidden'}" aria-hidden="true">›</span>
       </div>
     `;
   }

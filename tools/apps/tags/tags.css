@@ -443,6 +443,12 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   opacity: 0.6;
 }
 
+/* Reserves the chevron's width even when hidden, so the pencil icon lines
+   up across rows regardless of whether that row has children. */
+.miller-item-chevron.is-hidden {
+  visibility: hidden;
+}
+
 .drag-handle {
   color: var(--s2-gray-400);
   cursor: grab;
