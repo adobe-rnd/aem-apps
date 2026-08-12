@@ -826,14 +826,14 @@ class TaggerApp extends LitElement {
     const { path } = this._searchModalTag;
     return html`
       <div class="modal-backdrop" @click=${() => this.closeSearchModal()}>
-        <div class="modal" @click=${(e) => e.stopPropagation()}>
+        <div class="modal modal-lg" @click=${(e) => e.stopPropagation()}>
           <div class="modal-header">
             <h2>Find pages tagged "${path}"</h2>
             <button class="modal-close" aria-label="Close" @click=${() => this.closeSearchModal()}>&times;</button>
           </div>
           <div class="modal-body">
             <label class="search-field">
-              <span>Subfolder <em>(optional)</em></span>
+              <span>Subfolder <em>(recommended for large sites)</em></span>
               <input type="text" placeholder="/blog" .value=${this._searchSubfolder}
                 @change=${(e) => { this._searchSubfolder = e.target.value; }} />
             </label>

@@ -528,6 +528,11 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   box-shadow: 0 12px 40px rgb(0 0 0 / 25%);
 }
 
+.modal-lg {
+  width: min(680px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+}
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -617,7 +622,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 260px;
+  max-height: 420px;
   overflow-y: auto;
 }
 
