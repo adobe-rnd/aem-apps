@@ -8,18 +8,22 @@
  * A namespace, category, and tag are all the same node shape —
  * `{ name, description, children }` — differing only in depth and whether
  * they currently have children. `parseTaxonomyTree` + `serializeTaxonomyTree`
- * convert between that tree and `taxonomy.json`'s flat sheet rows, where
- * this distinction reappears: depth 0 is always a `Namespace` row; deeper
- * nodes serialize as a `Category` header (+ recurse) if they have children,
- * or a `Tag` row if they don't. Round-tripping through these two functions
- * must always produce a sheet the tags plugin parses identically.
+ * convert between that tree and `taxonomy.json`'s flat sheet rows.
  *
- * Within one node's children, leaves are always saved before sub-categories
- * regardless of the order they're arranged in — this repo's existing sheets
- * are already authored that way, and it keeps serialization simple: a
- * `Category` header row only ever needs to be emitted once, immediately
- * before that category's own content, with no need to "return" to a parent
- * context afterward.
+ * `Namespace` is the only inherited/stateful column: a `Namespace` row sets
+ * the "current namespace" for every row that follows, until the next one.
+ * `Category` is never inherited — a `Tag` row carries its own `Category`
+ * (the full `/`-joined path within its namespace, omitted for a tag directly
+ * under the namespace) directly on the row. This is what lets a namespace
+ * mix direct tags and categorized tags in any order without ambiguity: a
+ * `Tag` row's placement in the sheet doesn't affect where it attaches, only
+ * its own `Category` field does.
+ *
+ * A `Category`-only row (no `Tag`) is only needed to attach a `Description`
+ * to a category itself — a category's existence is always implied by any
+ * `Tag` row naming its path, and is created automatically. (A category with
+ * no tags anywhere in its subtree is indistinguishable from a tag itself —
+ * a node's role is defined solely by whether it currently has children.)
  */
 
 export const DA_ORIGIN = 'https://admin.da.live';
@@ -142,11 +146,13 @@ function ensureCategoryPath(namespace, categoryPath, description) {
 }
 
 /**
- * Parses `taxonomy.json`'s flat `data` rows into a namespace tree. Follows
- * the sheet's header-inheritance rule: a `Namespace` row resets the current
- * container, a `Category` row (which may contain nested `/`-separated
- * levels) sets where following `Tag` rows attach, until the next header row
- * changes it.
+ * Parses `taxonomy.json`'s flat `data` rows into a namespace tree.
+ * `Namespace` is the only inherited column — a `Namespace` row sets the
+ * current namespace for every row after it, until the next one. `Category`
+ * is read directly off each row: a `Tag` row attaches under whatever
+ * `Category` path it names (or directly under the namespace if omitted), and
+ * a `Category`-only row just declares/describes that path, creating any
+ * missing ancestors along the way.
  * @param {Object[]} rows Raw `taxonomy.json` `data` rows
  * @returns {{ namespaces: Object[] }} The parsed tree
  */
@@ -154,20 +160,23 @@ export function parseTaxonomyTree(rows = []) {
   const namespaces = [];
   const byName = new Map();
   let currentNamespace = null;
-  let currentContainer = null;
 
   rows.forEach((row) => {
-    if (row.Tag) {
-      const target = currentContainer || currentNamespace;
-      if (target) target.children.push(createNode(row.Tag, row.Description || ''));
-      return;
-    }
     if (row.Namespace) {
       currentNamespace = ensureNamespace(namespaces, byName, row.Namespace, row.Description || '');
-      currentContainer = null;
+      return;
     }
-    if (row.Category && currentNamespace) {
-      currentContainer = ensureCategoryPath(currentNamespace, row.Category, row.Description || '');
+    if (!currentNamespace) return;
+
+    if (row.Tag) {
+      const target = row.Category
+        ? ensureCategoryPath(currentNamespace, row.Category, '')
+        : currentNamespace;
+      target.children.push(createNode(row.Tag, row.Description || ''));
+      return;
+    }
+    if (row.Category) {
+      ensureCategoryPath(currentNamespace, row.Category, row.Description || '');
     }
   });
 
@@ -176,8 +185,13 @@ export function parseTaxonomyTree(rows = []) {
 
 /**
  * Serializes a namespace tree back into `taxonomy.json`'s flat `data` rows.
- * A node with no children becomes a `Tag` row; a node with children becomes
- * a `Category` header (namespaces are always a `Namespace` row regardless).
+ * Every `Tag` row carries its own `Category` (full `/`-joined path, omitted
+ * for a tag directly under the namespace) rather than relying on a preceding
+ * header row. A category's own existence is always reconstructible from any
+ * of its descendant `Tag` rows (a category, by definition, has at least one
+ * child, which is itself either a tag or another category with the same
+ * guarantee), so a `Category`-only row is only emitted when the category
+ * carries its own description.
  * @param {{ namespaces: Object[] }} tree
  * @returns {Object[]} Flat sheet rows
  */
@@ -189,16 +203,19 @@ export function serializeTaxonomyTree(tree) {
   );
 
   const serializeChildren = (children, ancestorPath) => {
-    const leaves = children.filter((child) => child.children.length === 0);
-    const containers = children.filter((child) => child.children.length > 0);
-
-    leaves.forEach((leaf) => {
-      rows.push(withDescription({ Tag: leaf.name }, leaf.description));
-    });
-    containers.forEach((container) => {
-      const fullPath = [...ancestorPath, container.name].join('/');
-      rows.push(withDescription({ Category: fullPath }, container.description));
-      serializeChildren(container.children, [...ancestorPath, container.name]);
+    children.forEach((child) => {
+      if (child.children.length === 0) {
+        const row = ancestorPath.length
+          ? { Category: ancestorPath.join('/'), Tag: child.name }
+          : { Tag: child.name };
+        rows.push(withDescription(row, child.description));
+        return;
+      }
+      const fullPath = [...ancestorPath, child.name].join('/');
+      if (child.description) {
+        rows.push(withDescription({ Category: fullPath }, child.description));
+      }
+      serializeChildren(child.children, [...ancestorPath, child.name]);
     });
   };
 

@@ -42,9 +42,10 @@ The app also works opened directly with no params (enter org/site and
 Same flat `Namespace`/`Category`/`Tag`/`Description` sheet the tags plugin
 reads — see its README for the format details. The editor presents it as a
 tree and always serializes back to that same row format, so anything saved
-here opens correctly in the plugin unmodified. One house rule: within a
-namespace or category, its direct tags always come before its
-sub-categories (existing sheets that don't follow this still parse fine).
+here opens correctly in the plugin unmodified. Each `Tag` row carries its own
+`Category` (the full `/`-joined path, omitted for a tag directly under the
+namespace) rather than inheriting one from a preceding header row, so direct
+and categorized tags can be mixed in any order under a namespace.
 
 ## Bulk search assumption
 
