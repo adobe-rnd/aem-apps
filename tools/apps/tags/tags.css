@@ -219,7 +219,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 }
 
 .icon-btn:hover {
-  background: var(--s2-gray-150, var(--s2-gray-100));
+  background: var(--s2-gray-100);
   color: var(--s2-gray-900);
 }
 
@@ -244,7 +244,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   align-items: center;
   justify-content: space-between;
   gap: var(--s2-spacing-200);
-  padding: var(--s2-spacing-150) var(--s2-spacing-200);
+  padding: var(--s2-spacing-100) var(--s2-spacing-200);
   background: var(--s2-gray-75);
   border-bottom: 1px solid var(--s2-gray-200);
 }
@@ -268,7 +268,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 .miller-actionbar-actions {
   display: flex;
   align-items: center;
-  gap: var(--s2-spacing-150);
+  gap: var(--s2-spacing-100);
   flex-shrink: 0;
 }
 
@@ -447,7 +447,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 /* ---- Column meta (description for the column's owner) ---- */
 
 .miller-column-meta {
-  padding: 0 var(--s2-spacing-150) var(--s2-spacing-150);
+  padding: 0 var(--s2-spacing-100) var(--s2-spacing-100);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -571,7 +571,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   display: flex;
   align-items: center;
   gap: var(--s2-spacing-200);
-  padding: var(--s2-spacing-150) var(--s2-spacing-200);
+  padding: var(--s2-spacing-100) var(--s2-spacing-200);
   border: 1px solid var(--s2-gray-200);
   border-radius: var(--s2-corner-radius-100);
 }
