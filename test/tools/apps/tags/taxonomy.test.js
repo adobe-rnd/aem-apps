@@ -7,9 +7,11 @@ import {
   buildTaxonomySheet,
 } from '../../../../tools/apps/tags/taxonomy.js';
 
-// A namespace with a direct tag, a namespace mixing a direct tag with a
-// categorized one (in either order), and a nested category — each Tag row
-// carries its own Category, so order within a namespace doesn't matter.
+// Sparse rows (only the keys relevant to that row) — parsing must tolerate
+// this legacy/hand-authored shape even though serialize always emits fully
+// keyed rows now. A namespace with a direct tag, a namespace mixing a
+// direct tag with a categorized one (in either order), and a nested
+// category — each Tag row carries its own Category, so order doesn't matter.
 const rows = [
   { Namespace: 'Article Types' },
   { Tag: 'Race Recap', Description: 'A recap of a race' },
@@ -74,6 +76,23 @@ describe('parseTaxonomyTree', () => {
     assert.equal(tree.namespaces[0].children[0].name, 'Cat');
     assert.equal(tree.namespaces[0].children[0].children[0].description, 'leaf desc');
   });
+
+  it('treats an empty string the same as a missing key', () => {
+    // serializeTaxonomyTree emits every column on every row (empty string
+    // where it doesn't apply) — parsing must not treat that empty string as
+    // a real value.
+    const fullyKeyedRows = [
+      {
+        Namespace: 'NS', Category: '', Tag: '', Description: '',
+      },
+      {
+        Namespace: '', Category: '', Tag: 'DirectTag', Description: '',
+      },
+    ];
+    const tree = parseTaxonomyTree(fullyKeyedRows);
+    assert.equal(tree.namespaces[0].children[0].name, 'DirectTag');
+    assert.equal(tree.namespaces[0].children[0].children.length, 0);
+  });
 });
 
 describe('flattenTaxonomyTags', () => {
@@ -90,9 +109,48 @@ describe('flattenTaxonomyTags', () => {
 });
 
 describe('serializeTaxonomyTree', () => {
-  it('round-trips a tree byte-for-byte, omitting Category header rows implied by a Tag', () => {
+  const ALL_COLUMNS = ['Namespace', 'Category', 'Tag', 'Description'];
+
+  it('emits all four columns on every row, matching a real spreadsheet\'s rectangular shape', () => {
+    // Regression: rows used to only carry the keys relevant to that row
+    // (e.g. a Tag row had no Namespace/Category key at all). AEM/DA's
+    // column detection didn't reliably pick up a column that was simply
+    // absent from a row's keys, so publishing silently dropped Category
+    // and Tag as columns even though `columns` declared them.
     const tree = parseTaxonomyTree(rows);
-    assert.deepEqual(serializeTaxonomyTree(tree), rows);
+    serializeTaxonomyTree(tree).forEach((row) => {
+      assert.deepEqual(Object.keys(row), ALL_COLUMNS);
+    });
+  });
+
+  it('round-trips a tree, reconstructing an equivalent structure', () => {
+    const tree = parseTaxonomyTree(rows);
+    const reparsed = parseTaxonomyTree(serializeTaxonomyTree(tree));
+    assert.deepEqual(reparsed, tree);
+  });
+
+  it('round-trips a tree to the exact expected fully-keyed rows', () => {
+    const tree = parseTaxonomyTree(rows);
+    assert.deepEqual(serializeTaxonomyTree(tree), [
+      {
+        Namespace: 'Article Types', Category: '', Tag: '', Description: '',
+      },
+      {
+        Namespace: '', Category: '', Tag: 'Race Recap', Description: 'A recap of a race',
+      },
+      {
+        Namespace: 'Tag Driven', Category: '', Tag: '', Description: '',
+      },
+      {
+        Namespace: '', Category: '', Tag: 'Race Recap', Description: '',
+      },
+      {
+        Namespace: '', Category: 'catlev1', Tag: 'Alpha', Description: '',
+      },
+      {
+        Namespace: '', Category: 'catlev1/catlev2', Tag: 'Beta', Description: 'Beta desc',
+      },
+    ]);
   });
 
   it('round-trips a category description alongside its tags', () => {
@@ -103,16 +161,17 @@ describe('serializeTaxonomyTree', () => {
     ];
     const tree = parseTaxonomyTree(describedRows);
     assert.equal(tree.namespaces[0].children[0].description, 'cat desc');
-    assert.deepEqual(serializeTaxonomyTree(tree), describedRows);
-  });
-
-  it('round-trips a namespace description', () => {
-    const describedRows = [
-      { Namespace: 'NS', Description: 'ns desc' },
-      { Category: 'Cat', Tag: 'Leaf', Description: 'leaf desc' },
-    ];
-    const tree = parseTaxonomyTree(describedRows);
-    assert.deepEqual(serializeTaxonomyTree(tree), describedRows);
+    assert.deepEqual(serializeTaxonomyTree(tree), [
+      {
+        Namespace: 'NS', Category: '', Tag: '', Description: '',
+      },
+      {
+        Namespace: '', Category: 'Cat', Tag: '', Description: 'cat desc',
+      },
+      {
+        Namespace: '', Category: 'Cat', Tag: 'Leaf', Description: '',
+      },
+    ]);
   });
 
   it('preserves order when a direct tag is interleaved between categorized tags', () => {
@@ -123,7 +182,20 @@ describe('serializeTaxonomyTree', () => {
       { Tag: 'DirectB' },
     ];
     const tree = parseTaxonomyTree(mixedRows);
-    assert.deepEqual(serializeTaxonomyTree(tree), mixedRows);
+    assert.deepEqual(serializeTaxonomyTree(tree), [
+      {
+        Namespace: 'NS', Category: '', Tag: '', Description: '',
+      },
+      {
+        Namespace: '', Category: '', Tag: 'DirectA', Description: '',
+      },
+      {
+        Namespace: '', Category: 'Reviews', Tag: 'InReviews', Description: '',
+      },
+      {
+        Namespace: '', Category: '', Tag: 'DirectB', Description: '',
+      },
+    ]);
   });
 });
 

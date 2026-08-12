@@ -24,6 +24,12 @@
  * `Tag` row naming its path, and is created automatically. (A category with
  * no tags anywhere in its subtree is indistinguishable from a tag itself —
  * a node's role is defined solely by whether it currently has children.)
+ *
+ * Every serialized row carries all four columns (`Namespace`/`Category`/
+ * `Tag`/`Description`), using an empty string for whichever don't apply —
+ * matching a real spreadsheet's rectangular shape, since AEM/DA's column
+ * detection doesn't reliably pick up a column that's simply absent from a
+ * row's keys.
  */
 
 export const DA_ORIGIN = 'https://admin.da.live';
@@ -184,8 +190,28 @@ export function parseTaxonomyTree(rows = []) {
 }
 
 /**
+ * Every row always carries all four columns (empty string where a column
+ * doesn't apply to that row) instead of only the keys relevant to that row.
+ * A real spreadsheet-backed sheet is rectangular — every row has a cell for
+ * every column — and AEM/DA's column detection reflects that: it doesn't
+ * reliably pick up a column (e.g. `Category`/`Tag`) that's simply absent
+ * from enough rows' keys, even when it's declared in the sheet's `columns`
+ * list. `parseTaxonomyTree` already treats an empty string the same as a
+ * missing key (both are falsy), so this doesn't change parsing.
+ * @param {{ namespace, category, tag, description }} parts
+ * @returns {Object} A fully-keyed row
+ */
+function makeRow({
+  namespace = '', category = '', tag = '', description = '',
+}) {
+  return {
+    Namespace: namespace, Category: category, Tag: tag, Description: description,
+  };
+}
+
+/**
  * Serializes a namespace tree back into `taxonomy.json`'s flat `data` rows.
- * Every `Tag` row carries its own `Category` (full `/`-joined path, omitted
+ * Every `Tag` row carries its own `Category` (full `/`-joined path, empty
  * for a tag directly under the namespace) rather than relying on a preceding
  * header row. A category's own existence is always reconstructible from any
  * of its descendant `Tag` rows (a category, by definition, has at least one
@@ -198,29 +224,24 @@ export function parseTaxonomyTree(rows = []) {
 export function serializeTaxonomyTree(tree) {
   const rows = [];
 
-  const withDescription = (row, description) => (
-    description ? { ...row, Description: description } : row
-  );
-
   const serializeChildren = (children, ancestorPath) => {
     children.forEach((child) => {
       if (child.children.length === 0) {
-        const row = ancestorPath.length
-          ? { Category: ancestorPath.join('/'), Tag: child.name }
-          : { Tag: child.name };
-        rows.push(withDescription(row, child.description));
+        rows.push(makeRow({
+          category: ancestorPath.join('/'), tag: child.name, description: child.description,
+        }));
         return;
       }
       const fullPath = [...ancestorPath, child.name].join('/');
       if (child.description) {
-        rows.push(withDescription({ Category: fullPath }, child.description));
+        rows.push(makeRow({ category: fullPath, description: child.description }));
       }
       serializeChildren(child.children, [...ancestorPath, child.name]);
     });
   };
 
   (tree?.namespaces || []).forEach((namespace) => {
-    rows.push(withDescription({ Namespace: namespace.name }, namespace.description));
+    rows.push(makeRow({ namespace: namespace.name, description: namespace.description }));
     serializeChildren(namespace.children, []);
   });
 
