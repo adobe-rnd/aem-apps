@@ -166,6 +166,11 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   line-height: 1.5;
 }
 
+/* Inline next to Save/Publish, it shouldn't add its own vertical spacing. */
+.editor-actions .message {
+  margin-bottom: 0;
+}
+
 .message.success {
   background: var(--s2-green-100);
   color: var(--s2-green-900);
@@ -186,6 +191,7 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 .editor-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--s2-spacing-200);
   margin-bottom: var(--s2-spacing-300);
 }
@@ -195,16 +201,75 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   color: var(--s2-orange-900);
 }
 
-.editor-item-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--s2-spacing-200);
-  margin-bottom: var(--s2-spacing-300);
-}
-
 .pw-action-sm::part(base) {
   padding: var(--s2-spacing-75) var(--s2-spacing-200);
   font-size: 12px;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 5px;
+  line-height: 1;
+  font-size: 13px;
+  color: var(--s2-gray-500);
+  border-radius: var(--s2-corner-radius-100);
+  flex-shrink: 0;
+}
+
+.icon-btn:hover {
+  background: var(--s2-gray-150, var(--s2-gray-100));
+  color: var(--s2-gray-900);
+}
+
+.dirty-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--s2-orange-800, orange);
+}
+
+/* ---- Miller panel (action bar + columns, styled as one attached unit) ---- */
+
+.miller-panel {
+  border: 1px solid var(--s2-gray-200);
+  border-radius: var(--s2-corner-radius-700);
+  overflow: hidden;
+}
+
+.miller-actionbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2-spacing-200);
+  padding: var(--s2-spacing-150) var(--s2-spacing-200);
+  background: var(--s2-gray-75);
+  border-bottom: 1px solid var(--s2-gray-200);
+}
+
+.miller-actionbar-context {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--s2-gray-700);
+}
+
+.miller-actionbar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.miller-actionbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s2-spacing-150);
+  flex-shrink: 0;
 }
 
 /* ---- Miller columns ---- */
@@ -213,8 +278,6 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   display: flex;
   align-items: stretch;
   gap: 0;
-  border: 1px solid var(--s2-gray-200);
-  border-radius: var(--s2-corner-radius-700);
   overflow: auto hidden;
   height: 480px;
 }
@@ -234,14 +297,46 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 
 .miller-column-header {
   padding: var(--s2-spacing-200) var(--s2-spacing-200) var(--s2-spacing-100);
+  background: var(--s2-gray-50, var(--s2-gray-75));
+  border-bottom: 1px solid var(--s2-gray-200);
 }
 
 .miller-column-title {
   display: block;
   padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--s2-gray-600);
+}
+
+.miller-column-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.miller-column-owner-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 14px;
   font-weight: 700;
   color: var(--s2-gray-900);
+}
+
+.miller-column-description {
+  margin: 0;
+  padding: 4px 6px;
+  font-size: 13px;
+  color: var(--s2-gray-600);
+  overflow-wrap: break-word;
 }
 
 .miller-column-items {
@@ -267,6 +362,23 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 .miller-item.is-selected {
   background: var(--pw-accent);
   color: var(--s2-gray-75);
+}
+
+/* Dropping here reorders — inserted above this row. */
+.miller-item.drag-over-reorder {
+  box-shadow: inset 0 2px 0 0 var(--pw-accent);
+}
+
+/* Dropping here moves the dragged item inside this row's children. */
+.miller-item.drag-over-into {
+  outline: 2px solid var(--pw-accent);
+  outline-offset: -2px;
+  background: var(--s2-blue-100, var(--s2-gray-75));
+}
+
+.miller-column-items.drag-over-column {
+  outline: 2px dashed var(--s2-gray-300);
+  outline-offset: -2px;
 }
 
 .miller-item-label {

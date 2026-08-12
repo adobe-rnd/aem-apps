@@ -84,6 +84,17 @@ class TaggerApp extends LitElement {
     _message: { state: true },
     // Miller-column drill path: [namespace, child, grandchild, ...].
     _selection: { state: true },
+    // The node whose name/description is currently shown as editable inputs
+    // (toggled via its pencil icon) — only one at a time.
+    _editingNode: { state: true },
+    // Nodes changed since the last save (added, renamed, re-described, or
+    // moved) — rendered with a small dot so unsaved changes are easy to spot.
+    _dirtyNodes: { state: true },
+    // { list, item, mode } for the row currently under a drag — `mode` is
+    // 'reorder' (same list, inserted before this row) or 'into' (a
+    // different list, appended as this row's child) — used to show where a
+    // drop would land.
+    _dragOverTarget: { state: true },
     // { list, item, name, hasChildren, typed } while the delete modal is open.
     _deleteTarget: { state: true },
     // { path } while the find-pages modal is open.
@@ -111,6 +122,9 @@ class TaggerApp extends LitElement {
     this._publishing = false;
     this._message = null;
     this._selection = [];
+    this._editingNode = null;
+    this._dirtyNodes = new Set();
+    this._dragOverTarget = null;
     this._deleteTarget = null;
     this._searchModalTag = null;
     this._searchSubfolder = '';
@@ -174,6 +188,8 @@ class TaggerApp extends LitElement {
     this._message = null;
     this._dirty = false;
     this._selection = [];
+    this._editingNode = null;
+    this._dirtyNodes = new Set();
 
     const location = resolveTaxonomyLocation(org, site, taxonomyPath);
     this._taxonomyLocation = location;
@@ -226,6 +242,7 @@ class TaggerApp extends LitElement {
     this._saving = false;
     if (result.success) {
       this._dirty = false;
+      this._dirtyNodes = new Set();
       this._message = { type: 'success', text: 'Saved.' };
     } else {
       this._message = { type: 'error', text: `Failed to save (${result.status || result.error}).` };
@@ -258,21 +275,40 @@ class TaggerApp extends LitElement {
   // children }` node — they differ only in depth and whether they currently
   // have children — so there's a single add/rename/edit path for all of them.
 
+  // Marks `node` as changed since the last save — tracked separately from
+  // `_dirty` so individual items can be highlighted, not just the overall
+  // save/publish state.
+  markDirty(node) {
+    this._dirtyNodes = new Set(this._dirtyNodes).add(node);
+    this._dirty = true;
+  }
+
   handleAddChild(owner) {
     const list = owner ? owner.children : this._tree.namespaces;
-    list.push({ name: 'New Item', description: '', children: [] });
-    this._dirty = true;
+    const node = { name: 'New Item', description: '', children: [] };
+    list.push(node);
+    this.markDirty(node);
     this.requestUpdate();
   }
 
   renameNode(node, name) {
     node.name = name;
-    this._dirty = true;
+    this.markDirty(node);
   }
 
   updateNodeField(node, field, value) {
     node[field] = value;
-    this._dirty = true;
+    this.markDirty(node);
+  }
+
+  // ---- Name/description edit toggle (pencil icon) ----
+
+  startEditing(node) {
+    this._editingNode = node;
+  }
+
+  stopEditing() {
+    this._editingNode = null;
   }
 
   // ---- Delete confirmation (type the name to confirm) ----
@@ -302,6 +338,7 @@ class TaggerApp extends LitElement {
 
     const selIdx = this._selection.indexOf(item);
     if (selIdx !== -1) this._selection = this._selection.slice(0, selIdx);
+    if (this._editingNode === item) this._editingNode = null;
 
     this._dirty = true;
     this._deleteTarget = null;
@@ -325,10 +362,29 @@ class TaggerApp extends LitElement {
 
   onDragEnd() {
     this._dragItem = null;
+    this._dragOverTarget = null;
   }
 
   onDragOverRow(e) {
     e.preventDefault();
+  }
+
+  // Highlights the hovered row differently depending on what the drop would
+  // do: `reorder` (same list — inserted before this row) vs `into` (a
+  // different list — appended as this row's child).
+  onDragEnterItem(e, targetList, targetItem) {
+    e.preventDefault();
+    if (!this._dragItem || this._dragItem.item === targetItem) return;
+    const mode = this._dragItem.list === targetList ? 'reorder' : 'into';
+    this._dragOverTarget = { list: targetList, item: targetItem, mode };
+  }
+
+  // Only highlights the column itself when hovering its bare background —
+  // hovering a specific item is handled by `onDragEnterItem` instead.
+  onDragEnterColumn(e, targetList) {
+    if (e.target !== e.currentTarget || !this._dragItem) return;
+    e.preventDefault();
+    this._dragOverTarget = { list: targetList, item: null, mode: 'into' };
   }
 
   moveItem(targetList, targetIndex) {
@@ -342,8 +398,9 @@ class TaggerApp extends LitElement {
     if (drag.list === targetList && sourceIndex < insertAt) insertAt -= 1;
     targetList.splice(insertAt, 0, drag.item);
 
+    this.markDirty(drag.item);
     this._dragItem = null;
-    this._dirty = true;
+    this._dragOverTarget = null;
     this.requestUpdate();
   }
 
@@ -513,38 +570,54 @@ class TaggerApp extends LitElement {
             ?disabled=${this._publishing || this._dirty}>
             ${this._publishing ? 'Publishing…' : 'Publish'}
           </sl-button>
-          ${this._dirty ? html`<span class="dirty-hint">Unsaved changes — publish is disabled until you save.</span>` : nothing}
+          ${this._dirty ? html`<span class="dirty-hint">Unsaved changes (dots mark what changed) — publish is disabled until you save.</span>` : nothing}
+          ${this.renderMessage()}
         </div>
-        ${this.renderItemToolbar()}
-        <div class="miller-columns">
-          ${this.buildColumns().map((col, i) => this.renderColumn(col, i))}
+        <div class="miller-panel">
+          ${this.renderItemToolbar()}
+          <div class="miller-columns">
+            ${this.buildColumns().map((col, i) => this.renderColumn(col, i))}
+          </div>
         </div>
       </div>
     `;
   }
 
-  // Acts on the deepest selected node — no selection means the implicit
-  // selection is the namespace level itself, so Add still works (it creates
-  // a new top-level namespace), while Delete/Find pages need an actual node
-  // and stay disabled.
+  // A Spectrum action-bar-style toolbar attached directly to the columns it
+  // acts on: shows the current selection path as context (with a way to
+  // clear it) alongside the actions themselves. Acts on the deepest
+  // selected node — no selection means the implicit target is the
+  // namespace level, so Add still works (it creates a new top-level
+  // namespace), while Delete/Find pages need an actual node and stay
+  // disabled.
   renderItemToolbar() {
     const hasSelection = this._selection.length > 0;
     const selected = hasSelection ? this._selection[this._selection.length - 1] : null;
     const selectedIndex = this._selection.length - 1;
+    const context = hasSelection ? this._selection.map((n) => n.name).join(' / ') : 'Namespaces';
 
     return html`
-      <div class="editor-item-actions">
-        <sl-button class="pw-quiet-secondary pw-action-sm" @click=${() => this.handleAddChild(selected)}>
-          + Add
-        </sl-button>
-        <sl-button class="pw-quiet-secondary pw-action-sm" ?disabled=${!hasSelection}
-          @click=${() => this.openSearchModal(this.pathForSelectionIndex(selectedIndex))}>
-          Find pages
-        </sl-button>
-        <sl-button class="pw-quiet-danger pw-action-sm" ?disabled=${!hasSelection}
-          @click=${() => this.openDeleteConfirm(this.parentListFor(selectedIndex), selected)}>
-          Delete
-        </sl-button>
+      <div class="miller-actionbar">
+        <div class="miller-actionbar-context">
+          ${hasSelection ? html`
+            <button class="icon-btn" aria-label="Clear selection"
+              @click=${() => { this._selection = []; }}>&times;</button>
+          ` : nothing}
+          <span class="miller-actionbar-label">${context}</span>
+        </div>
+        <div class="miller-actionbar-actions">
+          <sl-button class="pw-quiet-secondary pw-action-sm" @click=${() => this.handleAddChild(selected)}>
+            + Add
+          </sl-button>
+          <sl-button class="pw-quiet-secondary pw-action-sm" ?disabled=${!hasSelection}
+            @click=${() => this.openSearchModal(this.pathForSelectionIndex(selectedIndex))}>
+            Find pages
+          </sl-button>
+          <sl-button class="pw-quiet-danger pw-action-sm" ?disabled=${!hasSelection}
+            @click=${() => this.openDeleteConfirm(this.parentListFor(selectedIndex), selected)}>
+            Delete
+          </sl-button>
+        </div>
       </div>
     `;
   }
@@ -562,29 +635,63 @@ class TaggerApp extends LitElement {
 
   renderColumnHeader(col) {
     if (!col.owner) return html`<span class="miller-column-title">Namespaces</span>`;
+
+    const isEditing = this._editingNode === col.owner;
+    if (isEditing) {
+      return html`
+        <div class="miller-column-title-row">
+          <input class="tax-name-input" .value=${col.owner.name} @keydown=${commitOnEnter}
+            @change=${(e) => this.renameNode(col.owner, e.target.value)} />
+          <button class="icon-btn" aria-label="Done editing" @click=${() => this.stopEditing()}>✓</button>
+        </div>
+      `;
+    }
+
+    const isDirty = this._dirtyNodes.has(col.owner);
     return html`
-      <input class="tax-name-input" .value=${col.owner.name} @keydown=${commitOnEnter}
-        @change=${(e) => this.renameNode(col.owner, e.target.value)} />
+      <div class="miller-column-title-row">
+        <span class="miller-column-owner-name">
+          ${isDirty ? html`<span class="dirty-dot" aria-hidden="true" title="Unsaved change"></span>` : nothing}
+          ${col.owner.name}
+        </span>
+        <button class="icon-btn" aria-label="Edit ${col.owner.name}" @click=${() => this.startEditing(col.owner)}>✎</button>
+      </div>
     `;
   }
 
   renderColumnMeta(col) {
     if (!col.owner) return nothing;
+
+    if (this._editingNode === col.owner) {
+      return html`
+        <div class="miller-column-meta">
+          <input class="tax-desc-input" placeholder="Description" .value=${col.owner.description} @keydown=${commitOnEnter}
+            @change=${(e) => this.updateNodeField(col.owner, 'description', e.target.value)} />
+        </div>
+      `;
+    }
+
+    if (!col.owner.description) return nothing;
     return html`
       <div class="miller-column-meta">
-        <input class="tax-desc-input" placeholder="Description" .value=${col.owner.description} @keydown=${commitOnEnter}
-          @change=${(e) => this.updateNodeField(col.owner, 'description', e.target.value)} />
+        <p class="miller-column-description">${col.owner.description}</p>
       </div>
     `;
   }
 
   renderColumn(col, colIndex) {
     const ownerList = col.owner ? col.owner.children : this._tree.namespaces;
+    const isColumnDragOver = this._dragOverTarget?.item === null
+      && this._dragOverTarget?.list === ownerList;
+
     return html`
       <div class="miller-column">
-        <div class="miller-column-header">${this.renderColumnHeader(col)}</div>
-        ${this.renderColumnMeta(col)}
-        <div class="miller-column-items"
+        <div class="miller-column-header">
+          ${this.renderColumnHeader(col)}
+          ${this.renderColumnMeta(col)}
+        </div>
+        <div class="miller-column-items ${isColumnDragOver ? 'drag-over-column' : ''}"
+          @dragenter=${(e) => this.onDragEnterColumn(e, ownerList)}
           @dragover=${this.onDragOverRow}
           @drop=${(e) => this.onDropInColumn(e, col.owner)}>
           ${col.items.map((node) => this.renderColumnItem(node, colIndex, ownerList))}
@@ -596,16 +703,20 @@ class TaggerApp extends LitElement {
   renderColumnItem(node, colIndex, ownerList) {
     const isSelected = this._selection[colIndex] === node;
     const hasChildren = node.children.length > 0;
+    const isDirty = this._dirtyNodes.has(node);
+    const dragOverMode = this._dragOverTarget?.item === node ? this._dragOverTarget.mode : null;
 
     return html`
-      <div class="miller-item ${isSelected ? 'is-selected' : ''}"
+      <div class="miller-item ${isSelected ? 'is-selected' : ''} ${dragOverMode ? `drag-over-${dragOverMode}` : ''}"
         draggable="true"
         @dragstart=${(e) => this.onDragStart(e, ownerList, node)}
         @dragend=${() => this.onDragEnd()}
+        @dragenter=${(e) => this.onDragEnterItem(e, ownerList, node)}
         @dragover=${this.onDragOverRow}
         @drop=${(e) => this.onDropOnItem(e, ownerList, node)}
         @click=${() => this.handleColumnItemClick(node, colIndex)}>
         <span class="drag-handle" aria-hidden="true">⠿</span>
+        ${isDirty ? html`<span class="dirty-dot" aria-hidden="true" title="Unsaved change"></span>` : nothing}
         <span class="miller-item-label">${node.name}</span>
         ${hasChildren ? html`<span class="miller-item-chevron" aria-hidden="true">›</span>` : nothing}
       </div>
@@ -707,7 +818,7 @@ class TaggerApp extends LitElement {
     return html`
       ${this.renderToolbar()}
       ${this._state === 'loading' ? this.renderLoading() : nothing}
-      ${this._state !== 'loading' ? this.renderMessage() : nothing}
+      ${this._state !== 'loading' && this._state !== 'loaded' ? this.renderMessage() : nothing}
       ${this._state === 'loaded' ? this.renderEditor() : nothing}
       ${this._deleteTarget ? this.renderDeleteModal() : nothing}
       ${this._searchModalTag ? this.renderSearchModal() : nothing}
