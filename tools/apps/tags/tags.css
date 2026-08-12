@@ -272,14 +272,37 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   flex-shrink: 0;
 }
 
-/* ---- Miller columns ---- */
+/* ---- Miller columns ----
+ *
+ * The header row and the items row are separate flex rows (not one column
+ * per div) so header heights come from natural flexbox `stretch` — every
+ * header cell (plus the filler) automatically matches the tallest one,
+ * whether that's a bare title or a title+description. No fixed height
+ * number to keep in sync, and a header without a description doesn't grow
+ * a fixed empty block reserved for one it doesn't have — it just stays as
+ * short as its content, matching its neighbours only when one of them
+ * actually needs the extra room. Both rows share one scroll container so
+ * they always scroll horizontally in sync.
+ */
+
+.miller-scroll {
+  display: flex;
+  flex-direction: column;
+  overflow: auto hidden;
+  height: 480px;
+}
+
+.miller-headers {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+}
 
 .miller-columns {
   display: flex;
   align-items: stretch;
-  gap: 0;
-  overflow: auto hidden;
-  height: 480px;
+  flex: 1;
+  min-height: 0;
 }
 
 .miller-column {
@@ -287,20 +310,37 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   flex-direction: column;
   flex: 0 0 240px;
   width: 240px;
-  border-right: 1px solid var(--s2-gray-200);
   min-height: 0;
 }
 
-.miller-column:last-child {
-  border-right: none;
+.miller-column + .miller-column {
+  border-left: 1px solid var(--s2-gray-200);
+}
+
+/* Fills any leftover width past the real columns so the header's grey
+   background reaches the panel's edge instead of stopping abruptly. */
+.miller-column-filler {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--s2-gray-50, var(--s2-gray-75));
+  border-bottom: 1px solid var(--s2-gray-200);
+  box-sizing: border-box;
 }
 
 .miller-column-header {
-  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 240px;
+  width: 240px;
   padding: var(--s2-spacing-200) var(--s2-spacing-200) var(--s2-spacing-100);
   background: var(--s2-gray-50, var(--s2-gray-75));
   border-bottom: 1px solid var(--s2-gray-200);
   box-sizing: border-box;
+}
+
+.miller-column-header + .miller-column-header,
+.miller-column-header + .miller-column-filler {
+  border-left: 1px solid var(--s2-gray-200);
 }
 
 .miller-column-title {

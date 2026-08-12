@@ -40,10 +40,6 @@ try {
   console.warn('Failed to load styles:', e);
 }
 
-function commitOnEnter(e) {
-  if (e.key === 'Enter') e.target.blur();
-}
-
 // Remembers the last loaded location across sessions, so reopening the app
 // without URL params (e.g. from a bookmark) picks up where the user left
 // off. URL params (`org`/`site`/`taxonomy`, matching da-permissions' and the
@@ -84,9 +80,15 @@ class TaggerApp extends LitElement {
     _message: { state: true },
     // Miller-column drill path: [namespace, child, grandchild, ...].
     _selection: { state: true },
-    // The node whose name/description is currently shown as editable inputs
-    // (toggled via its pencil icon) — only one at a time.
+    // The node whose row is currently showing an inline name/description
+    // editor (toggled via its pencil icon) — only one at a time. Edits are
+    // held in `_editingDraft` and only applied to the node on commit (the
+    // checkmark), so switching to edit something else, or clicking Cancel,
+    // discards them instead of silently keeping half-typed changes.
     _editingNode: { state: true },
+    _editingList: { state: true },
+    _editingIsNew: { state: true },
+    _editingDraft: { state: true },
     // Nodes changed since the last save (added, renamed, re-described, or
     // moved) — rendered with a small dot so unsaved changes are easy to spot.
     _dirtyNodes: { state: true },
@@ -123,6 +125,9 @@ class TaggerApp extends LitElement {
     this._message = null;
     this._selection = [];
     this._editingNode = null;
+    this._editingList = null;
+    this._editingIsNew = false;
+    this._editingDraft = null;
     this._dirtyNodes = new Set();
     this._dragOverTarget = null;
     this._deleteTarget = null;
@@ -189,6 +194,9 @@ class TaggerApp extends LitElement {
     this._dirty = false;
     this._selection = [];
     this._editingNode = null;
+    this._editingList = null;
+    this._editingIsNew = false;
+    this._editingDraft = null;
     this._dirtyNodes = new Set();
 
     const location = resolveTaxonomyLocation(org, site, taxonomyPath);
@@ -283,32 +291,80 @@ class TaggerApp extends LitElement {
     this._dirty = true;
   }
 
-  handleAddChild(owner) {
+  async handleAddChild(owner) {
     const list = owner ? owner.children : this._tree.namespaces;
     const node = { name: 'New Item', description: '', children: [] };
     list.push(node);
-    this.markDirty(node);
+    this.startEditing(node, list, { isNew: true });
     this.requestUpdate();
-  }
 
-  renameNode(node, name) {
-    node.name = name;
-    this.markDirty(node);
-  }
-
-  updateNodeField(node, field, value) {
-    node[field] = value;
-    this.markDirty(node);
+    await this.updateComplete;
+    const input = this.shadowRoot.querySelector('.miller-item.is-editing .tax-name-input');
+    if (input) {
+      input.focus();
+      input.select();
+    }
   }
 
   // ---- Name/description edit toggle (pencil icon) ----
+  //
+  // Edits are drafted, not applied live: `_editingDraft` holds the in-progress
+  // name/description, and the actual node is only updated on commit (the
+  // checkmark, or Enter). Starting a different edit, clicking Cancel (or
+  // Escape), or navigating away all discard the draft instead — so a
+  // half-typed change never ends up silently saved.
 
-  startEditing(node) {
+  startEditing(node, list, { isNew = false } = {}) {
+    if (this._editingNode && this._editingNode !== node) this.discardCurrentEdit();
     this._editingNode = node;
+    this._editingList = list;
+    this._editingIsNew = isNew;
+    this._editingDraft = { name: node.name, description: node.description };
   }
 
-  stopEditing() {
+  updateDraft(field, value) {
+    this._editingDraft = { ...this._editingDraft, [field]: value };
+  }
+
+  commitEditing() {
+    const node = this._editingNode;
+    if (!node) return;
+    const { name, description } = this._editingDraft;
+    const changed = this._editingIsNew || name !== node.name || description !== node.description;
+    node.name = name;
+    node.description = description;
+    if (changed) this.markDirty(node);
+    this.clearEditingState();
+  }
+
+  cancelEditing() {
+    this.discardCurrentEdit();
+  }
+
+  // Drops whatever's currently being edited without committing it. A
+  // brand-new, never-confirmed node is removed entirely (undoing the Add);
+  // an existing node just closes its editor, leaving its saved fields as
+  // they were before this edit started.
+  discardCurrentEdit() {
+    const node = this._editingNode;
+    const list = this._editingList;
+    if (this._editingIsNew && node && list) {
+      const idx = list.indexOf(node);
+      if (idx !== -1) list.splice(idx, 1);
+      const next = new Set(this._dirtyNodes);
+      next.delete(node);
+      this._dirtyNodes = next;
+      const selIdx = this._selection.indexOf(node);
+      if (selIdx !== -1) this._selection = this._selection.slice(0, selIdx);
+    }
+    this.clearEditingState();
+  }
+
+  clearEditingState() {
     this._editingNode = null;
+    this._editingList = null;
+    this._editingIsNew = false;
+    this._editingDraft = null;
   }
 
   // ---- Delete confirmation (type the name to confirm) ----
@@ -338,7 +394,7 @@ class TaggerApp extends LitElement {
 
     const selIdx = this._selection.indexOf(item);
     if (selIdx !== -1) this._selection = this._selection.slice(0, selIdx);
-    if (this._editingNode === item) this._editingNode = null;
+    if (this._editingNode === item) this.clearEditingState();
 
     this._dirty = true;
     this._deleteTarget = null;
@@ -437,6 +493,7 @@ class TaggerApp extends LitElement {
   // ---- Miller column navigation ----
 
   handleColumnItemClick(node, colIndex) {
+    if (this._editingNode) this.discardCurrentEdit();
     this._selection = [...this._selection.slice(0, colIndex), node];
   }
 
@@ -559,6 +616,7 @@ class TaggerApp extends LitElement {
   // ---- Render: editor (Miller columns) ----
 
   renderEditor() {
+    const columns = this.buildColumns();
     return html`
       <div class="tagger-editor">
         <div class="editor-actions">
@@ -575,8 +633,19 @@ class TaggerApp extends LitElement {
         </div>
         <div class="miller-panel">
           ${this.renderItemToolbar()}
-          <div class="miller-columns">
-            ${this.buildColumns().map((col, i) => this.renderColumn(col, i))}
+          <div class="miller-scroll">
+            <div class="miller-headers">
+              ${columns.map((col) => html`
+                <div class="miller-column-header">
+                  ${this.renderColumnHeader(col)}
+                  ${this.renderColumnMeta(col)}
+                </div>
+              `)}
+              <div class="miller-column-filler" aria-hidden="true"></div>
+            </div>
+            <div class="miller-columns">
+              ${columns.map((col, i) => this.renderColumn(col, i))}
+            </div>
           </div>
         </div>
       </div>
@@ -663,10 +732,6 @@ class TaggerApp extends LitElement {
 
     return html`
       <div class="miller-column">
-        <div class="miller-column-header">
-          ${this.renderColumnHeader(col)}
-          ${this.renderColumnMeta(col)}
-        </div>
         <div class="miller-column-items ${isColumnDragOver ? 'drag-over-column' : ''}"
           @dragenter=${(e) => this.onDragEnterColumn(e, ownerList)}
           @dragover=${this.onDragOverRow}
@@ -677,17 +742,25 @@ class TaggerApp extends LitElement {
     `;
   }
 
+  handleEditKeydown(e) {
+    if (e.key === 'Enter') this.commitEditing();
+    if (e.key === 'Escape') this.cancelEditing();
+  }
+
   renderColumnItem(node, colIndex, ownerList) {
     if (this._editingNode === node) {
+      const draft = this._editingDraft;
       return html`
         <div class="miller-item is-editing">
           <div class="miller-item-edit-row">
-            <input class="tax-name-input" .value=${node.name} @keydown=${commitOnEnter}
-              @change=${(e) => this.renameNode(node, e.target.value)} />
-            <button class="icon-btn" aria-label="Done editing" @click=${() => this.stopEditing()}>✓</button>
+            <input class="tax-name-input" .value=${draft.name} @keydown=${(e) => this.handleEditKeydown(e)}
+              @input=${(e) => this.updateDraft('name', e.target.value)} />
+            <button class="icon-btn" aria-label="Save changes" @click=${() => this.commitEditing()}>✓</button>
+            <button class="icon-btn" aria-label="Cancel" @click=${() => this.cancelEditing()}>&times;</button>
           </div>
-          <input class="tax-desc-input" placeholder="Description" .value=${node.description} @keydown=${commitOnEnter}
-            @change=${(e) => this.updateNodeField(node, 'description', e.target.value)} />
+          <input class="tax-desc-input" placeholder="Description" .value=${draft.description}
+            @keydown=${(e) => this.handleEditKeydown(e)}
+            @input=${(e) => this.updateDraft('description', e.target.value)} />
         </div>
       `;
     }
@@ -710,7 +783,7 @@ class TaggerApp extends LitElement {
         ${isDirty ? html`<span class="dirty-dot" aria-hidden="true" title="Unsaved change"></span>` : nothing}
         <span class="miller-item-label">${node.name}</span>
         <button class="icon-btn" aria-label="Edit ${node.name}"
-          @click=${(e) => { e.stopPropagation(); this.startEditing(node); }}>✎</button>
+          @click=${(e) => { e.stopPropagation(); this.startEditing(node, ownerList); }}>✎</button>
         ${hasChildren ? html`<span class="miller-item-chevron" aria-hidden="true">›</span>` : nothing}
       </div>
     `;
