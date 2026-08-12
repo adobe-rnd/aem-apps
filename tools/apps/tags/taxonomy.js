@@ -265,13 +265,20 @@ export function flattenTaxonomyTags(tree) {
 }
 
 /**
- * Wraps flat rows in the `{ total, limit, offset, data }` envelope DA sheets
- * are saved as.
+ * Wraps flat rows in AEM's single-sheet JSON envelope
+ * (https://www.aem.live/developer/spreadsheets#single-sheet-format).
+ * `:type: 'sheet'` is required — without it, admin rejects the sheet on
+ * preview/publish with "invalid sheet; unknown type".
  * @param {Object[]} rows
  * @returns {Object}
  */
 export function buildTaxonomySheet(rows) {
   return {
-    total: rows.length, limit: rows.length, offset: 0, data: rows,
+    total: rows.length,
+    limit: rows.length,
+    offset: 0,
+    data: rows,
+    columns: ['Namespace', 'Category', 'Tag', 'Description'],
+    ':type': 'sheet',
   };
 }

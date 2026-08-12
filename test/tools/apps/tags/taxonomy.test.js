@@ -4,6 +4,7 @@ import {
   parseTaxonomyTree,
   serializeTaxonomyTree,
   flattenTaxonomyTags,
+  buildTaxonomySheet,
 } from '../../../../tools/apps/tags/taxonomy.js';
 
 // A namespace with a direct tag, a namespace mixing a direct tag with a
@@ -123,5 +124,17 @@ describe('serializeTaxonomyTree', () => {
     ];
     const tree = parseTaxonomyTree(mixedRows);
     assert.deepEqual(serializeTaxonomyTree(tree), mixedRows);
+  });
+});
+
+describe('buildTaxonomySheet', () => {
+  it('wraps rows in AEM\'s required single-sheet envelope', () => {
+    const sheet = buildTaxonomySheet([{ Namespace: 'NS' }]);
+    assert.equal(sheet[':type'], 'sheet');
+    assert.deepEqual(sheet.columns, ['Namespace', 'Category', 'Tag', 'Description']);
+    assert.equal(sheet.total, 1);
+    assert.equal(sheet.limit, 1);
+    assert.equal(sheet.offset, 0);
+    assert.deepEqual(sheet.data, [{ Namespace: 'NS' }]);
   });
 });
