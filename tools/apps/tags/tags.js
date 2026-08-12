@@ -12,7 +12,6 @@ import {
 import {
   parseTaxonomyTree,
   serializeTaxonomyTree,
-  flattenTaxonomyTags,
   buildTaxonomySheet,
 } from './taxonomy.js';
 
@@ -39,16 +38,6 @@ try {
   ]);
 } catch (e) {
   console.warn('Failed to load styles:', e);
-}
-
-// Collects every `.categories` array reachable from a category (itself
-// included), so a drag-move can refuse to drop a category into its own
-// subtree and create a cycle.
-function collectCategoryLists(category) {
-  return category.categories.reduce(
-    (lists, sub) => lists.concat(collectCategoryLists(sub)),
-    [category.categories],
-  );
 }
 
 function commitOnEnter(e) {
@@ -93,9 +82,12 @@ class TaggerApp extends LitElement {
     _saving: { state: true },
     _publishing: { state: true },
     _message: { state: true },
-    // 'editor' | 'search'
-    _tab: { state: true },
-    _searchTag: { state: true },
+    // Miller-column drill path: [namespace, child, grandchild, ...].
+    _selection: { state: true },
+    // { list, item, name, hasChildren, typed } while the delete modal is open.
+    _deleteTarget: { state: true },
+    // { path } while the find-pages modal is open.
+    _searchModalTag: { state: true },
     _searchSubfolder: { state: true },
     _searching: { state: true },
     _searchProgress: { state: true },
@@ -118,8 +110,9 @@ class TaggerApp extends LitElement {
     this._saving = false;
     this._publishing = false;
     this._message = null;
-    this._tab = 'editor';
-    this._searchTag = '';
+    this._selection = [];
+    this._deleteTarget = null;
+    this._searchModalTag = null;
     this._searchSubfolder = '';
     this._searching = false;
     this._searchProgress = null;
@@ -180,8 +173,7 @@ class TaggerApp extends LitElement {
     this._state = 'loading';
     this._message = null;
     this._dirty = false;
-    this._searchResult = null;
-    this._searchTag = '';
+    this._selection = [];
 
     const location = resolveTaxonomyLocation(org, site, taxonomyPath);
     this._taxonomyLocation = location;
@@ -261,78 +253,72 @@ class TaggerApp extends LitElement {
   }
 
   // ---- Tree editing ----
-
-  handleAddNamespace() {
-    this._tree.namespaces.push({ name: 'New Namespace', tags: [], categories: [] });
-    this._dirty = true;
-    this.requestUpdate();
-  }
-
-  handleDeleteNamespace(ns) {
-    // eslint-disable-next-line no-alert -- cascading delete; native confirm is enough here
-    if (!window.confirm(`Delete namespace "${ns.name}" and everything under it?`)) return;
-    this._tree.namespaces = this._tree.namespaces.filter((n) => n !== ns);
-    this._dirty = true;
-    this.requestUpdate();
-  }
-
-  renameNamespace(ns, name) {
-    ns.name = name;
-    this._dirty = true;
-  }
-
-  handleAddTag(owner) {
-    owner.tags.push({ tag: 'New Tag', description: '' });
-    this._dirty = true;
-    this.requestUpdate();
-  }
-
-  updateTagField(tag, field, value) {
-    tag[field] = value;
-    this._dirty = true;
-  }
-
-  handleDeleteTag(list, tag) {
-    const idx = list.indexOf(tag);
-    if (idx === -1) return;
-    list.splice(idx, 1);
-    this._dirty = true;
-    this.requestUpdate();
-  }
-
-  handleAddCategory(owner) {
-    owner.categories.push({ name: 'New Category', tags: [], categories: [] });
-    this._dirty = true;
-    this.requestUpdate();
-  }
-
-  renameCategory(cat, name) {
-    cat.name = name;
-    this._dirty = true;
-  }
-
-  handleDeleteCategory(list, cat) {
-    // eslint-disable-next-line no-alert -- cascading delete; native confirm is enough here
-    if (!window.confirm(`Delete category "${cat.name}" and everything under it?`)) return;
-    const idx = list.indexOf(cat);
-    if (idx === -1) return;
-    list.splice(idx, 1);
-    this._dirty = true;
-    this.requestUpdate();
-  }
-
-  // ---- Drag & drop reordering ----
   //
-  // Each draggable row stashes `{ kind, list, item }` on drag start — `list`
-  // is a direct reference to the array the item currently lives in (a
-  // namespace/category's `.tags` or `.categories`). A drop target then
-  // splices `item` out of its source list and into the target list at the
-  // target index. Because the tree is held by reference, this works for
-  // reordering in place and for moving an item to a different namespace/
-  // category without any separate path bookkeeping.
+  // A namespace, category, and tag are all the same `{ name, description,
+  // children }` node — they differ only in depth and whether they currently
+  // have children — so there's a single add/rename/edit path for all of them.
 
-  onDragStart(e, kind, list, item) {
-    this._dragItem = { kind, list, item };
+  handleAddChild(owner) {
+    const list = owner ? owner.children : this._tree.namespaces;
+    list.push({ name: 'New Item', description: '', children: [] });
+    this._dirty = true;
+    this.requestUpdate();
+  }
+
+  renameNode(node, name) {
+    node.name = name;
+    this._dirty = true;
+  }
+
+  updateNodeField(node, field, value) {
+    node[field] = value;
+    this._dirty = true;
+  }
+
+  // ---- Delete confirmation (type the name to confirm) ----
+
+  openDeleteConfirm(list, item) {
+    this._deleteTarget = {
+      list, item, name: item.name, hasChildren: item.children.length > 0, typed: '',
+    };
+  }
+
+  closeDeleteConfirm() {
+    this._deleteTarget = null;
+  }
+
+  updateDeleteTyped(value) {
+    this._deleteTarget = { ...this._deleteTarget, typed: value };
+  }
+
+  confirmDelete() {
+    const {
+      list, item, name, typed,
+    } = this._deleteTarget;
+    if (typed !== name) return;
+
+    const idx = list.indexOf(item);
+    if (idx !== -1) list.splice(idx, 1);
+
+    const selIdx = this._selection.indexOf(item);
+    if (selIdx !== -1) this._selection = this._selection.slice(0, selIdx);
+
+    this._dirty = true;
+    this._deleteTarget = null;
+    this.requestUpdate();
+  }
+
+  // ---- Drag & drop ----
+  //
+  // Each draggable item stashes `{ list, item }` on drag start — `list` is a
+  // direct reference to the array it currently lives in. Dropping onto
+  // another item in the SAME list reorders before it; dropping onto an item
+  // in a DIFFERENT list moves the dragged item into it (appended to its
+  // `.children`) — how an item moves to a different branch without both
+  // branches needing to be visible in the same column at once.
+
+  onDragStart(e, list, item) {
+    this._dragItem = { list, item };
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', '');
   }
@@ -347,7 +333,7 @@ class TaggerApp extends LitElement {
 
   moveItem(targetList, targetIndex) {
     const drag = this._dragItem;
-    if (!drag) return;
+    if (!drag || !targetList) return;
     const sourceIndex = drag.list.indexOf(drag.item);
     if (sourceIndex === -1) return;
 
@@ -361,48 +347,76 @@ class TaggerApp extends LitElement {
     this.requestUpdate();
   }
 
-  onDropBeforeTag(e, targetList, targetTag) {
-    e.preventDefault();
-    if (this._dragItem?.kind !== 'tag') return;
-    this.moveItem(targetList, targetList.indexOf(targetTag));
+  // True if `maybeInside` is `node` itself or nested somewhere in its subtree
+  // — used to refuse a drop that would nest a node inside itself.
+  isNodeOrDescendant(node, maybeInside) {
+    if (node === maybeInside) return true;
+    return node.children.some((child) => this.isNodeOrDescendant(child, maybeInside));
   }
 
-  onDropAtEndOfTags(e, targetList) {
+  onDropOnItem(e, targetList, targetItem) {
     e.preventDefault();
-    if (this._dragItem?.kind !== 'tag') return;
+    e.stopPropagation();
+    const drag = this._dragItem;
+    if (!drag) return;
+
+    if (drag.list === targetList) {
+      this.moveItem(targetList, targetList.indexOf(targetItem));
+      return;
+    }
+    if (this.isNodeOrDescendant(drag.item, targetItem)) return;
+    this.moveItem(targetItem.children, targetItem.children.length);
+  }
+
+  onDropInColumn(e, owner) {
+    e.preventDefault();
+    const drag = this._dragItem;
+    if (!drag) return;
+    if (owner && this.isNodeOrDescendant(drag.item, owner)) return;
+    const targetList = owner ? owner.children : this._tree.namespaces;
     this.moveItem(targetList, targetList.length);
   }
 
-  onDropBeforeCategory(e, targetList, targetCat) {
-    e.preventDefault();
-    const drag = this._dragItem;
-    if (drag?.kind !== 'category' || collectCategoryLists(drag.item).includes(targetList)) return;
-    this.moveItem(targetList, targetList.indexOf(targetCat));
+  // ---- Miller column navigation ----
+
+  handleColumnItemClick(node, colIndex) {
+    this._selection = [...this._selection.slice(0, colIndex), node];
   }
 
-  onDropAtEndOfCategories(e, targetList) {
-    e.preventDefault();
-    const drag = this._dragItem;
-    if (drag?.kind !== 'category' || collectCategoryLists(drag.item).includes(targetList)) return;
-    this.moveItem(targetList, targetList.length);
+  // The parent list the node at `_selection[idx]` was found in — needed to
+  // delete or reparent it. `idx === 0` lives in the tree's namespace list;
+  // deeper indexes live in the previous selection level's `.children`.
+  parentListFor(idx) {
+    return idx === 0 ? this._tree.namespaces : this._selection[idx - 1].children;
   }
 
-  onDropBeforeNamespace(e, targetNs) {
-    e.preventDefault();
-    if (this._dragItem?.kind !== 'namespace') return;
-    this.moveItem(this._tree.namespaces, this._tree.namespaces.indexOf(targetNs));
+  // Builds the `Namespace:Category/Tag` (or `Namespace/Tag`, or bare
+  // `Namespace`) path for the node at `_selection[idx]`, matching
+  // `taxonomy.js`'s `flattenTaxonomyTags` convention exactly.
+  pathForSelectionIndex(idx) {
+    const namespace = this._selection[0];
+    if (idx === 0) return namespace.name;
+    const node = this._selection[idx];
+    const categoryPath = this._selection.slice(1, idx).map((n) => n.name).join('/');
+    return categoryPath ? `${namespace.name}:${categoryPath}/${node.name}` : `${namespace.name}/${node.name}`;
   }
 
-  onDropAtEndOfNamespaces(e) {
-    e.preventDefault();
-    if (this._dragItem?.kind !== 'namespace') return;
-    this.moveItem(this._tree.namespaces, this._tree.namespaces.length);
+  // ---- Bulk search (find pages) ----
+
+  openSearchModal(path) {
+    this._searchModalTag = { path };
+    this._searchSubfolder = '';
+    this._searching = false;
+    this._searchProgress = null;
+    this._searchResult = null;
   }
 
-  // ---- Bulk search ----
+  closeSearchModal() {
+    this._searchModalTag = null;
+  }
 
   async handleSearch() {
-    if (!this._searchTag || this._searching) return;
+    if (!this._searchModalTag || this._searching) return;
     this._searching = true;
     this._searchResult = null;
     this._searchProgress = {
@@ -417,7 +431,7 @@ class TaggerApp extends LitElement {
       org: this._org,
       repo: this._site,
       rootPath,
-      tagPath: this._searchTag,
+      tagPath: this._searchModalTag.path,
       onProgress: (progress) => {
         this._searchProgress = progress;
       },
@@ -457,8 +471,8 @@ class TaggerApp extends LitElement {
               @keydown=${(e) => { if (e.key === 'Enter') this.handleLoadClick(); }}></sl-input>
           </label>
           <label class="tagger-field tagger-field-path">
-            <span>Taxonomy path <em>(optional, defaults to /taxonomy.json)</em></span>
-            <sl-input id="taxonomy-input" type="text" placeholder="/taxonomy.json or a DA source URL"
+            <span>Taxonomy Path</span>
+            <sl-input id="taxonomy-input" type="text" placeholder="/taxonomy.json"
               autocomplete="off" .value=${this._taxonomyPathValue}
               @keydown=${(e) => { if (e.key === 'Enter') this.handleLoadClick(); }}></sl-input>
           </label>
@@ -485,18 +499,7 @@ class TaggerApp extends LitElement {
     return html`<div class="message ${this._message.type}">${this._message.text}</div>`;
   }
 
-  renderTabs() {
-    return html`
-      <div class="tagger-tabs" role="tablist">
-        <button role="tab" class="tagger-tab ${this._tab === 'editor' ? 'is-active' : ''}"
-          @click=${() => { this._tab = 'editor'; }}>Editor</button>
-        <button role="tab" class="tagger-tab ${this._tab === 'search' ? 'is-active' : ''}"
-          @click=${() => { this._tab = 'search'; }}>Find pages</button>
-      </div>
-    `;
-  }
-
-  // ---- Render: editor ----
+  // ---- Render: editor (Miller columns) ----
 
   renderEditor() {
     return html`
@@ -512,127 +515,146 @@ class TaggerApp extends LitElement {
           </sl-button>
           ${this._dirty ? html`<span class="dirty-hint">Unsaved changes — publish is disabled until you save.</span>` : nothing}
         </div>
-        ${this.renderMessage()}
-        <div class="namespace-list">
-          ${this._tree.namespaces.map((ns) => this.renderNamespace(ns))}
-          <div class="drop-zone" @dragover=${this.onDragOverRow} @drop=${(e) => this.onDropAtEndOfNamespaces(e)}></div>
-        </div>
-        <button class="add-node-btn" @click=${() => this.handleAddNamespace()}>+ Add namespace</button>
-      </div>
-    `;
-  }
-
-  renderNamespace(ns) {
-    return html`
-      <div class="tax-node tax-namespace" draggable="true"
-        @dragstart=${(e) => this.onDragStart(e, 'namespace', this._tree.namespaces, ns)}
-        @dragend=${() => this.onDragEnd()}
-        @dragover=${this.onDragOverRow}
-        @drop=${(e) => this.onDropBeforeNamespace(e, ns)}>
-        <div class="tax-node-header">
-          <span class="drag-handle" aria-hidden="true">⠿</span>
-          <input class="tax-name-input tax-namespace-name" .value=${ns.name} @keydown=${commitOnEnter}
-            @change=${(e) => this.renameNamespace(ns, e.target.value)} />
-          <button class="tax-action-btn" @click=${() => this.handleAddTag(ns)}>+ Tag</button>
-          <button class="tax-action-btn" @click=${() => this.handleAddCategory(ns)}>+ Category</button>
-          <button class="tax-action-btn tax-action-danger" @click=${() => this.handleDeleteNamespace(ns)}>Delete</button>
-        </div>
-        <div class="tax-node-body">
-          ${this.renderTagsList(ns.tags)}
-          ${ns.categories.map((cat) => this.renderCategory(cat, ns.categories))}
-          <div class="drop-zone" @dragover=${this.onDragOverRow} @drop=${(e) => this.onDropAtEndOfCategories(e, ns.categories)}></div>
+        <div class="miller-columns">
+          ${this.buildColumns().map((col, i) => this.renderColumn(col, i))}
         </div>
       </div>
     `;
   }
 
-  renderCategory(cat, ownerList) {
-    return html`
-      <div class="tax-node tax-category" draggable="true"
-        @dragstart=${(e) => this.onDragStart(e, 'category', ownerList, cat)}
-        @dragend=${() => this.onDragEnd()}
-        @dragover=${this.onDragOverRow}
-        @drop=${(e) => this.onDropBeforeCategory(e, ownerList, cat)}>
-        <div class="tax-node-header">
-          <span class="drag-handle" aria-hidden="true">⠿</span>
-          <input class="tax-name-input" .value=${cat.name} @keydown=${commitOnEnter}
-            @change=${(e) => this.renameCategory(cat, e.target.value)} />
-          <button class="tax-action-btn" @click=${() => this.handleAddTag(cat)}>+ Tag</button>
-          <button class="tax-action-btn" @click=${() => this.handleAddCategory(cat)}>+ Subcategory</button>
-          <button class="tax-action-btn tax-action-danger" @click=${() => this.handleDeleteCategory(ownerList, cat)}>Delete</button>
-        </div>
-        <div class="tax-node-body">
-          ${this.renderTagsList(cat.tags)}
-          ${cat.categories.map((sub) => this.renderCategory(sub, cat.categories))}
-          <div class="drop-zone" @dragover=${this.onDragOverRow} @drop=${(e) => this.onDropAtEndOfCategories(e, cat.categories)}></div>
-        </div>
-      </div>
-    `;
-  }
-
-  renderTagsList(list) {
-    return html`
-      <div class="tags-list">
-        ${list.map((tag) => html`
-          <div class="tag-row" draggable="true"
-            @dragstart=${(e) => this.onDragStart(e, 'tag', list, tag)}
-            @dragend=${() => this.onDragEnd()}
-            @dragover=${this.onDragOverRow}
-            @drop=${(e) => this.onDropBeforeTag(e, list, tag)}>
-            <span class="drag-handle" aria-hidden="true">⠿</span>
-            <input class="tax-name-input" .value=${tag.tag} @keydown=${commitOnEnter}
-              @change=${(e) => this.updateTagField(tag, 'tag', e.target.value)} />
-            <input class="tax-desc-input" placeholder="Description" .value=${tag.description} @keydown=${commitOnEnter}
-              @change=${(e) => this.updateTagField(tag, 'description', e.target.value)} />
-            <button class="tax-action-btn tax-action-danger" title="Delete tag"
-              @click=${() => this.handleDeleteTag(list, tag)}>&times;</button>
-          </div>
-        `)}
-        <div class="drop-zone drop-zone-tags" @dragover=${this.onDragOverRow} @drop=${(e) => this.onDropAtEndOfTags(e, list)}></div>
-      </div>
-    `;
-  }
-
-  // ---- Render: search ----
-
-  renderSearch() {
-    const flatTags = flattenTaxonomyTags(this._tree);
-    const byNamespace = new Map();
-    flatTags.forEach((tag) => {
-      if (!byNamespace.has(tag.namespace)) byNamespace.set(tag.namespace, []);
-      byNamespace.get(tag.namespace).push(tag);
+  // Column 0 is always the namespace list. Column i (i >= 1) shows the
+  // children of `_selection[i - 1]`, and only exists once there's a
+  // selection that deep.
+  buildColumns() {
+    const columns = [{ owner: null, items: this._tree.namespaces }];
+    this._selection.forEach((node) => {
+      columns.push({ owner: node, items: node.children });
     });
+    return columns;
+  }
 
+  renderColumnHeader(col) {
+    if (!col.owner) return html`<span class="miller-column-title">Namespaces</span>`;
     return html`
-      <div class="tagger-search">
-        <div class="search-form">
-          <label class="search-field">
-            <span>Tag</span>
-            <select @change=${(e) => { this._searchTag = e.target.value; }}>
-              <option value="" ?selected=${!this._searchTag}>Select a tag…</option>
-              ${[...byNamespace.entries()].map(([namespace, tags]) => html`
-                <optgroup label=${namespace}>
-                  ${tags.map((tag) => html`
-                    <option value=${tag.path} ?selected=${this._searchTag === tag.path}>
-                      ${tag.category ? `${tag.category} / ${tag.tag}` : tag.tag}
-                    </option>
-                  `)}
-                </optgroup>
-              `)}
-            </select>
-          </label>
-          <label class="search-field">
-            <span>Subfolder <em>(optional)</em></span>
-            <input type="text" placeholder="/blog" .value=${this._searchSubfolder}
-              @change=${(e) => { this._searchSubfolder = e.target.value; }} />
-          </label>
-          <sl-button class="pw-fill-accent" @click=${() => this.handleSearch()}
-            ?disabled=${!this._searchTag || this._searching}>
-            ${this._searching ? 'Searching…' : 'Find pages'}
+      <input class="tax-name-input" .value=${col.owner.name} @keydown=${commitOnEnter}
+        @change=${(e) => this.renameNode(col.owner, e.target.value)} />
+    `;
+  }
+
+  renderColumnMeta(col, colIndex) {
+    if (!col.owner) return nothing;
+    return html`
+      <div class="miller-column-meta">
+        <input class="tax-desc-input" placeholder="Description" .value=${col.owner.description} @keydown=${commitOnEnter}
+          @change=${(e) => this.updateNodeField(col.owner, 'description', e.target.value)} />
+        <div class="miller-column-meta-actions">
+          <sl-button class="pw-quiet-secondary pw-action-sm"
+            @click=${() => this.openSearchModal(this.pathForSelectionIndex(colIndex - 1))}>
+            Find pages
+          </sl-button>
+          <sl-button class="pw-quiet-danger pw-action-sm"
+            @click=${() => this.openDeleteConfirm(this.parentListFor(colIndex - 1), col.owner)}>
+            Delete
           </sl-button>
         </div>
-        ${this._searching ? this.renderSearchProgress() : nothing}
-        ${!this._searching && this._searchResult ? this.renderSearchResults() : nothing}
+      </div>
+    `;
+  }
+
+  renderColumn(col, colIndex) {
+    const ownerList = col.owner ? col.owner.children : this._tree.namespaces;
+    return html`
+      <div class="miller-column">
+        <div class="miller-column-header">${this.renderColumnHeader(col)}</div>
+        ${this.renderColumnMeta(col, colIndex)}
+        <div class="miller-column-actions">
+          <button class="tax-action-btn" @click=${() => this.handleAddChild(col.owner)}>+ Add</button>
+        </div>
+        <div class="miller-column-items"
+          @dragover=${this.onDragOverRow}
+          @drop=${(e) => this.onDropInColumn(e, col.owner)}>
+          ${col.items.length === 0 ? html`<p class="miller-column-empty">Empty</p>` : nothing}
+          ${col.items.map((node) => this.renderColumnItem(node, colIndex, ownerList))}
+        </div>
+      </div>
+    `;
+  }
+
+  renderColumnItem(node, colIndex, ownerList) {
+    const isSelected = this._selection[colIndex] === node;
+    const hasChildren = node.children.length > 0;
+
+    return html`
+      <div class="miller-item ${hasChildren ? 'has-children' : ''} ${isSelected ? 'is-selected' : ''}"
+        draggable="true"
+        @dragstart=${(e) => this.onDragStart(e, ownerList, node)}
+        @dragend=${() => this.onDragEnd()}
+        @dragover=${this.onDragOverRow}
+        @drop=${(e) => this.onDropOnItem(e, ownerList, node)}
+        @click=${() => this.handleColumnItemClick(node, colIndex)}>
+        <span class="drag-handle" aria-hidden="true">⠿</span>
+        <span class="miller-item-label">${node.name}</span>
+        <span class="miller-item-chevron" aria-hidden="true">›</span>
+      </div>
+    `;
+  }
+
+  // ---- Render: delete confirmation modal ----
+
+  renderDeleteModal() {
+    const {
+      name, typed, hasChildren,
+    } = this._deleteTarget;
+    const matches = typed.length > 0 && typed === name;
+
+    return html`
+      <div class="modal-backdrop" @click=${() => this.closeDeleteConfirm()}>
+        <div class="modal" @click=${(e) => e.stopPropagation()}>
+          <div class="modal-header">
+            <h2>Delete "${name}"?</h2>
+            <button class="modal-close" aria-label="Close" @click=${() => this.closeDeleteConfirm()}>&times;</button>
+          </div>
+          <div class="modal-body">
+            ${hasChildren ? html`<p class="modal-warning">This deletes everything under it.</p>` : nothing}
+            <label class="search-field">
+              <span>Type "${name}" to confirm</span>
+              <input type="text" .value=${typed} @input=${(e) => this.updateDeleteTyped(e.target.value)} />
+            </label>
+            <div class="modal-actions">
+              <sl-button class="pw-quiet-secondary" @click=${() => this.closeDeleteConfirm()}>Cancel</sl-button>
+              <sl-button class="pw-quiet-danger" @click=${() => this.confirmDelete()} ?disabled=${!matches}>Delete</sl-button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ---- Render: find-pages modal ----
+
+  renderSearchModal() {
+    const { path } = this._searchModalTag;
+    return html`
+      <div class="modal-backdrop" @click=${() => this.closeSearchModal()}>
+        <div class="modal" @click=${(e) => e.stopPropagation()}>
+          <div class="modal-header">
+            <h2>Find pages tagged "${path}"</h2>
+            <button class="modal-close" aria-label="Close" @click=${() => this.closeSearchModal()}>&times;</button>
+          </div>
+          <div class="modal-body">
+            <label class="search-field">
+              <span>Subfolder <em>(optional)</em></span>
+              <input type="text" placeholder="/blog" .value=${this._searchSubfolder}
+                @change=${(e) => { this._searchSubfolder = e.target.value; }} />
+            </label>
+            <sl-button class="pw-fill-accent" @click=${() => this.handleSearch()}
+              ?disabled=${this._searching}>
+              ${this._searching ? 'Searching…' : 'Find pages'}
+            </sl-button>
+            ${this._searching ? this.renderSearchProgress() : nothing}
+            ${!this._searching && this._searchResult ? this.renderSearchResults() : nothing}
+          </div>
+        </div>
       </div>
     `;
   }
@@ -673,12 +695,9 @@ class TaggerApp extends LitElement {
       ${this.renderToolbar()}
       ${this._state === 'loading' ? this.renderLoading() : nothing}
       ${this._state !== 'loading' ? this.renderMessage() : nothing}
-      ${this._state === 'loaded' ? html`
-        ${this.renderTabs()}
-        <div class="tagger-content">
-          ${this._tab === 'editor' ? this.renderEditor() : this.renderSearch()}
-        </div>
-      ` : nothing}
+      ${this._state === 'loaded' ? this.renderEditor() : nothing}
+      ${this._deleteTarget ? this.renderDeleteModal() : nothing}
+      ${this._searchModalTag ? this.renderSearchModal() : nothing}
     `;
   }
 }
