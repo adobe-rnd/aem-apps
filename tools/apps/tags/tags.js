@@ -632,45 +632,23 @@ class TaggerApp extends LitElement {
     return columns;
   }
 
+  // Read-only — editing a node's name/description happens inline on its row
+  // in the column where it's listed (via its pencil icon), not here. This is
+  // just a "where am I" display of the node whose children this column shows.
   renderColumnHeader(col) {
     if (!col.owner) return html`<span class="miller-column-title">Namespaces</span>`;
 
-    const isEditing = this._editingNode === col.owner;
-    if (isEditing) {
-      return html`
-        <div class="miller-column-title-row">
-          <input class="tax-name-input" .value=${col.owner.name} @keydown=${commitOnEnter}
-            @change=${(e) => this.renameNode(col.owner, e.target.value)} />
-          <button class="icon-btn" aria-label="Done editing" @click=${() => this.stopEditing()}>✓</button>
-        </div>
-      `;
-    }
-
     const isDirty = this._dirtyNodes.has(col.owner);
     return html`
-      <div class="miller-column-title-row">
-        <span class="miller-column-owner-name">
-          ${isDirty ? html`<span class="dirty-dot" aria-hidden="true" title="Unsaved change"></span>` : nothing}
-          ${col.owner.name}
-        </span>
-        <button class="icon-btn" aria-label="Edit ${col.owner.name}" @click=${() => this.startEditing(col.owner)}>✎</button>
-      </div>
+      <span class="miller-column-owner-name">
+        ${isDirty ? html`<span class="dirty-dot" aria-hidden="true" title="Unsaved change"></span>` : nothing}
+        ${col.owner.name}
+      </span>
     `;
   }
 
   renderColumnMeta(col) {
-    if (!col.owner) return nothing;
-
-    if (this._editingNode === col.owner) {
-      return html`
-        <div class="miller-column-meta">
-          <input class="tax-desc-input" placeholder="Description" .value=${col.owner.description} @keydown=${commitOnEnter}
-            @change=${(e) => this.updateNodeField(col.owner, 'description', e.target.value)} />
-        </div>
-      `;
-    }
-
-    if (!col.owner.description) return nothing;
+    if (!col.owner || !col.owner.description) return nothing;
     return html`
       <div class="miller-column-meta">
         <p class="miller-column-description">${col.owner.description}</p>
@@ -700,6 +678,20 @@ class TaggerApp extends LitElement {
   }
 
   renderColumnItem(node, colIndex, ownerList) {
+    if (this._editingNode === node) {
+      return html`
+        <div class="miller-item is-editing">
+          <div class="miller-item-edit-row">
+            <input class="tax-name-input" .value=${node.name} @keydown=${commitOnEnter}
+              @change=${(e) => this.renameNode(node, e.target.value)} />
+            <button class="icon-btn" aria-label="Done editing" @click=${() => this.stopEditing()}>✓</button>
+          </div>
+          <input class="tax-desc-input" placeholder="Description" .value=${node.description} @keydown=${commitOnEnter}
+            @change=${(e) => this.updateNodeField(node, 'description', e.target.value)} />
+        </div>
+      `;
+    }
+
     const isSelected = this._selection[colIndex] === node;
     const hasChildren = node.children.length > 0;
     const isDirty = this._dirtyNodes.has(node);
@@ -717,6 +709,8 @@ class TaggerApp extends LitElement {
         <span class="drag-handle" aria-hidden="true">⠿</span>
         ${isDirty ? html`<span class="dirty-dot" aria-hidden="true" title="Unsaved change"></span>` : nothing}
         <span class="miller-item-label">${node.name}</span>
+        <button class="icon-btn" aria-label="Edit ${node.name}"
+          @click=${(e) => { e.stopPropagation(); this.startEditing(node); }}>✎</button>
         ${hasChildren ? html`<span class="miller-item-chevron" aria-hidden="true">›</span>` : nothing}
       </div>
     `;

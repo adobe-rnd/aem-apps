@@ -312,13 +312,6 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   color: var(--s2-gray-600);
 }
 
-.miller-column-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-}
-
 .miller-column-owner-name {
   display: flex;
   align-items: center;
@@ -363,6 +356,20 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 .miller-item.is-selected {
   background: var(--pw-accent);
   color: var(--s2-gray-75);
+}
+
+.miller-item.is-editing {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  cursor: default;
+}
+
+.miller-item-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* Dropping here reorders — inserted above this row. */
