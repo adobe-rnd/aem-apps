@@ -833,8 +833,8 @@ class TaggerApp extends LitElement {
           </div>
           <div class="modal-body">
             <label class="search-field">
-              <span>Subfolder <em>(recommended for large sites)</em></span>
-              <input type="text" placeholder="/blog" .value=${this._searchSubfolder}
+              <span>Path Filter <em>(recommended for large sites)</em></span>
+              <input type="text" placeholder="/news/2026" .value=${this._searchSubfolder}
                 @change=${(e) => { this._searchSubfolder = e.target.value; }} />
             </label>
             <sl-button class="pw-fill-accent" @click=${() => this.handleSearch()}
