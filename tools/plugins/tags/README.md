@@ -1,7 +1,9 @@
 # Tags plugin
 
 A multi-select, searchable tag picker for authors, backed by a site's tag
-taxonomy sheet (`/taxonomy.json` by default).
+taxonomy sheet (`/taxonomy.json` by default). To create or edit that sheet,
+or to find which pages already carry a given tag, see the companion
+[Tags app](../../apps/tags/README.md).
 
 Ported from
 [scdemos/demo's `tools/plugins/tags`](https://github.com/scdemos/demo/tree/main/tools/plugins/tags),
@@ -53,3 +55,10 @@ access needs to add:
 Append `?taxonomy=...` to the `path` for sites that keep `taxonomy.json`
 somewhere other than the default location (see **Taxonomy location**
 above).
+
+## Dependencies
+
+Resolving the taxonomy location, fetching the sheet, and parsing its rows
+are shared with the [Tags app](../../apps/tags/README.md) via
+`tools/apps/tags/taxonomy.js` — one canonical implementation of the
+`taxonomy.json` contract for both.

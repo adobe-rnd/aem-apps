@@ -1,99 +1,10 @@
 // eslint-disable-next-line import/no-unresolved
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
-// eslint-disable-next-line import/no-unresolved
-import { DA_ORIGIN } from 'https://da.live/nx/public/utils/constants.js';
-
-const DEFAULT_TAXONOMY_PATH = '/taxonomy.json';
-
-/**
- * Resolves where to fetch the taxonomy sheet from. Defaults to
- * `taxonomy.json` at the current site's DA source root, but a site can
- * point this plugin at a different location via a `taxonomy` query param
- * on the plugin URL (set in the DA config library's `path` column), e.g.
- * `tags.html?taxonomy=/config/taxonomy.json`. The param can be either a
- * path within this site's DA source, or a full DA source URL (`https://
- * admin.da.live/source/{org}/{repo}/...`) to share one taxonomy sheet
- * across multiple sites/orgs.
- * @param {string} org Organization name
- * @param {string} repo Repository name
- * @returns {string} The DA source URL to fetch the taxonomy sheet from
- */
-function resolveTaxonomyUrl(org, repo) {
-  const params = new URLSearchParams(window.location.search);
-  const taxonomyParam = params.get('taxonomy');
-
-  if (!taxonomyParam) return `${DA_ORIGIN}/source/${org}/${repo}${DEFAULT_TAXONOMY_PATH}`;
-  if (/^https?:\/\//i.test(taxonomyParam)) return taxonomyParam;
-
-  const path = taxonomyParam.startsWith('/') ? taxonomyParam : `/${taxonomyParam}`;
-  return `${DA_ORIGIN}/source/${org}/${repo}${path}`;
-}
-
-/**
- * Fetches the taxonomy sheet's DA source (not the published site) so
- * authors see taxonomy edits immediately, without waiting for a publish.
- * @param {Object} actions DA actions object
- * @param {string} taxonomyUrl DA source URL of the taxonomy sheet
- * @returns {Promise<Object|null>} The taxonomy JSON data, or null on failure
- */
-async function fetchTaxonomy(actions, taxonomyUrl) {
-  try {
-    const response = await actions.daFetch(taxonomyUrl);
-
-    if (!response.ok) {
-      console.error(`Failed to fetch taxonomy: ${response.status} ${response.statusText}`);
-      return null;
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching taxonomy:', error);
-    return null;
-  }
-}
-
-/**
- * Walks the taxonomy sheet's flat rows into a list of selectable tags. A
- * row with only `Namespace` (and/or `Category`) set is a section header,
- * not a tag — it updates the namespace/category every later row with a
- * `Tag` inherits, until the next header row changes it. A namespace header
- * resets the category (a category only applies within one namespace).
- * Nested categories don't need special handling here — a sheet row's
- * `Category` cell can itself already contain `/`-separated levels (e.g.
- * `catlev1/catlev2`), and since this only ever treats `Category` as an
- * opaque string, that nesting just carries straight through into `path`.
- *
- * Each entry's `path` (`Namespace:Category/Tag`, or `Namespace/Tag` with no
- * category) is what actually gets sent to the document — keeps imported
- * and author-picked tags in the same format, and distinguishable even when
- * the same leaf tag name exists under more than one namespace (e.g.
- * "Race Recap" under both "Article Types" and "Tag Driven").
- * @param {Object[]} rows Raw `taxonomy.json` `data` rows
- * @returns {Object[]} `{ namespace, category, tag, path, description }`
- *   entries, one per selectable tag
- */
-function parseTaxonomy(rows) {
-  const tags = [];
-  let namespace = '';
-  let category = '';
-
-  rows.forEach((row) => {
-    if (row.Tag) {
-      const path = category ? `${namespace}:${category}/${row.Tag}` : `${namespace}/${row.Tag}`;
-      tags.push({
-        namespace, category, tag: row.Tag, path, description: row.Description || '',
-      });
-      return;
-    }
-    if (row.Namespace) {
-      namespace = row.Namespace;
-      category = '';
-    }
-    if (row.Category) category = row.Category;
-  });
-
-  return tags;
-}
+// Shared with tools/apps/tags (the taxonomy editor app) so both read
+// taxonomy.json against the same canonical resolve/fetch/parse logic.
+import {
+  resolveTaxonomyLocation, fetchTaxonomySheet, parseTaxonomyTree, flattenTaxonomyTags,
+} from '../../apps/tags/taxonomy.js';
 
 /**
  * Renders the (already-filtered) tag list, grouped under a collapsible
@@ -271,7 +182,8 @@ function displayTaxonomy(taxonomyData, actions) {
     return;
   }
 
-  const tags = parseTaxonomy(taxonomyData.data).map((tag, index) => ({ ...tag, index }));
+  const flatTags = flattenTaxonomyTags(parseTaxonomyTree(taxonomyData.data));
+  const tags = flatTags.map((tag, index) => ({ ...tag, index }));
 
   const searchContainer = document.createElement('div');
   searchContainer.className = 'search-container';
@@ -508,9 +420,14 @@ function displayTaxonomy(taxonomyData, actions) {
 async function init() {
   try {
     const { context, actions } = await DA_SDK;
-    const taxonomyUrl = resolveTaxonomyUrl(context.org, context.repo);
-    const taxonomyData = await fetchTaxonomy(actions, taxonomyUrl);
-    displayTaxonomy(taxonomyData, actions);
+    const taxonomyParam = new URLSearchParams(window.location.search).get('taxonomy');
+    const { sourceUrl } = resolveTaxonomyLocation(context.org, context.repo, taxonomyParam);
+    // The plugin runs in a cross-origin editor iframe, so it must fetch via
+    // the SDK's `actions.daFetch` (relays the auth token from the parent
+    // frame) rather than a directly-imported `daFetch`.
+    const { ok, status, sheet } = await fetchTaxonomySheet(actions.daFetch, sourceUrl);
+    if (!ok) console.error(`Failed to fetch taxonomy: ${status || 'network error'}`);
+    displayTaxonomy(ok ? sheet : null, actions);
   } catch (error) {
     console.error('Error initializing tags tool:', error);
 
