@@ -20,6 +20,8 @@ configure where its taxonomy sheet lives.
 - Tags are grouped under a collapsible heading per `Namespace`, with an
   optional `Category` shown as a badge; search filters across tag,
   namespace, category, and description.
+- A category is itself selectable, alongside anything nested under it — e.g.
+  both `Tag Driven:catlev1` and `Tag Driven:catlev1/Alpha` can be applied.
 - Multi-select via checkboxes, with a running summary of selected tags
   above the action buttons.
 - **Send Selected** inserts the selected tags' taxonomy paths at the

@@ -100,11 +100,27 @@ describe('flattenTaxonomyTags', () => {
     const tree = parseTaxonomyTree(rows);
     const paths = flattenTaxonomyTags(tree).map((t) => t.path);
     assert.deepEqual(paths, [
-      'Article Types/Race Recap',
-      'Tag Driven/Race Recap',
+      'Article Types:Race Recap',
+      'Tag Driven:Race Recap',
+      'Tag Driven:catlev1',
       'Tag Driven:catlev1/Alpha',
+      'Tag Driven:catlev1/catlev2',
       'Tag Driven:catlev1/catlev2/Beta',
     ]);
+  });
+
+  it('also flattens categories themselves as selectable tags, not just their leaves', () => {
+    // A category (a node with children) can be applied as a tag in its own
+    // right, alongside anything nested under it.
+    const tree = parseTaxonomyTree(rows);
+    const tagDriven = flattenTaxonomyTags(tree).filter((t) => t.namespace === 'Tag Driven');
+    const catlev1 = tagDriven.find((t) => t.tag === 'catlev1');
+    assert.equal(catlev1.category, '');
+    assert.equal(catlev1.path, 'Tag Driven:catlev1');
+
+    const catlev2 = tagDriven.find((t) => t.tag === 'catlev2');
+    assert.equal(catlev2.category, 'catlev1');
+    assert.equal(catlev2.path, 'Tag Driven:catlev1/catlev2');
   });
 });
 
@@ -145,10 +161,36 @@ describe('serializeTaxonomyTree', () => {
         Namespace: '', Category: '', Tag: 'Race Recap', Description: '',
       },
       {
+        Namespace: '', Category: 'catlev1', Tag: '', Description: '',
+      },
+      {
         Namespace: '', Category: 'catlev1', Tag: 'Alpha', Description: '',
       },
       {
+        Namespace: '', Category: 'catlev1/catlev2', Tag: '', Description: '',
+      },
+      {
         Namespace: '', Category: 'catlev1/catlev2', Tag: 'Beta', Description: 'Beta desc',
+      },
+    ]);
+  });
+
+  it('always emits a category\'s own row, even with no description', () => {
+    // A category needs a row to be independently selectable/applicable as a
+    // tag (see flattenTaxonomyTags), regardless of whether it carries its
+    // own description.
+    const tree = parseTaxonomyTree(rows);
+    const tagDriven = tree.namespaces.find((n) => n.name === 'Tag Driven');
+    const catlev1 = tagDriven.children.find((n) => n.name === 'catlev1');
+    assert.equal(catlev1.description, '');
+
+    const categoryOnlyRows = serializeTaxonomyTree(tree).filter((row) => row.Category && !row.Tag);
+    assert.deepEqual(categoryOnlyRows, [
+      {
+        Namespace: '', Category: 'catlev1', Tag: '', Description: '',
+      },
+      {
+        Namespace: '', Category: 'catlev1/catlev2', Tag: '', Description: '',
       },
     ]);
   });
@@ -188,6 +230,9 @@ describe('serializeTaxonomyTree', () => {
       },
       {
         Namespace: '', Category: '', Tag: 'DirectA', Description: '',
+      },
+      {
+        Namespace: '', Category: 'Reviews', Tag: '', Description: '',
       },
       {
         Namespace: '', Category: 'Reviews', Tag: 'InReviews', Description: '',

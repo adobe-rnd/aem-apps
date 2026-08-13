@@ -19,11 +19,13 @@
  * `Tag` row's placement in the sheet doesn't affect where it attaches, only
  * its own `Category` field does.
  *
- * A `Category`-only row (no `Tag`) is only needed to attach a `Description`
- * to a category itself — a category's existence is always implied by any
- * `Tag` row naming its path, and is created automatically. (A category with
- * no tags anywhere in its subtree is indistinguishable from a tag itself —
- * a node's role is defined solely by whether it currently has children.)
+ * A `Category`-only row (no `Tag`) declares a category explicitly — always
+ * emitted for any node currently with children, whether or not it carries
+ * its own `Description`, since a category can be applied as a tag in its
+ * own right (see `flattenTaxonomyTags`) and needs a row to do that from.
+ * (A category with no tags anywhere in its subtree is indistinguishable
+ * from a tag itself — a node's role is defined solely by whether it
+ * currently has children.)
  *
  * Every serialized row carries all four columns (`Namespace`/`Category`/
  * `Tag`/`Description`), using an empty string for whichever don't apply —
@@ -213,11 +215,11 @@ function makeRow({
  * Serializes a namespace tree back into `taxonomy.json`'s flat `data` rows.
  * Every `Tag` row carries its own `Category` (full `/`-joined path, empty
  * for a tag directly under the namespace) rather than relying on a preceding
- * header row. A category's own existence is always reconstructible from any
- * of its descendant `Tag` rows (a category, by definition, has at least one
- * child, which is itself either a tag or another category with the same
- * guarantee), so a `Category`-only row is only emitted when the category
- * carries its own description.
+ * header row. A category (any node currently with children) always gets its
+ * own `Category`-only row, even with no description of its own — since
+ * `flattenTaxonomyTags` lets a category be applied as a tag in its own
+ * right, it needs a row to be selected/referenced from independently of
+ * whichever tags happen to be nested under it.
  * @param {{ namespaces: Object[] }} tree
  * @returns {Object[]} Flat sheet rows
  */
@@ -233,9 +235,7 @@ export function serializeTaxonomyTree(tree) {
         return;
       }
       const fullPath = [...ancestorPath, child.name].join('/');
-      if (child.description) {
-        rows.push(makeRow({ category: fullPath, description: child.description }));
-      }
+      rows.push(makeRow({ category: fullPath, description: child.description }));
       serializeChildren(child.children, [...ancestorPath, child.name]);
     });
   };
@@ -249,11 +249,14 @@ export function serializeTaxonomyTree(tree) {
 }
 
 /**
- * Flattens the tree's leaf nodes (tags) into the `{ namespace, category,
- * tag, path, description }` shape the tags plugin's picker uses, so it and
- * this app's search always agree on a tag's `path` string. Non-leaf nodes
- * (namespaces, categories) are walked into but never themselves selectable,
- * matching the picker's original behavior.
+ * Flattens every node under a namespace (both tags and categories) into the
+ * `{ namespace, category, tag, path, description }` shape the tags plugin's
+ * picker uses, so it and this app's search always agree on a tag's `path`
+ * string. A category is itself selectable (applied as a tag in its own
+ * right, e.g. `Tag Driven:catlev1`), not just a container walked into to
+ * reach its descendants — a node's role (bare tag vs. category) only
+ * affects whether it has anything nested under it, not whether it can be
+ * applied on its own.
  * @param {{ namespaces: Object[] }} tree
  * @returns {Object[]} Flat list of selectable tags
  */
@@ -262,20 +265,17 @@ export function flattenTaxonomyTags(tree) {
 
   (tree?.namespaces || []).forEach((namespace) => {
     const walk = (node, ancestorPath) => {
-      if (node.children.length === 0) {
-        const categoryPath = ancestorPath.join('/');
-        const path = categoryPath
-          ? `${namespace.name}:${categoryPath}/${node.name}`
-          : `${namespace.name}/${node.name}`;
-        out.push({
-          namespace: namespace.name,
-          category: categoryPath,
-          tag: node.name,
-          description: node.description,
-          path,
-        });
-        return;
-      }
+      const categoryPath = ancestorPath.join('/');
+      const path = categoryPath
+        ? `${namespace.name}:${categoryPath}/${node.name}`
+        : `${namespace.name}:${node.name}`;
+      out.push({
+        namespace: namespace.name,
+        category: categoryPath,
+        tag: node.name,
+        description: node.description,
+        path,
+      });
       node.children.forEach((child) => walk(child, [...ancestorPath, node.name]));
     };
 

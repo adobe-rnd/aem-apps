@@ -504,7 +504,7 @@ class TaggerApp extends LitElement {
     return idx === 0 ? this._tree.namespaces : this._selection[idx - 1].children;
   }
 
-  // Builds the `Namespace:Category/Tag` (or `Namespace/Tag`, or bare
+  // Builds the `Namespace:Category/Tag` (or `Namespace:Tag`, or bare
   // `Namespace`) path for the node at `_selection[idx]`, matching
   // `taxonomy.js`'s `flattenTaxonomyTags` convention exactly.
   pathForSelectionIndex(idx) {
@@ -512,7 +512,7 @@ class TaggerApp extends LitElement {
     if (idx === 0) return namespace.name;
     const node = this._selection[idx];
     const categoryPath = this._selection.slice(1, idx).map((n) => n.name).join('/');
-    return categoryPath ? `${namespace.name}:${categoryPath}/${node.name}` : `${namespace.name}/${node.name}`;
+    return categoryPath ? `${namespace.name}:${categoryPath}/${node.name}` : `${namespace.name}:${node.name}`;
   }
 
   // ---- Bulk search (find pages) ----
