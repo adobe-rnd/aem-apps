@@ -5,23 +5,13 @@
     <title>Developer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" href="data:,">
+    <script type="importmap">
+      { "imports": { "da-lit": "/tools/deps/lit/dist/index.js" } }
+    </script>
     <link rel="stylesheet" href="https://da.live/nx2/styles/styles.css">
-    <link rel="stylesheet" href="/tools/plugins/developer/developer.css">
     <script src="https://da.live/nx/utils/sdk.js" type="module"></script>
     <script src="/tools/plugins/developer/developer.js" type="module"></script>
   </head>
   <body>
-    <div id="developer-app">
-      <div class="main-content">
-        <p class="branch-description">Use a developer branch for the preview in the layout mode by selecting one from the list below. Select nothing to use the production branch.</p>
-        <div id="status-message" class="status-message" role="status" aria-live="polite"></div>
-        <div id="branch-field" class="branch-field" hidden>
-          <label for="branch-select" class="branch-label">Branch</label>
-          <select id="branch-select" class="branch-select">
-            <option value=""></option>
-          </select>
-        </div>
-      </div>
-    </div>
   </body>
 </html>
