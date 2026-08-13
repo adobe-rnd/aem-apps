@@ -161,13 +161,13 @@ describe('serializeTaxonomyTree', () => {
         Namespace: '', Category: '', Tag: 'Race Recap', Description: '',
       },
       {
-        Namespace: '', Category: 'catlev1', Tag: '', Description: '',
+        Namespace: '', Category: '', Tag: 'catlev1', Description: '',
       },
       {
         Namespace: '', Category: 'catlev1', Tag: 'Alpha', Description: '',
       },
       {
-        Namespace: '', Category: 'catlev1/catlev2', Tag: '', Description: '',
+        Namespace: '', Category: 'catlev1', Tag: 'catlev2', Description: '',
       },
       {
         Namespace: '', Category: 'catlev1/catlev2', Tag: 'Beta', Description: 'Beta desc',
@@ -175,27 +175,24 @@ describe('serializeTaxonomyTree', () => {
     ]);
   });
 
-  it('always emits a category\'s own row, even with no description', () => {
-    // A category needs a row to be independently selectable/applicable as a
-    // tag (see flattenTaxonomyTags), regardless of whether it carries its
-    // own description.
+  it('represents a category node as an ordinary Tag row, not a distinct shape', () => {
+    // A category is just a tag that has children — its own row (Tag: its
+    // name, Category: its ancestors' path) looks exactly like a leaf tag's.
     const tree = parseTaxonomyTree(rows);
     const tagDriven = tree.namespaces.find((n) => n.name === 'Tag Driven');
     const catlev1 = tagDriven.children.find((n) => n.name === 'catlev1');
-    assert.equal(catlev1.description, '');
+    assert.ok(catlev1.children.length > 0);
 
-    const categoryOnlyRows = serializeTaxonomyTree(tree).filter((row) => row.Category && !row.Tag);
-    assert.deepEqual(categoryOnlyRows, [
-      {
-        Namespace: '', Category: 'catlev1', Tag: '', Description: '',
-      },
-      {
-        Namespace: '', Category: 'catlev1/catlev2', Tag: '', Description: '',
-      },
-    ]);
+    const catlev1Row = serializeTaxonomyTree(tree).find((row) => row.Tag === 'catlev1');
+    assert.deepEqual(catlev1Row, {
+      Namespace: '', Category: '', Tag: 'catlev1', Description: '',
+    });
   });
 
   it('round-trips a category description alongside its tags', () => {
+    // The input still uses the old Category-only row shape (no Tag) —
+    // parseTaxonomyTree keeps accepting that (Postel's law), even though
+    // serializeTaxonomyTree no longer produces it.
     const describedRows = [
       { Namespace: 'NS' },
       { Category: 'Cat', Description: 'cat desc' },
@@ -208,7 +205,7 @@ describe('serializeTaxonomyTree', () => {
         Namespace: 'NS', Category: '', Tag: '', Description: '',
       },
       {
-        Namespace: '', Category: 'Cat', Tag: '', Description: 'cat desc',
+        Namespace: '', Category: '', Tag: 'Cat', Description: 'cat desc',
       },
       {
         Namespace: '', Category: 'Cat', Tag: 'Leaf', Description: '',
@@ -232,7 +229,7 @@ describe('serializeTaxonomyTree', () => {
         Namespace: '', Category: '', Tag: 'DirectA', Description: '',
       },
       {
-        Namespace: '', Category: 'Reviews', Tag: '', Description: '',
+        Namespace: '', Category: '', Tag: 'Reviews', Description: '',
       },
       {
         Namespace: '', Category: 'Reviews', Tag: 'InReviews', Description: '',

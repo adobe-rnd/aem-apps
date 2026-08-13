@@ -19,13 +19,14 @@
  * `Tag` row's placement in the sheet doesn't affect where it attaches, only
  * its own `Category` field does.
  *
- * A `Category`-only row (no `Tag`) declares a category explicitly — always
- * emitted for any node currently with children, whether or not it carries
- * its own `Description`, since a category can be applied as a tag in its
- * own right (see `flattenTaxonomyTags`) and needs a row to do that from.
- * (A category with no tags anywhere in its subtree is indistinguishable
- * from a tag itself — a node's role is defined solely by whether it
- * currently has children.)
+ * A category is just a tag that happens to have children — there's no
+ * separate row shape for it. Every node gets one `Tag` row (its own name in
+ * `Tag`, its ancestors' `/`-joined path in `Category`), whether or not it
+ * currently has children, so a category is applicable as a tag in its own
+ * right (see `flattenTaxonomyTags`) exactly like any of its descendants. A
+ * `Category`-only row (no `Tag`) is still accepted when parsing — for
+ * hand-edited sheets predating this, or written some other way — but
+ * `serializeTaxonomyTree` never emits one.
  *
  * Every serialized row carries all four columns (`Namespace`/`Category`/
  * `Tag`/`Description`), using an empty string for whichever don't apply —
@@ -213,13 +214,12 @@ function makeRow({
 
 /**
  * Serializes a namespace tree back into `taxonomy.json`'s flat `data` rows.
- * Every `Tag` row carries its own `Category` (full `/`-joined path, empty
- * for a tag directly under the namespace) rather than relying on a preceding
- * header row. A category (any node currently with children) always gets its
- * own `Category`-only row, even with no description of its own — since
- * `flattenTaxonomyTags` lets a category be applied as a tag in its own
- * right, it needs a row to be selected/referenced from independently of
- * whichever tags happen to be nested under it.
+ * Every node — tag or category alike — gets one `Tag` row: its own name in
+ * `Tag`, its ancestors' `/`-joined path in `Category` (empty for a node
+ * directly under the namespace), rather than relying on a preceding header
+ * row. A category's row looks exactly like a tag's, then its children (if
+ * any) follow as their own rows — a category is only a tag with children,
+ * not a different row shape.
  * @param {{ namespaces: Object[] }} tree
  * @returns {Object[]} Flat sheet rows
  */
@@ -228,15 +228,12 @@ export function serializeTaxonomyTree(tree) {
 
   const serializeChildren = (children, ancestorPath) => {
     children.forEach((child) => {
-      if (child.children.length === 0) {
-        rows.push(makeRow({
-          category: ancestorPath.join('/'), tag: child.name, description: child.description,
-        }));
-        return;
+      rows.push(makeRow({
+        category: ancestorPath.join('/'), tag: child.name, description: child.description,
+      }));
+      if (child.children.length > 0) {
+        serializeChildren(child.children, [...ancestorPath, child.name]);
       }
-      const fullPath = [...ancestorPath, child.name].join('/');
-      rows.push(makeRow({ category: fullPath, description: child.description }));
-      serializeChildren(child.children, [...ancestorPath, child.name]);
     });
   };
 
