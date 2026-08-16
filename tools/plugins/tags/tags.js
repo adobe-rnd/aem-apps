@@ -315,11 +315,11 @@ function displayTaxonomy(taxonomyData, actions) {
    * Reads the document's current text selection (via `actions.getSelection`)
    * and loads whichever taxonomy paths it contains as the picker's
    * selection — replacing whatever was previously selected in the picker.
-   * There's no push notification when the author changes the document
-   * selection while the panel stays open (the SDK only exposes a pull,
-   * request/response `getSelection`), so this is wired to a button the
-   * author clicks whenever they want the picker to catch up to a new
-   * selection, rather than something that happens automatically.
+   * Run once on init to seed the picker from whatever's already selected,
+   * and also wired to a button, since there's no push notification when
+   * the author changes the document selection while the panel stays open
+   * (the SDK only exposes a pull, request/response `getSelection`) — the
+   * button lets the author re-sync the picker to a new selection later.
    *
    * Matches by substring (`text.includes(tag.path)`) rather than splitting
    * the selection on commas and comparing each piece exactly — the editor's
@@ -413,6 +413,7 @@ function displayTaxonomy(taxonomyData, actions) {
   render(tags);
   updateSendButton();
   updateSelectedSummary();
+  loadTagsFromSelection();
 
   document.body.appendChild(container);
 }
