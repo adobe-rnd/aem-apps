@@ -12,6 +12,7 @@ import {
 import { CONFIG_KEYS } from '../../shared/constants.js';
 import '../../components/explainer-info-card.js';
 import '../../components/compact-settings-table.js';
+import '../editor-config/editor-config.js';
 
 // Get stylesheet for this section
 const NX = 'https://da.live/nx2';
@@ -38,6 +39,7 @@ export default class ExperienceWorkspaceSection extends BaseSectionElement {
     _configs: { state: true },
     _isSaving: { state: true },
     _saveMessage: { state: true },
+    _activeTab: { state: true },
   };
 
   constructor() {
@@ -45,6 +47,7 @@ export default class ExperienceWorkspaceSection extends BaseSectionElement {
     this._configs = {};
     this._isSaving = false;
     this._saveMessage = null;
+    this._activeTab = 'settings'; // 'settings' or 'editor-paths'
   }
 
   _getStylesheets() {
@@ -342,6 +345,29 @@ export default class ExperienceWorkspaceSection extends BaseSectionElement {
     `;
   }
 
+  _renderTabs() {
+    // Only show Editor Paths tab in org context (not site)
+    const showEditorPaths = !this.site;
+
+    if (!showEditorPaths) {
+      // No tabs needed if only one view available
+      return '';
+    }
+
+    return html`
+      <div class="section-tabs">
+        <button
+          class="section-tab ${this._activeTab === 'settings' ? 'active' : ''}"
+          @click=${() => { this._activeTab = 'settings'; }}
+        >Settings</button>
+        <button
+          class="section-tab ${this._activeTab === 'editor-paths' ? 'active' : ''}"
+          @click=${() => { this._activeTab = 'editor-paths'; }}
+        >Editor Paths</button>
+      </div>
+    `;
+  }
+
   render() {
     if (this._loading) {
       return this._renderLoading('Loading Experience Workspace settings...');
@@ -351,17 +377,31 @@ export default class ExperienceWorkspaceSection extends BaseSectionElement {
       return this._renderError(this._error);
     }
 
+    // In site context, only show settings (editor paths are org-level)
+    const showEditorPaths = !this.site;
+    const showSettings = this._activeTab === 'settings' || !showEditorPaths;
+
     return html`
       <div class="section-container">
-        ${this._renderExplainerCard()}
+        ${this._renderTabs()}
 
-        ${this._saveMessage ? html`
-          <div class="message ${this._saveMessage.type}">
-            ${this._saveMessage.text}
-          </div>
-        ` : ''}
+        ${showSettings ? html`
+          ${this._renderExplainerCard()}
 
-        ${this._renderSettingsCard()}
+          ${this._saveMessage ? html`
+            <div class="message ${this._saveMessage.type}">
+              ${this._saveMessage.text}
+            </div>
+          ` : ''}
+
+          ${this._renderSettingsCard()}
+        ` : html`
+          <editor-config-section
+            .org=${this.org}
+            .site=${this.site}
+            .token=${this.token}
+          ></editor-config-section>
+        `}
       </div>
     `;
   }
