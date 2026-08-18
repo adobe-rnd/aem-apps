@@ -4,7 +4,8 @@
 /* eslint-disable no-underscore-dangle */
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from 'da-lit';
-import { fetchSiteList } from './shared/api/config-api.js';
+import { fetchSiteList, fetchInheritedFlag } from './shared/api/config-api.js';
+import { CONFIG_KEYS } from './shared/constants.js';
 
 const NX = 'https://da.live/nx2';
 let nexter = null;
@@ -61,57 +62,35 @@ const SPECTRUM_ICONS = {
   'multi-site-manager': './icons/multi-site-manager-branch.svg',
   collapse: './icons/collapse-menu-rail-right-close.svg',
   expand: './icons/collapse-menu-rail-right-open.svg',
+  home: './icons/home-house.svg',
 };
 
 // Section definitions with Spectrum icon references
 const SECTIONS = {
   ORG: [
     {
-      id: 'permissions-group',
+      id: 'permissions',
       title: 'Permissions',
       iconKey: 'permissions',
-      type: 'group',
-      children: [
-        {
-          id: 'permissions',
-          title: 'Permissions',
-          iconKey: 'permissions',
-          scope: 'org',
-          inheritable: false,
-        },
-      ],
+      scope: 'org',
+      inheritable: false,
     },
     {
-      id: 'multi-site-manager-group',
+      id: 'multi-site-manager',
       title: 'Multi-Site Manager',
       iconKey: 'multi-site-manager',
-      type: 'group',
-      children: [
-        {
-          id: 'multi-site-manager',
-          title: 'Multi-Site Manager',
-          iconKey: 'multi-site-manager',
-          scope: 'org',
-          inheritable: false,
-        },
-      ],
+      scope: 'org',
+      inheritable: false,
     },
     {
       id: 'authoring-experience-group',
-      title: 'Authoring Experience',
+      title: 'Experience Workspace',
       iconKey: 'universal-editor',
       type: 'group',
       children: [
         {
           id: 'experience-workspace',
           title: 'Experience Workspace',
-          iconKey: 'universal-editor',
-          scope: 'both',
-          inheritable: true,
-        },
-        {
-          id: 'editor-config',
-          title: 'Editor Config',
           iconKey: 'universal-editor',
           scope: 'both',
           inheritable: true,
@@ -173,11 +152,33 @@ const SECTIONS = {
       ],
     },
     {
-      id: 'translation-group',
-      title: 'Translation',
-      iconKey: 'translation',
+      id: 'authoring-experience-group-site',
+      title: 'Experience Workspace',
+      iconKey: 'universal-editor',
       type: 'group',
       children: [
+        {
+          id: 'experience-workspace',
+          title: 'Experience Workspace',
+          iconKey: 'universal-editor',
+          scope: 'both',
+          inheritable: true,
+        },
+      ],
+    },
+    {
+      id: 'integrations-group-site',
+      title: 'Integrations',
+      iconKey: 'integrations',
+      type: 'group',
+      children: [
+        {
+          id: 'aem-assets',
+          title: 'AEM Assets',
+          iconKey: 'aem-assets',
+          scope: 'both',
+          inheritable: true,
+        },
         {
           id: 'translation',
           title: 'Translation',
@@ -207,6 +208,8 @@ class ConfigConsoleApp extends LitElement {
     _recentPaths: { state: true },
     _availableSites: { state: true },
     _fetchingSites: { state: true },
+    _welcomeView: { state: true },
+    _ewEnabled: { state: true },
   };
 
   constructor() {
@@ -225,6 +228,8 @@ class ConfigConsoleApp extends LitElement {
     this._availableSites = [];
     this._fetchingSites = false;
     this._fetchSitesDebounceTimer = null;
+    this._welcomeView = 'org'; // 'org' or 'site'
+    this._ewEnabled = null; // null = not checked yet, true/false = checked
   }
 
   // eslint-disable-next-line class-methods-use-this -- sessionStorage access is stateless
@@ -364,6 +369,73 @@ class ConfigConsoleApp extends LitElement {
     this._saveSidebarState();
   }
 
+  _handleHomeClick() {
+    // Clear current section to return to welcome page
+    this._currentSection = null;
+    this._sectionComponent = null;
+
+    // Clear hash without triggering navigation
+    if (window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+
+    // Track home navigation
+    sampleRUM('config-console-home', { org: this._org, site: this._site });
+
+    // Force re-render to show welcome page
+    this.requestUpdate();
+  }
+
+  _handleViewToggle(view) {
+    this._welcomeView = view;
+
+    // If we're currently in a section, check if it's still available in the new view
+    if (this._currentSection) {
+      const sectionAvailable = this._availableSections.some(
+        (section) => section.id === this._currentSection
+          || (section.children
+            && section.children.some((child) => child.id === this._currentSection)),
+      );
+
+      // If current section not available in new view, go back to home
+      if (!sectionAvailable) {
+        this._currentSection = null;
+        this._sectionComponent = null;
+        if (window.location.hash) {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+      }
+    }
+
+    sampleRUM('config-console-view-toggle', { view, org: this._org, site: this._site });
+  }
+
+  async _checkEWStatus() {
+    if (!this._org) {
+      this._ewEnabled = null;
+      return;
+    }
+
+    try {
+      const result = await fetchInheritedFlag(
+        this._org,
+        this._site,
+        CONFIG_KEYS.EW_ENABLED,
+        this.token,
+      );
+      // Store full config info to determine banner message
+      this._ewEnabled = {
+        value: result?.value === 'true' || result?.value === true,
+        source: result?.source,
+        inheritedValue: result?.inheritedValue === 'true' || result?.inheritedValue === true,
+      };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to check EW status:', error);
+      this._ewEnabled = null;
+    }
+  }
+
   _toggleGroup(groupId) {
     // If sidebar is collapsed, expand it first
     if (this._sidebarCollapsed) {
@@ -480,6 +552,9 @@ class ConfigConsoleApp extends LitElement {
     sampleRUM('config-console-load', { org: this._org, site: this._site, source: 'manual' });
 
     this._state = 'ready';
+
+    // Check EW status
+    this._checkEWStatus();
 
     // Re-process hash navigation now that context is loaded
     this._handleRouteChange();
@@ -684,8 +759,46 @@ class ConfigConsoleApp extends LitElement {
 
   get _availableSections() {
     const sections = [];
-    if (this._org) sections.push(...SECTIONS.ORG);
-    if (this._org && this._site) sections.push(...SECTIONS.SITE);
+    const hasSite = this._org && this._site;
+
+    // Helper to flatten single-child groups
+    const flattenSections = (sectionList) => sectionList.map((section) => {
+      // If group has only one child, flatten it
+      if (section.type === 'group' && section.children && section.children.length === 1) {
+        return section.children[0];
+      }
+      return section;
+    });
+
+    // If both org and site are loaded, filter based on welcome view
+    if (hasSite) {
+      if (this._welcomeView === 'org') {
+        // Show only org sections
+        sections.push({
+          type: 'header',
+          id: 'org-header',
+          title: 'Org',
+        });
+        sections.push(...flattenSections(SECTIONS.ORG));
+      } else {
+        // Show only site sections
+        sections.push({
+          type: 'header',
+          id: 'site-header',
+          title: `Site: ${this._site}`,
+        });
+        sections.push(...flattenSections(SECTIONS.SITE));
+      }
+    } else if (this._org) {
+      // Only org loaded, show org sections
+      sections.push({
+        type: 'header',
+        id: 'org-header',
+        title: 'Org',
+      });
+      sections.push(...flattenSections(SECTIONS.ORG));
+    }
+
     return sections;
   }
 
@@ -787,7 +900,7 @@ class ConfigConsoleApp extends LitElement {
       <div class="console-toolbar">
         <div class="console-toolbar-fields">
           <div class="console-toolbar-input-group">
-            <label for="org-input">Organization</label>
+            <label for="org-input">Org</label>
             <input
               id="org-input"
               type="text"
@@ -834,8 +947,25 @@ class ConfigConsoleApp extends LitElement {
     return html`
       <div class="console-nav-header">
         ${!this._sidebarCollapsed ? html`
-          <div class="console-title-small">Config Console</div>
-        ` : nothing}
+          <button
+            class="console-title-small console-home-button"
+            @click=${this._handleHomeClick}
+            title="Return to home"
+            aria-label="Return to home"
+          >
+            ${this._renderIcon('home', 'Home')}
+            <span>Config Console</span>
+          </button>
+        ` : html`
+          <button
+            class="nav-home-button-collapsed"
+            @click=${this._handleHomeClick}
+            title="Return to home"
+            aria-label="Return to home"
+          >
+            ${this._renderIcon('home', 'Home')}
+          </button>
+        `}
         <button
           class="nav-collapse-button"
           @click=${this._toggleSidebar}
@@ -853,6 +983,19 @@ class ConfigConsoleApp extends LitElement {
   }
 
   _renderNavItem(section) {
+    // Section headers
+    if (section.type === 'header') {
+      if (this._sidebarCollapsed) {
+        // Don't show header when collapsed - toggle buttons provide context
+        return nothing;
+      }
+      return html`
+        <div class="nav-section-header" role="heading" aria-level="2">
+          ${section.title}
+        </div>
+      `;
+    }
+
     if (section.type === 'group') {
       const isExpanded = this._expandedGroups[section.id];
       return html`
@@ -900,19 +1043,38 @@ class ConfigConsoleApp extends LitElement {
     const hasOrg = this._org && this._state === 'ready';
     const hasSite = hasOrg && this._site;
 
+    // Determine title based on context and view
+    let titleText = 'Configure your sites';
+    let titleName = null;
+
+    if (hasOrg && hasSite) {
+      if (this._welcomeView === 'site') {
+        titleText = 'Configure your site';
+        titleName = this._site;
+      } else {
+        titleText = 'Configure your org';
+        titleName = this._org;
+      }
+    } else if (hasOrg && !hasSite) {
+      titleText = 'Configure your org';
+      titleName = this._org;
+    }
+
     return html`
       <div class="welcome-container">
         <div class="welcome-hero">
           <p class="welcome-eyebrow">Configuration Console</p>
-          <h1 class="welcome-title">Set up and manage your ${hasSite ? 'site' : 'sites'}</h1>
-          <p class="welcome-body">Choose an organization${hasSite ? ' and site' : ''} to manage permissions, authoring library items, and integrations for your authoring experience.</p>
+          <h1 class="welcome-title">
+            ${titleText}
+            ${titleName ? html` <span class="welcome-title-name">(${titleName})</span>` : nothing}
+          </h1>
 
           ${!hasOrg ? html`
             <div class="welcome-actions">
               <button class="welcome-cta-primary" @click=${() => {
     const input = this.shadowRoot.querySelector('.console-toolbar sl-input');
     input?.focus();
-  }}>Select organization</button>
+  }}>Select org</button>
               <a
                 href="https://docs.da.live"
                 target="_blank"
@@ -921,67 +1083,212 @@ class ConfigConsoleApp extends LitElement {
               >DA documentation</a>
             </div>
           ` : nothing}
+
+          ${hasOrg && hasSite ? html`
+            <div class="welcome-view-toggle">
+              <button
+                class="welcome-view-button ${this._welcomeView === 'org' ? 'active' : ''}"
+                @click=${() => { this._handleViewToggle('org'); }}
+              >Org: ${this._org}</button>
+              <button
+                class="welcome-view-button ${this._welcomeView === 'site' ? 'active' : ''}"
+                @click=${() => { this._handleViewToggle('site'); }}
+              >Site: ${this._site}</button>
+            </div>
+          ` : nothing}
         </div>
 
+${this._renderEWBanner(hasOrg, hasSite)}
+
         ${hasOrg ? html`
-          <div class="welcome-cards">
-            <div class="welcome-card">
-              <div class="welcome-card-header">
-                <div class="welcome-card-icon">
-                  ${this._renderIcon('permissions')}
-                </div>
-                <h3 class="welcome-card-title">Permissions & Sites</h3>
-              </div>
-              <p class="welcome-card-body">Control user access to repositories and configure Multi-Site Manager for enterprise content workflows.</p>
-              <div class="welcome-card-actions">
-                <button
-                  class="welcome-card-action"
-                  @click=${() => this._handleNavClick('permissions')}
-                >Manage access</button>
-              </div>
-            </div>
-
-            <div class="welcome-card">
-              <div class="welcome-card-header">
-                <div class="welcome-card-icon">
-                  ${this._renderIcon('library')}
-                </div>
-                <h3 class="welcome-card-title">${hasSite ? 'Library Setup' : 'Editor Configuration'}</h3>
-              </div>
-              <p class="welcome-card-body">Configure blocks, templates, icons, and placeholders${hasSite ? ' that authors use while creating pages' : ' at organization or site level'}.</p>
-              <div class="welcome-card-actions">
-                <button
-                  class="welcome-card-action"
-                  @click=${() => this._handleNavClick(hasSite ? 'blocks' : 'editor-config')}
-                >${hasSite ? 'Review library' : 'Configure editor'}</button>
-              </div>
-            </div>
-
-            <div class="welcome-card">
-              <div class="welcome-card-header">
-                <div class="welcome-card-icon">
-                  ${this._renderIcon('universal-editor')}
-                </div>
-                <h3 class="welcome-card-title">Authoring & Integrations</h3>
-              </div>
-              <p class="welcome-card-body">Configure Experience Workspace for AI-powered authoring and connect services like AEM Assets${hasSite ? ' and Translation' : ''}.</p>
-              <div class="welcome-card-actions">
-                <button
-                  class="welcome-card-action"
-                  @click=${() => this._handleNavClick('experience-workspace')}
-                >Configure authoring</button>
-                <button
-                  class="welcome-card-action"
-                  @click=${() => this._handleNavClick('aem-assets')}
-                >Configure integrations</button>
-              </div>
-            </div>
-          </div>
+          ${this._renderWelcomeCards(hasOrg, hasSite)}
         ` : html`
           <div class="welcome-empty-state">
-            <p>Select an organization and site above to view available configuration options.</p>
+            <p>Select an org and site above to view available configuration options.</p>
           </div>
         `}
+      </div>
+    `;
+  }
+
+  _renderEWBanner(hasOrg, hasSite) {
+    if (!hasOrg || !this._ewEnabled) return nothing;
+
+    const { value: isEnabled, source } = this._ewEnabled;
+
+    // Don't show banner if EW is enabled
+    if (isEnabled) return nothing;
+
+    // Determine banner message based on context
+    let title;
+    let message;
+    let buttonText;
+
+    if (!hasSite) {
+      // Org context: EW not enabled at org level
+      title = 'Experience Workspace is not enabled at org level';
+      message = 'Enable it here to make AI-powered authoring available to all sites. Each site can then customize its experience settings.';
+      buttonText = 'Enable for Org';
+    } else if (this._welcomeView === 'org') {
+      // Viewing org settings in site context
+      title = 'Experience Workspace is not enabled at org level';
+      message = 'Enable it here to make AI-powered authoring available to all sites. Each site can then customize its experience settings.';
+      buttonText = 'Enable for Org';
+    } else if (source === 'org') {
+      // Site context: inheriting disabled state from org
+      title = 'Experience Workspace is not enabled at org level';
+      message = 'Enable it at the org level to make it available for all sites. Individual sites can then customize their settings.';
+      buttonText = 'Enable for Org';
+    } else {
+      // Site context: site has its own config set to disabled
+      title = 'Experience Workspace is disabled for this site';
+      message = 'This site is configured to not use Experience Workspace. Enable it to use AI-powered authoring features.';
+      buttonText = 'Enable for Site';
+    }
+
+    return html`
+      <div class="ew-banner">
+        <div class="ew-banner-content">
+          <div class="ew-banner-icon">⚠️</div>
+          <div class="ew-banner-text">
+            <strong>${title}</strong>
+            <p>${message}</p>
+          </div>
+          <button
+            class="ew-banner-button"
+            @click=${() => this._handleNavClick('experience-workspace')}
+          >${buttonText}</button>
+        </div>
+      </div>
+    `;
+  }
+
+  _renderWelcomeCards(hasOrg, hasSite) {
+    // When both org and site are loaded, show cards based on selected view
+    const showOrgCards = !hasSite || this._welcomeView === 'org';
+    const showSiteCards = hasSite && this._welcomeView === 'site';
+
+    return html`
+      <div class="welcome-cards">
+        ${showOrgCards ? html`
+          <div class="welcome-card">
+            <div class="welcome-card-header">
+              <div class="welcome-card-icon">
+                ${this._renderIcon('permissions')}
+              </div>
+              <h3 class="welcome-card-title">Access & MSM</h3>
+            </div>
+            <p class="welcome-card-body">Control user access to repositories and manage multi-site workflows across your organization.</p>
+            <div class="welcome-card-actions">
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('permissions')}
+              >Permissions</button>
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('multi-site-manager')}
+              >Multi-Site Manager</button>
+            </div>
+          </div>
+
+          <div class="welcome-card">
+            <div class="welcome-card-header">
+              <div class="welcome-card-icon">
+                ${this._renderIcon('universal-editor')}
+              </div>
+              <h3 class="welcome-card-title">Experience Workspace</h3>
+            </div>
+            <p class="welcome-card-body">Configure Experience Workspace for AI-powered authoring and editor path mappings.</p>
+            <div class="welcome-card-actions">
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('experience-workspace')}
+              >Configure workspace</button>
+            </div>
+          </div>
+
+          <div class="welcome-card">
+            <div class="welcome-card-header">
+              <div class="welcome-card-icon">
+                ${this._renderIcon('integrations')}
+              </div>
+              <h3 class="welcome-card-title">Integrations</h3>
+            </div>
+            <p class="welcome-card-body">Connect external services like AEM Assets for your org.</p>
+            <div class="welcome-card-actions">
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('aem-assets')}
+              >Configure integrations</button>
+            </div>
+          </div>
+        ` : nothing}
+
+        ${showSiteCards ? html`
+          <div class="welcome-card">
+            <div class="welcome-card-header">
+              <div class="welcome-card-icon">
+                ${this._renderIcon('library')}
+              </div>
+              <h3 class="welcome-card-title">Library</h3>
+            </div>
+            <p class="welcome-card-body">Configure blocks, templates, icons, and placeholders that authors use while creating pages.</p>
+            <div class="welcome-card-actions">
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('blocks')}
+              >Blocks</button>
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('templates')}
+              >Templates</button>
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('icons')}
+              >Icons</button>
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('placeholders')}
+              >Placeholders</button>
+            </div>
+          </div>
+
+          <div class="welcome-card">
+            <div class="welcome-card-header">
+              <div class="welcome-card-icon">
+                ${this._renderIcon('universal-editor')}
+              </div>
+              <h3 class="welcome-card-title">Experience Workspace</h3>
+            </div>
+            <p class="welcome-card-body">Customize Experience Workspace settings for this site, including default views and AI features.</p>
+            <div class="welcome-card-actions">
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('experience-workspace')}
+              >Configure workspace</button>
+            </div>
+          </div>
+
+          <div class="welcome-card">
+            <div class="welcome-card-header">
+              <div class="welcome-card-icon">
+                ${this._renderIcon('integrations')}
+              </div>
+              <h3 class="welcome-card-title">Integrations</h3>
+            </div>
+            <p class="welcome-card-body">Connect external services like AEM Assets and translation providers for this site.</p>
+            <div class="welcome-card-actions">
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('aem-assets')}
+              >AEM Assets</button>
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('translation')}
+              >Translation</button>
+            </div>
+          </div>
+        ` : nothing}
       </div>
     `;
   }
@@ -991,7 +1298,7 @@ class ConfigConsoleApp extends LitElement {
       return html`
         <div class="empty-state">
           <h2>Welcome to Configuration Console</h2>
-          <p>Enter an organization and optional site above to get started.</p>
+          <p>Enter an org and optional site above to get started.</p>
         </div>
       `;
     }
