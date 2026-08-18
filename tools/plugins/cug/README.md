@@ -1,6 +1,6 @@
 # CUG — Page Access (Closed User Groups)
 
-A DA (Document Authoring) tool that applies or removes [Closed User Group](https://main--helix-website--adobe.aem.page/drafts/jkautzma/closed-user-groups) (CUG) access restrictions for a site, based on a `closed-user-groups` sheet authored in DA.
+A DA Prepare-menu plugin that applies or removes [Closed User Group](https://main--helix-website--adobe.aem.page/drafts/jkautzma/closed-user-groups) (CUG) access restrictions for a site, based on a `closed-user-groups` sheet authored in DA.
 
 ## Overview
 
@@ -22,8 +22,8 @@ Only the first row for a given `url` is used; duplicate paths in the sheet are i
 ### Files
 
 ```
-tools/apps/cug/
-├── cug.html   # Entry point (DA tool shell page)
+tools/plugins/cug/
+├── cug.html   # Entry point (Prepare-menu dialog shell)
 ├── cug.js     # Fetches the sheet, transforms rows to headers, applies/removes via the Config Service
 └── cug.css    # Styles
 ```
@@ -42,8 +42,18 @@ tools/apps/cug/
 | `/config/{org}/aggregated/{site}.json` | `admin.hlx.page` | GET | Read the site's current aggregated config (to preserve non-CUG headers) |
 | `/config/{org}/sites/{site}/headers.json` | `admin.hlx.page` | POST | Write the merged headers config |
 
+## Configuration
+
+Register in your DA site config's `prepare` sheet:
+
+| title         | path                                                                          | format   |
+| ------------- | ------------------------------------------------------------------------------ | -------- |
+| `Page Access` | `https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/cug/cug.html`         | `dialog` |
+
+The plugin uses [`DA_SDK`](https://da.live/nx/utils/sdk.js) to read the org/site of whichever page is open when it's launched from the Prepare menu — the CUG sheet and headers it manages are site-wide, not page-specific.
+
 ## Usage
 
 1. Author a `closed-user-groups` sheet at the site root in DA (see the [docs](https://main--helix-website--adobe.aem.page/drafts/jkautzma/closed-user-groups) for the column format).
-2. Open the CUG tool from the DA interface (hosted at `/tools/apps/cug/cug`).
+2. Open any page in that site in DA and pick **Page Access** from the Prepare menu.
 3. Click **Apply Page Access** to push the sheet's restrictions live, or **Remove Page Access** to clear all CUG headers for the site.
