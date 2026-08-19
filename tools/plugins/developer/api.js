@@ -2,6 +2,12 @@
 
 const ADMIN_API = 'https://api.aem.live';
 
+// When the requested org/site isn't the canonical source for the code repo,
+// the admin API returns 403 with this error code, and the `x-error` header
+// carries a message ending in the canonical `org/site` to use instead, e.g.
+// "[admin] Code operation restricted to canonical source: attsites/att-da".
+const NOT_CANONICAL_ERROR_CODE = 'AEM_NOT_CANONICAL_CODE_SOURCE';
+
 // Branches don't change often; cache the list in sessionStorage for a
 // short time so switching branches (which reloads the page) doesn't
 // trigger an immediate refetch.
@@ -34,9 +40,35 @@ function writeCache(org, site, branches) {
 }
 
 /**
+ * Parse the canonical `org/site` out of the `x-error` header sent alongside
+ * an `AEM_NOT_CANONICAL_CODE_SOURCE` 403, e.g. a message ending in
+ * "...canonical source: attsites/att-da" yields `{ org: 'attsites', site: 'att-da' }`.
+ * @param {string|null} headerValue - the raw `x-error` header value
+ * @returns {{org: string, site: string}|null}
+ */
+export function parseCanonicalSource(headerValue) {
+  if (!headerValue) return null;
+  const match = headerValue.trim().match(/([\w.-]+)\/([\w.-]+)\s*$/);
+  if (!match) return null;
+  const [, canonicalOrg, canonicalSite] = match;
+  return { org: canonicalOrg, site: canonicalSite };
+}
+
+async function requestBranches(org, site, token) {
+  return fetch(`${ADMIN_API}/${org}/repos/${site}/code/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+/**
  * Fetch the list of code branches for a site from the EDS admin API.
  * Results are cached in sessionStorage for `CACHE_TTL_MS` to avoid
  * refetching right after a branch switch reloads the page.
+ *
+ * If the API responds with a 403 and an `x-error-code` of
+ * `AEM_NOT_CANONICAL_CODE_SOURCE`, the `x-error` header is parsed for the
+ * canonical `org/site` and the request is retried against it — only in
+ * that specific case.
  * @param {string} org - Organization (owner)
  * @param {string} site - Site (repo)
  * @param {string} token - IMS bearer token
@@ -49,9 +81,14 @@ export async function fetchBranches(org, site, token) {
   }
 
   try {
-    const response = await fetch(`${ADMIN_API}/${org}/repos/${site}/code/`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    let response = await requestBranches(org, site, token);
+
+    if (response.status === 403 && response.headers.get('x-error-code') === NOT_CANONICAL_ERROR_CODE) {
+      const canonical = parseCanonicalSource(response.headers.get('x-error'));
+      if (canonical) {
+        response = await requestBranches(canonical.org, canonical.site, token);
+      }
+    }
 
     if (response.status === 401) {
       return { branches: [], error: 'unauthorized' };
