@@ -3,7 +3,14 @@ import {
   daFetch, DA_ORIGIN, AEM_ADMIN, cleanPath,
 } from './fetch.js';
 
-const NX = 'https://da.live/nx';
+// da-nx's loc/project module migrated to nx2's daFetch on 2026-07-07 (da-nx
+// commit e96292c), which always initiates its own IMS session and can't take
+// a token we already have — that session bootstrap gets CORS-blocked outside
+// da.live's own origin. Pinned to the last commit before that migration, via
+// jsdelivr (correct JS content-type + immutable caching for a commit SHA), so
+// merge keeps using nx1's daFetch, which setMergeAuthToken feeds our existing
+// DA SDK token into.
+const LOC_NX1_PIN = 'https://cdn.jsdelivr.net/gh/adobe/da-nx@9a6deb15f9cb5d18ae0e2fdb8ef0cfdc23cac282/nx';
 
 const EXT_MIME_TYPES = {
   html: 'text/html',
@@ -23,12 +30,19 @@ let editUrlOrigin = 'https://da.live';
 export function setEditUrlOrigin(origin) { if (origin) editUrlOrigin = origin; }
 export function getEditUrlOrigin() { return editUrlOrigin; }
 
+let mergeAuthToken;
+export function setMergeAuthToken(token) { mergeAuthToken = token; }
+
 let mergeCopyFn;
 export function setMergeCopy(fn) { mergeCopyFn = fn; }
 async function ensureMergeCopy() {
   if (!mergeCopyFn) {
-    const mod = await import(`${NX}/blocks/loc/project/index.js`);
+    const mod = await import(`${LOC_NX1_PIN}/blocks/loc/project/index.js`);
     mergeCopyFn = mod.mergeCopy;
+  }
+  if (mergeAuthToken) {
+    const { setImsDetails } = await import(`${LOC_NX1_PIN}/utils/daFetch.js`);
+    setImsDetails(mergeAuthToken);
   }
   return mergeCopyFn;
 }

@@ -18,6 +18,7 @@ import {
   getStatusConfig,
   setSdkFetch as setUtilsSdkFetch,
   setEditUrlOrigin,
+  setMergeAuthToken,
 } from './utils.js';
 import { icon } from '../../apps/msm/core/icons.js';
 import { buildParentMap, effectiveSource, isOutOfSync } from '../../apps/msm/core/source-tree.js';
@@ -37,13 +38,6 @@ function getAppRef() {
     return null;
   }
 }
-
-// mergeFromSource lazy-loads da-nx's loc/project module, which authenticates
-// via nx's ims.js — that reads imsClientId off this same-window nexter config,
-// so it must be set even though the rest of this dialog authenticates via the
-// DA SDK's postMessage token.
-const { setConfig } = await import(`${NX}/scripts/nexter.js`);
-setConfig({ imsClientId: 'da-web' });
 
 let nexter = null;
 let styles = null;
@@ -883,7 +877,7 @@ export default function render(details) {
   if (typeof window === 'undefined' || !document.body) return;
 
   try {
-    const { context, actions } = await DA_SDK;
+    const { context, actions, token } = await DA_SDK;
     const { org, path, ref } = context;
     const site = context.site || context.repo;
     console.log('[MSM Plugin] Init context:', {
@@ -892,6 +886,7 @@ export default function render(details) {
 
     setConfigSdkFetch(actions.daFetch);
     setUtilsSdkFetch(actions.daFetch);
+    setMergeAuthToken(token);
 
     if (document.referrer) {
       try {

@@ -27,6 +27,7 @@ export {
   copyFromSource,
   deleteCopy,
   mergeFromSource,
+  setMergeAuthToken,
 } from '../core/operations.js';
 export { getPageStatus, getStatusConfig, getPageTimestamp } from '../core/status.js';
 export { PUBLISH_LAG_MS } from '../core/fetch.js';
