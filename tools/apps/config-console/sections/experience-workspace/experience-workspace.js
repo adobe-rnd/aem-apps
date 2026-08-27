@@ -320,9 +320,11 @@ export default class ExperienceWorkspaceSection extends BaseSectionElement {
   }
 
   _openSetupTool() {
-    const setupUrl = this.site
-      ? `https://da.live/app/${this.org}/${this.site}/tools/ew-setup/ew-setup`
-      : `https://da.live/app/${this.org}/tools/ew-setup/ew-setup`;
+    const hash = this.site
+      ? `#/${this.org}/${this.site}`
+      : `#/${this.org}`;
+
+    const setupUrl = `https://da.live/app/adobe-rnd/ew-extensions/tools/ew-setup/ew-setup${hash}`;
 
     this._trackAction('experience-workspace-setup-opened', {
       org: this.org,
