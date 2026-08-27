@@ -11,6 +11,8 @@ A collection of Adobe owned apps & plugins for Experience Workspace & Document A
 | **Anchor Links** |https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/anchor-links/anchor-links.html | `tools/plugins/anchor-links` | Lightweight plugin to create anchor links  | Plugin |
 | **Fragment Picker** |https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/fragments/fragments.html | `tools/plugins/fragments` | Browse and insert fragments with live preview  | Plugin |
 | **Tags** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/tags/tags | `tools/apps/tags` `tools/plugins/tags` | Manage tag taxonomy, publish it, and bulk-search pages by tag; pick tags while authoring  | App & Plugin |
+| **Developer** |https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/developer/developer.html | `tools/plugins/developer` | Switch the preview branch (`?ref=`) for the current page  | Plugin |
+| **CUG** |https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/cug/cug.html | `tools/plugins/cug` | Apply or remove closed user group (page access) restrictions  | Plugin |
 
 ## Developing
 
