@@ -7,6 +7,14 @@ import './helpers/column-browser.js';
 import './helpers/action-panel.js';
 
 const NX = 'https://da.live/nx';
+
+// mergeFromSource lazy-loads da-nx's loc/project module, which authenticates
+// via nx's ims.js — that reads imsClientId off this same-window nexter config,
+// so it must be set even though the rest of this app authenticates via the
+// DA SDK's postMessage token.
+const { setConfig } = await import(`${NX}/scripts/nexter.js`);
+setConfig({ imsClientId: 'da-web' });
+
 let sl = null;
 let styles = null;
 let buttons = null;
