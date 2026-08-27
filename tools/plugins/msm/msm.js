@@ -23,7 +23,7 @@ import { icon } from '../../apps/msm/core/icons.js';
 import { buildParentMap, effectiveSource, isOutOfSync } from '../../apps/msm/core/source-tree.js';
 import { PUBLISH_LAG_MS } from '../../apps/msm/core/fetch.js';
 
-const MSM_APP_URL = 'https://da.live/app/aemsites/da-blog-tools/tools/apps/msm/msm';
+const MSM_APP_URL = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/msm/msm';
 const NX = 'https://da.live/nx';
 
 function getAppRef() {
