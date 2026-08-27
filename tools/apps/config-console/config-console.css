@@ -261,6 +261,48 @@
   margin-top: 0;
 }
 
+.nav-section-org-name {
+  color: light-dark(var(--s2-blue-600, #06c), var(--s2-blue-400, #4da6ff));
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  margin-left: var(--s2-spacing-100, 4px);
+}
+
+.site-header-with-dropdown {
+  display: flex;
+  align-items: center;
+  gap: var(--s2-spacing-200, 8px);
+  padding-bottom: var(--s2-spacing-200, 8px);
+}
+
+.site-header-label {
+  flex-shrink: 0;
+}
+
+.site-dropdown {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: var(--s2-spacing-50, 2px) var(--s2-spacing-100, 4px);
+  font-size: 11px;
+  font-family: inherit;
+  border: 1px solid light-dark(var(--s2-gray-300, #d0d0d0), var(--s2-gray-700, #404040));
+  border-radius: 4px;
+  background: light-dark(var(--s2-gray-50, #fafafa), var(--s2-gray-900, #1a1a1a));
+  color: inherit;
+  cursor: pointer;
+}
+
+.site-dropdown:hover {
+  border-color: light-dark(var(--s2-gray-400, #b0b0b0), var(--s2-gray-600, #606060));
+}
+
+.site-dropdown:focus {
+  outline: 2px solid light-dark(var(--s2-blue-600, #06c), var(--s2-blue-400, #4da6ff));
+  outline-offset: 1px;
+}
+
 .nav-section-header-collapsed {
   padding: var(--s2-spacing-200, 8px) var(--s2-spacing-100, 4px);
   margin: var(--s2-spacing-200, 8px) 0;
@@ -732,6 +774,21 @@
   grid-template-columns: repeat(3, 1fr);
   gap: var(--s2-spacing-400, 16px);
   margin-top: var(--s2-spacing-600, 32px);
+}
+
+.welcome-cards-section-title {
+  grid-column: 1 / -1;
+  font-size: var(--s2-heading-size-200, 18px);
+  font-weight: 700;
+  color: light-dark(var(--s2-gray-800, #2a2a2a), var(--s2-gray-200, #e0e0e0));
+  margin-top: var(--s2-spacing-400, 16px);
+  margin-bottom: var(--s2-spacing-200, 8px);
+  padding-bottom: var(--s2-spacing-200, 8px);
+  border-bottom: 2px solid light-dark(var(--s2-gray-300, #d0d0d0), var(--s2-gray-700, #404040));
+}
+
+.welcome-cards-section-title:first-child {
+  margin-top: 0;
 }
 
 .welcome-card {

@@ -208,7 +208,6 @@ class ConfigConsoleApp extends LitElement {
     _recentPaths: { state: true },
     _availableSites: { state: true },
     _fetchingSites: { state: true },
-    _welcomeView: { state: true },
     _ewEnabled: { state: true },
   };
 
@@ -228,7 +227,6 @@ class ConfigConsoleApp extends LitElement {
     this._availableSites = [];
     this._fetchingSites = false;
     this._fetchSitesDebounceTimer = null;
-    this._welcomeView = 'org'; // 'org' or 'site'
     this._ewEnabled = null; // null = not checked yet, true/false = checked
   }
 
@@ -386,30 +384,6 @@ class ConfigConsoleApp extends LitElement {
     this.requestUpdate();
   }
 
-  _handleViewToggle(view) {
-    this._welcomeView = view;
-
-    // If we're currently in a section, check if it's still available in the new view
-    if (this._currentSection) {
-      const sectionAvailable = this._availableSections.some(
-        (section) => section.id === this._currentSection
-          || (section.children
-            && section.children.some((child) => child.id === this._currentSection)),
-      );
-
-      // If current section not available in new view, go back to home
-      if (!sectionAvailable) {
-        this._currentSection = null;
-        this._sectionComponent = null;
-        if (window.location.hash) {
-          window.history.replaceState(null, '', window.location.pathname + window.location.search);
-        }
-      }
-    }
-
-    sampleRUM('config-console-view-toggle', { view, org: this._org, site: this._site });
-  }
-
   async _checkEWStatus() {
     if (!this._org) {
       this._ewEnabled = null;
@@ -531,6 +505,9 @@ class ConfigConsoleApp extends LitElement {
     // Org is valid, set it
     this._org = org;
     this._site = ''; // Clear site when loading new org
+
+    // Fetch available sites for the dropdown
+    this._fetchSitesForOrg(org);
 
     // Step 2: If site provided, validate it
     if (site) {
@@ -710,6 +687,16 @@ class ConfigConsoleApp extends LitElement {
     this._loadContext(org, site);
   }
 
+  _handleSiteDropdownChange(site) {
+    if (!this._org) return;
+
+    // Update the site input to keep it in sync
+    this._siteInput = site;
+
+    // Load the new context with the selected site
+    this._loadContext(this._org, site);
+  }
+
   async _handleBrowseSites() {
     const org = this._orgInput.trim();
 
@@ -770,33 +757,27 @@ class ConfigConsoleApp extends LitElement {
       return section;
     });
 
-    // If both org and site are loaded, filter based on welcome view
-    if (hasSite) {
-      if (this._welcomeView === 'org') {
-        // Show only org sections
-        sections.push({
-          type: 'header',
-          id: 'org-header',
-          title: 'Org',
-        });
-        sections.push(...flattenSections(SECTIONS.ORG));
-      } else {
-        // Show only site sections
-        sections.push({
-          type: 'header',
-          id: 'site-header',
-          title: `Site: ${this._site}`,
-        });
-        sections.push(...flattenSections(SECTIONS.SITE));
-      }
-    } else if (this._org) {
-      // Only org loaded, show org sections
+    // Always show both org and site sections when org is loaded
+    if (this._org) {
+      // Org-level sections
       sections.push({
         type: 'header',
         id: 'org-header',
         title: 'Org',
       });
       sections.push(...flattenSections(SECTIONS.ORG));
+
+      // Site-level sections
+      sections.push({
+        type: 'header',
+        id: 'site-header',
+        title: 'Site',
+        hasSite,
+      });
+      sections.push(...flattenSections(SECTIONS.SITE).map((section) => ({
+        ...section,
+        disabled: !hasSite,
+      })));
     }
 
     return sections;
@@ -989,6 +970,40 @@ class ConfigConsoleApp extends LitElement {
         // Don't show header when collapsed - toggle buttons provide context
         return nothing;
       }
+
+      // Special handling for org header - show org name
+      if (section.id === 'org-header') {
+        return html`
+          <div class="nav-section-header" role="heading" aria-level="2">
+            ${section.title}
+            ${this._org ? html`<span class="nav-section-org-name">(${this._org})</span>` : nothing}
+          </div>
+        `;
+      }
+
+      // Special handling for site header with dropdown
+      if (section.id === 'site-header') {
+        return html`
+          <div class="nav-section-header site-header-with-dropdown" role="heading" aria-level="2">
+            <span class="site-header-label">${section.title}</span>
+            ${this._org ? html`
+              <select
+                class="site-dropdown"
+                .value=${this._site || ''}
+                @change=${(e) => this._handleSiteDropdownChange(e.target.value)}
+              >
+                <option value="">Select a site...</option>
+                ${(this._availableSites || []).map((site) => html`
+                  <option value="${site}" ?selected=${site === this._site}>${site}</option>
+                `)}
+              </select>
+            ` : html`
+              <span class="nav-section-subtext empty">Load org first</span>
+            `}
+          </div>
+        `;
+      }
+
       return html`
         <div class="nav-section-header" role="heading" aria-level="2">
           ${section.title}
@@ -1011,27 +1026,44 @@ class ConfigConsoleApp extends LitElement {
           </button>
           ${isExpanded && section.children && !this._sidebarCollapsed ? html`
             <div class="nav-group-children">
-              ${section.children.map((child) => html`
+              ${section.children.map((child) => {
+    let childTitle = '';
+    if (child.disabled) {
+      childTitle = 'Select a site to configure this section';
+    } else if (this._sidebarCollapsed) {
+      childTitle = child.title;
+    }
+    return html`
                 <button
-                  class="nav-item nav-item-child ${this._currentSection === child.id ? 'active' : ''}"
-                  @click=${() => this._handleNavClick(child.id)}
-                  title="${this._sidebarCollapsed ? child.title : ''}"
+                  class="nav-item nav-item-child ${this._currentSection === child.id ? 'active' : ''} ${child.disabled ? 'disabled' : ''}"
+                  @click=${() => !child.disabled && this._handleNavClick(child.id)}
+                  ?disabled=${child.disabled}
+                  title="${childTitle}"
                 >
                   ${this._renderIcon(child.iconKey, child.title)}
                   ${!this._sidebarCollapsed ? html`<span class="nav-title">${child.title}</span>` : nothing}
                 </button>
-              `)}
+              `;
+  })}
             </div>
           ` : nothing}
         </div>
       `;
     }
     // Fallback for non-grouped items (backward compatibility)
+    let itemTitle = '';
+    if (section.disabled) {
+      itemTitle = 'Select a site to configure this section';
+    } else if (this._sidebarCollapsed) {
+      itemTitle = section.title;
+    }
+
     return html`
       <button
-        class="nav-item ${this._currentSection === section.id ? 'active' : ''}"
-        @click=${() => this._handleNavClick(section.id)}
-        title="${this._sidebarCollapsed ? section.title : ''}"
+        class="nav-item ${this._currentSection === section.id ? 'active' : ''} ${section.disabled ? 'disabled' : ''}"
+        @click=${() => !section.disabled && this._handleNavClick(section.id)}
+        ?disabled=${section.disabled}
+        title="${itemTitle}"
       >
         ${this._renderIcon(section.iconKey, section.title)}
         ${!this._sidebarCollapsed ? html`<span class="nav-title">${section.title}</span>` : nothing}
@@ -1043,21 +1075,16 @@ class ConfigConsoleApp extends LitElement {
     const hasOrg = this._org && this._state === 'ready';
     const hasSite = hasOrg && this._site;
 
-    // Determine title based on context and view
+    // Determine title based on context
     let titleText = 'Configure your sites';
     let titleName = null;
 
-    if (hasOrg && hasSite) {
-      if (this._welcomeView === 'site') {
-        titleText = 'Configure your site';
-        titleName = this._site;
-      } else {
-        titleText = 'Configure your org';
-        titleName = this._org;
-      }
-    } else if (hasOrg && !hasSite) {
+    if (hasOrg) {
       titleText = 'Configure your org';
       titleName = this._org;
+      if (hasSite) {
+        titleName = `${this._org} / ${this._site}`;
+      }
     }
 
     return html`
@@ -1081,19 +1108,6 @@ class ConfigConsoleApp extends LitElement {
                 rel="noopener noreferrer"
                 class="welcome-cta-secondary"
               >DA documentation</a>
-            </div>
-          ` : nothing}
-
-          ${hasOrg && hasSite ? html`
-            <div class="welcome-view-toggle">
-              <button
-                class="welcome-view-button ${this._welcomeView === 'org' ? 'active' : ''}"
-                @click=${() => { this._handleViewToggle('org'); }}
-              >Org: ${this._org}</button>
-              <button
-                class="welcome-view-button ${this._welcomeView === 'site' ? 'active' : ''}"
-                @click=${() => { this._handleViewToggle('site'); }}
-              >Site: ${this._site}</button>
             </div>
           ` : nothing}
         </div>
@@ -1124,20 +1138,10 @@ ${this._renderEWBanner(hasOrg, hasSite)}
     let message;
     let buttonText;
 
-    if (!hasSite) {
-      // Org context: EW not enabled at org level
+    if (!hasSite || source === 'org') {
+      // Org context or site inheriting from org
       title = 'Experience Workspace is not enabled at org level';
-      message = 'Enable it here to make AI-powered authoring available to all sites. Each site can then customize its experience settings.';
-      buttonText = 'Enable for Org';
-    } else if (this._welcomeView === 'org') {
-      // Viewing org settings in site context
-      title = 'Experience Workspace is not enabled at org level';
-      message = 'Enable it here to make AI-powered authoring available to all sites. Each site can then customize its experience settings.';
-      buttonText = 'Enable for Org';
-    } else if (source === 'org') {
-      // Site context: inheriting disabled state from org
-      title = 'Experience Workspace is not enabled at org level';
-      message = 'Enable it at the org level to make it available for all sites. Individual sites can then customize their settings.';
+      message = 'Enable it at the org level to make AI-powered authoring available to all sites. Individual sites can then customize their settings.';
       buttonText = 'Enable for Org';
     } else {
       // Site context: site has its own config set to disabled
@@ -1164,13 +1168,11 @@ ${this._renderEWBanner(hasOrg, hasSite)}
   }
 
   _renderWelcomeCards(hasOrg, hasSite) {
-    // When both org and site are loaded, show cards based on selected view
-    const showOrgCards = !hasSite || this._welcomeView === 'org';
-    const showSiteCards = hasSite && this._welcomeView === 'site';
-
+    // Always show both org and site cards when org is loaded
     return html`
       <div class="welcome-cards">
-        ${showOrgCards ? html`
+        ${hasOrg ? html`
+          <h2 class="welcome-cards-section-title">Org-Level Configuration</h2>
           <div class="welcome-card">
             <div class="welcome-card-header">
               <div class="welcome-card-icon">
@@ -1222,9 +1224,17 @@ ${this._renderEWBanner(hasOrg, hasSite)}
               >Configure integrations</button>
             </div>
           </div>
+
+          <h2 class="welcome-cards-section-title">Site-Level Configuration</h2>
         ` : nothing}
 
-        ${showSiteCards ? html`
+        ${hasOrg && !hasSite ? html`
+          <div class="welcome-empty-state">
+            <p>Select a site above to configure site-level options.</p>
+          </div>
+        ` : nothing}
+
+        ${hasOrg && hasSite ? html`
           <div class="welcome-card">
             <div class="welcome-card-header">
               <div class="welcome-card-icon">
