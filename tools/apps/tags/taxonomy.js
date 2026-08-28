@@ -107,6 +107,24 @@ export async function fetchTaxonomySheet(daFetchFn, sourceUrl) {
   }
 }
 
+const TAXONOMY_COLUMNS = ['Namespace', 'Category', 'Tag', 'Description'];
+
+/**
+ * True if `sheet` looks like taxonomy.json's schema — an empty sheet always
+ * passes (nothing to contradict), otherwise its first row must carry one of
+ * the expected columns. Catches sheets that exist but use an unrelated
+ * schema (e.g. a flat `key`/`value` tag list some sites already have at
+ * `taxonomy.json`), which `parseTaxonomyTree` would otherwise silently parse
+ * into an empty tree instead of surfacing as an error.
+ * @param {Object} sheet Raw sheet envelope (`{ data }`)
+ * @returns {boolean}
+ */
+export function hasTaxonomySchema(sheet) {
+  const rows = Array.isArray(sheet?.data) ? sheet.data : [];
+  if (rows.length === 0) return true;
+  return TAXONOMY_COLUMNS.some((col) => Object.prototype.hasOwnProperty.call(rows[0], col));
+}
+
 function createNode(name, description = '') {
   return { name, description, children: [] };
 }

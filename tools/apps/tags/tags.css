@@ -207,6 +207,9 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 }
 
 .icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
   cursor: pointer;
@@ -461,42 +464,14 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 }
 
 .tax-name-input {
+  display: block;
   flex: 1;
   min-width: 0;
-  font-family: var(--s2-font-family, sans-serif);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--s2-gray-900);
-  border: 1px solid transparent;
-  border-radius: var(--s2-corner-radius-100);
-  padding: 6px 8px;
-  background: transparent;
-}
-
-.tax-name-input:hover,
-.tax-name-input:focus {
-  border-color: var(--s2-gray-300);
-  background: var(--s2-gray-25);
-  outline: none;
 }
 
 .tax-desc-input {
-  box-sizing: border-box;
+  display: block;
   width: 100%;
-  font-family: var(--s2-font-family, sans-serif);
-  font-size: 13px;
-  color: var(--s2-gray-700);
-  border: 1px solid transparent;
-  border-radius: var(--s2-corner-radius-100);
-  padding: 4px 6px;
-  background: transparent;
-}
-
-.tax-desc-input:hover,
-.tax-desc-input:focus {
-  border-color: var(--s2-gray-300);
-  background: var(--s2-gray-25);
-  outline: none;
 }
 
 /* ---- Column meta (description for the column's owner) ---- */

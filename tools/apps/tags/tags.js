@@ -13,7 +13,9 @@ import {
   parseTaxonomyTree,
   serializeTaxonomyTree,
   buildTaxonomySheet,
+  hasTaxonomySchema,
 } from './taxonomy.js';
+import { icon } from './icons.js';
 
 // NX style pipeline matches other da.live shell apps: nx.js loadStyle + getStyle.
 const NX = 'https://da.live/nx2';
@@ -213,6 +215,15 @@ class TaggerApp extends LitElement {
     if (!ok && status !== 404) {
       this._state = 'error';
       this._message = { type: 'error', text: `Failed to load taxonomy (${status || 'network error'}).` };
+      return;
+    }
+
+    if (ok && !hasTaxonomySchema(sheet)) {
+      this._state = 'error';
+      this._message = {
+        type: 'error',
+        text: `${location.path} doesn't look like a taxonomy sheet — expected Namespace/Category/Tag/Description columns.`,
+      };
       return;
     }
 
@@ -753,14 +764,14 @@ class TaggerApp extends LitElement {
       return html`
         <div class="miller-item is-editing">
           <div class="miller-item-edit-row">
-            <input class="tax-name-input" .value=${draft.name} @keydown=${(e) => this.handleEditKeydown(e)}
-              @input=${(e) => this.updateDraft('name', e.target.value)} />
-            <button class="icon-btn" aria-label="Save changes" @click=${() => this.commitEditing()}>✓</button>
-            <button class="icon-btn" aria-label="Cancel" @click=${() => this.cancelEditing()}>&times;</button>
+            <sl-input class="tax-name-input" .value=${draft.name} @keydown=${(e) => this.handleEditKeydown(e)}
+              @input=${(e) => this.updateDraft('name', e.target.value)}></sl-input>
+            <button class="icon-btn" aria-label="Save changes" @click=${() => this.commitEditing()}>${icon('S2_Icon_Checkmark_20_N')}</button>
+            <button class="icon-btn" aria-label="Cancel" @click=${() => this.cancelEditing()}>${icon('S2_Icon_Close_20_N')}</button>
           </div>
-          <input class="tax-desc-input" placeholder="Description" .value=${draft.description}
+          <sl-input class="tax-desc-input" placeholder="Description" .value=${draft.description}
             @keydown=${(e) => this.handleEditKeydown(e)}
-            @input=${(e) => this.updateDraft('description', e.target.value)} />
+            @input=${(e) => this.updateDraft('description', e.target.value)}></sl-input>
         </div>
       `;
     }
@@ -783,7 +794,7 @@ class TaggerApp extends LitElement {
         ${isDirty ? html`<span class="dirty-dot" aria-hidden="true" title="Unsaved change"></span>` : nothing}
         <span class="miller-item-label">${node.name}</span>
         <button class="icon-btn" aria-label="Edit ${node.name}"
-          @click=${(e) => { e.stopPropagation(); this.startEditing(node, ownerList); }}>✎</button>
+          @click=${(e) => { e.stopPropagation(); this.startEditing(node, ownerList); }}>${icon('S2_Icon_Edit_20_N')}</button>
         <span class="miller-item-chevron ${hasChildren ? '' : 'is-hidden'}" aria-hidden="true">›</span>
       </div>
     `;
