@@ -160,6 +160,10 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
 /* ---- Messages ---- */
 
 .message {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s2-spacing-200);
   padding: var(--s2-spacing-200) var(--s2-spacing-300);
   margin-bottom: var(--s2-spacing-200);
   border-radius: var(--s2-corner-radius-500);
@@ -583,6 +587,11 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   font-size: 14px;
   color: var(--s2-gray-900);
   box-sizing: border-box;
+}
+
+.search-field sl-input {
+  display: block;
+  width: 100%;
 }
 
 .search-progress,

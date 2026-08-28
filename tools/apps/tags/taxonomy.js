@@ -125,6 +125,39 @@ export function hasTaxonomySchema(sheet) {
   return TAXONOMY_COLUMNS.some((col) => Object.prototype.hasOwnProperty.call(rows[0], col));
 }
 
+const LEGACY_TAG_LIST_COLUMNS = ['key', 'value'];
+
+/**
+ * True if `sheet`'s first row looks like the flat `key`/`value`/`Comments`
+ * tag list some sites already have at their taxonomy path — the one legacy
+ * shape `convertLegacyTagList` knows how to migrate, as opposed to some
+ * other, unrecognized non-matching schema.
+ * @param {Object} sheet Raw sheet envelope (`{ data }`)
+ * @returns {boolean}
+ */
+export function isLegacyTagList(sheet) {
+  const rows = Array.isArray(sheet?.data) ? sheet.data : [];
+  if (rows.length === 0) return false;
+  return LEGACY_TAG_LIST_COLUMNS.every((col) => Object.prototype.hasOwnProperty.call(rows[0], col));
+}
+
+/**
+ * Converts a flat `key`/`value`/`Comments` tag list — no hierarchy — into a
+ * single-namespace taxonomy tree, so it can be reviewed here before
+ * (optionally) being saved to a *new* taxonomy.json. Never touches the
+ * legacy file itself: other blocks on the site may still read it in its
+ * original flat form.
+ * @param {Object[]} rows Legacy `{ key, value, Comments }` rows
+ * @param {string} namespaceName Name for the single namespace all tags land under
+ * @returns {{ namespaces: Object[] }}
+ */
+export function convertLegacyTagList(rows, namespaceName) {
+  const children = rows
+    .map((row) => ({ name: row.key || row.value || '', description: row.Comments || '', children: [] }))
+    .filter((node) => node.name);
+  return { namespaces: [{ name: namespaceName, description: '', children }] };
+}
+
 function createNode(name, description = '') {
   return { name, description, children: [] };
 }

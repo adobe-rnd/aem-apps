@@ -14,6 +14,8 @@ import {
   serializeTaxonomyTree,
   buildTaxonomySheet,
   hasTaxonomySchema,
+  isLegacyTagList,
+  convertLegacyTagList,
 } from './taxonomy.js';
 import { icon } from './icons.js';
 
@@ -107,6 +109,11 @@ class TaggerApp extends LitElement {
     _searching: { state: true },
     _searchProgress: { state: true },
     _searchResult: { state: true },
+    // { rows, path } when the last load hit a flat key/value tag list at
+    // `path` — offers a (never automatic) conversion into a new taxonomy.
+    _legacyConvert: { state: true },
+    // { namespaceName, targetPath } while the convert-legacy modal is open.
+    _convertModal: { state: true },
   };
 
   connectedCallback() {
@@ -138,6 +145,8 @@ class TaggerApp extends LitElement {
     this._searching = false;
     this._searchProgress = null;
     this._searchResult = null;
+    this._legacyConvert = null;
+    this._convertModal = null;
     // Not a reactive property — set/read only inside a single drag gesture.
     this._dragItem = null;
 
@@ -200,6 +209,8 @@ class TaggerApp extends LitElement {
     this._editingIsNew = false;
     this._editingDraft = null;
     this._dirtyNodes = new Set();
+    this._legacyConvert = null;
+    this._convertModal = null;
 
     const location = resolveTaxonomyLocation(org, site, taxonomyPath);
     this._taxonomyLocation = location;
@@ -224,6 +235,7 @@ class TaggerApp extends LitElement {
         type: 'error',
         text: `${location.path} doesn't look like a taxonomy sheet — expected Namespace/Category/Tag/Description columns.`,
       };
+      if (isLegacyTagList(sheet)) this._legacyConvert = { rows: sheet.data, path: location.path };
       return;
     }
 
@@ -566,6 +578,52 @@ class TaggerApp extends LitElement {
     this._searchResult = result;
   }
 
+  // ---- Legacy tag list conversion ----
+  //
+  // Purely opt-in: detecting a legacy sheet only ever offers this modal, it
+  // never converts or writes anything on its own. Confirming just replaces
+  // the in-memory tree and points `_taxonomyLocation` at the new path — the
+  // legacy file is never touched, and nothing is written until the user
+  // separately clicks Save.
+
+  openConvertModal() {
+    if (!this._legacyConvert) return;
+    const targetPath = this._legacyConvert.path.replace(/\.json$/, '-taxonomy.json');
+    this._convertModal = { namespaceName: 'Tags', targetPath };
+  }
+
+  closeConvertModal() {
+    this._convertModal = null;
+  }
+
+  updateConvertField(field, value) {
+    this._convertModal = { ...this._convertModal, [field]: value };
+  }
+
+  confirmConvert() {
+    const { namespaceName, targetPath } = this._convertModal;
+    const name = namespaceName.trim();
+    const path = targetPath.trim();
+    if (!name || !path) return;
+
+    const { rows } = this._legacyConvert;
+    const location = resolveTaxonomyLocation(this._org, this._site, path);
+    this._taxonomyLocation = location;
+    this._taxonomyPathValue = location.path;
+    this._tree = convertLegacyTagList(rows, name);
+    this._dirty = true;
+    this._dirtyNodes = new Set();
+    this._selection = [];
+    this._state = 'loaded';
+    this._message = {
+      type: 'warning',
+      text: `Converted ${rows.length} tag${rows.length === 1 ? '' : 's'} into "${name}" — review, then Save to write it to ${location.path}. The original file at ${this._legacyConvert.path} is untouched.`,
+    };
+    this._legacyConvert = null;
+    this._convertModal = null;
+    this.persistLocation(this._org, this._site, location.path);
+  }
+
   editUrl(path) {
     const clean = path.replace(/\.html$/, '');
     return `https://da.live/edit#/${this._org}/${this._site}${clean}`;
@@ -621,7 +679,16 @@ class TaggerApp extends LitElement {
 
   renderMessage() {
     if (!this._message) return nothing;
-    return html`<div class="message ${this._message.type}">${this._message.text}</div>`;
+    return html`
+      <div class="message ${this._message.type}">
+        <span>${this._message.text}</span>
+        ${this._legacyConvert ? html`
+          <sl-button class="pw-quiet-secondary pw-action-sm" @click=${() => this.openConvertModal()}>
+            Convert legacy tags…
+          </sl-button>
+        ` : nothing}
+      </div>
+    `;
   }
 
   // ---- Render: editor (Miller columns) ----
@@ -889,6 +956,46 @@ class TaggerApp extends LitElement {
     `;
   }
 
+  // ---- Render: convert-legacy-tags modal ----
+
+  renderConvertModal() {
+    const { namespaceName, targetPath } = this._convertModal;
+    const canConvert = namespaceName.trim().length > 0 && targetPath.trim().length > 0;
+
+    return html`
+      <div class="modal-backdrop" @click=${() => this.closeConvertModal()}>
+        <div class="modal" @click=${(e) => e.stopPropagation()}>
+          <div class="modal-header">
+            <h2>Convert legacy tag list</h2>
+            <button class="modal-close" aria-label="Close" @click=${() => this.closeConvertModal()}>${icon('S2_Icon_Close_20_N')}</button>
+          </div>
+          <div class="modal-body">
+            <p class="modal-warning">
+              This does not modify ${this._legacyConvert.path} — it only builds a new taxonomy in memory here,
+              which you review and explicitly Save to the path below. Nothing is written until you do.
+              If other blocks or pages read the original flat file directly, they'll keep working unchanged and
+              won't automatically pick up this new taxonomy.
+            </p>
+            <label class="search-field">
+              <span>Namespace name</span>
+              <sl-input .value=${namespaceName}
+                @input=${(e) => this.updateConvertField('namespaceName', e.target.value)}></sl-input>
+            </label>
+            <label class="search-field">
+              <span>Save new taxonomy to</span>
+              <sl-input .value=${targetPath}
+                @input=${(e) => this.updateConvertField('targetPath', e.target.value)}></sl-input>
+            </label>
+            <div class="modal-actions">
+              <sl-button class="pw-quiet-secondary" @click=${() => this.closeConvertModal()}>Cancel</sl-button>
+              <sl-button class="pw-fill-accent" ?disabled=${!canConvert} @click=${() => this.confirmConvert()}>Convert</sl-button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   // ---- Render: top-level ----
 
   render() {
@@ -899,6 +1006,7 @@ class TaggerApp extends LitElement {
       ${this._state === 'loaded' ? this.renderEditor() : nothing}
       ${this._deleteTarget ? this.renderDeleteModal() : nothing}
       ${this._searchModalTag ? this.renderSearchModal() : nothing}
+      ${this._convertModal ? this.renderConvertModal() : nothing}
     `;
   }
 }
