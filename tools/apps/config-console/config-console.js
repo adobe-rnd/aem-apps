@@ -56,6 +56,7 @@ const SPECTRUM_ICONS = {
   templates: './icons/templates-file-template.svg',
   icons: './icons/icons-image.svg',
   placeholders: './icons/placeholders-variable.svg',
+  plugins: './icons/integrations-plug.svg',
   'aem-assets': './icons/aem-assets-asset.svg',
   translation: './icons/translation-globe.svg',
   'universal-editor': './icons/universal-editor-edit.svg',
@@ -146,6 +147,13 @@ const SECTIONS = {
           id: 'placeholders',
           title: 'Placeholders',
           iconKey: 'placeholders',
+          scope: 'site',
+          inheritable: false,
+        },
+        {
+          id: 'plugins',
+          title: 'Plugins',
+          iconKey: 'plugins',
           scope: 'site',
           inheritable: false,
         },
@@ -547,6 +555,11 @@ class ConfigConsoleApp extends LitElement {
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          // Show friendly unauthorized message
+          this._handleUnauthorized();
+          return false;
+        }
         if (response.status === 404) {
           this._error = `Organization not found: /${org}. Please check the path.`;
           return false;
@@ -584,6 +597,11 @@ class ConfigConsoleApp extends LitElement {
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          // Show friendly unauthorized message
+          this._handleUnauthorized();
+          return false;
+        }
         if (response.status === 404) {
           this._error = `Site not found: /${org}/${site}. Showing org-level sections only.`;
           return false;
@@ -613,6 +631,21 @@ class ConfigConsoleApp extends LitElement {
     } catch (error) {
       this._error = `Failed to validate site: ${error.message}`;
       return false;
+    }
+  }
+
+  _handleUnauthorized() {
+    // Check if user has a token or active auth session
+    const hasToken = !!this.token;
+    const hasAuthSession = !!localStorage.getItem('nx-ims');
+    const hasActiveToken = !!window.adobeIMS?.getAccessToken?.();
+
+    if (!hasToken && !hasAuthSession && !hasActiveToken) {
+      // Anonymous user - show friendly sign-in message
+      this._error = 'Please sign in and ensure you are in the correct IMS organization with access to this resource.';
+    } else {
+      // User appears to be authenticated but still got 401
+      this._error = 'Access denied. Please ensure you are signed into the correct IMS organization with appropriate permissions.';
     }
   }
 
@@ -1242,7 +1275,7 @@ ${this._renderEWBanner(hasOrg, hasSite)}
               </div>
               <h3 class="welcome-card-title">Library</h3>
             </div>
-            <p class="welcome-card-body">Configure blocks, templates, icons, and placeholders that authors use while creating pages.</p>
+            <p class="welcome-card-body">Configure blocks, templates, icons, placeholders, and plugins that authors use while creating pages.</p>
             <div class="welcome-card-actions">
               <button
                 class="welcome-card-action"
@@ -1260,6 +1293,10 @@ ${this._renderEWBanner(hasOrg, hasSite)}
                 class="welcome-card-action"
                 @click=${() => this._handleNavClick('placeholders')}
               >Placeholders</button>
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('plugins')}
+              >Plugins</button>
             </div>
           </div>
 
