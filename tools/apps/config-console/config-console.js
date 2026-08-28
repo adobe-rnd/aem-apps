@@ -58,6 +58,7 @@ const SPECTRUM_ICONS = {
   placeholders: './icons/placeholders-variable.svg',
   plugins: './icons/integrations-plug.svg',
   apps: './icons/apps-app.svg',
+  prepare: './icons/library-cc-library.svg',
   'aem-assets': './icons/aem-assets-asset.svg',
   translation: './icons/translation-globe.svg',
   'universal-editor': './icons/universal-editor-edit.svg',
@@ -164,6 +165,13 @@ const SECTIONS = {
       id: 'apps',
       title: 'Apps',
       iconKey: 'apps',
+      scope: 'site',
+      inheritable: false,
+    },
+    {
+      id: 'prepare',
+      title: 'Prepare',
+      iconKey: 'prepare',
       scope: 'site',
       inheritable: false,
     },
@@ -1281,9 +1289,9 @@ ${this._renderEWBanner(hasOrg, hasSite)}
               <div class="welcome-card-icon">
                 ${this._renderIcon('library')}
               </div>
-              <h3 class="welcome-card-title">Apps, Plugins & Library</h3>
+              <h3 class="welcome-card-title">Apps, Plugins, Prepare & Library</h3>
             </div>
-            <p class="welcome-card-body">Configure apps, plugins, blocks, templates, icons, and placeholders that authors use while creating pages.</p>
+            <p class="welcome-card-body">Configure apps, plugins, prepare menu items, blocks, templates, icons, and placeholders that authors use while creating and publishing pages.</p>
             <div class="welcome-card-actions">
               <button
                 class="welcome-card-action"
@@ -1293,6 +1301,10 @@ ${this._renderEWBanner(hasOrg, hasSite)}
                 class="welcome-card-action"
                 @click=${() => this._handleNavClick('plugins')}
               >Plugins</button>
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('prepare')}
+              >Prepare</button>
               <button
                 class="welcome-card-action"
                 @click=${() => this._handleNavClick('blocks')}
