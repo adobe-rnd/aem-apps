@@ -32,6 +32,25 @@ npm i
 npm run lint
 ```
 
+## License Headers
+
+All source files must include Apache License 2.0 headers. This is enforced automatically via pre-commit hooks.
+
+**Check license headers:**
+```sh
+npm run license:check
+```
+
+**Add license headers to new files:**
+```sh
+npm run license:add
+```
+
+**Remove license headers:**
+```sh
+npm run license:remove
+```
+
 ## Local development
 
 1. Create a new repository based on the `aem-boilerplate` template

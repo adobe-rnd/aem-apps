@@ -1,0 +1,50 @@
+{
+  "src": [
+    "**/*.js",
+    "**/*.html",
+    "!node_modules/**",
+    "!tools/deps/**"
+  ],
+  "license": "license.txt",
+  "ignore": [
+    "node_modules/**",
+    "tools/deps/**",
+    "**/*.css",
+    "**/*.md",
+    ".husky/**",
+    ".github/**",
+    ".editorconfig",
+    ".eslintignore",
+    ".eslintrc.js",
+    ".gitignore",
+    ".hlxignore",
+    "**/*.yaml",
+    "**/*.yml",
+    "**/*.json",
+    "**/*.svg",
+    "**/*.woff",
+    "**/*.woff2",
+    "**/*.ttf",
+    "**/*.eot"
+  ],
+  "blocking": true,
+  "logInfo": false,
+  "logError": true,
+  "licenseFormats": {
+    "js": {
+      "prepend": "/*",
+      "append": " */",
+      "eachLine": {
+        "prepend": " * "
+      }
+    },
+    "html": {
+      "prepend": "<!--",
+      "append": "-->",
+      "eachLine": {
+        "prepend": " "
+      }
+    }
+  },
+  "trailingWhitespace": "TRIM"
+}

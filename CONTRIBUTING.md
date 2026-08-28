@@ -1,10 +1,10 @@
-# Contributing to Project Helix
+# Contributing to AEM Apps
 
-This project (like almost all of Project Helix) is an Open Development project and welcomes contributions from everyone who finds it useful or lacking.
+This project is an Open Development project and welcomes contributions from everyone who finds it useful or lacking.
 
 ## Code Of Conduct
 
-This project adheres to the Adobe [code of conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to cstaub at adobe dot com.
+This project adheres to the Adobe [code of conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to Grp-opensourceoffice@adobe.com.
 
 ## Contributor License Agreement
 
@@ -45,29 +45,11 @@ Each commit message that is not part of a pull request:
 
 ## Coding Styleguides
 
-We enforce a coding styleguide using `eslint`. As part of your build, run `npm run lint` to check if your code is conforming to the style guide. We do the same for every PR in our CI, so PRs will get rejected if they don't follow the style guide.
+We enforce a coding styleguide using `eslint` and `stylelint`. As part of your build, run `npm run lint` to check if your code is conforming to the style guide. We do the same for every PR in our CI, so PRs will get rejected if they don't follow the style guide.
 
-You can fix some of the issues automatically by running `npx eslint . --fix`.
-
-## Commit Message Format
-
-This project uses a structured commit changelog format that should be used for every commit. Use `npm run commit` instead of your usual `git commit` to generate commit messages using a wizard.
-
-```bash
-# either add all changed files
-$ git add -A
-# or selectively add files
-$ git add package.json
-# then commit using the wizard
-$ npm run commit
-```
+You can fix some of the issues automatically by running `npm run lint:fix`.
 
 # How Contributions get Reviewed
 
 One of the maintainers will look at the pull request within one week. Feedback on the pull request will be given in writing, in GitHub.
-
-# Release Management
-
-The project's committers will release to the [Adobe organization on npmjs.org](https://www.npmjs.com/org/adobe).
-Please contact the [Adobe Open Source Advisory Board](https://git.corp.adobe.com/OpenSourceAdvisoryBoard/discuss/issues) to get access to the npmjs organization.
 
