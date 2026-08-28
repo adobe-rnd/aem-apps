@@ -1289,22 +1289,10 @@ ${this._renderEWBanner(hasOrg, hasSite)}
               <div class="welcome-card-icon">
                 ${this._renderIcon('library')}
               </div>
-              <h3 class="welcome-card-title">Apps, Plugins, Prepare & Library</h3>
+              <h3 class="welcome-card-title">Library</h3>
             </div>
-            <p class="welcome-card-body">Configure apps, plugins, prepare menu items, blocks, templates, icons, and placeholders that authors use while creating and publishing pages.</p>
+            <p class="welcome-card-body">Configure blocks, templates, icons, and placeholders that authors use while creating pages.</p>
             <div class="welcome-card-actions">
-              <button
-                class="welcome-card-action"
-                @click=${() => this._handleNavClick('apps')}
-              >Apps</button>
-              <button
-                class="welcome-card-action"
-                @click=${() => this._handleNavClick('plugins')}
-              >Plugins</button>
-              <button
-                class="welcome-card-action"
-                @click=${() => this._handleNavClick('prepare')}
-              >Prepare</button>
               <button
                 class="welcome-card-action"
                 @click=${() => this._handleNavClick('blocks')}
@@ -1327,28 +1315,40 @@ ${this._renderEWBanner(hasOrg, hasSite)}
           <div class="welcome-card">
             <div class="welcome-card-header">
               <div class="welcome-card-icon">
-                ${this._renderIcon('universal-editor')}
+                ${this._renderIcon('apps')}
               </div>
-              <h3 class="welcome-card-title">Experience Workspace</h3>
+              <h3 class="welcome-card-title">Apps, Plugins & Prepare</h3>
             </div>
-            <p class="welcome-card-body">Customize Experience Workspace settings for this site, including default views and AI features.</p>
+            <p class="welcome-card-body">Configure apps, plugins, and prepare menu items for extended authoring capabilities and content orchestration.</p>
             <div class="welcome-card-actions">
               <button
                 class="welcome-card-action"
-                @click=${() => this._handleNavClick('experience-workspace')}
-              >Configure workspace</button>
+                @click=${() => this._handleNavClick('apps')}
+              >Apps</button>
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('plugins')}
+              >Plugins</button>
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('prepare')}
+              >Prepare</button>
             </div>
           </div>
 
           <div class="welcome-card">
             <div class="welcome-card-header">
               <div class="welcome-card-icon">
-                ${this._renderIcon('integrations')}
+                ${this._renderIcon('universal-editor')}
               </div>
-              <h3 class="welcome-card-title">Integrations</h3>
+              <h3 class="welcome-card-title">Experience Workspace & Integrations</h3>
             </div>
-            <p class="welcome-card-body">Connect external services like AEM Assets and translation providers for this site.</p>
+            <p class="welcome-card-body">Customize Experience Workspace settings and connect external services like AEM Assets and translation providers.</p>
             <div class="welcome-card-actions">
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('experience-workspace')}
+              >Experience Workspace</button>
               <button
                 class="welcome-card-action"
                 @click=${() => this._handleNavClick('aem-assets')}
