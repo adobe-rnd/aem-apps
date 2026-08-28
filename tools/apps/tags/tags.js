@@ -999,11 +999,12 @@ class TaggerApp extends LitElement {
           </div>
           <div class="modal-body">
             <p class="modal-warning">
-              Converting builds a new taxonomy in memory here — ${this._legacyConvert.path} isn't touched until you
-              click Save, and even then Save writes to the separate path below, not back to the original file.
-              From that point the two files are independent: anything that reads ${this._legacyConvert.path}
-              directly won't see tags you add, rename, or remove here afterward. If pages or blocks are meant to
-              use this new taxonomy, you'll need to update them to read from the new path yourself.
+              Converting builds a new taxonomy file — it doesn't edit your existing ${this._legacyConvert.path} ever.
+            </p>
+            <p class="modal-warning">
+              If you have blocks or pages that read ${this._legacyConvert.path}, they won't see tags you add,
+              rename, or remove here afterward. Those should be updated to work with the new taxonomy format.
+              Proceed with caution?
             </p>
             ${warnExists ? html`
               <p class="modal-warning">
