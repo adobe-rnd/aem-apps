@@ -1000,6 +1000,7 @@ class TaggerApp extends LitElement {
           <div class="modal-body">
             <p class="modal-warning">
               Converting builds a new taxonomy file — it doesn't edit your existing ${this._legacyConvert.path} ever.
+              Nothing is written anywhere until you click Save afterward.
             </p>
             <p class="modal-warning">
               If you have blocks or pages that read ${this._legacyConvert.path}, they won't see tags you add,
