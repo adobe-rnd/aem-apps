@@ -26,6 +26,12 @@ const PRESET_PREPARE_ITEMS = [
     icon: 'https://da.live/blocks/edit/img/S2_Icon_GlobeGrid_20_N.svg#S2_Icon_GlobeGrid',
   },
   {
+    name: 'Rollout',
+    title: 'Rollout',
+    path: 'https://da.live/nx/public/plugins/rollout.html',
+    icon: 'https://da.live/nx/public/plugins/rollout/media_195da69764de2782d555abed3042d8434a040e31c.png',
+  },
+  {
     name: 'Schedule Publish',
     title: 'Schedule Publish',
     path: '',
