@@ -1287,6 +1287,30 @@ ${this._renderEWBanner(hasOrg, hasSite)}
           <div class="welcome-card">
             <div class="welcome-card-header">
               <div class="welcome-card-icon">
+                ${this._renderIcon('apps')}
+              </div>
+              <h3 class="welcome-card-title">Apps, Plugins & Prepare</h3>
+            </div>
+            <p class="welcome-card-body">Configure apps, plugins, and prepare menu items for extended authoring capabilities and content orchestration.</p>
+            <div class="welcome-card-actions">
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('apps')}
+              >Apps</button>
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('plugins')}
+              >Plugins</button>
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('prepare')}
+              >Prepare</button>
+            </div>
+          </div>
+
+          <div class="welcome-card">
+            <div class="welcome-card-header">
+              <div class="welcome-card-icon">
                 ${this._renderIcon('library')}
               </div>
               <h3 class="welcome-card-title">Library</h3>
@@ -1309,30 +1333,6 @@ ${this._renderEWBanner(hasOrg, hasSite)}
                 class="welcome-card-action"
                 @click=${() => this._handleNavClick('placeholders')}
               >Placeholders</button>
-            </div>
-          </div>
-
-          <div class="welcome-card">
-            <div class="welcome-card-header">
-              <div class="welcome-card-icon">
-                ${this._renderIcon('apps')}
-              </div>
-              <h3 class="welcome-card-title">Apps, Plugins & Prepare</h3>
-            </div>
-            <p class="welcome-card-body">Configure apps, plugins, and prepare menu items for extended authoring capabilities and content orchestration.</p>
-            <div class="welcome-card-actions">
-              <button
-                class="welcome-card-action"
-                @click=${() => this._handleNavClick('apps')}
-              >Apps</button>
-              <button
-                class="welcome-card-action"
-                @click=${() => this._handleNavClick('plugins')}
-              >Plugins</button>
-              <button
-                class="welcome-card-action"
-                @click=${() => this._handleNavClick('prepare')}
-              >Prepare</button>
             </div>
           </div>
 
