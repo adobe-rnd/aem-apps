@@ -57,6 +57,7 @@ const SPECTRUM_ICONS = {
   icons: './icons/icons-image.svg',
   placeholders: './icons/placeholders-variable.svg',
   plugins: './icons/integrations-plug.svg',
+  apps: './icons/apps-app.svg',
   'aem-assets': './icons/aem-assets-asset.svg',
   translation: './icons/translation-globe.svg',
   'universal-editor': './icons/universal-editor-edit.svg',
@@ -158,6 +159,13 @@ const SECTIONS = {
           inheritable: false,
         },
       ],
+    },
+    {
+      id: 'apps',
+      title: 'Apps',
+      iconKey: 'apps',
+      scope: 'site',
+      inheritable: false,
     },
     {
       id: 'authoring-experience-group-site',
@@ -1273,10 +1281,18 @@ ${this._renderEWBanner(hasOrg, hasSite)}
               <div class="welcome-card-icon">
                 ${this._renderIcon('library')}
               </div>
-              <h3 class="welcome-card-title">Library</h3>
+              <h3 class="welcome-card-title">Apps, Plugins & Library</h3>
             </div>
-            <p class="welcome-card-body">Configure blocks, templates, icons, placeholders, and plugins that authors use while creating pages.</p>
+            <p class="welcome-card-body">Configure apps, plugins, blocks, templates, icons, and placeholders that authors use while creating pages.</p>
             <div class="welcome-card-actions">
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('apps')}
+              >Apps</button>
+              <button
+                class="welcome-card-action"
+                @click=${() => this._handleNavClick('plugins')}
+              >Plugins</button>
               <button
                 class="welcome-card-action"
                 @click=${() => this._handleNavClick('blocks')}
@@ -1293,10 +1309,6 @@ ${this._renderEWBanner(hasOrg, hasSite)}
                 class="welcome-card-action"
                 @click=${() => this._handleNavClick('placeholders')}
               >Placeholders</button>
-              <button
-                class="welcome-card-action"
-                @click=${() => this._handleNavClick('plugins')}
-              >Plugins</button>
             </div>
           </div>
 

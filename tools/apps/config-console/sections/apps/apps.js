@@ -17,73 +17,43 @@ try {
   // Styles failed to load
 }
 
-// Preset plugins available in this repository and external sources
-const PRESET_PLUGINS = [
+const PRESET_APPS = [
   {
-    name: 'Anchor Links',
-    title: 'Anchor Links',
-    path: 'https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/anchor-links/anchor-links.html',
-    experience: 'dialog',
-  },
-  {
-    name: 'Fragment Picker',
-    title: 'Fragment Picker',
-    path: 'https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/fragments/fragments.html',
-    icon: 'https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/fragments/img/Smock_DocumentFragment_18_N.svg',
-    experience: 'fullsize-dialog',
+    name: 'DA Permissions',
+    title: 'DA Permissions',
+    description: 'Manage DA Permissions',
+    path: 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/da-permissions/da-permissions',
   },
   {
     name: 'Media Library',
     title: 'Media Library',
-    path: 'https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/media-library/media-library.html',
-    icon: 'https://da.live/blocks/edit/img/Smock_Images_18_N.svg',
-    experience: 'fullsize-dialog',
+    description: 'Browse and manage media assets',
+    path: 'https://da.live/apps/media-library#/{org}/{site}',
   },
   {
-    name: 'MSM (Multi-site Manager)',
-    title: 'MSM',
-    path: 'https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/msm/msm.html',
-    experience: 'fullsize-dialog',
+    name: 'MSM Actions',
+    title: 'MSM Actions',
+    description: 'Multi-Site Management tool for managing content links across sites',
+    path: 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/msm/msm',
   },
   {
-    name: 'Request Publish',
-    title: 'Request Publish',
-    path: 'https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/request-for-publish/request-for-publish.html',
-    icon: 'https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/request-for-publish/request-for-publish.svg',
-    experience: 'fullsize-dialog',
-  },
-  {
-    name: 'Rollout',
-    title: 'Rollout',
-    path: 'https://da.live/nx/public/plugins/rollout.html',
-    icon: 'https://da.live/nx/public/plugins/rollout/media_195da69764de2782d555abed3042d8434a040e31c.png',
+    name: 'Publish Request Review',
+    title: 'Publish Request Review',
+    description: 'Review, approve, or reject content publish requests',
+    path: 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox',
   },
   {
     name: 'Snapshots',
     title: 'Snapshots',
+    description: 'Manage content snapshots and versions',
     path: 'https://da.live/apps/snapshots#/{org}/{site}',
-    experience: 'window',
   },
 ];
 
-const EXPERIENCE_TYPES = [
-  { value: 'fullsize-dialog', label: 'Fullsize Dialog' },
-  { value: 'dialog', label: 'Dialog' },
-  { value: 'window', label: 'Window' },
-  { value: '', label: 'None' },
-];
-
-// Standard library items that are not plugins
-const STANDARD_LIBRARY_ITEMS = ['Blocks', 'Templates', 'Icons', 'Placeholders'];
-
-/**
- * Plugins section component
- * Manages custom plugins in the library configuration (stored in config.json)
- */
-export default class PluginsSection extends BaseSectionElement {
+export default class AppsSection extends BaseSectionElement {
   static properties = {
     ...BaseSectionElement.properties,
-    _plugins: { state: true },
+    _apps: { state: true },
     _showAddForm: { state: true },
     _editingIndex: { state: true },
     _form: { state: true },
@@ -93,7 +63,7 @@ export default class PluginsSection extends BaseSectionElement {
 
   constructor() {
     super();
-    this._plugins = [];
+    this._apps = [];
     this._showAddForm = false;
     this._editingIndex = -1;
     this._form = this._getDefaultFormState();
@@ -109,10 +79,9 @@ export default class PluginsSection extends BaseSectionElement {
     return {
       selectedPreset: '',
       title: '',
+      description: '',
+      image: '',
       path: '',
-      icon: '',
-      experience: 'fullsize-dialog',
-      format: '',
       ref: '',
     };
   }
@@ -127,36 +96,26 @@ export default class PluginsSection extends BaseSectionElement {
       this._setLoading(true);
       const config = await fetchSiteConfig(this.org, this.site);
 
-      const libraryData = config?.library?.data || [];
-      this._plugins = libraryData.filter(
-        (item) => !STANDARD_LIBRARY_ITEMS.includes(item.title),
-      );
+      this._apps = config?.apps?.data || [];
 
       this._setLoading(false);
-      this._trackAction('plugins-loaded', { count: this._plugins.length });
+      this._trackAction('apps-loaded', { count: this._apps.length });
     } catch (error) {
-      this._setError(`Failed to load plugins: ${error.message}`);
+      this._setError(`Failed to load apps: ${error.message}`);
     }
   }
 
-  async _savePlugins(plugins) {
+  async _saveApps(apps) {
     try {
       const config = await fetchSiteConfig(this.org, this.site);
       if (!config) {
         throw new Error('Site configuration not found');
       }
 
-      const libraryData = config?.library?.data || [];
-
-      const standardItems = libraryData.filter(
-        (item) => STANDARD_LIBRARY_ITEMS.includes(item.title),
-      );
-      const updatedLibraryData = [...standardItems, ...plugins];
-
-      config.library = config.library || {};
-      config.library.data = updatedLibraryData;
-      config.library.total = updatedLibraryData.length;
-      config.library.limit = updatedLibraryData.length;
+      config.apps = config.apps || {};
+      config.apps.data = apps;
+      config.apps.total = apps.length;
+      config.apps.limit = apps.length;
 
       const result = await updateSiteConfig(this.org, this.site, config);
       return result;
@@ -179,16 +138,15 @@ export default class PluginsSection extends BaseSectionElement {
       this._form = {
         selectedPreset: '',
         title: '',
+        description: '',
+        image: '',
         path: '',
-        icon: '',
-        experience: '',
-        format: '',
         ref: '',
       };
       return;
     }
 
-    const preset = PRESET_PLUGINS.find((p) => p.name === value);
+    const preset = PRESET_APPS.find((p) => p.name === value);
     if (preset) {
       // Replace {org} and {site} placeholders with actual values
       let path = preset.path || '';
@@ -199,23 +157,20 @@ export default class PluginsSection extends BaseSectionElement {
       this._form = {
         selectedPreset: value,
         title: preset.title || '',
+        description: preset.description || '',
+        image: preset.image || '',
         path,
-        icon: preset.icon || '',
-        experience: preset.experience || '',
-        format: preset.format || '',
         ref: preset.ref || '',
       };
     }
   }
 
   _handleFormChange(field, value) {
-    // If changing preset dropdown
     if (field === 'selectedPreset') {
       this._handlePresetSelect(value);
       return;
     }
 
-    // Otherwise just update the field
     this._form = {
       ...this._form,
       [field]: value,
@@ -231,57 +186,56 @@ export default class PluginsSection extends BaseSectionElement {
 
     this._message = null;
 
-    const isDuplicate = this._plugins.some(
+    const isDuplicate = this._apps.some(
       (p, idx) => p.title === this._form.title.trim() && idx !== this._editingIndex,
     );
 
     if (isDuplicate) {
       this._message = {
         type: 'error',
-        text: 'A plugin with this title already exists',
+        text: 'An app with this title already exists',
       };
       return;
     }
 
     try {
-      const cleanPlugin = {
+      const cleanApp = {
         title: this._form.title.trim(),
         path: this._form.path.trim(),
       };
-      if (this._form.icon?.trim()) cleanPlugin.icon = this._form.icon.trim();
-      if (this._form.experience?.trim()) cleanPlugin.experience = this._form.experience.trim();
-      if (this._form.format?.trim()) cleanPlugin.format = this._form.format.trim();
-      if (this._form.ref?.trim()) cleanPlugin.ref = this._form.ref.trim();
+      if (this._form.description?.trim()) cleanApp.description = this._form.description.trim();
+      if (this._form.image?.trim()) cleanApp.image = this._form.image.trim();
+      if (this._form.ref?.trim()) cleanApp.ref = this._form.ref.trim();
 
-      let updatedPlugins;
+      let updatedApps;
       if (this._editingIndex >= 0) {
-        updatedPlugins = this._plugins.map((p, idx) => (
-          idx === this._editingIndex ? cleanPlugin : p
+        updatedApps = this._apps.map((p, idx) => (
+          idx === this._editingIndex ? cleanApp : p
         ));
       } else {
-        updatedPlugins = [...this._plugins, cleanPlugin];
+        updatedApps = [...this._apps, cleanApp];
       }
 
-      const result = await this._savePlugins(updatedPlugins);
+      const result = await this._saveApps(updatedApps);
 
       if (result.success) {
         const action = this._editingIndex >= 0 ? 'updated' : 'added';
-        this._trackAction(`plugin-${action}`, {
+        this._trackAction(`app-${action}`, {
           org: this.org,
           site: this.site,
-          title: cleanPlugin.title,
+          title: cleanApp.title,
         });
 
         await this.loadData();
         this._message = {
           type: 'success',
-          text: `Plugin ${action} successfully`,
+          text: `App ${action} successfully`,
         };
         this._form = this._getDefaultFormState();
         this._editingIndex = -1;
         this._showAddForm = false;
       } else {
-        throw new Error(result.error || `Failed to ${this._editingIndex >= 0 ? 'update' : 'add'} plugin`);
+        throw new Error(result.error || `Failed to ${this._editingIndex >= 0 ? 'update' : 'add'} app`);
       }
     } catch (error) {
       this._message = {
@@ -291,18 +245,16 @@ export default class PluginsSection extends BaseSectionElement {
     }
   }
 
-  _handleEdit(plugin, index) {
+  _handleEdit(app, index) {
     this._editingIndex = index;
     this._form = {
-      title: plugin.title,
-      path: plugin.path,
-      icon: plugin.icon || '',
-      experience: plugin.experience || '',
-      format: plugin.format || '',
-      ref: plugin.ref || '',
+      title: app.title,
+      description: app.description || '',
+      image: app.image || '',
+      path: app.path,
+      ref: app.ref || '',
     };
     this._showAddForm = true;
-    this._showPresetPicker = false;
     this._message = null;
   }
 
@@ -312,29 +264,29 @@ export default class PluginsSection extends BaseSectionElement {
     this._showAddForm = false;
   }
 
-  async _handleRemove(plugin, index) {
+  async _handleRemove(app, index) {
     // eslint-disable-next-line no-alert, no-restricted-globals
-    if (!confirm(`Remove plugin "${plugin.title}"?`)) return;
+    if (!confirm(`Remove app "${app.title}"?`)) return;
 
     this._message = null;
 
     try {
-      const updatedPlugins = this._plugins.filter((_, idx) => idx !== index);
-      const result = await this._savePlugins(updatedPlugins);
+      const updatedApps = this._apps.filter((_, idx) => idx !== index);
+      const result = await this._saveApps(updatedApps);
 
       if (result.success) {
-        this._trackAction('plugin-remove', {
+        this._trackAction('app-remove', {
           org: this.org,
           site: this.site,
-          title: plugin.title,
+          title: app.title,
         });
         await this.loadData();
         this._message = {
           type: 'success',
-          text: 'Plugin removed successfully',
+          text: 'App removed successfully',
         };
       } else {
-        throw new Error(result.error || 'Failed to remove plugin');
+        throw new Error(result.error || 'Failed to remove app');
       }
     } catch (error) {
       this._message = {
@@ -348,13 +300,17 @@ export default class PluginsSection extends BaseSectionElement {
     this._searchQuery = e.target.value.toLowerCase();
   }
 
-  _getFilteredPlugins() {
-    if (!this._searchQuery) return this._plugins;
-    return this._plugins.filter((plugin) => plugin.title.toLowerCase().includes(this._searchQuery));
+  _getFilteredApps() {
+    if (!this._searchQuery) return this._apps;
+
+    return this._apps.filter((app) => app.title.toLowerCase().includes(this._searchQuery)
+      || app.description?.toLowerCase().includes(this._searchQuery)
+      || app.path.toLowerCase().includes(this._searchQuery));
   }
 
   _renderMessage() {
     if (!this._message) return nothing;
+
     return html`
       <div class="message ${this._message.type}">
         ${this._message.text}
@@ -363,45 +319,45 @@ export default class PluginsSection extends BaseSectionElement {
   }
 
   _renderExplainerCard() {
-    const hasPlugins = this._plugins && this._plugins.length > 0;
-    const status = hasPlugins ? 'configured' : 'not-configured';
-    const statusLabel = hasPlugins ? 'Configured' : 'Not Configured';
+    const hasApps = this._apps && this._apps.length > 0;
+    const status = hasApps ? 'configured' : 'not-configured';
+    const statusLabel = hasApps ? 'Configured' : 'Not Configured';
 
     return html`
       <explainer-info-card
-        cardId="plugins-library-setup"
-        title="Plugins"
+        cardId="apps-setup"
+        title="Apps"
         status="${status}"
         statusLabel="${statusLabel}"
       >
         <div slot="content">
-          <p>Plugins extend the authoring library with custom tools and integrations. Add plugins from preset options or create custom entries.</p>
-          <p>${!hasPlugins ? 'No plugins configured yet.' : 'Authors can now access these plugins from the library panel.'} Plugins can open in dialogs, fullsize dialogs, or new windows.</p>
-          <p>Each plugin needs a title and a path URL. Optional fields include icon URL, experience type, format template, and ref (branch name).</p>
+          <p>Apps extend the authoring experience with custom tools and utilities. Add apps from preset options or create custom entries.</p>
+          <p>${!hasApps ? 'No apps configured yet.' : 'Authors can now access these apps from the apps panel.'} Apps provide additional functionality for content management.</p>
+          <p>Each app needs a title and a path URL. Optional fields include description, image URL, and ref (branch name).</p>
         </div>
         <div slot="actions">
           <a
-            href="https://docs.da.live/administrators/guides/setup-library"
+            href="https://docs.da.live/administrators/guides/setup-apps"
             target="_blank"
             rel="noopener noreferrer"
             class="btn-small btn-secondary"
-          >Setup Library Docs</a>
+          >Setup Apps Docs</a>
         </div>
       </explainer-info-card>
     `;
   }
 
   _renderCollectionCard() {
-    const filteredPlugins = this._getFilteredPlugins();
+    const filteredApps = this._getFilteredApps();
 
     return html`
       <div class="collection-card">
         <div class="collection-header">
-          <h3 class="collection-title">Plugins</h3>
+          <h3 class="collection-title">Apps</h3>
           <sl-input
             type="search"
             size="small"
-            placeholder="Search plugins..."
+            placeholder="Search apps..."
             .value=${this._searchQuery}
             @sl-input=${this._handleSearch}
             @sl-change=${this._handleSearch}
@@ -410,38 +366,38 @@ export default class PluginsSection extends BaseSectionElement {
             clearable
           ></sl-input>
         </div>
-        ${filteredPlugins.length === 0 ? html`
+        ${filteredApps.length === 0 ? html`
           <div class="empty-state">
-            ${this._plugins.length === 0 ? html`
-              <div class="empty-state-icon">🧩</div>
-              <p class="empty-state-text">No plugins yet</p>
-              <p>Add a plugin from presets or create a custom one.</p>
+            ${this._apps.length === 0 ? html`
+              <div class="empty-state-icon">🛠️</div>
+              <p class="empty-state-text">No apps yet</p>
+              <p>Add an app from presets or create a custom one.</p>
             ` : html`
-              <p>No plugins found</p>
+              <p>No apps found</p>
             `}
           </div>
         ` : html`
-          <div class="plugin-list">
-            ${filteredPlugins.map((plugin, index) => html`
-              <div class="plugin-item">
-                <div class="plugin-info">
-                  <div class="plugin-name">${plugin.title}</div>
-                  <div class="plugin-path">${plugin.path}</div>
-                  ${plugin.experience ? html`
-                    <div class="plugin-meta">Experience: ${plugin.experience}</div>
+          <div class="app-list">
+            ${filteredApps.map((app, index) => html`
+              <div class="app-item">
+                <div class="app-info">
+                  <div class="app-name">${app.title}</div>
+                  ${app.description ? html`
+                    <div class="app-description">${app.description}</div>
                   ` : nothing}
-                  ${plugin.ref ? html`
-                    <div class="plugin-meta">Ref: ${plugin.ref}</div>
+                  <div class="app-path">${app.path}</div>
+                  ${app.ref ? html`
+                    <div class="app-meta">Ref: ${app.ref}</div>
                   ` : nothing}
                 </div>
-                <div class="plugin-actions">
+                <div class="app-actions">
                   <button
-                    class="plugin-action-btn"
-                    @click=${() => this._handleEdit(plugin, index)}
+                    class="app-action-btn"
+                    @click=${() => this._handleEdit(app, index)}
                   >Edit</button>
                   <button
-                    class="plugin-action-btn remove"
-                    @click=${() => this._handleRemove(plugin, index)}
+                    class="app-action-btn remove"
+                    @click=${() => this._handleRemove(app, index)}
                   >Remove</button>
                 </div>
               </div>
@@ -459,20 +415,20 @@ export default class PluginsSection extends BaseSectionElement {
       return html`
         <div class="add-button-container">
           <button class="add-scope-btn" @click=${this._toggleAddForm}>
-            + Add plugin
+            + Add app
           </button>
         </div>
       `;
     }
 
     return html`
-      <div class="add-plugin-card">
-        <div class="add-plugin-header">
-          <h3 class="add-plugin-title">${isEditing ? 'Edit Plugin' : 'Add Plugin'}</h3>
+      <div class="add-app-card">
+        <div class="add-app-header">
+          <h3 class="add-app-title">${isEditing ? 'Edit App' : 'Add App'}</h3>
           <button class="btn-icon" @click=${this._toggleAddForm} title="Close">×</button>
         </div>
-        <p class="add-plugin-description">Select a preset plugin or configure a custom plugin. You can modify any preset values before adding.</p>
-        <div class="add-plugin-form">
+        <p class="add-app-description">Select a preset app or configure a custom app. You can modify any preset values before adding.</p>
+        <div class="add-app-form">
           ${!isEditing ? html`
             <div class="form-field">
               <label class="form-label">Start with</label>
@@ -481,8 +437,8 @@ export default class PluginsSection extends BaseSectionElement {
                 .value=${this._form.selectedPreset}
                 @change=${(e) => this._handleFormChange('selectedPreset', e.target.value)}
               >
-                <option value="">Custom Plugin</option>
-                ${PRESET_PLUGINS.map((preset) => html`
+                <option value="">Custom App</option>
+                ${PRESET_APPS.map((preset) => html`
                   <option value="${preset.name}" ?selected=${this._form.selectedPreset === preset.name}>${preset.name}</option>
                 `)}
               </select>
@@ -493,9 +449,19 @@ export default class PluginsSection extends BaseSectionElement {
             <input
               type="text"
               class="form-input"
-              placeholder="e.g., My Custom Plugin"
+              placeholder="e.g., My Custom App"
               .value=${this._form.title}
               @input=${(e) => this._handleFormChange('title', e.target.value)}
+            />
+          </div>
+          <div class="form-field">
+            <label class="form-label">Description</label>
+            <input
+              type="text"
+              class="form-input"
+              placeholder="Brief description of the app"
+              .value=${this._form.description}
+              @input=${(e) => this._handleFormChange('description', e.target.value)}
             />
           </div>
           <div class="form-field">
@@ -503,43 +469,20 @@ export default class PluginsSection extends BaseSectionElement {
             <input
               type="url"
               class="form-input"
-              placeholder="https://example.com/plugin.html"
+              placeholder="https://example.com/app"
               .value=${this._form.path}
               @input=${(e) => this._handleFormChange('path', e.target.value)}
             />
           </div>
           <div class="form-field">
-            <label class="form-label">Icon URL</label>
+            <label class="form-label">Image URL</label>
             <input
               type="url"
               class="form-input"
-              placeholder="https://example.com/icon.svg"
-              .value=${this._form.icon}
-              @input=${(e) => this._handleFormChange('icon', e.target.value)}
+              placeholder="https://example.com/image.jpg"
+              .value=${this._form.image}
+              @input=${(e) => this._handleFormChange('image', e.target.value)}
             />
-          </div>
-          <div class="form-field">
-            <label class="form-label">Experience Type</label>
-            <select
-              class="form-input"
-              .value=${this._form.experience}
-              @change=${(e) => this._handleFormChange('experience', e.target.value)}
-            >
-              ${EXPERIENCE_TYPES.map((type) => html`
-                <option value="${type.value}" ?selected=${this._form.experience === type.value}>${type.label}</option>
-              `)}
-            </select>
-          </div>
-          <div class="form-field">
-            <label class="form-label">Format</label>
-            <input
-              type="text"
-              class="form-input"
-              placeholder="e.g., :<content>: or {{<content>}}"
-              .value=${this._form.format}
-              @input=${(e) => this._handleFormChange('format', e.target.value)}
-            />
-            <small class="form-hint">Optional format template for content insertion</small>
           </div>
           <div class="form-field">
             <label class="form-label">Ref (Branch Name)</label>
@@ -550,14 +493,14 @@ export default class PluginsSection extends BaseSectionElement {
               .value=${this._form.ref}
               @input=${(e) => this._handleFormChange('ref', e.target.value)}
             />
-            <small class="form-hint">Optional GitHub branch name for the plugin</small>
+            <small class="form-hint">Optional GitHub branch name for the app</small>
           </div>
           <div class="form-actions">
             <button
               class="btn-primary"
               @click=${this._handleAdd}
               ?disabled=${!this._isFormValid()}
-            >${isEditing ? 'Update' : 'Add Plugin'}</button>
+            >${isEditing ? 'Update' : 'Add App'}</button>
             ${isEditing ? html`
               <button
                 class="btn-secondary"
@@ -572,7 +515,7 @@ export default class PluginsSection extends BaseSectionElement {
 
   render() {
     if (this._loading) {
-      return this._renderLoading('Loading plugins...');
+      return this._renderLoading('Loading apps...');
     }
 
     if (this._error) {
@@ -590,4 +533,4 @@ export default class PluginsSection extends BaseSectionElement {
   }
 }
 
-customElements.define('plugins-section', PluginsSection);
+customElements.define('apps-section', AppsSection);
