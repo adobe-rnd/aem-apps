@@ -589,25 +589,48 @@ class TaggerApp extends LitElement {
   openConvertModal() {
     if (!this._legacyConvert) return;
     const targetPath = this._legacyConvert.path.replace(/\.json$/, '-taxonomy.json');
-    this._convertModal = { namespaceName: 'Tags', targetPath };
+    this._convertModal = {
+      namespaceName: 'Tags', targetPath, checking: false, warnExists: false,
+    };
   }
 
   closeConvertModal() {
     this._convertModal = null;
   }
 
+  // Editing the target path invalidates a previous "already exists" check —
+  // it was for the old value, not this one.
   updateConvertField(field, value) {
-    this._convertModal = { ...this._convertModal, [field]: value };
+    this._convertModal = {
+      ...this._convertModal,
+      [field]: value,
+      warnExists: field === 'targetPath' ? false : this._convertModal.warnExists,
+    };
   }
 
-  confirmConvert() {
-    const { namespaceName, targetPath } = this._convertModal;
+  // First click checks whether the target path is already occupied — if so,
+  // it only warns (via `warnExists`) rather than converting, so a second,
+  // explicit click is needed before anything already there could be
+  // overwritten by a later Save.
+  async handleConvertClick() {
+    const { namespaceName, targetPath, warnExists } = this._convertModal;
     const name = namespaceName.trim();
     const path = targetPath.trim();
     if (!name || !path) return;
 
-    const { rows } = this._legacyConvert;
     const location = resolveTaxonomyLocation(this._org, this._site, path);
+
+    if (!warnExists) {
+      this._convertModal = { ...this._convertModal, checking: true };
+      const { ok } = await fetchTaxonomy(location.sourceUrl);
+      this._convertModal = { ...this._convertModal, checking: false };
+      if (ok) {
+        this._convertModal = { ...this._convertModal, warnExists: true };
+        return;
+      }
+    }
+
+    const { rows } = this._legacyConvert;
     this._taxonomyLocation = location;
     this._taxonomyPathValue = location.path;
     this._tree = convertLegacyTagList(rows, name);
@@ -959,8 +982,13 @@ class TaggerApp extends LitElement {
   // ---- Render: convert-legacy-tags modal ----
 
   renderConvertModal() {
-    const { namespaceName, targetPath } = this._convertModal;
-    const canConvert = namespaceName.trim().length > 0 && targetPath.trim().length > 0;
+    const {
+      namespaceName, targetPath, checking, warnExists,
+    } = this._convertModal;
+    const canConvert = namespaceName.trim().length > 0 && targetPath.trim().length > 0 && !checking;
+    let convertLabel = 'Convert';
+    if (checking) convertLabel = 'Checking…';
+    else if (warnExists) convertLabel = 'Convert anyway';
 
     return html`
       <div class="modal-backdrop" @click=${() => this.closeConvertModal()}>
@@ -971,11 +999,19 @@ class TaggerApp extends LitElement {
           </div>
           <div class="modal-body">
             <p class="modal-warning">
-              This does not modify ${this._legacyConvert.path} — it only builds a new taxonomy in memory here,
-              which you review and explicitly Save to the path below. Nothing is written until you do.
-              If other blocks or pages read the original flat file directly, they'll keep working unchanged and
-              won't automatically pick up this new taxonomy.
+              Converting builds a new taxonomy in memory here — ${this._legacyConvert.path} isn't touched until you
+              click Save, and even then Save writes to the separate path below, not back to the original file.
+              From that point the two files are independent: anything that reads ${this._legacyConvert.path}
+              directly won't see tags you add, rename, or remove here afterward. If pages or blocks are meant to
+              use this new taxonomy, you'll need to update them to read from the new path yourself.
             </p>
+            ${warnExists ? html`
+              <p class="modal-warning">
+                A file already exists at ${resolveTaxonomyLocation(this._org, this._site, targetPath.trim()).path}.
+                Converting won't overwrite it yet — that only happens if you Save afterward — but click Convert
+                again to confirm you want to proceed toward that.
+              </p>
+            ` : nothing}
             <label class="search-field">
               <span>Namespace name</span>
               <sl-input .value=${namespaceName}
@@ -988,7 +1024,9 @@ class TaggerApp extends LitElement {
             </label>
             <div class="modal-actions">
               <sl-button class="pw-quiet-secondary" @click=${() => this.closeConvertModal()}>Cancel</sl-button>
-              <sl-button class="pw-fill-accent" ?disabled=${!canConvert} @click=${() => this.confirmConvert()}>Convert</sl-button>
+              <sl-button class="pw-fill-accent" ?disabled=${!canConvert} @click=${() => this.handleConvertClick()}>
+                ${convertLabel}
+              </sl-button>
             </div>
           </div>
         </div>
