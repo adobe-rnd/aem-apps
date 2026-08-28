@@ -58,7 +58,7 @@ const SPECTRUM_ICONS = {
   placeholders: './icons/placeholders-variable.svg',
   plugins: './icons/integrations-plug.svg',
   apps: './icons/apps-app.svg',
-  prepare: './icons/library-cc-library.svg',
+  prepare: './icons/prepare-menu.svg',
   'aem-assets': './icons/aem-assets-asset.svg',
   translation: './icons/translation-globe.svg',
   'universal-editor': './icons/universal-editor-edit.svg',
