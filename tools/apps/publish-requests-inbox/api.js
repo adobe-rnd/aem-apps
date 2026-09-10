@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 /* eslint-disable import/no-unresolved, no-console, no-await-in-loop */
+// eslint-disable-next-line import/extensions
+import { requestsFromResponse } from './response-utils.js';
 
 const WORKER_URL = 'https://publish-requests.aem-poc-lab.workers.dev';
 const CI_WORKER_URL = 'https://publish-requests-ci.aem-poc-lab.workers.dev';
@@ -293,10 +295,10 @@ export async function getApproversForPath(org, site, path, token) {
  */
 export async function getAllPendingRequestsForUser(org, site, userEmail, token) {
   const url = `${getWorkerUrl()}/api/requests?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
-  const resp = await fetch(url, getOpts(token, 'GET'));
-  if (!resp.ok) return [];
-  const { requests = [] } = await resp.json();
-  return requests;
+  // daFetch injects a fresh IMS token (avoids a stale captured token 401);
+  // a non-ok worker response throws so the UI shows an error, not an empty inbox.
+  const resp = await daFetch(url, getOpts(token, 'GET'));
+  return requestsFromResponse(resp);
 }
 
 /**
@@ -305,10 +307,10 @@ export async function getAllPendingRequestsForUser(org, site, userEmail, token) 
  */
 export async function getAllPendingRequestsByRequester(org, site, userEmail, token) {
   const url = `${getWorkerUrl()}/api/requests?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}&role=requester`;
-  const resp = await fetch(url, getOpts(token, 'GET'));
-  if (!resp.ok) return [];
-  const { requests = [] } = await resp.json();
-  return requests;
+  // Fresh token via daFetch; a non-ok response throws rather than silently
+  // showing the requester an empty "my requests" list.
+  const resp = await daFetch(url, getOpts(token, 'GET'));
+  return requestsFromResponse(resp);
 }
 
 /**
