@@ -38,11 +38,6 @@ let editUrlOrigin = 'https://da.live';
 export function setEditUrlOrigin(origin) { if (origin) editUrlOrigin = origin; }
 export function getEditUrlOrigin() { return editUrlOrigin; }
 
-// mergeFromSource lazy-loads da-nx's loc/project module, whose daFetch
-// (nx2/utils/api.js) authenticates via loadIms(). That resolves, via
-// ../../../../scripts/utils.js's getNx() hook, to
-// ../../../../scripts/nx-shim/utils/ims.js — which reads the token nx1's
-// daFetch.js already maintains — so merge never needs its own IMS session.
 let mergeCopyFn;
 export function setMergeCopy(fn) { mergeCopyFn = fn; }
 async function ensureMergeCopy() {

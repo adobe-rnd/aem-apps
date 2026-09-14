@@ -30,13 +30,13 @@ async function currentDetails() {
 export async function loadIms() {
   const details = await currentDetails();
   if (details?.accessToken) return details;
-  const { loadIms: realLoadIms } = await import('https://da.live/nx/utils/ims.js');
-  return realLoadIms();
+  const { loadIms: nxLoadIms } = await import('https://da.live/nx/utils/ims.js');
+  return nxLoadIms();
 }
 
 export async function handleSignIn() {
   const details = await currentDetails();
   if (details?.accessToken) return;
-  const { handleSignIn: realHandleSignIn } = await import('https://da.live/nx/utils/ims.js');
-  realHandleSignIn();
+  const { handleSignIn: nxHandleSignIn } = await import('https://da.live/nx/utils/ims.js');
+  nxHandleSignIn();
 }
