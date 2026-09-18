@@ -1,0 +1,1062 @@
+/* eslint-disable no-underscore-dangle, import/no-unresolved, no-console, class-methods-use-this */
+import DA_SDK from 'https://da.live/nx/utils/sdk.js';
+import { LitElement, html, nothing } from 'da-lit';
+import {
+  resolveTaxonomyLocation,
+  fetchTaxonomy,
+  saveTaxonomy,
+  previewTaxonomy,
+  publishTaxonomy,
+  searchPagesForTag,
+} from './api.js';
+import {
+  parseTaxonomyTree,
+  serializeTaxonomyTree,
+  buildTaxonomySheet,
+  hasTaxonomySchema,
+  isLegacyTagList,
+  convertLegacyTagList,
+} from './taxonomy.js';
+import { icon } from './icons.js';
+
+// NX style pipeline matches other da.live shell apps: nx.js loadStyle + getStyle.
+const NX = 'https://da.live/nx2';
+let nexter = null;
+let sl = null;
+let styles = null;
+try {
+  const [{ default: getStyle }, { loadStyle, getColorScheme }] = await Promise.all([
+    import(`${NX}/public/utils/styles.js`),
+    import(`${NX}/scripts/nx.js`),
+  ]);
+  document.documentElement.style.colorScheme = getColorScheme() === 'dark-scheme' ? 'dark' : 'light';
+  await Promise.all([
+    loadStyle(`${NX}/styles/styles.css`),
+    loadStyle(`${NX}/public/sl/styles.css`),
+  ]);
+  await import(`${NX}/public/sl/components.js`);
+  [nexter, sl, styles] = await Promise.all([
+    getStyle(`${NX}/styles/styles.css`),
+    getStyle(`${NX}/public/sl/styles.css`),
+    getStyle(import.meta.url),
+  ]);
+} catch (e) {
+  console.warn('Failed to load styles:', e);
+}
+
+// Remembers the last loaded location across sessions, so reopening the app
+// without URL params (e.g. from a bookmark) picks up where the user left
+// off. URL params (`org`/`site`/`taxonomy`, matching da-permissions' and the
+// tags plugin's own param names) still take precedence when present. Stored
+// as a single `/org/site:taxonomyPath` string rather than one key per field.
+const STORAGE_KEY = 'tagger-location';
+
+function formatStoredLocation(org, site, taxonomyPath) {
+  return `/${org}/${site}:${taxonomyPath || ''}`;
+}
+
+function parseStoredLocation(value) {
+  const trimmed = (value || '').trim();
+  const colonIndex = trimmed.indexOf(':');
+  const sitePart = (colonIndex === -1 ? trimmed : trimmed.slice(0, colonIndex)).replace(/^\/+/, '');
+  const taxonomyPath = colonIndex === -1 ? '' : trimmed.slice(colonIndex + 1);
+  const slashIndex = sitePart.indexOf('/');
+  if (slashIndex === -1) return { org: '', site: '', taxonomyPath };
+  return { org: sitePart.slice(0, slashIndex), site: sitePart.slice(slashIndex + 1), taxonomyPath };
+}
+
+class TaggerApp extends LitElement {
+  static properties = {
+    context: { attribute: false },
+    token: { attribute: false },
+    // 'idle' | 'loading' | 'loaded' | 'error'
+    _state: { state: true },
+    _orgValue: { state: true },
+    _siteValue: { state: true },
+    _taxonomyPathValue: { state: true },
+    _org: { state: true },
+    _site: { state: true },
+    _taxonomyLocation: { state: true },
+    _tree: { state: true },
+    _dirty: { state: true },
+    _saving: { state: true },
+    _publishing: { state: true },
+    _message: { state: true },
+    // Miller-column drill path: [namespace, child, grandchild, ...].
+    _selection: { state: true },
+    // The node whose row is currently showing an inline name/description
+    // editor (toggled via its pencil icon) — only one at a time. Edits are
+    // held in `_editingDraft` and only applied to the node on commit (the
+    // checkmark), so switching to edit something else, or clicking Cancel,
+    // discards them instead of silently keeping half-typed changes.
+    _editingNode: { state: true },
+    _editingList: { state: true },
+    _editingIsNew: { state: true },
+    _editingDraft: { state: true },
+    // Nodes changed since the last save (added, renamed, re-described, or
+    // moved) — rendered with a small dot so unsaved changes are easy to spot.
+    _dirtyNodes: { state: true },
+    // { list, item, mode } for the row currently under a drag — `mode` is
+    // 'reorder' (same list, inserted before this row) or 'into' (a
+    // different list, appended as this row's child) — used to show where a
+    // drop would land.
+    _dragOverTarget: { state: true },
+    // { list, item, name, hasChildren, typed } while the delete modal is open.
+    _deleteTarget: { state: true },
+    // { path } while the find-pages modal is open.
+    _searchModalTag: { state: true },
+    _searchSubfolder: { state: true },
+    _searching: { state: true },
+    _searchProgress: { state: true },
+    _searchResult: { state: true },
+    // { rows, path } when the last load hit a flat key/value tag list at
+    // `path` — offers a (never automatic) conversion into a new taxonomy.
+    _legacyConvert: { state: true },
+    // { namespaceName, targetPath } while the convert-legacy modal is open.
+    _convertModal: { state: true },
+  };
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.shadowRoot.adoptedStyleSheets = [nexter, sl, styles].filter(Boolean);
+
+    this._state = 'idle';
+    this._orgValue = '';
+    this._siteValue = '';
+    this._taxonomyPathValue = '';
+    this._org = '';
+    this._site = '';
+    this._taxonomyLocation = null;
+    this._tree = { namespaces: [] };
+    this._dirty = false;
+    this._saving = false;
+    this._publishing = false;
+    this._message = null;
+    this._selection = [];
+    this._editingNode = null;
+    this._editingList = null;
+    this._editingIsNew = false;
+    this._editingDraft = null;
+    this._dirtyNodes = new Set();
+    this._dragOverTarget = null;
+    this._deleteTarget = null;
+    this._searchModalTag = null;
+    this._searchSubfolder = '';
+    this._searching = false;
+    this._searchProgress = null;
+    this._searchResult = null;
+    this._legacyConvert = null;
+    this._convertModal = null;
+    // Not a reactive property — set/read only inside a single drag gesture.
+    this._dragItem = null;
+
+    const params = new URLSearchParams(window.location.search);
+    const orgParam = (params.get('org') || '').trim();
+    const siteParam = (params.get('site') || '').trim();
+    const taxonomyParam = (params.get('taxonomy') || '').trim();
+    const stored = parseStoredLocation(TaggerApp.readStorage(STORAGE_KEY));
+    const org = orgParam || stored.org;
+    const site = siteParam || stored.site;
+    const taxonomyPath = taxonomyParam || stored.taxonomyPath;
+    this._orgValue = org;
+    this._siteValue = site;
+    this._taxonomyPathValue = taxonomyPath;
+    if (org && site) this.loadTaxonomy(org, site, taxonomyPath);
+  }
+
+  static readStorage(key) {
+    try {
+      return localStorage.getItem(key) || '';
+    } catch {
+      return '';
+    }
+  }
+
+  // Persists the resolved location to both the URL (so the page is
+  // shareable/reloadable) and localStorage (so it's remembered even when
+  // reopened without those params).
+  persistLocation(org, site, taxonomyPath) {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('org', org);
+      url.searchParams.set('site', site);
+      if (taxonomyPath) {
+        url.searchParams.set('taxonomy', taxonomyPath);
+      } else {
+        url.searchParams.delete('taxonomy');
+      }
+      window.history.replaceState(null, '', url);
+    } catch (e) {
+      console.warn('[tagger] updating URL failed:', e);
+    }
+
+    try {
+      localStorage.setItem(STORAGE_KEY, formatStoredLocation(org, site, taxonomyPath));
+    } catch (e) {
+      console.warn('[tagger] persisting to localStorage failed:', e);
+    }
+  }
+
+  // ---- Loading ----
+
+  async loadTaxonomy(org, site, taxonomyPath) {
+    this._state = 'loading';
+    this._message = null;
+    this._dirty = false;
+    this._selection = [];
+    this._editingNode = null;
+    this._editingList = null;
+    this._editingIsNew = false;
+    this._editingDraft = null;
+    this._dirtyNodes = new Set();
+    this._legacyConvert = null;
+    this._convertModal = null;
+
+    const location = resolveTaxonomyLocation(org, site, taxonomyPath);
+    this._taxonomyLocation = location;
+    this._org = org;
+    this._site = site;
+    this._orgValue = org;
+    this._siteValue = site;
+    this._taxonomyPathValue = taxonomyPath;
+    this.persistLocation(org, site, taxonomyPath);
+
+    const { ok, status, sheet } = await fetchTaxonomy(location.sourceUrl);
+
+    if (!ok && status !== 404) {
+      this._state = 'error';
+      this._message = { type: 'error', text: `Failed to load taxonomy (${status || 'network error'}).` };
+      return;
+    }
+
+    if (ok && !hasTaxonomySchema(sheet)) {
+      this._state = 'error';
+      this._message = {
+        type: 'error',
+        text: `${location.path} doesn't look like a taxonomy sheet — expected Namespace/Category/Tag/Description columns.`,
+      };
+      if (isLegacyTagList(sheet)) this._legacyConvert = { rows: sheet.data, path: location.path };
+      return;
+    }
+
+    this._tree = parseTaxonomyTree(Array.isArray(sheet?.data) ? sheet.data : []);
+    this._state = 'loaded';
+    if (!ok) {
+      this._message = {
+        type: 'warning',
+        text: `No taxonomy.json found yet at ${location.path} — add a namespace and save to create it.`,
+      };
+    }
+  }
+
+  handleLoadClick() {
+    const org = (this.shadowRoot.querySelector('#org-input')?.value ?? '').trim();
+    const site = (this.shadowRoot.querySelector('#site-input')?.value ?? '').trim();
+    const taxonomyPath = (this.shadowRoot.querySelector('#taxonomy-input')?.value ?? '').trim();
+    if (!org || !site) {
+      this._message = { type: 'error', text: 'Enter both an organization and a site.' };
+      return;
+    }
+    this.loadTaxonomy(org, site, taxonomyPath);
+  }
+
+  // ---- Save / Publish ----
+
+  async handleSave() {
+    if (this._saving) return;
+    this._saving = true;
+    this._message = null;
+
+    const sheet = buildTaxonomySheet(serializeTaxonomyTree(this._tree));
+    const result = await saveTaxonomy(this._taxonomyLocation.sourceUrl, sheet);
+
+    this._saving = false;
+    if (result.success) {
+      this._dirty = false;
+      this._dirtyNodes = new Set();
+      this._message = { type: 'success', text: 'Saved.' };
+    } else {
+      this._message = { type: 'error', text: `Failed to save (${result.status || result.error}).` };
+    }
+  }
+
+  async handlePublish() {
+    if (this._publishing || this._dirty) return;
+    this._publishing = true;
+    this._message = null;
+
+    const { org, repo, path } = this._taxonomyLocation;
+    const preview = await previewTaxonomy(org, repo, path);
+    if (!preview.success) {
+      this._publishing = false;
+      this._message = { type: 'error', text: `Preview failed (${preview.status || preview.error}).` };
+      return;
+    }
+
+    const live = await publishTaxonomy(org, repo, path);
+    this._publishing = false;
+    this._message = live.success
+      ? { type: 'success', text: 'Published.' }
+      : { type: 'error', text: `Publish failed (${live.status || live.error}).` };
+  }
+
+  // ---- Tree editing ----
+  //
+  // A namespace, category, and tag are all the same `{ name, description,
+  // children }` node — they differ only in depth and whether they currently
+  // have children — so there's a single add/rename/edit path for all of them.
+
+  // Marks `node` as changed since the last save — tracked separately from
+  // `_dirty` so individual items can be highlighted, not just the overall
+  // save/publish state.
+  markDirty(node) {
+    this._dirtyNodes = new Set(this._dirtyNodes).add(node);
+    this._dirty = true;
+  }
+
+  async handleAddChild(owner) {
+    const list = owner ? owner.children : this._tree.namespaces;
+    const node = { name: 'New Item', description: '', children: [] };
+    list.push(node);
+    this.startEditing(node, list, { isNew: true });
+    this.requestUpdate();
+
+    await this.updateComplete;
+    const input = this.shadowRoot.querySelector('.miller-item.is-editing .tax-name-input');
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }
+
+  // ---- Name/description edit toggle (pencil icon) ----
+  //
+  // Edits are drafted, not applied live: `_editingDraft` holds the in-progress
+  // name/description, and the actual node is only updated on commit (the
+  // checkmark, or Enter). Starting a different edit, clicking Cancel (or
+  // Escape), or navigating away all discard the draft instead — so a
+  // half-typed change never ends up silently saved.
+
+  startEditing(node, list, { isNew = false } = {}) {
+    if (this._editingNode && this._editingNode !== node) this.discardCurrentEdit();
+    this._editingNode = node;
+    this._editingList = list;
+    this._editingIsNew = isNew;
+    this._editingDraft = { name: node.name, description: node.description };
+  }
+
+  updateDraft(field, value) {
+    this._editingDraft = { ...this._editingDraft, [field]: value };
+  }
+
+  commitEditing() {
+    const node = this._editingNode;
+    if (!node) return;
+    const { name, description } = this._editingDraft;
+    const changed = this._editingIsNew || name !== node.name || description !== node.description;
+    node.name = name;
+    node.description = description;
+    if (changed) this.markDirty(node);
+    this.clearEditingState();
+  }
+
+  cancelEditing() {
+    this.discardCurrentEdit();
+  }
+
+  // Drops whatever's currently being edited without committing it. A
+  // brand-new, never-confirmed node is removed entirely (undoing the Add);
+  // an existing node just closes its editor, leaving its saved fields as
+  // they were before this edit started.
+  discardCurrentEdit() {
+    const node = this._editingNode;
+    const list = this._editingList;
+    if (this._editingIsNew && node && list) {
+      const idx = list.indexOf(node);
+      if (idx !== -1) list.splice(idx, 1);
+      const next = new Set(this._dirtyNodes);
+      next.delete(node);
+      this._dirtyNodes = next;
+      const selIdx = this._selection.indexOf(node);
+      if (selIdx !== -1) this._selection = this._selection.slice(0, selIdx);
+    }
+    this.clearEditingState();
+  }
+
+  clearEditingState() {
+    this._editingNode = null;
+    this._editingList = null;
+    this._editingIsNew = false;
+    this._editingDraft = null;
+  }
+
+  // ---- Delete confirmation (type the name to confirm) ----
+
+  openDeleteConfirm(list, item) {
+    this._deleteTarget = {
+      list, item, name: item.name, hasChildren: item.children.length > 0, typed: '',
+    };
+  }
+
+  closeDeleteConfirm() {
+    this._deleteTarget = null;
+  }
+
+  updateDeleteTyped(value) {
+    this._deleteTarget = { ...this._deleteTarget, typed: value };
+  }
+
+  confirmDelete() {
+    const {
+      list, item, name, typed,
+    } = this._deleteTarget;
+    if (typed !== name) return;
+
+    const idx = list.indexOf(item);
+    if (idx !== -1) list.splice(idx, 1);
+
+    const selIdx = this._selection.indexOf(item);
+    if (selIdx !== -1) this._selection = this._selection.slice(0, selIdx);
+    if (this._editingNode === item) this.clearEditingState();
+
+    this._dirty = true;
+    this._deleteTarget = null;
+    this.requestUpdate();
+  }
+
+  // ---- Drag & drop ----
+  //
+  // Each draggable item stashes `{ list, item }` on drag start — `list` is a
+  // direct reference to the array it currently lives in. Dropping onto
+  // another item in the SAME list reorders before it; dropping onto an item
+  // in a DIFFERENT list moves the dragged item into it (appended to its
+  // `.children`) — how an item moves to a different branch without both
+  // branches needing to be visible in the same column at once.
+
+  onDragStart(e, list, item) {
+    this._dragItem = { list, item };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', '');
+  }
+
+  onDragEnd() {
+    this._dragItem = null;
+    this._dragOverTarget = null;
+  }
+
+  onDragOverRow(e) {
+    e.preventDefault();
+  }
+
+  // Highlights the hovered row differently depending on what the drop would
+  // do: `reorder` (same list — inserted before this row) vs `into` (a
+  // different list — appended as this row's child).
+  onDragEnterItem(e, targetList, targetItem) {
+    e.preventDefault();
+    if (!this._dragItem || this._dragItem.item === targetItem) return;
+    const mode = this._dragItem.list === targetList ? 'reorder' : 'into';
+    this._dragOverTarget = { list: targetList, item: targetItem, mode };
+  }
+
+  // Only highlights the column itself when hovering its bare background —
+  // hovering a specific item is handled by `onDragEnterItem` instead.
+  onDragEnterColumn(e, targetList) {
+    if (e.target !== e.currentTarget || !this._dragItem) return;
+    e.preventDefault();
+    this._dragOverTarget = { list: targetList, item: null, mode: 'into' };
+  }
+
+  moveItem(targetList, targetIndex) {
+    const drag = this._dragItem;
+    if (!drag || !targetList) return;
+    const sourceIndex = drag.list.indexOf(drag.item);
+    if (sourceIndex === -1) return;
+
+    drag.list.splice(sourceIndex, 1);
+    let insertAt = targetIndex;
+    if (drag.list === targetList && sourceIndex < insertAt) insertAt -= 1;
+    targetList.splice(insertAt, 0, drag.item);
+
+    this.markDirty(drag.item);
+    this._dragItem = null;
+    this._dragOverTarget = null;
+    this.requestUpdate();
+  }
+
+  // True if `maybeInside` is `node` itself or nested somewhere in its subtree
+  // — used to refuse a drop that would nest a node inside itself.
+  isNodeOrDescendant(node, maybeInside) {
+    if (node === maybeInside) return true;
+    return node.children.some((child) => this.isNodeOrDescendant(child, maybeInside));
+  }
+
+  onDropOnItem(e, targetList, targetItem) {
+    e.preventDefault();
+    e.stopPropagation();
+    const drag = this._dragItem;
+    if (!drag) return;
+
+    if (drag.list === targetList) {
+      this.moveItem(targetList, targetList.indexOf(targetItem));
+      return;
+    }
+    if (this.isNodeOrDescendant(drag.item, targetItem)) return;
+    this.moveItem(targetItem.children, targetItem.children.length);
+  }
+
+  onDropInColumn(e, owner) {
+    e.preventDefault();
+    const drag = this._dragItem;
+    if (!drag) return;
+    if (owner && this.isNodeOrDescendant(drag.item, owner)) return;
+    const targetList = owner ? owner.children : this._tree.namespaces;
+    this.moveItem(targetList, targetList.length);
+  }
+
+  // ---- Miller column navigation ----
+
+  handleColumnItemClick(node, colIndex) {
+    if (this._editingNode) this.discardCurrentEdit();
+    this._selection = [...this._selection.slice(0, colIndex), node];
+  }
+
+  // The parent list the node at `_selection[idx]` was found in — needed to
+  // delete or reparent it. `idx === 0` lives in the tree's namespace list;
+  // deeper indexes live in the previous selection level's `.children`.
+  parentListFor(idx) {
+    return idx === 0 ? this._tree.namespaces : this._selection[idx - 1].children;
+  }
+
+  // Builds the `Namespace:Category/Tag` (or `Namespace:Tag`, or bare
+  // `Namespace`) path for the node at `_selection[idx]`, matching
+  // `taxonomy.js`'s `flattenTaxonomyTags` convention exactly.
+  pathForSelectionIndex(idx) {
+    const namespace = this._selection[0];
+    if (idx === 0) return namespace.name;
+    const node = this._selection[idx];
+    const categoryPath = this._selection.slice(1, idx).map((n) => n.name).join('/');
+    return categoryPath ? `${namespace.name}:${categoryPath}/${node.name}` : `${namespace.name}:${node.name}`;
+  }
+
+  // ---- Bulk search (find pages) ----
+
+  openSearchModal(path) {
+    this._searchModalTag = { path };
+    this._searchSubfolder = '';
+    this._searching = false;
+    this._searchProgress = null;
+    this._searchResult = null;
+  }
+
+  closeSearchModal() {
+    this._searchModalTag = null;
+  }
+
+  async handleSearch() {
+    if (!this._searchModalTag || this._searching) return;
+    this._searching = true;
+    this._searchResult = null;
+    this._searchProgress = {
+      checked: 0, total: 0, matched: 0, failed: 0,
+    };
+
+    // Search always crawls the currently loaded site's content — not
+    // `_taxonomyLocation`, which may point at a taxonomy shared from a
+    // different org/repo when a custom taxonomy path is in use.
+    const rootPath = (this._searchSubfolder || '/').trim() || '/';
+    const result = await searchPagesForTag({
+      org: this._org,
+      repo: this._site,
+      rootPath,
+      tagPath: this._searchModalTag.path,
+      onProgress: (progress) => {
+        this._searchProgress = progress;
+      },
+    });
+
+    this._searching = false;
+    this._searchResult = result;
+  }
+
+  // ---- Legacy tag list conversion ----
+  //
+  // Purely opt-in: detecting a legacy sheet only ever offers this modal, it
+  // never converts or writes anything on its own. Confirming just replaces
+  // the in-memory tree and points `_taxonomyLocation` at the new path — the
+  // legacy file is never touched, and nothing is written until the user
+  // separately clicks Save.
+
+  openConvertModal() {
+    if (!this._legacyConvert) return;
+    const targetPath = this._legacyConvert.path.replace(/\.json$/, '-taxonomy.json');
+    this._convertModal = {
+      namespaceName: 'Tags', targetPath, checking: false, warnExists: false,
+    };
+  }
+
+  closeConvertModal() {
+    this._convertModal = null;
+  }
+
+  // Editing the target path invalidates a previous "already exists" check —
+  // it was for the old value, not this one.
+  updateConvertField(field, value) {
+    this._convertModal = {
+      ...this._convertModal,
+      [field]: value,
+      warnExists: field === 'targetPath' ? false : this._convertModal.warnExists,
+    };
+  }
+
+  // First click checks whether the target path is already occupied — if so,
+  // it only warns (via `warnExists`) rather than converting, so a second,
+  // explicit click is needed before anything already there could be
+  // overwritten by a later Save.
+  async handleConvertClick() {
+    const { namespaceName, targetPath, warnExists } = this._convertModal;
+    const name = namespaceName.trim();
+    const path = targetPath.trim();
+    if (!name || !path) return;
+
+    const location = resolveTaxonomyLocation(this._org, this._site, path);
+
+    if (!warnExists) {
+      this._convertModal = { ...this._convertModal, checking: true };
+      const { ok } = await fetchTaxonomy(location.sourceUrl);
+      this._convertModal = { ...this._convertModal, checking: false };
+      if (ok) {
+        this._convertModal = { ...this._convertModal, warnExists: true };
+        return;
+      }
+    }
+
+    const { rows } = this._legacyConvert;
+    this._taxonomyLocation = location;
+    this._taxonomyPathValue = location.path;
+    this._tree = convertLegacyTagList(rows, name);
+    this._dirty = true;
+    this._dirtyNodes = new Set();
+    this._selection = [];
+    this._state = 'loaded';
+    this._message = {
+      type: 'warning',
+      text: `Converted ${rows.length} tag${rows.length === 1 ? '' : 's'} into "${name}" — review, then Save to write it to ${location.path}. The original file at ${this._legacyConvert.path} is untouched.`,
+    };
+    this._legacyConvert = null;
+    this._convertModal = null;
+    this.persistLocation(this._org, this._site, location.path);
+  }
+
+  editUrl(path) {
+    const clean = path.replace(/\.html$/, '');
+    return `https://da.live/edit#/${this._org}/${this._site}${clean}`;
+  }
+
+  previewUrl(path) {
+    const clean = path.replace(/\.html$/, '').replace(/\/index$/, '') || '/';
+    return `https://main--${this._site}--${this._org}.aem.page${clean}`;
+  }
+
+  // ---- Render: toolbar ----
+
+  renderToolbar() {
+    return html`
+      <div class="tagger-toolbar">
+        <header class="tagger-toolbar-header">
+          <h1 class="tagger-title">Tags</h1>
+        </header>
+        <div class="tagger-org-form">
+          <label class="tagger-field">
+            <span>Organization</span>
+            <sl-input id="org-input" type="text" autocomplete="off" .value=${this._orgValue}
+              @keydown=${(e) => { if (e.key === 'Enter') this.handleLoadClick(); }}></sl-input>
+          </label>
+          <label class="tagger-field">
+            <span>Site</span>
+            <sl-input id="site-input" type="text" autocomplete="off" .value=${this._siteValue}
+              @keydown=${(e) => { if (e.key === 'Enter') this.handleLoadClick(); }}></sl-input>
+          </label>
+          <label class="tagger-field tagger-field-path">
+            <span>Taxonomy Path</span>
+            <sl-input id="taxonomy-input" type="text" placeholder="/taxonomy.json"
+              autocomplete="off" .value=${this._taxonomyPathValue}
+              @keydown=${(e) => { if (e.key === 'Enter') this.handleLoadClick(); }}></sl-input>
+          </label>
+          <sl-button class="pw-fill-accent" @click=${() => this.handleLoadClick()}
+            ?disabled=${this._state === 'loading'}>
+            ${this._state === 'loading' ? 'Loading…' : 'Load'}
+          </sl-button>
+        </div>
+      </div>
+    `;
+  }
+
+  renderLoading() {
+    return html`
+      <div class="loading-container" role="status" aria-live="polite" aria-busy="true">
+        <div class="tagger-spinner" aria-hidden="true"></div>
+        <p class="loading-label">Loading…</p>
+      </div>
+    `;
+  }
+
+  renderMessage() {
+    if (!this._message) return nothing;
+    return html`
+      <div class="message ${this._message.type}">
+        <span>${this._message.text}</span>
+        ${this._legacyConvert ? html`
+          <sl-button class="pw-quiet-secondary pw-action-sm" @click=${() => this.openConvertModal()}>
+            Convert legacy tags…
+          </sl-button>
+        ` : nothing}
+      </div>
+    `;
+  }
+
+  // ---- Render: editor (Miller columns) ----
+
+  renderEditor() {
+    const columns = this.buildColumns();
+    return html`
+      <div class="tagger-editor">
+        <div class="editor-actions">
+          <sl-button class="pw-fill-accent" @click=${() => this.handleSave()}
+            ?disabled=${this._saving || !this._dirty}>
+            ${this._saving ? 'Saving…' : 'Save'}
+          </sl-button>
+          <sl-button class="pw-quiet-secondary" @click=${() => this.handlePublish()}
+            ?disabled=${this._publishing || this._dirty}>
+            ${this._publishing ? 'Publishing…' : 'Publish'}
+          </sl-button>
+          ${this._dirty ? html`<span class="dirty-hint">Unsaved changes (dots mark what changed) — publish is disabled until you save.</span>` : nothing}
+          ${this.renderMessage()}
+        </div>
+        <div class="miller-panel">
+          ${this.renderItemToolbar()}
+          <div class="miller-scroll">
+            <div class="miller-headers">
+              ${columns.map((col) => html`
+                <div class="miller-column-header">
+                  ${this.renderColumnHeader(col)}
+                  ${this.renderColumnMeta(col)}
+                </div>
+              `)}
+              <div class="miller-column-filler" aria-hidden="true"></div>
+            </div>
+            <div class="miller-columns">
+              ${columns.map((col, i) => this.renderColumn(col, i))}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // A Spectrum action-bar-style toolbar attached directly to the columns it
+  // acts on: shows the current selection path as context (with a way to
+  // clear it) alongside the actions themselves. Acts on the deepest
+  // selected node — no selection means the implicit target is the
+  // namespace level, so Add still works (it creates a new top-level
+  // namespace), while Delete/Find pages need an actual node and stay
+  // disabled.
+  renderItemToolbar() {
+    const hasSelection = this._selection.length > 0;
+    const selected = hasSelection ? this._selection[this._selection.length - 1] : null;
+    const selectedIndex = this._selection.length - 1;
+
+    return html`
+      <div class="miller-actionbar">
+        <div class="miller-actionbar-context">
+          ${hasSelection ? html`
+            <button class="icon-btn" aria-label="Clear selection"
+              @click=${() => { this._selection = []; }}>&times;</button>
+            <span class="miller-actionbar-label">${this._selection.map((n) => n.name).join(' / ')}</span>
+          ` : nothing}
+        </div>
+        <div class="miller-actionbar-actions">
+          <sl-button class="pw-quiet-secondary pw-action-sm" @click=${() => this.handleAddChild(selected)}>
+            + Add
+          </sl-button>
+          <sl-button class="pw-quiet-secondary pw-action-sm" ?disabled=${!hasSelection}
+            @click=${() => this.openSearchModal(this.pathForSelectionIndex(selectedIndex))}>
+            Find pages
+          </sl-button>
+          <sl-button class="pw-quiet-danger pw-action-sm" ?disabled=${!hasSelection}
+            @click=${() => this.openDeleteConfirm(this.parentListFor(selectedIndex), selected)}>
+            Delete
+          </sl-button>
+        </div>
+      </div>
+    `;
+  }
+
+  // Column 0 is always the namespace list. Column i (i >= 1) shows the
+  // children of `_selection[i - 1]`, and only exists once there's a
+  // selection that deep.
+  buildColumns() {
+    const columns = [{ owner: null, items: this._tree.namespaces }];
+    this._selection.forEach((node) => {
+      columns.push({ owner: node, items: node.children });
+    });
+    return columns;
+  }
+
+  // Read-only — editing a node's name/description happens inline on its row
+  // in the column where it's listed (via its pencil icon), not here. This is
+  // just a "where am I" display of the node whose children this column shows.
+  renderColumnHeader(col) {
+    if (!col.owner) return html`<span class="miller-column-title">Namespaces</span>`;
+
+    const isDirty = this._dirtyNodes.has(col.owner);
+    return html`
+      <span class="miller-column-owner-name">
+        ${isDirty ? html`<span class="dirty-dot" aria-hidden="true" title="Unsaved change"></span>` : nothing}
+        ${col.owner.name}
+      </span>
+    `;
+  }
+
+  renderColumnMeta(col) {
+    if (!col.owner || !col.owner.description) return nothing;
+    return html`
+      <div class="miller-column-meta">
+        <p class="miller-column-description">${col.owner.description}</p>
+      </div>
+    `;
+  }
+
+  renderColumn(col, colIndex) {
+    const ownerList = col.owner ? col.owner.children : this._tree.namespaces;
+    const isColumnDragOver = this._dragOverTarget?.item === null
+      && this._dragOverTarget?.list === ownerList;
+
+    return html`
+      <div class="miller-column">
+        <div class="miller-column-items ${isColumnDragOver ? 'drag-over-column' : ''}"
+          @dragenter=${(e) => this.onDragEnterColumn(e, ownerList)}
+          @dragover=${this.onDragOverRow}
+          @drop=${(e) => this.onDropInColumn(e, col.owner)}>
+          ${col.items.map((node) => this.renderColumnItem(node, colIndex, ownerList))}
+        </div>
+      </div>
+    `;
+  }
+
+  handleEditKeydown(e) {
+    if (e.key === 'Enter') this.commitEditing();
+    if (e.key === 'Escape') this.cancelEditing();
+  }
+
+  renderColumnItem(node, colIndex, ownerList) {
+    if (this._editingNode === node) {
+      const draft = this._editingDraft;
+      return html`
+        <div class="miller-item is-editing">
+          <div class="miller-item-edit-row">
+            <sl-input class="tax-name-input" .value=${draft.name} @keydown=${(e) => this.handleEditKeydown(e)}
+              @input=${(e) => this.updateDraft('name', e.target.value)}></sl-input>
+            <button class="icon-btn" aria-label="Save changes" @click=${() => this.commitEditing()}>${icon('S2_Icon_Checkmark_20_N')}</button>
+            <button class="icon-btn" aria-label="Cancel" @click=${() => this.cancelEditing()}>${icon('S2_Icon_Close_20_N')}</button>
+          </div>
+          <sl-input class="tax-desc-input" placeholder="Description" .value=${draft.description}
+            @keydown=${(e) => this.handleEditKeydown(e)}
+            @input=${(e) => this.updateDraft('description', e.target.value)}></sl-input>
+        </div>
+      `;
+    }
+
+    const isSelected = this._selection[colIndex] === node;
+    const hasChildren = node.children.length > 0;
+    const isDirty = this._dirtyNodes.has(node);
+    const dragOverMode = this._dragOverTarget?.item === node ? this._dragOverTarget.mode : null;
+
+    return html`
+      <div class="miller-item ${isSelected ? 'is-selected' : ''} ${dragOverMode ? `drag-over-${dragOverMode}` : ''}"
+        draggable="true"
+        @dragstart=${(e) => this.onDragStart(e, ownerList, node)}
+        @dragend=${() => this.onDragEnd()}
+        @dragenter=${(e) => this.onDragEnterItem(e, ownerList, node)}
+        @dragover=${this.onDragOverRow}
+        @drop=${(e) => this.onDropOnItem(e, ownerList, node)}
+        @click=${() => this.handleColumnItemClick(node, colIndex)}>
+        <span class="drag-handle" aria-hidden="true">⠿</span>
+        ${isDirty ? html`<span class="dirty-dot" aria-hidden="true" title="Unsaved change"></span>` : nothing}
+        <span class="miller-item-label">${node.name}</span>
+        <button class="icon-btn" aria-label="Edit ${node.name}"
+          @click=${(e) => { e.stopPropagation(); this.startEditing(node, ownerList); }}>${icon('S2_Icon_Edit_20_N')}</button>
+        <span class="miller-item-chevron ${hasChildren ? '' : 'is-hidden'}" aria-hidden="true">›</span>
+      </div>
+    `;
+  }
+
+  // ---- Render: delete confirmation modal ----
+
+  renderDeleteModal() {
+    const {
+      name, typed, hasChildren,
+    } = this._deleteTarget;
+    const matches = typed.length > 0 && typed === name;
+
+    return html`
+      <div class="modal-backdrop" @click=${() => this.closeDeleteConfirm()}>
+        <div class="modal" @click=${(e) => e.stopPropagation()}>
+          <div class="modal-header">
+            <h2>Delete "${name}"?</h2>
+            <button class="modal-close" aria-label="Close" @click=${() => this.closeDeleteConfirm()}>&times;</button>
+          </div>
+          <div class="modal-body">
+            ${hasChildren ? html`<p class="modal-warning">This deletes everything under it.</p>` : nothing}
+            <label class="search-field">
+              <span>Type "${name}" to confirm</span>
+              <input type="text" .value=${typed} @input=${(e) => this.updateDeleteTyped(e.target.value)} />
+            </label>
+            <div class="modal-actions">
+              <sl-button class="pw-quiet-secondary" @click=${() => this.closeDeleteConfirm()}>Cancel</sl-button>
+              <sl-button class="pw-quiet-danger" @click=${() => this.confirmDelete()} ?disabled=${!matches}>Delete</sl-button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ---- Render: find-pages modal ----
+
+  renderSearchModal() {
+    const { path } = this._searchModalTag;
+    return html`
+      <div class="modal-backdrop" @click=${() => this.closeSearchModal()}>
+        <div class="modal modal-lg" @click=${(e) => e.stopPropagation()}>
+          <div class="modal-header">
+            <h2>Find pages tagged "${path}"</h2>
+            <button class="modal-close" aria-label="Close" @click=${() => this.closeSearchModal()}>&times;</button>
+          </div>
+          <div class="modal-body">
+            <label class="search-field">
+              <span>Path Filter <em>(recommended for large sites)</em></span>
+              <input type="text" placeholder="/news/2026" .value=${this._searchSubfolder}
+                @change=${(e) => { this._searchSubfolder = e.target.value; }} />
+            </label>
+            <sl-button class="pw-fill-accent" @click=${() => this.handleSearch()}
+              ?disabled=${this._searching}>
+              ${this._searching ? 'Searching…' : 'Find pages'}
+            </sl-button>
+            ${this._searching ? this.renderSearchProgress() : nothing}
+            ${!this._searching && this._searchResult ? this.renderSearchResults() : nothing}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  renderSearchProgress() {
+    const p = this._searchProgress;
+    if (!p) return nothing;
+    return html`
+      <p class="search-progress">
+        Checked ${p.checked} of ${p.total || '…'} pages — ${p.matched} match${p.matched === 1 ? '' : 'es'} so far.
+      </p>
+    `;
+  }
+
+  renderSearchResults() {
+    const { total, matches, failed } = this._searchResult;
+    if (total === 0) return html`<p class="search-summary">No pages found to check in this scope.</p>`;
+    return html`
+      <p class="search-summary">
+        ${matches.length} of ${total} pages matched${failed ? ` (${failed} page${failed === 1 ? '' : 's'} could not be checked)` : ''}.
+      </p>
+      <ul class="search-results-list">
+        ${matches.map((path) => html`
+          <li>
+            <code>${path}</code>
+            <a href=${this.editUrl(path)} target="_blank" rel="noopener">Edit</a>
+            <a href=${this.previewUrl(path)} target="_blank" rel="noopener">Preview</a>
+          </li>
+        `)}
+      </ul>
+    `;
+  }
+
+  // ---- Render: convert-legacy-tags modal ----
+
+  renderConvertModal() {
+    const {
+      namespaceName, targetPath, checking, warnExists,
+    } = this._convertModal;
+    const canConvert = namespaceName.trim().length > 0 && targetPath.trim().length > 0 && !checking;
+    let convertLabel = 'Convert';
+    if (checking) convertLabel = 'Checking…';
+    else if (warnExists) convertLabel = 'Convert anyway';
+
+    return html`
+      <div class="modal-backdrop" @click=${() => this.closeConvertModal()}>
+        <div class="modal" @click=${(e) => e.stopPropagation()}>
+          <div class="modal-header">
+            <h2>Convert legacy tag list</h2>
+            <button class="modal-close" aria-label="Close" @click=${() => this.closeConvertModal()}>${icon('S2_Icon_Close_20_N')}</button>
+          </div>
+          <div class="modal-body">
+            <p class="modal-warning">
+              Converting builds a new taxonomy file — it doesn't edit your existing ${this._legacyConvert.path} ever.
+              Nothing is written anywhere until you click Save afterward.
+            </p>
+            <p class="modal-warning">
+              If you have blocks or pages that read ${this._legacyConvert.path}, they won't see tags you add,
+              rename, or remove here afterward. Those should be updated to work with the new taxonomy format.
+              Proceed with caution?
+            </p>
+            ${warnExists ? html`
+              <p class="modal-warning">
+                A file already exists at ${resolveTaxonomyLocation(this._org, this._site, targetPath.trim()).path}.
+                Converting won't overwrite it yet — that only happens if you Save afterward — but click Convert
+                again to confirm you want to proceed toward that.
+              </p>
+            ` : nothing}
+            <label class="search-field">
+              <span>Namespace name</span>
+              <sl-input .value=${namespaceName}
+                @input=${(e) => this.updateConvertField('namespaceName', e.target.value)}></sl-input>
+            </label>
+            <label class="search-field">
+              <span>Save new taxonomy to</span>
+              <sl-input .value=${targetPath}
+                @input=${(e) => this.updateConvertField('targetPath', e.target.value)}></sl-input>
+            </label>
+            <div class="modal-actions">
+              <sl-button class="pw-quiet-secondary" @click=${() => this.closeConvertModal()}>Cancel</sl-button>
+              <sl-button class="pw-fill-accent" ?disabled=${!canConvert} @click=${() => this.handleConvertClick()}>
+                ${convertLabel}
+              </sl-button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ---- Render: top-level ----
+
+  render() {
+    return html`
+      ${this.renderToolbar()}
+      ${this._state === 'loading' ? this.renderLoading() : nothing}
+      ${this._state !== 'loading' && this._state !== 'loaded' ? this.renderMessage() : nothing}
+      ${this._state === 'loaded' ? this.renderEditor() : nothing}
+      ${this._deleteTarget ? this.renderDeleteModal() : nothing}
+      ${this._searchModalTag ? this.renderSearchModal() : nothing}
+      ${this._convertModal ? this.renderConvertModal() : nothing}
+    `;
+  }
+}
+
+customElements.define('tagger-app', TaggerApp);
+
+(async function init() {
+  const { context, token } = await DA_SDK;
+  const cmp = document.createElement('tagger-app');
+  cmp.context = context;
+  cmp.token = token;
+  document.body.append(cmp);
+}());
