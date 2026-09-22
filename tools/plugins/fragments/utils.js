@@ -381,12 +381,19 @@ export function buildTableHtml(tabData) {
 
   console.log('[buildTableHtml] tabData length:', tabData.length, 'first item:', tabData[0]);
 
-  // First row contains headers
-  const headerRow = tabData[0];
-  const headers = Object.keys(headerRow);
+  let headers;
+  let dataRows;
   
-  // Data rows are from index 1 onwards
-  const dataRows = tabData.slice(1);
+  // If only 1 row, it's data (not headers+data)
+  // If 2+ rows, first row is headers, rest is data
+  if (tabData.length === 1) {
+    headers = Object.keys(tabData[0]);
+    dataRows = tabData;
+  } else {
+    const headerRow = tabData[0];
+    headers = Object.keys(headerRow);
+    dataRows = tabData.slice(1);
+  }
   
   console.log('[buildTableHtml] headers:', headers, 'dataRows:', dataRows.length);
   
