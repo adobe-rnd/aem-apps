@@ -312,22 +312,17 @@ async function listFolderContents(org, site, path) {
 
 /**
  * Fetch sheet content from DA source API
- * @param {string} org - Organization
- * @param {string} site - Site name  
- * @param {string} path - Sheet path (absolute or relative)
+ * @param {string} org - Organization (may be undefined for cross-site)
+ * @param {string} site - Site name (may be undefined for cross-site)
+ * @param {string} path - Sheet path (always full absolute path like /org/site/path/file.json)
  * @returns {Promise<object|null>} Parsed sheet JSON or null if error
  */
 export async function fetchSheetContent(org, site, path) {
   try {
-    // Construct full path: if path already starts with /org, use as-is; otherwise prepend org/site
-    let fullPath = path;
-    if (!path.startsWith(`/${org}/`)) {
-      fullPath = `/${org}/${site}${path}`;
-    }
-    
-    const sourceUrl = `${DA_ADMIN}/source${fullPath}`;
+    // Path is always already full (either /org/site/path or /org/site/path for cross-site)
+    // Do NOT reconstruct - use as-is
+    const sourceUrl = `${DA_ADMIN}/source${path}`;
     console.log('[fetchSheetContent] org:', org, 'site:', site, 'path:', path);
-    console.log('[fetchSheetContent] fullPath:', fullPath);
     console.log('[fetchSheetContent] sourceUrl:', sourceUrl);
     
     const response = await daFetch(sourceUrl);
@@ -384,12 +379,16 @@ export function buildTableHtml(tabData) {
     return '<p>No data available</p>';
   }
 
+  console.log('[buildTableHtml] tabData length:', tabData.length, 'first item:', tabData[0]);
+
   // First row contains headers
   const headerRow = tabData[0];
   const headers = Object.keys(headerRow);
   
   // Data rows are from index 1 onwards
   const dataRows = tabData.slice(1);
+  
+  console.log('[buildTableHtml] headers:', headers, 'dataRows:', dataRows.length);
   
   let html = '<table style="border-collapse: collapse; width: 100%; font-family: system-ui; font-size: 14px;">';
   html += '<thead style="background-color: #f0f0f0; border-bottom: 2px solid #ccc;">';
