@@ -940,7 +940,7 @@ async function loadFragments() {
 
                 // Text
                 const textSpan = document.createElement('span');
-                textSpan.textContent = fileName;
+                textSpan.textContent = fileName.replace(/\.\w+$/, ''); // Remove file extension
 
                 fileBtn.appendChild(iconSpan);
                 fileBtn.appendChild(textSpan);

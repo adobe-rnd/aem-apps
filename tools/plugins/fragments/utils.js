@@ -249,7 +249,7 @@ export async function analyzeSharedPaths(siteConfig, currentOrg, currentSite) {
 
       const entry = {
         path: analyzed.fullPath,
-        display: analyzed.display,
+        display: analyzed.display.replace(/\.\w+$/, ''), // Remove file extension from display
         type: ext,
         itemType: 'file',
       };
