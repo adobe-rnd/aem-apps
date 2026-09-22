@@ -798,32 +798,17 @@ async function loadFragments() {
       });
     });
 
-    // Debug: Log context to see available properties
-    console.log('[Fragments Plugin] Context:', { 
-      org: context.org, 
-      repo: context.repo, 
-      site: context.site, 
-      path: context.path 
-    });
-
     // Extract site name: try context.site first, then repo (most reliable), then from path
     const site = context.site || 
                   context.repo || 
                   (context.path ? context.path.split('/').filter(Boolean)[0] : null) || 
                   'main';
 
-    console.log('[Fragments Plugin] Using site:', site);
-
-    // Test: Analyze shared paths from site config
-    console.log('[Fragments Plugin] Analyzing shared paths from site config...');
+    // Analyze shared paths from site config
     let sharedPathsData = null;
     const { canAccess, config } = await fetchSiteConfig(context.org, site);
-    console.log('[Fragments Plugin] Site config received:', config);
     if (canAccess && config) {
       sharedPathsData = await analyzeSharedPaths(config, context.org, site);
-      console.log('[Fragments Plugin] Shared paths analysis:', sharedPathsData);
-    } else {
-      console.log('[Fragments Plugin] No site config access or config not found');
     }
 
     searchInput.addEventListener('input', (e) => {
