@@ -475,9 +475,12 @@ export function createSharedPathElement(pathEntry, org, site) {
     button.appendChild(textSpan);
 
     button.addEventListener('click', () => {
+      console.log('[File Click] Root level file:', pathEntry.display);
       const event = new CustomEvent('sheet-selected', {
         detail: { path: pathEntry.path, org, site, type: pathEntry.type },
+        bubbles: true,
       });
+      console.log('[File Click] Dispatching with bubbles=true');
       item.dispatchEvent(event);
     });
 

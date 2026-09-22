@@ -948,6 +948,7 @@ async function loadFragments() {
 
                 // Click handler for preview
                 fileBtn.addEventListener('click', () => {
+                  console.log('[File Click] Clicked:', fileName);
                   const event = new CustomEvent('sheet-selected', {
                     detail: {
                       path: file.path,
@@ -955,7 +956,9 @@ async function loadFragments() {
                       site: siteName,
                       type: isJson ? 'json' : 'document',
                     },
+                    bubbles: true,
                   });
+                  console.log('[File Click] Dispatching event with bubbles=true');
                   fileItem.dispatchEvent(event);
                 });
 
@@ -976,8 +979,11 @@ async function loadFragments() {
 
       // Handle sheet selection events (both from root items and nested items)
       sharedPathsList.addEventListener('sheet-selected', async (e) => {
+        console.log('[Sheet Selected] Event fired', e.detail);
         const { path, org, site, type } = e.detail;
         const selectedItem = e.target.closest('.tree-item');
+
+        console.log('[Sheet Selected] path=', path, 'type=', type);
 
         // Update selection styling
         document.querySelectorAll('.tree-item.selected').forEach((item) => {
