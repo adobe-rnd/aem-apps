@@ -774,11 +774,27 @@ async function loadFragments() {
     const searchInput = document.querySelector('.fragment-search');
     const insertBtn = document.querySelector('.insert-btn');
 
+    // Debug: Log context to see available properties
+    console.log('[Fragments Plugin] Context:', { 
+      org: context.org, 
+      repo: context.repo, 
+      site: context.site, 
+      path: context.path 
+    });
+
+    // Extract site name: try context.site first, then from path, fallback to repo
+    const site = context.site || 
+                  (context.path ? context.path.split('/').filter(Boolean)[0] : null) || 
+                  context.repo || 
+                  'main';
+
+    console.log('[Fragments Plugin] Using site:', site);
+
     // Test: Analyze shared paths from site config
     console.log('[Fragments Plugin] Analyzing shared paths from site config...');
-    const { canAccess, config } = await fetchSiteConfig(context.org, context.site);
+    const { canAccess, config } = await fetchSiteConfig(context.org, site);
     if (canAccess && config) {
-      const sharedPathsAnalysis = await analyzeSharedPaths(config, context.org, context.site);
+      const sharedPathsAnalysis = await analyzeSharedPaths(config, context.org, site);
       console.log('[Fragments Plugin] Shared paths analysis:', sharedPathsAnalysis);
     } else {
       console.log('[Fragments Plugin] No site config access or config not found');
