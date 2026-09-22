@@ -162,29 +162,62 @@ export function analyzePath(userPath, currentOrg, currentSite) {
 
 /**
  * Determine if a path is a folder or file
+ * If path is a file, returns {type: 'file', ext: 'json'|'html'|...}
+ * If path is a folder, returns {type: 'folder'}
+ * 
+ * Logic: Check if item has 'ext' property → file; no 'ext' → folder
+ * 
  * @param {string} org - Organization
  * @param {string} site - Site name
- * @param {string} path - Path to check (e.g., /data, /data/pricing)
- * @returns {Promise<'folder'|'file'|'unknown'>} Type of path
+ * @param {string} path - Path to check (e.g., /data, /data/pricing, /metadata)
+ * @returns {Promise<object>} { type: 'folder'|'file'|'unknown', ext?: string }
  */
 export async function detectPathType(org, site, path) {
   try {
+    // Try to list the path itself
     const response = await daFetch(`${DA_ADMIN}/list/${org}/${site}${path}`);
 
-    // If list succeeds, it's a folder
     if (response.ok) {
       const items = await response.json();
-      return Array.isArray(items) ? 'folder' : 'file';
+      if (Array.isArray(items)) {
+        // It's a folder - returns array of items
+        return { type: 'folder' };
+      }
     }
 
-    // If 404, likely a file or doesn't exist
-    if (response.status === 404) {
-      return 'file';
+    // If 404 or not an array, the path might be a file
+    // Extract the filename and check parent folder for it
+    const pathParts = path.split('/').filter(Boolean);
+    if (pathParts.length > 0) {
+      const fileName = pathParts[pathParts.length - 1];
+      const parentPath = '/' + pathParts.slice(0, -1).join('/');
+
+      try {
+        const parentResponse = await daFetch(`${DA_ADMIN}/list/${org}/${site}${parentPath}`);
+        if (parentResponse.ok) {
+          const parentItems = await parentResponse.json();
+          if (Array.isArray(parentItems)) {
+            // Find the item in parent
+            const item = parentItems.find((i) => i.name === fileName);
+            if (item) {
+              // Item found - check for ext property
+              if (item.ext) {
+                return { type: 'file', ext: item.ext.toLowerCase() };
+              }
+              // No ext property means it's a folder
+              return { type: 'folder' };
+            }
+          }
+        }
+      } catch {
+        // Parent check failed, assume file
+      }
     }
 
-    return 'unknown';
+    // Couldn't determine type
+    return { type: 'unknown' };
   } catch {
-    return 'unknown';
+    return { type: 'unknown' };
   }
 }
 
@@ -227,13 +260,13 @@ export async function analyzeSharedPaths(siteConfig, currentOrg, currentSite) {
     console.log(`${pathType}: ${analyzed.display} → ${analyzed.fullPath}`);
 
     // Check if path is a folder or file
-    const itemType = await detectPathType(
+    const pathInfo = await detectPathType(
       analyzed.org || currentOrg,
       analyzed.site || currentSite,
       analyzed.folder || analyzed.fullPath,
     );
 
-    console.log(`  Type: ${itemType}`);
+    console.log(`  Type: ${pathInfo.type}${pathInfo.ext ? ` (.${pathInfo.ext})` : ''}`);
 
     // Skip relative /fragments paths (already covered by fragments picker)
     if (analyzed.type === 'same-site' && analyzed.fullPath.endsWith('/fragments')) {
@@ -241,9 +274,9 @@ export async function analyzeSharedPaths(siteConfig, currentOrg, currentSite) {
       continue;
     }
 
-    if (itemType === 'file') {
-      // Determine file type
-      const ext = analyzed.fullPath.split('.').pop()?.toLowerCase();
+    if (pathInfo.type === 'file') {
+      // Determine file type based on extension
+      const ext = pathInfo.ext || analyzed.fullPath.split('.').pop()?.toLowerCase();
       const fileType = ext === 'json' ? '📊 Sheet' : ext === 'html' ? '📄 Document' : `📋 ${ext}`;
       console.log(`  File type: ${fileType}`);
 
@@ -259,7 +292,7 @@ export async function analyzeSharedPaths(siteConfig, currentOrg, currentSite) {
       } else {
         result.crossSite.push(entry);
       }
-    } else if (itemType === 'folder') {
+    } else if (pathInfo.type === 'folder') {
       // Count documents and sheets in folder
       const folderItems = await listFolderContents(
         analyzed.org || currentOrg,
