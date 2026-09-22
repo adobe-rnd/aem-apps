@@ -403,16 +403,30 @@ function handleFragmentInsert(actions, context) {
       showMessage('Fragment inserted successfully', false, true);
       actions.closeLibrary();
     }
-    // Handle sheet insert
+    // Handle sheet/document insert
     else if (selectedSheet) {
-      // For sheets, insert the full path to the JSON file via DA Source API
-      const sheetUrl = `${selectedSheet.path}`;
+      // For sheets and documents, determine if same-site or cross-site
+      const isSameSite = selectedSheet.org === context.org && selectedSheet.site === context.repo;
+      
+      let insertUrl;
+      if (isSameSite) {
+        // Same-site: strip org/site prefix from path
+        // Path is /org/site/path/file.json, extract just /path/file.json
+        const pathWithoutOrgSite = selectedSheet.path.replace(`/${selectedSheet.org}/${selectedSheet.site}`, '');
+        insertUrl = pathWithoutOrgSite;
+      } else {
+        // Cross-site: construct full main-- URL
+        // Path is /org/site/path/file.json, construct https://main--site--org.aem.page/path/file.json
+        const pathWithoutOrgSite = selectedSheet.path.replace(`/${selectedSheet.org}/${selectedSheet.site}`, '');
+        insertUrl = `https://main--${selectedSheet.site}--${selectedSheet.org}.aem.page${pathWithoutOrgSite}`;
+      }
+      
       const link = document.createElement('a');
-      link.href = sheetUrl;
-      link.className = 'sheet';
-      link.textContent = sheetUrl;
+      link.href = insertUrl;
+      link.className = selectedSheet.type === 'sheet' ? 'sheet' : 'document';
+      link.textContent = insertUrl;
       actions.sendHTML(link.outerHTML);
-      showMessage('Sheet link inserted successfully', false, true);
+      showMessage(`${selectedSheet.type === 'sheet' ? 'Sheet' : 'Document'} link inserted successfully`, false, true);
       actions.closeLibrary();
     }
   } catch (error) {
