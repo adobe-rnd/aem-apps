@@ -498,13 +498,8 @@ export function createSharedPathElement(pathEntry, org, site) {
     label.className = 'folder-name';
     label.textContent = pathEntry.display;
 
-    const infoSpan = document.createElement('span');
-    infoSpan.className = 'tree-item-info';
-    infoSpan.textContent = `(${pathEntry.sheets} sheets, ${pathEntry.documents} docs)`;
-
     folderButton.appendChild(folderIcon);
     folderButton.appendChild(label);
-    folderButton.appendChild(infoSpan);
 
     const toggleFolder = () => {
       folderButton.classList.toggle('expanded');

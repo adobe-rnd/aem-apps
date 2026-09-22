@@ -365,26 +365,29 @@ body {
   margin-right: 5px;
   vertical-align: middle;
   display: inline-block;
+  background-size: 18px 18px;
+  background-repeat: no-repeat;
+  background-position: center;
 }
 
 .fragments-container .tree-icon.folder-icon {
-  content: url('./img/Smock_Folder_18_N.svg');
+  background-image: url('./img/Smock_Folder_18_N.svg');
 }
 
 .fragments-container .tree-icon.folder-open-icon {
-  content: url('./img/Smock_FolderOpen_18_N.svg');
+  background-image: url('./img/Smock_FolderOpen_18_N.svg');
 }
 
 .fragments-container .tree-icon.fragment-icon {
-  content: url('./img/Smock_DocumentFragment_18_N.svg');
+  background-image: url('./img/Smock_DocumentFragment_18_N.svg');
 }
 
 .fragments-container .tree-icon.sheet-icon {
-  content: url('./img/Smock_Data_18_N.svg');
+  background-image: url('./img/Smock_Data_18_N.svg');
 }
 
 .fragments-container .tree-icon.document-icon {
-  content: url('./img/Smock_DocumentFragment_18_N.svg');
+  background-image: url('./img/Smock_DocumentFragment_18_N.svg');
 }
 
 .fragments-container .tree-list {
