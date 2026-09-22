@@ -791,8 +791,8 @@ async function loadFragments() {
                   (context.path ? context.path.split('/').filter(Boolean)[0] : null) || 
                   'main';
 
-    // Initialize authenticated preview URL builder
-    buildPreviewUrl = await initPreviewUrlBuilder(context.org, site, token);
+    // Initialize preview URL builder
+    buildPreviewUrl = initPreviewUrlBuilder(context.org, site);
 
     // Tab switching
     tabBtns.forEach((btn) => {
