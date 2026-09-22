@@ -920,6 +920,8 @@ async function loadFragments() {
                 const fileExt = fileName.split('.').pop()?.toLowerCase() || '';
                 const isJson = fileExt === 'json';
 
+                console.log(`[File] ${fileName}, ext=${fileExt}, isJson=${isJson}`);
+
                 // Create tree-item for file
                 const fileItem = document.createElement('div');
                 fileItem.className = 'tree-item';
