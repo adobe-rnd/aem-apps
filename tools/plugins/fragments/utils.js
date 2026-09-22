@@ -325,13 +325,11 @@ export async function fetchSheetContent(org, site, path) {
     
     const response = await daFetch(sourceUrl);
     if (!response.ok) {
-      console.error(`[Sheets Preview] Failed to fetch sheet: ${sourceUrl} (${response.status})`);
       return null;
     }
     const sheetData = await response.json();
     return sheetData;
   } catch (e) {
-    console.error(`[Sheets Preview] Error fetching sheet: ${e.message}`);
     return null;
   }
 }

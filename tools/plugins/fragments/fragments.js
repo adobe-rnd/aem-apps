@@ -241,6 +241,9 @@ async function showPreview(fragmentPath, fragmentName, context, fragmentElement,
 
   if (!iframe || !placeholder || !insertBtn) return;
 
+  // Clear sheet selection when selecting a fragment
+  selectedSheet = null;
+
   const basePath = `/${context.org}/${context.repo}`;
   const displayPath = fragmentPath.replace(basePath, '').replace(/\.html$/, '');
   const previewUrl = buildPreviewUrl(displayPath);
@@ -369,35 +372,51 @@ function createTreeItem(name, node, context) {
 }
 
 function handleFragmentInsert(actions, context) {
-  if (!selectedFragment) {
-    showMessage('No fragment selected', true);
+  // Check if fragment or sheet is selected
+  if (!selectedFragment && !selectedSheet) {
+    showMessage('No fragment or sheet selected', true);
     return;
   }
 
   if (!actions?.sendHTML) {
-    showMessage('Cannot insert fragment: Editor not available', true);
+    showMessage('Cannot insert: Editor not available', true);
     return;
   }
 
   try {
-    const basePath = `/${context.org}/${context.repo}`;
-    const displayPath = selectedFragment.path.replace(basePath, '').replace(/\.html$/, '');
+    // Handle fragment insert
+    if (selectedFragment) {
+      const basePath = `/${context.org}/${context.repo}`;
+      const displayPath = selectedFragment.path.replace(basePath, '').replace(/\.html$/, '');
 
-    if (!/^[a-zA-Z0-9/_.-]+$/.test(displayPath)) {
-      showMessage('Invalid fragment path', true);
-      return;
+      if (!/^[a-zA-Z0-9/_.-]+$/.test(displayPath)) {
+        showMessage('Invalid fragment path', true);
+        return;
+      }
+
+      const fragmentUrl = `https://main--${context.repo}--${context.org}.aem.page${displayPath}`;
+      const link = document.createElement('a');
+      link.href = fragmentUrl;
+      link.className = 'fragment';
+      link.textContent = fragmentUrl;
+      actions.sendHTML(link.outerHTML);
+      showMessage('Fragment inserted successfully', false, true);
+      actions.closeLibrary();
     }
-
-    const fragmentUrl = `https://main--${context.repo}--${context.org}.aem.page${displayPath}`;
-    const link = document.createElement('a');
-    link.href = fragmentUrl;
-    link.className = 'fragment';
-    link.textContent = fragmentUrl;
-    actions.sendHTML(link.outerHTML);
-    showMessage('Fragment inserted successfully', false, true);
-    actions.closeLibrary();
+    // Handle sheet insert
+    else if (selectedSheet) {
+      // For sheets, insert the full path to the JSON file via DA Source API
+      const sheetUrl = `${selectedSheet.path}`;
+      const link = document.createElement('a');
+      link.href = sheetUrl;
+      link.className = 'sheet';
+      link.textContent = sheetUrl;
+      actions.sendHTML(link.outerHTML);
+      showMessage('Sheet link inserted successfully', false, true);
+      actions.closeLibrary();
+    }
   } catch (error) {
-    showMessage('Failed to insert fragment', true);
+    showMessage('Failed to insert', true);
   }
 }
 
@@ -998,6 +1017,9 @@ async function loadFragments() {
         const { path, org, site, type } = e.detail;
         const selectedItem = e.target.closest('.tree-item');
 
+        // Clear fragment selection when selecting a sheet
+        selectedFragment = null;
+
         // Update selection styling
         document.querySelectorAll('.tree-item.selected').forEach((item) => {
           item.classList.remove('selected');
@@ -1044,18 +1066,30 @@ async function loadFragments() {
           const insertBtn = document.querySelector('.insert-btn');
 
           if (iframe && placeholder && insertBtn && buildPreviewUrl) {
-            const previewUrl = buildPreviewUrl(path);
-            iframe.src = previewUrl;
-            iframe.classList.remove('hidden');
-            placeholder.classList.add('hidden');
-            insertBtn.disabled = false;
+            try {
+              const previewUrl = buildPreviewUrl(path);
+              const response = await fetch(previewUrl);
+              if (!response.ok) {
+                throw new Error(`Failed to fetch: ${response.status}`);
+              }
+              const html = await response.text();
+              iframe.srcdoc = html;
+              iframe.classList.remove('hidden');
+              placeholder.classList.add('hidden');
+              insertBtn.disabled = false;
 
-            selectedSheet = {
-              path,
-              org,
-              site,
-              type: 'document',
-            };
+              selectedSheet = {
+                path,
+                org,
+                site,
+                type: 'document',
+              };
+            } catch (err) {
+              const placeholder = document.querySelector('.preview-placeholder');
+              if (placeholder) {
+                placeholder.innerHTML = `<p style="color: red;">Error loading document preview</p>`;
+              }
+            }
           }
         }
       });
