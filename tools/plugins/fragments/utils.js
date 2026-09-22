@@ -162,59 +162,56 @@ export function analyzePath(userPath, currentOrg, currentSite) {
 
 /**
  * Determine if a path is a folder or file
+ * Uses source API first to detect files, then list API for folders
  * If path is a file, returns {type: 'file', ext: 'json'|'html'|...}
  * If path is a folder, returns {type: 'folder'}
  * 
- * Logic: Check if item has 'ext' property → file; no 'ext' → folder
+ * Logic: 
+ * 1. Try source API → if OK with Content-Type, it's a file
+ * 2. If source OK but no Content-Type, or 404 → try list API
+ * 3. If list API OK → it's a folder
+ * 4. Otherwise unknown
  * 
  * @param {string} org - Organization
  * @param {string} site - Site name
- * @param {string} path - Path to check (e.g., /data, /data/pricing, /metadata)
+ * @param {string} path - Path to check (e.g., /metadata, /data, /drafts/kiran)
  * @returns {Promise<object>} { type: 'folder'|'file'|'unknown', ext?: string }
  */
 export async function detectPathType(org, site, path) {
   try {
-    // Try to list the path itself
-    const response = await daFetch(`${DA_ADMIN}/list/${org}/${site}${path}`);
+    // First try source API - direct file access
+    const sourceUrl = `${DA_ADMIN}/source/${org}/${site}${path}`;
+    const sourceResponse = await daFetch(sourceUrl);
 
-    if (response.ok) {
-      const items = await response.json();
-      if (Array.isArray(items)) {
-        // It's a folder - returns array of items
-        return { type: 'folder' };
+    if (sourceResponse.ok) {
+      // Source API returned content
+      const contentType = sourceResponse.headers.get('content-type');
+      
+      if (contentType) {
+        // Has Content-Type header → it's a file
+        const ext = path.split('.').pop()?.toLowerCase() || 'unknown';
+        return { type: 'file', ext };
       }
+      
+      // Source returned 200 but no Content-Type, might be folder
+      // Try list API
     }
 
-    // If 404 or not an array, the path might be a file
-    // Extract the filename and check parent folder for it
-    const pathParts = path.split('/').filter(Boolean);
-    if (pathParts.length > 0) {
-      const fileName = pathParts[pathParts.length - 1];
-      const parentPath = '/' + pathParts.slice(0, -1).join('/');
+    // Source API failed or returned empty Content-Type, try list API
+    try {
+      const listUrl = `${DA_ADMIN}/list/${org}/${site}${path}`;
+      const listResponse = await daFetch(listUrl);
 
-      try {
-        const parentResponse = await daFetch(`${DA_ADMIN}/list/${org}/${site}${parentPath}`);
-        if (parentResponse.ok) {
-          const parentItems = await parentResponse.json();
-          if (Array.isArray(parentItems)) {
-            // Find the item in parent
-            const item = parentItems.find((i) => i.name === fileName);
-            if (item) {
-              // Item found - check for ext property
-              if (item.ext) {
-                return { type: 'file', ext: item.ext.toLowerCase() };
-              }
-              // No ext property means it's a folder
-              return { type: 'folder' };
-            }
-          }
+      if (listResponse.ok) {
+        const items = await listResponse.json();
+        if (Array.isArray(items)) {
+          return { type: 'folder' };
         }
-      } catch {
-        // Parent check failed, assume file
       }
+    } catch {
+      // List API also failed
     }
 
-    // Couldn't determine type
     return { type: 'unknown' };
   } catch {
     return { type: 'unknown' };
