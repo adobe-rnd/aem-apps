@@ -163,58 +163,44 @@ export function analyzePath(userPath, currentOrg, currentSite) {
 
 /**
  * Determine if a path is a folder or file
- * Uses source API first to detect files, then list API for folders
- * If path is a file, returns {type: 'file', ext: 'json'|'html'|...}
- * If path is a folder, returns {type: 'folder'}
- * 
  * Logic: 
- * 1. Try source API → if OK with Content-Type, it's a file
- * 2. If source OK but no Content-Type, or 404 → try list API
- * 3. If list API OK → it's a folder
- * 4. Otherwise unknown
+ * 1. If path has file extension (e.g., .json, .html) → treat as file immediately
+ * 2. If no extension → call list API to verify it's a folder
  * 
  * @param {string} org - Organization
  * @param {string} site - Site name
- * @param {string} path - Path to check (e.g., /metadata, /data, /drafts/kiran)
+ * @param {string} path - Path to check (e.g., /metadata.json, /data, /drafts/kiran)
  * @returns {Promise<object>} { type: 'folder'|'file'|'unknown', ext?: string }
  */
 export async function detectPathType(org, site, path) {
   try {
-    // First try source API - direct file access
-    const sourceUrl = `${DA_ADMIN}/source/${org}/${site}${path}`;
-    const sourceResponse = await daFetch(sourceUrl);
+    // Check if path has a file extension
+    const lastSegment = path.split('/').pop() || '';
+    const ext = lastSegment.includes('.') ? lastSegment.split('.').pop()?.toLowerCase() : null;
 
-    if (sourceResponse.ok) {
-      // Source API returned content
-      const contentType = sourceResponse.headers.get('content-type');
-      
-      if (contentType) {
-        // Has Content-Type header → it's a file
-        const ext = path.split('.').pop()?.toLowerCase() || 'unknown';
-        return { type: 'file', ext };
-      }
-      
-      // Source returned 200 but no Content-Type, might be folder
-      // Try list API
+    // If path has extension, treat as file
+    if (ext) {
+      console.log(`  [detectPathType] File with extension .${ext}: ${path}`);
+      return { type: 'file', ext };
     }
 
-    // Source API failed or returned empty Content-Type, try list API
-    try {
-      const listUrl = `${DA_ADMIN}/list/${org}/${site}${path}`;
-      const listResponse = await daFetch(listUrl);
+    // No extension - must be a folder, verify with list API
+    const listUrl = `${DA_ADMIN}/list/${org}/${site}${path}`;
+    console.log(`  [detectPathType] Calling list API: ${listUrl}`);
+    const listResponse = await daFetch(listUrl);
 
-      if (listResponse.ok) {
-        const items = await listResponse.json();
-        if (Array.isArray(items)) {
-          return { type: 'folder' };
-        }
+    if (listResponse.ok) {
+      const items = await listResponse.json();
+      if (Array.isArray(items)) {
+        console.log(`  [detectPathType] Confirmed folder with ${items.length} items`);
+        return { type: 'folder' };
       }
-    } catch {
-      // List API also failed
     }
 
+    console.log(`  [detectPathType] Not a valid folder, list API returned ${listResponse.status}`);
     return { type: 'unknown' };
-  } catch {
+  } catch (e) {
+    console.error(`  [detectPathType] Error: ${e.message}`);
     return { type: 'unknown' };
   }
 }
