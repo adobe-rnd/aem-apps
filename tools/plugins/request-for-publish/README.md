@@ -52,3 +52,5 @@ Run `npm test` and `npm run lint`. Also run `npx stylelint tools/plugins/request
 Serve the repository over HTTP and open `/test/fixtures/request-for-publish.html`. The fixture runs browser assertions against the real component with a fake client and displays the results. Add `?view=requester` or `?view=approver` to inspect the other views. No workflow, email or content operation is sent by this fixture.
 
 Worker environments are fixed: localhost defaults to the local worker on port 8787; `?env=ci` selects CI and `?env=prod` explicitly selects production (including from a local plugin). Unknown environment values are rejected. Do not use a real worker for fixture tests.
+
+The current production worker does not allow localhost origins in CORS. `env=prod` selects it but does not bypass that policy: real workflow testing needs plugin code served from an allowed HTTPS `*.aem.page` or `*.aem.live` origin. Local fixtures remain backend-free.
