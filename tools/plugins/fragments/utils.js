@@ -311,16 +311,17 @@ async function listFolderContents(org, site, path) {
 }
 
 /**
- * Fetch sheet content from DA source API
+ * Fetch sheet content as JSON directly from the site
  * @param {string} fullPath - Absolute sheet path (e.g., /org/site/path/to/sheet.json)
+ * @param {function} buildPreviewUrl - Function to build preview URLs
  * @returns {Promise<object|null>} Parsed sheet JSON or null if error
  */
-export async function fetchSheetContent(fullPath) {
+export async function fetchSheetContent(fullPath, buildPreviewUrl) {
   try {
-    const sourceUrl = `${DA_ADMIN}/source${fullPath}`;
-    const response = await daFetch(sourceUrl);
+    const sheetUrl = buildPreviewUrl(fullPath);
+    const response = await fetch(sheetUrl);
     if (!response.ok) {
-      console.error(`[Sheets Preview] Failed to fetch sheet: ${sourceUrl} (${response.status})`);
+      console.error(`[Sheets Preview] Failed to fetch sheet: ${sheetUrl} (${response.status})`);
       return null;
     }
     const sheetData = await response.json();
@@ -338,30 +339,24 @@ export async function fetchSheetContent(fullPath) {
  * @returns {object} { tabName: [rows...], ... }
  */
 export function extractSheetTabs(sheetContent) {
-  if (!sheetContent || !sheetContent.data) {
+  if (!sheetContent) {
     return {};
   }
   
-  // sheetContent.data is an array of tabs, convert to object with tab indices as keys
   const tabs = {};
-  const dataArray = sheetContent.data;
   
-  if (Array.isArray(dataArray)) {
-    dataArray.forEach((tabData, index) => {
-      // Each tab is either an array of rows or an object with data property
-      if (Array.isArray(tabData)) {
-        tabs[index] = tabData;
-      } else if (tabData && Array.isArray(tabData.data)) {
-        tabs[index] = tabData.data;
-      } else if (tabData && Array.isArray(tabData.rows)) {
-        tabs[index] = tabData.rows;
-      } else {
-        tabs[index] = [tabData]; // Wrap single object in array
+  // Check if this is a multi-sheet format (has :type === "multi-sheet")
+  if (sheetContent[':type'] === 'multi-sheet' && sheetContent[':names']) {
+    // Multi-sheet: each sheet is a property with name from :names array
+    sheetContent[':names'].forEach((sheetName) => {
+      const sheetData = sheetContent[sheetName];
+      if (sheetData && sheetData.data && Array.isArray(sheetData.data)) {
+        tabs[sheetName] = sheetData.data;
       }
     });
-  } else {
-    // If data is not an array, treat it as an object
-    tabs['0'] = dataArray;
+  } else if (sheetContent.data && Array.isArray(sheetContent.data)) {
+    // Single sheet: data is an array at root level
+    tabs['data'] = sheetContent.data;
   }
   
   return tabs;
