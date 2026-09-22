@@ -260,7 +260,7 @@ export async function analyzeSharedPaths(siteConfig, currentOrg, currentSite) {
     const pathInfo = await detectPathType(
       analyzed.org || currentOrg,
       analyzed.site || currentSite,
-      analyzed.folder || analyzed.fullPath,
+      analyzed.folder,
     );
 
     console.log(`  Type: ${pathInfo.type}${pathInfo.ext ? ` (.${pathInfo.ext})` : ''}`);
