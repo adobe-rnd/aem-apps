@@ -180,27 +180,22 @@ export async function detectPathType(org, site, path) {
 
     // If path has extension, treat as file
     if (ext) {
-      console.log(`  [detectPathType] File with extension .${ext}: ${path}`);
       return { type: 'file', ext };
     }
 
     // No extension - must be a folder, verify with list API
     const listUrl = `${DA_ADMIN}/list/${org}/${site}${path}`;
-    console.log(`  [detectPathType] Calling list API: ${listUrl}`);
     const listResponse = await daFetch(listUrl);
 
     if (listResponse.ok) {
       const items = await listResponse.json();
       if (Array.isArray(items)) {
-        console.log(`  [detectPathType] Confirmed folder with ${items.length} items`);
         return { type: 'folder' };
       }
     }
 
-    console.log(`  [detectPathType] Not a valid folder, list API returned ${listResponse.status}`);
     return { type: 'unknown' };
   } catch (e) {
-    console.error(`  [detectPathType] Error: ${e.message}`);
     return { type: 'unknown' };
   }
 }
@@ -219,13 +214,8 @@ export async function analyzeSharedPaths(siteConfig, currentOrg, currentSite) {
 
   // No shared paths - use default fragments picker
   if (paths.length === 0) {
-    console.log('[Sheets Picker] No shared.paths configured. Using default fragments picker.');
     return { sameSite: [], crossSite: [], invalid: [] };
   }
-
-  console.log(`[Sheets Picker] Found ${paths.length} configured path(s)`);
-  console.log('[Sheets Picker] Note: For individual files, include the file extension (e.g., /metadata.json, /data/products.json)');
-  console.log('[Sheets Picker] For folders, omit the extension (e.g., /drafts, /data)');
 
   const result = {
     sameSite: [],
@@ -241,10 +231,6 @@ export async function analyzeSharedPaths(siteConfig, currentOrg, currentSite) {
       continue;
     }
 
-    // Log path analysis
-    const pathType = analyzed.type === 'same-site' ? '📍 SAME-SITE' : '🌍 CROSS-SITE';
-    console.log(`${pathType}: ${analyzed.display} → ${analyzed.fullPath}`);
-
     // Check if path is a folder or file
     const pathInfo = await detectPathType(
       analyzed.org || currentOrg,
@@ -252,19 +238,14 @@ export async function analyzeSharedPaths(siteConfig, currentOrg, currentSite) {
       analyzed.folder,
     );
 
-    console.log(`  Type: ${pathInfo.type}${pathInfo.ext ? ` (.${pathInfo.ext})` : ''}`);
-
     // Skip relative /fragments paths (already covered by fragments picker)
     if (analyzed.type === 'same-site' && analyzed.fullPath.endsWith('/fragments')) {
-      console.log('  ⊘ Skipping relative /fragments (already in fragments picker)');
       continue;
     }
 
     if (pathInfo.type === 'file') {
       // Determine file type based on extension
       const ext = pathInfo.ext || analyzed.fullPath.split('.').pop()?.toLowerCase();
-      const fileType = ext === 'json' ? '📊 Sheet' : ext === 'html' ? '📄 Document' : `📋 ${ext}`;
-      console.log(`  File type: ${fileType}`);
 
       const entry = {
         path: analyzed.fullPath,
@@ -289,8 +270,6 @@ export async function analyzeSharedPaths(siteConfig, currentOrg, currentSite) {
       const sheetCount = folderItems.filter(isSheetItem).length;
       const docCount = folderItems.filter(isDocumentItem).length;
 
-      console.log(`  Contents: ${sheetCount} sheets, ${docCount} documents`);
-
       const entry = {
         path: analyzed.fullPath,
         display: analyzed.display,
@@ -306,12 +285,9 @@ export async function analyzeSharedPaths(siteConfig, currentOrg, currentSite) {
         result.crossSite.push(entry);
       }
     } else {
-      console.warn(`  ⚠ Unknown item type: ${itemType}`);
       result.invalid.push(userPath);
     }
   }
-
-  console.log(`[Sheets Picker] Analysis complete: ${result.sameSite.length} same-site, ${result.crossSite.length} cross-site, ${result.invalid.length} invalid`);
 
   return result;
 }

@@ -23,6 +23,8 @@ import {
   createSharedPathElement,
 } from './utils.js';
 
+console.log('[Fragments Plugin v2] Loaded - with tabs support');
+
 const FRAGMENTS_BASE = '/fragments';
 const CRAWL_THROTTLE = 10;
 const LOCALE_PATTERN = /^[a-z]{2}(-[a-z]{2,4})?$/i;
