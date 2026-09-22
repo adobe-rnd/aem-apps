@@ -955,20 +955,23 @@ async function loadFragments() {
               emptyMsg.className = 'empty-state';
               treeList.appendChild(emptyMsg);
             } else {
-              const org = item.dataset.org;
-              const siteName = item.dataset.site;
-              
               files.forEach((file) => {
                 const fileName = file.name;
                 const fileExt = file.ext?.toLowerCase() || '';
                 const isJson = fileExt === 'json';
 
+                // Extract org and site from file's absolute path
+                // Path format: /org/site/rest/of/path
+                const pathParts = file.path.split('/').filter(p => p);
+                const fileOrg = pathParts[0] || item.dataset.org;
+                const fileSite = pathParts[1] || item.dataset.site;
+
                 // Create tree-item for file
                 const fileItem = document.createElement('div');
                 fileItem.className = 'tree-item';
                 fileItem.setAttribute('role', 'listitem');
-                fileItem.dataset.org = org;
-                fileItem.dataset.site = siteName;
+                fileItem.dataset.org = fileOrg;
+                fileItem.dataset.site = fileSite;
 
                 const content = document.createElement('div');
                 content.className = 'tree-item-content';
