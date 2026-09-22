@@ -1002,7 +1002,9 @@ async function loadFragments() {
           // For sheets, show preview using buildSheetPreviewHtml
           try {
             const sheetContent = await fetchSheetContent(path);
+            console.log('[Sheet Debug] Fetched content:', sheetContent);
             const previewHtml = buildSheetPreviewHtml(sheetContent);
+            console.log('[Sheet Debug] Preview HTML:', previewHtml);
             const iframe = document.querySelector('.preview-iframe');
             const placeholder = document.querySelector('.preview-placeholder');
             const insertBtn = document.querySelector('.insert-btn');
