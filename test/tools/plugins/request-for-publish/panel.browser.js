@@ -154,6 +154,45 @@ await test('published page with no remaining request does not offer an unsafe re
   assert(!button('Request publish'), 'new request form masks incomplete outcome');
 });
 
+await test('ambiguous publication blocks another publish attempt', async () => {
+  let published = 0;
+  await show({ ...base, approvable: [row] }, {
+    approve: async () => {
+      published += 1;
+      throw Object.assign(new Error('Response lost'), { publishUnknown: true });
+    },
+  });
+  button('Approve & publish').click();
+  await tick();
+  assert(/Publication outcome unknown/.test(text()), 'unknown publication is not explicit');
+  assert(!button('Approve & publish'), 'a normal second publish is still available');
+  await current.act('approve');
+  assert(published === 1, 'programmatic second action was not guarded');
+});
+await test('page changes clear stale content before the first new render', async () => {
+  await show({ ...base, own: [row] }, { load: (context) => (context.path === ctx.path
+    ? Promise.resolve({ ...base, own: [row] }) : new Promise(() => {})) });
+  current.context = { ...ctx, path: '/drafts/second' };
+  await current.updateComplete;
+  assert(!button('Request publish') && !text().includes(row.comment), 'old content or premature form flashed');
+});
+await test('primary button has AA text contrast in light and dark themes', async () => {
+  await show({ ...base, approvable: [row] });
+  const luminance = (color) => color.match(/\d+(?:\.\d+)?/g).slice(0, 3)
+    .map((channel) => Number(channel) / 255)
+    .map((channel) => (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4))
+    .reduce((sum, channel, i) => sum + channel * [0.2126, 0.7152, 0.0722][i], 0);
+  const previous = document.documentElement.style.colorScheme;
+  try {
+    ['light', 'dark'].forEach((scheme) => {
+      document.documentElement.style.colorScheme = scheme;
+      const styles = getComputedStyle(button('Approve & publish'));
+      const colors = [luminance(styles.color), luminance(styles.backgroundColor)].sort((a, b) => a - b);
+      assert((colors[1] + 0.05) / (colors[0] + 0.05) >= 4.5, `${scheme} button contrast below 4.5`);
+    });
+  } finally { document.documentElement.style.colorScheme = previous; }
+});
+
 await test('late page A response cannot overwrite page B', async () => {
   let finish;
   await show(base, {

@@ -171,6 +171,11 @@ describe('workflow operations', () => {
     const { client } = fixture({ approvable: [pending], fail: (url) => url.pathname.endsWith('/approve') && response({ approved: [], unauthorized: [context.path], notFound: [] }) });
     await assert.rejects(client.approve(context, pending), (error) => error.published === true && /record|authoriz/i.test(error.message));
   });
+  it('marks a failed publish response as an unknown publication outcome', async () => {
+    const { client } = fixture({ approvable: [pending], publishFail: true });
+    await assert.rejects(client.approve(context, pending), (error) => error.publishUnknown === true);
+  });
+
   it('retries completion without publishing a second time', async () => {
     const { client, calls } = fixture({ approvable: [pending] });
     await client.complete(context, pending);
