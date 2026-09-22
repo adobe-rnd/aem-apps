@@ -415,10 +415,10 @@ function handleFragmentInsert(actions, context) {
         const pathWithoutOrgSite = selectedSheet.path.replace(`/${selectedSheet.org}/${selectedSheet.site}`, '');
         insertUrl = pathWithoutOrgSite;
       } else {
-        // Cross-site: construct full main-- URL
-        // Path is /org/site/path/file.json, construct https://main--site--org.aem.page/path/file.json
+        // Cross-site: construct full main-- URL using .aem.live to prevent decoration rewriting
+        // Path is /org/site/path/file.json, construct https://main--site--org.aem.live/path/file.json
         const pathWithoutOrgSite = selectedSheet.path.replace(`/${selectedSheet.org}/${selectedSheet.site}`, '');
-        insertUrl = `https://main--${selectedSheet.site}--${selectedSheet.org}.aem.page${pathWithoutOrgSite}`;
+        insertUrl = `https://main--${selectedSheet.site}--${selectedSheet.org}.aem.live${pathWithoutOrgSite}`;
       }
       
       const link = document.createElement('a');
