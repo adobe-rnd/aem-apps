@@ -912,6 +912,9 @@ async function loadFragments() {
               emptyMsg.className = 'empty-state';
               treeList.appendChild(emptyMsg);
             } else {
+              const org = item.dataset.org;
+              const siteName = item.dataset.site;
+              
               files.forEach((file) => {
                 const fileName = file.name;
                 const fileExt = fileName.split('.').pop()?.toLowerCase() || '';
