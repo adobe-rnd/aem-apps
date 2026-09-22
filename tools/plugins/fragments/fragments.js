@@ -20,6 +20,7 @@ import { crawl } from 'https://da.live/nx/public/utils/tree.js';
 import {
   fetchSiteConfig,
   analyzeSharedPaths,
+  createSharedPathElement,
 } from './utils.js';
 
 const FRAGMENTS_BASE = '/fragments';
@@ -771,8 +772,31 @@ async function loadFragments() {
   try {
     const { actions, context } = await DA_SDK;
     const fragmentsList = document.querySelector('.fragments-list');
+    const sharedPathsList = document.querySelector('.shared-paths-list');
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
     const searchInput = document.querySelector('.fragment-search');
     const insertBtn = document.querySelector('.insert-btn');
+
+    // Tab switching
+    tabBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tabName = btn.dataset.tab;
+        
+        // Update active tab button
+        tabBtns.forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        // Show/hide tab content
+        tabContents.forEach((content) => {
+          if (content.dataset.tab === tabName) {
+            content.classList.remove('hidden');
+          } else {
+            content.classList.add('hidden');
+          }
+        });
+      });
+    });
 
     // Debug: Log context to see available properties
     console.log('[Fragments Plugin] Context:', { 
@@ -792,11 +816,12 @@ async function loadFragments() {
 
     // Test: Analyze shared paths from site config
     console.log('[Fragments Plugin] Analyzing shared paths from site config...');
+    let sharedPathsData = null;
     const { canAccess, config } = await fetchSiteConfig(context.org, site);
     console.log('[Fragments Plugin] Site config received:', config);
     if (canAccess && config) {
-      const sharedPathsAnalysis = await analyzeSharedPaths(config, context.org, site);
-      console.log('[Fragments Plugin] Shared paths analysis:', sharedPathsAnalysis);
+      sharedPathsData = await analyzeSharedPaths(config, context.org, site);
+      console.log('[Fragments Plugin] Shared paths analysis:', sharedPathsData);
     } else {
       console.log('[Fragments Plugin] No site config access or config not found');
     }
@@ -832,6 +857,30 @@ async function loadFragments() {
     });
 
     await loadFragments();
+
+    // Render shared paths section if configured
+    if (sharedPathsData && (sharedPathsData.sameSite.length > 0 || sharedPathsData.crossSite.length > 0)) {
+      sharedPathsList.innerHTML = '';
+      
+      const list = document.createElement('ul');
+      list.style.cssText = 'list-style: none; margin: 0; padding: 8px 0;';
+
+      // Add same-site paths
+      sharedPathsData.sameSite.forEach((entry) => {
+        const element = createSharedPathElement(entry, context.org, site);
+        list.appendChild(element);
+      });
+
+      // Add cross-site paths
+      sharedPathsData.crossSite.forEach((entry) => {
+        const element = createSharedPathElement(entry, entry.org, entry.site);
+        list.appendChild(element);
+      });
+
+      sharedPathsList.appendChild(list);
+    } else if (sharedPathsData) {
+      sharedPathsList.innerHTML = '<p style="padding: 16px; color: #999;">No shared paths configured.</p>';
+    }
   } catch (error) {
     showMessage('Initialization failed. Please refresh the page.', true);
   }

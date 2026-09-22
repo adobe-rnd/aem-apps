@@ -27,6 +27,11 @@
 <body>
   <div class="fragments-container">
     <div class="fragments-panel">
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="fragments" type="button">Fragments</button>
+        <button class="tab-btn" data-tab="shared-paths" type="button">Shared Paths</button>
+      </div>
+
       <input type="search"
              class="fragment-search"
              placeholder="Enter fragment name"
@@ -37,8 +42,16 @@
         <div class="feedback-message"></div>
       </div>
 
-      <div class="fragments-list" role="list">
-        <div class="loading-state">Loading fragments...</div>
+      <div class="tab-content" data-tab="fragments">
+        <div class="fragments-list" role="list">
+          <div class="loading-state">Loading fragments...</div>
+        </div>
+      </div>
+
+      <div class="tab-content hidden" data-tab="shared-paths">
+        <div class="shared-paths-list" role="list">
+          <div class="loading-state">Loading shared paths...</div>
+        </div>
       </div>
     </div>
 

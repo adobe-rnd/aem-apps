@@ -333,3 +333,211 @@ async function listFolderContents(org, site, path) {
     return [];
   }
 }
+
+/**
+ * Fetch sheet content from DA source API
+ * @param {string} org - Organization
+ * @param {string} site - Site name
+ * @param {string} path - Sheet path (with .json extension)
+ * @returns {Promise<object|null>} Parsed sheet JSON or null if error
+ */
+export async function fetchSheetContent(org, site, path) {
+  try {
+    const sourceUrl = `${DA_ADMIN}/source/${org}/${site}${path}`;
+    const response = await daFetch(sourceUrl);
+    if (!response.ok) {
+      console.error(`[Sheets Preview] Failed to fetch sheet: ${sourceUrl} (${response.status})`);
+      return null;
+    }
+    const sheetData = await response.json();
+    return sheetData;
+  } catch (e) {
+    console.error(`[Sheets Preview] Error fetching sheet: ${e.message}`);
+    return null;
+  }
+}
+
+/**
+ * Extract tabs from sheet data
+ * Sheets have structure: { data: { tabName: [...], tabName2: [...] }, ... }
+ * @param {object} sheetContent - Parsed sheet JSON
+ * @returns {object} { tabName: [rows...], ... }
+ */
+export function extractSheetTabs(sheetContent) {
+  if (!sheetContent || !sheetContent.data) {
+    return {};
+  }
+  return sheetContent.data;
+}
+
+/**
+ * Build read-only HTML table from tab data
+ * First row contains headers (keys), subsequent rows are data values
+ * @param {array} tabData - Array of row objects [headerRow, dataRow1, dataRow2, ...]
+ * @returns {string} HTML table markup
+ */
+export function buildTableHtml(tabData) {
+  if (!Array.isArray(tabData) || tabData.length === 0) {
+    return '<p>No data available</p>';
+  }
+
+  // First row contains headers
+  const headerRow = tabData[0];
+  const headers = Object.keys(headerRow);
+  
+  // Data rows are from index 1 onwards
+  const dataRows = tabData.slice(1);
+  
+  let html = '<table style="border-collapse: collapse; width: 100%; font-family: system-ui; font-size: 14px;">';
+  html += '<thead style="background-color: #f0f0f0; border-bottom: 2px solid #ccc;">';
+  html += '<tr>';
+  
+  headers.forEach((header) => {
+    html += `<th style="padding: 8px; text-align: left; border: 1px solid #ddd; font-weight: bold;">${header}</th>`;
+  });
+  
+  html += '</tr></thead><tbody>';
+  
+  dataRows.forEach((row, idx) => {
+    const bgColor = idx % 2 === 0 ? '#ffffff' : '#f9f9f9';
+    html += `<tr style="background-color: ${bgColor};">`;
+    
+    headers.forEach((header) => {
+      const cellValue = row[header] !== undefined ? row[header] : '';
+      html += `<td style="padding: 8px; border: 1px solid #ddd;">${cellValue}</td>`;
+    });
+    
+    html += '</tr>';
+  });
+  
+  html += '</tbody></table>';
+  return html;
+}
+
+/**
+ * Build sheet preview UI with tabs
+ * @param {object} sheetContent - Parsed sheet JSON
+ * @returns {string} HTML markup with tabs and tables
+ */
+export function buildSheetPreviewHtml(sheetContent) {
+  const tabs = extractSheetTabs(sheetContent);
+  const tabNames = Object.keys(tabs);
+  
+  if (tabNames.length === 0) {
+    return '<p>No tabs found in sheet</p>';
+  }
+
+  let html = '<div style="display: flex; flex-direction: column; gap: 16px;">';
+  
+  // Tab buttons
+  html += '<div style="display: flex; gap: 4px; border-bottom: 2px solid #ccc;">';
+  tabNames.forEach((tabName, idx) => {
+    const isActive = idx === 0 ? 'true' : 'false';
+    const bgColor = idx === 0 ? '#007bff' : '#e0e0e0';
+    const textColor = idx === 0 ? '#fff' : '#000';
+    html += `<button data-tab="${tabName}" class="sheet-tab" style="padding: 8px 16px; background-color: ${bgColor}; color: ${textColor}; border: none; cursor: pointer; border-radius: 4px 4px 0 0; font-size: 14px; font-weight: ${idx === 0 ? 'bold' : 'normal'};" data-active="${isActive}">${tabName}</button>`;
+  });
+  html += '</div>';
+  
+  // Tab content
+  html += '<div style="padding: 16px; background-color: #fafafa; border-radius: 0 4px 4px 4px; border: 1px solid #ccc;">';
+  tabNames.forEach((tabName, idx) => {
+    const display = idx === 0 ? 'block' : 'none';
+    html += `<div class="sheet-tab-content" data-tab="${tabName}" style="display: ${display};">`;
+    html += buildTableHtml(tabs[tabName]);
+    html += '</div>';
+  });
+  html += '</div></div>';
+  
+  return html;
+}
+
+/**
+ * Build DOM element for a shared path (file or folder)
+ * @param {object} pathEntry - Path entry from analyzeSharedPaths result
+ * @param {string} org - Organization
+ * @param {string} site - Site name
+ * @returns {HTMLElement} List item element with expandable content
+ */
+export function createSharedPathElement(pathEntry, org, site) {
+  const li = document.createElement('li');
+  li.className = 'shared-path-item';
+  li.setAttribute('role', 'listitem');
+
+  // Determine icon based on type
+  let icon = '📋';
+  let label = pathEntry.display;
+  
+  if (pathEntry.itemType === 'file') {
+    icon = pathEntry.type === 'json' ? '📊' : pathEntry.type === 'html' ? '📄' : '📋';
+  } else if (pathEntry.itemType === 'folder') {
+    icon = '📁';
+  }
+
+  // Create expandable header
+  const header = document.createElement('div');
+  header.className = 'shared-path-header';
+  header.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; user-select: none;';
+  
+  const expandBtn = document.createElement('span');
+  expandBtn.className = 'expand-icon';
+  expandBtn.textContent = pathEntry.itemType === 'folder' ? '▼' : '';
+  expandBtn.style.cssText = 'display: inline-block; width: 16px; transform: rotate(-90deg); transition: transform 0.2s;';
+  
+  header.appendChild(expandBtn);
+  
+  const iconSpan = document.createElement('span');
+  iconSpan.textContent = icon;
+  header.appendChild(iconSpan);
+  
+  const labelSpan = document.createElement('span');
+  labelSpan.textContent = label;
+  labelSpan.style.fontWeight = pathEntry.itemType === 'file' ? 'normal' : 'bold';
+  header.appendChild(labelSpan);
+  
+  // Info text for folders
+  if (pathEntry.itemType === 'folder') {
+    const infoSpan = document.createElement('span');
+    infoSpan.textContent = `(${pathEntry.sheets} sheets, ${pathEntry.documents} docs)`;
+    infoSpan.style.cssText = 'font-size: 12px; color: #666; margin-left: auto;';
+    header.appendChild(infoSpan);
+  }
+  
+  li.appendChild(header);
+
+  // Content area (hidden by default for folders)
+  if (pathEntry.itemType === 'folder') {
+    const content = document.createElement('div');
+    content.className = 'shared-path-content';
+    content.style.cssText = 'display: none; padding-left: 24px; border-left: 1px solid #ccc;';
+    content.setAttribute('data-path', pathEntry.path);
+    content.setAttribute('data-org', org);
+    content.setAttribute('data-site', pathEntry.itemType === 'folder' ? site : '');
+    
+    const loadingText = document.createElement('p');
+    loadingText.textContent = 'Loading...';
+    loadingText.style.cssText = 'font-size: 12px; color: #999;';
+    content.appendChild(loadingText);
+    
+    li.appendChild(content);
+
+    // Toggle expand/collapse
+    header.addEventListener('click', () => {
+      const isOpen = content.style.display !== 'none';
+      content.style.display = isOpen ? 'none' : 'block';
+      expandBtn.style.transform = isOpen ? 'rotate(-90deg)' : 'rotate(0deg)';
+    });
+  } else if (pathEntry.itemType === 'file') {
+    // File item - add preview on click
+    header.style.cursor = 'pointer';
+    header.addEventListener('click', () => {
+      // Emit event to show preview
+      const event = new CustomEvent('sheet-selected', {
+        detail: { path: pathEntry.path, org, site, type: pathEntry.type },
+      });
+      li.dispatchEvent(event);
+    });
+  }
+
+  return li;
+}
