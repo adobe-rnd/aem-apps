@@ -890,6 +890,8 @@ async function loadFragments() {
             const fullPath = `/${org}/${siteName}${pathFull}`;
             const files = [];
 
+            console.log(`[Folder Load] path=${fullPath}`);
+
             const { results } = crawl({
               path: fullPath,
               callback: (file) => {
@@ -899,6 +901,8 @@ async function loadFragments() {
             });
 
             await results;
+
+            console.log(`[Folder Load] found ${files.length} files in ${fullPath}`);
 
             // Build tree items for each file
             treeList.innerHTML = '';
