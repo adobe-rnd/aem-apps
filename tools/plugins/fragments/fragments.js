@@ -1012,7 +1012,7 @@ async function loadFragments() {
         if (type === 'json') {
           // For sheets, show preview using buildSheetPreviewHtml
           try {
-            const sheetContent = await fetchSheetContent(path, buildPreviewUrl);
+            const sheetContent = await fetchSheetContent(path);
             const previewHtml = buildSheetPreviewHtml(sheetContent);
             const iframe = document.querySelector('.preview-iframe');
             const placeholder = document.querySelector('.preview-placeholder');
