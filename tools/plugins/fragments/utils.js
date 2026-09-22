@@ -238,6 +238,8 @@ export async function analyzeSharedPaths(siteConfig, currentOrg, currentSite) {
   }
 
   console.log(`[Sheets Picker] Found ${paths.length} configured path(s)`);
+  console.log('[Sheets Picker] Note: For individual files, include the file extension (e.g., /metadata.json, /data/products.json)');
+  console.log('[Sheets Picker] For folders, omit the extension (e.g., /drafts, /data)');
 
   const result = {
     sameSite: [],
