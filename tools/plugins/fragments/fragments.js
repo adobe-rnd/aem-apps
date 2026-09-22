@@ -17,6 +17,10 @@
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 // eslint-disable-next-line import/no-unresolved
 import { crawl } from 'https://da.live/nx/public/utils/tree.js';
+import {
+  fetchSiteConfig,
+  analyzeSharedPaths,
+} from './utils.js';
 
 const FRAGMENTS_BASE = '/fragments';
 const CRAWL_THROTTLE = 10;
@@ -769,6 +773,16 @@ async function loadFragments() {
     const fragmentsList = document.querySelector('.fragments-list');
     const searchInput = document.querySelector('.fragment-search');
     const insertBtn = document.querySelector('.insert-btn');
+
+    // Test: Analyze shared paths from site config
+    console.log('[Fragments Plugin] Analyzing shared paths from site config...');
+    const { canAccess, config } = await fetchSiteConfig(context.org, context.site);
+    if (canAccess && config) {
+      const sharedPathsAnalysis = await analyzeSharedPaths(config, context.org, context.site);
+      console.log('[Fragments Plugin] Shared paths analysis:', sharedPathsAnalysis);
+    } else {
+      console.log('[Fragments Plugin] No site config access or config not found');
+    }
 
     searchInput.addEventListener('input', (e) => {
       filterFragments(e.target.value, fragmentsList);
