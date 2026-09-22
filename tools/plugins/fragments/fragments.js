@@ -879,15 +879,15 @@ async function loadFragments() {
         const treeList = item.querySelector('.tree-list');
         const isExpanded = folderBtn.classList.contains('expanded');
 
+        console.log(`[Folder Click] expanded=${isExpanded}, children=${treeList.children.length}`);
+
         // Only load on first expand (when tree-list is still empty)
         if (isExpanded && treeList.children.length === 0) {
           try {
             const pathFull = item.dataset.pathFull;
-            const org = item.dataset.org;
-            const siteName = item.dataset.site;
             
-            // Use crawl to get folder contents
-            const fullPath = `/${org}/${siteName}${pathFull}`;
+            // pathFull is already the absolute path: /org/site/path
+            const fullPath = pathFull;
             const files = [];
 
             console.log(`[Folder Load] path=${fullPath}`);
