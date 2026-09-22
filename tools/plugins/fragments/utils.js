@@ -130,6 +130,7 @@ export function analyzePath(userPath, currentOrg, currentSite) {
     return {
       type: 'same-site',
       fullPath: `/${currentOrg}/${currentSite}${path}`,
+      folder: path,
       display: path,
     };
   }
