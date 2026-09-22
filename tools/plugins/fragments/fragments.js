@@ -879,8 +879,6 @@ async function loadFragments() {
         const treeList = item.querySelector('.tree-list');
         const isExpanded = folderBtn.classList.contains('expanded');
 
-        console.log(`[Folder Click] expanded=${isExpanded}, children=${treeList.children.length}`);
-
         // Only load on first expand (when tree-list is still empty)
         if (isExpanded && treeList.children.length === 0) {
           try {
@@ -889,8 +887,6 @@ async function loadFragments() {
             // pathFull is already the absolute path: /org/site/path
             const fullPath = pathFull;
             const files = [];
-
-            console.log(`[Folder Load] path=${fullPath}`);
 
             const { results } = crawl({
               path: fullPath,
@@ -901,8 +897,6 @@ async function loadFragments() {
             });
 
             await results;
-
-            console.log(`[Folder Load] found ${files.length} files in ${fullPath}`);
 
             // Build tree items for each file
             treeList.innerHTML = '';
@@ -919,8 +913,6 @@ async function loadFragments() {
                 const fileName = file.name;
                 const fileExt = file.ext?.toLowerCase() || '';
                 const isJson = fileExt === 'json';
-
-                console.log(`[File] ${fileName}, ext=${fileExt}, isJson=${isJson}`);
 
                 // Create tree-item for file
                 const fileItem = document.createElement('div');
@@ -985,15 +977,17 @@ async function loadFragments() {
       // Handle sheet selection events (both from root items and nested items)
       sharedPathsList.addEventListener('sheet-selected', async (e) => {
         const { path, org, site, type } = e.detail;
-        const selectedItem = e.target;
+        const selectedItem = e.target.closest('.tree-item');
 
         // Update selection styling
         document.querySelectorAll('.tree-item.selected').forEach((item) => {
           item.classList.remove('selected');
           item.classList.add('was-selected');
         });
-        selectedItem.classList.remove('was-selected');
-        selectedItem.classList.add('selected');
+        if (selectedItem) {
+          selectedItem.classList.remove('was-selected');
+          selectedItem.classList.add('selected');
+        }
 
         // Show preview
         if (type === 'json') {
