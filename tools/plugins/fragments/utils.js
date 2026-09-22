@@ -541,3 +541,36 @@ export function createSharedPathElement(pathEntry, org, site) {
 
   return item;
 }
+
+
+/**
+ * Initialize authenticated preview URL builder using .preview.da.live
+ * This gets a site token via /gimme_cookie endpoint for authenticated access
+ * @param {string} org - Organization
+ * @param {string} site - Site name
+ * @param {string} token - Access token from DA_SDK
+ * @returns {Promise<Function>} Function that builds preview URLs
+ */
+export async function initPreviewUrlBuilder(org, site, token) {
+  try {
+    // Request site token via gimme_cookie endpoint
+    const previewUrl = `https://main--${site}--${org}.preview.da.live/gimme_cookie`;
+    const response = await fetch(previewUrl, {
+      credentials: 'include',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      // Fallback to public .aem.page
+      return (path) => `https://main--${site}--${org}.aem.page${path}`;
+    }
+
+    // Success - now use .preview.da.live for authenticated access
+    return (path) => `https://main--${site}--${org}.preview.da.live${path}`;
+  } catch (err) {
+    // Fallback to public .aem.page
+    return (path) => `https://main--${site}--${org}.aem.page${path}`;
+  }
+}

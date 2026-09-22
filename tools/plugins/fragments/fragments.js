@@ -23,6 +23,7 @@ import {
   createSharedPathElement,
   fetchSheetContent,
   buildSheetPreviewHtml,
+  initPreviewUrlBuilder,
 } from './utils.js';
 
 console.log('[Fragments Plugin v2] Loaded - with tabs support');
@@ -35,6 +36,7 @@ const DA_ADMIN = 'https://admin.da.live';
 let selectedFragment = null;
 let selectedSheet = null;
 let currentPageLocale = null;
+let buildPreviewUrl = null; // Will be initialized in init()
 
 function isLocaleFolder(name) {
   return LOCALE_PATTERN.test(name);
@@ -232,7 +234,7 @@ function createFileTree(files, basePath) {
   return tree;
 }
 
-function showPreview(fragmentPath, fragmentName, context, fragmentElement) {
+function showPreview(fragmentPath, fragmentName, context, fragmentElement, buildPreviewUrl) {
   const iframe = document.querySelector('.preview-iframe');
   const placeholder = document.querySelector('.preview-placeholder');
   const insertBtn = document.querySelector('.insert-btn');
@@ -241,7 +243,7 @@ function showPreview(fragmentPath, fragmentName, context, fragmentElement) {
 
   const basePath = `/${context.org}/${context.repo}`;
   const displayPath = fragmentPath.replace(basePath, '').replace(/\.html$/, '');
-  const previewUrl = `https://main--${context.repo}--${context.org}.aem.page${displayPath}`;
+  const previewUrl = buildPreviewUrl(displayPath);
 
   if (selectedFragment && selectedFragment.element) {
     selectedFragment.element.classList.remove('selected');
@@ -294,7 +296,7 @@ function createTreeItem(name, node, context) {
     button.title = `Click to preview "${displayName}"`;
 
     button.addEventListener('click', () => {
-      showPreview(node.path, displayName, context, item);
+      showPreview(node.path, displayName, context, item, buildPreviewUrl);
     });
 
     content.appendChild(button);
@@ -775,13 +777,22 @@ async function loadFragments() {
 
 (async function init() {
   try {
-    const { actions, context } = await DA_SDK;
+    const { actions, context, token } = await DA_SDK;
     const fragmentsList = document.querySelector('.fragments-list');
     const sharedPathsList = document.querySelector('.shared-paths-list');
     const tabBtns = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
     const searchInput = document.querySelector('.fragment-search');
     const insertBtn = document.querySelector('.insert-btn');
+
+    // Extract site name: try context.site first, then repo (most reliable), then from path
+    const site = context.site || 
+                  context.repo || 
+                  (context.path ? context.path.split('/').filter(Boolean)[0] : null) || 
+                  'main';
+
+    // Initialize authenticated preview URL builder
+    buildPreviewUrl = await initPreviewUrlBuilder(context.org, site, token);
 
     // Tab switching
     tabBtns.forEach((btn) => {
@@ -802,12 +813,6 @@ async function loadFragments() {
         });
       });
     });
-
-    // Extract site name: try context.site first, then repo (most reliable), then from path
-    const site = context.site || 
-                  context.repo || 
-                  (context.path ? context.path.split('/').filter(Boolean)[0] : null) || 
-                  'main';
 
     // Analyze shared paths from site config
     let sharedPathsData = null;
@@ -1030,8 +1035,8 @@ async function loadFragments() {
           const placeholder = document.querySelector('.preview-placeholder');
           const insertBtn = document.querySelector('.insert-btn');
 
-          if (iframe && placeholder && insertBtn) {
-            const previewUrl = `https://main--${context.repo}--${context.org}.aem.page${path}`;
+          if (iframe && placeholder && insertBtn && buildPreviewUrl) {
+            const previewUrl = buildPreviewUrl(path);
             iframe.src = previewUrl;
             iframe.classList.remove('hidden');
             placeholder.classList.add('hidden');
