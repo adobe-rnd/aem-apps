@@ -53,4 +53,4 @@ Serve the repository over HTTP and open `/test/fixtures/request-for-publish.html
 
 Worker environments are fixed: localhost defaults to the local worker on port 8787; `?env=ci` selects CI and `?env=prod` explicitly selects production (including from a local plugin). Unknown environment values are rejected. Do not use a real worker for fixture tests.
 
-The current production worker does not allow localhost origins in CORS. `env=prod` selects it but does not bypass that policy: real workflow testing needs plugin code served from an allowed HTTPS `*.aem.page` or `*.aem.live` origin. Local fixtures remain backend-free.
+The production worker at this branch’s baseline does not allow localhost origins in CORS. `env=prod` cannot bypass that policy. Local testing can use `env=ci` after a CI worker with the exact localhost:3000 exception is deployed, or use plugin code served from an allowed HTTPS origin. CI is not a data sandbox: it can access real DA content and send notifications. Local fixtures remain backend-free.
