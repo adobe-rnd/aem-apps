@@ -122,6 +122,38 @@ await test('publication failure offers completion-only recovery', async () => {
   await tick();
   assert(completion === 1, 'completion retry not wired');
 });
+await test('publication remains visible when the follow-up status read fails', async () => {
+  let broken = false;
+  await show({ ...base, approvable: [row] }, {
+    load: async () => {
+      if (broken) throw new Error('Status unavailable');
+      return { ...base, approvable: [row] };
+    },
+    approve: async () => {
+      broken = true;
+      throw Object.assign(new Error('Recording failed'), { published: true });
+    },
+  });
+  button('Approve & publish').click();
+  await tick();
+  assert(/Published/.test(text()), 'confirmed publication disappeared after a read failure');
+  assert(!button('Approve & publish'), 'repeat publication offered');
+});
+await test('published page with no remaining request does not offer an unsafe retry', async () => {
+  let removed = false;
+  await show({ ...base, approvable: [row] }, {
+    load: async () => ({ ...base, approvable: removed ? [] : [row] }),
+    approve: async () => {
+      removed = true;
+      throw Object.assign(new Error('Notification failed'), { published: true });
+    },
+  });
+  button('Approve & publish').click();
+  await tick();
+  assert(!button('Retry request update'), 'retry offered for a request that has disappeared');
+  assert(!button('Request publish'), 'new request form masks incomplete outcome');
+});
+
 await test('late page A response cannot overwrite page B', async () => {
   let finish;
   await show(base, {
