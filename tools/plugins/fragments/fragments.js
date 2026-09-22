@@ -21,6 +21,7 @@ import {
   fetchSiteConfig,
   analyzeSharedPaths,
   createSharedPathElement,
+  createSheetIcon,
 } from './utils.js';
 
 console.log('[Fragments Plugin v2] Loaded - with tabs support');
@@ -865,6 +866,87 @@ async function loadFragments() {
       });
 
       sharedPathsList.appendChild(list);
+
+      // Add expand/collapse handlers for folders
+      sharedPathsList.querySelectorAll('.tree-item-toggle').forEach((toggleBtn) => {
+        toggleBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const li = toggleBtn.closest('.tree-item');
+          const childrenDiv = li.querySelector('.tree-item-children');
+          const isExpanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+
+          // Only load on first expand
+          if (!isExpanded && childrenDiv.querySelector('div:first-child')?.textContent === 'Loading...') {
+            try {
+              const { token } = await DA_SDK;
+              const pathFull = li.dataset.pathFull;
+              const org = li.dataset.org;
+              const siteName = li.dataset.site;
+              
+              // Use crawl to get folder contents
+              const fullPath = `/${org}/${siteName}${pathFull}`;
+              const files = [];
+
+              const { results } = crawl({
+                path: fullPath,
+                callback: (file) => {
+                  files.push(file);
+                },
+                throttle: 10,
+              });
+
+              await results;
+
+              // Build tree items for each file
+              childrenDiv.innerHTML = '';
+              if (files.length === 0) {
+                const empty = document.createElement('div');
+                empty.textContent = 'Empty folder';
+                empty.style.cssText = 'font-size: 12px; color: #999; padding: 4px 0;';
+                childrenDiv.appendChild(empty);
+              } else {
+                files.forEach((file) => {
+                  const item = document.createElement('div');
+                  item.className = 'tree-item';
+                  item.role = 'listitem';
+                  
+                  const itemContent = document.createElement('div');
+                  itemContent.className = 'tree-item-content';
+                  itemContent.style.cssText = 'display: flex; align-items: center; padding: 4px 0; gap: 8px;';
+                  
+                  // No expand icon for files
+                  const spacer = document.createElement('span');
+                  spacer.style.width = '16px';
+                  itemContent.appendChild(spacer);
+                  
+                  // Icon based on file type
+                  const icon = document.createElement('span');
+                  icon.style.cssText = 'flex-shrink: 0;';
+                  if (file.path.endsWith('.json')) {
+                    icon.appendChild(createSheetIcon());
+                  } else if (file.path.endsWith('.html')) {
+                    icon.textContent = '📄';
+                  } else {
+                    icon.textContent = '📋';
+                  }
+                  itemContent.appendChild(icon);
+                  
+                  // Label
+                  const label = document.createElement('span');
+                  label.textContent = file.name;
+                  label.style.cssText = 'flex: 1;';
+                  itemContent.appendChild(label);
+                  
+                  item.appendChild(itemContent);
+                  childrenDiv.appendChild(item);
+                });
+              }
+            } catch (err) {
+              childrenDiv.innerHTML = '<div style="font-size: 12px; color: #d00; padding: 4px 0;">Error loading folder</div>';
+            }
+          }
+        });
+      });
     } else if (sharedPathsData) {
       sharedPathsList.innerHTML = '<p style="padding: 16px; color: #999;">No shared paths configured.</p>';
     }
