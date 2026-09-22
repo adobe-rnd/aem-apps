@@ -25,7 +25,7 @@ The worker remains unchanged. The panel uses:
 - `POST /api/requests` (including `resend: true`)
 - `POST /api/requests/withdraw`, `/reject` and `/approve`
 
-Preview and publication still happen client-side under the user's session. Submission stops if preview fails. Approval revalidates the request, publishes, then records completion. If publication succeeds but completion fails, the panel offers **Retry request update**, which does not republish. Withdraw and reject require an inline confirmation; rejection also requires a reason. Mutations are not automatically retried.
+Preview and publication still happen client-side under the user's session. Submission stops if preview fails. Approval revalidates the request, publishes, then records completion. If publication succeeds but completion fails, the panel offers **Retry request update**, which does not republish. Withdraw and reject require an inline confirmation; rejection also requires a reason. An ambiguous publish response blocks another publication attempt in the panel and directs the user to check the live page. Mutations are not automatically retried.
 
 HTTP failures and malformed queue responses are not treated as empty queues. The panel re-reads after mutations and failures because an email failure may occur after a row was written/deleted. It also refreshes on explicit refresh and return to the document, without background polling. Notes survive failed submission and refresh.
 

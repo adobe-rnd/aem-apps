@@ -170,8 +170,10 @@ await test('ambiguous publication blocks another publish attempt', async () => {
   assert(published === 1, 'programmatic second action was not guarded');
 });
 await test('page changes clear stale content before the first new render', async () => {
-  await show({ ...base, own: [row] }, { load: (context) => (context.path === ctx.path
-    ? Promise.resolve({ ...base, own: [row] }) : new Promise(() => {})) });
+  await show({ ...base, own: [row] }, {
+    load: (context) => (context.path === ctx.path
+      ? Promise.resolve({ ...base, own: [row] }) : new Promise(() => {})),
+  });
   current.context = { ...ctx, path: '/drafts/second' };
   await current.updateComplete;
   assert(!button('Request publish') && !text().includes(row.comment), 'old content or premature form flashed');
@@ -187,7 +189,8 @@ await test('primary button has AA text contrast in light and dark themes', async
     ['light', 'dark'].forEach((scheme) => {
       document.documentElement.style.colorScheme = scheme;
       const styles = getComputedStyle(button('Approve & publish'));
-      const colors = [luminance(styles.color), luminance(styles.backgroundColor)].sort((a, b) => a - b);
+      const colors = [luminance(styles.color), luminance(styles.backgroundColor)]
+        .sort((a, b) => a - b);
       assert((colors[1] + 0.05) / (colors[0] + 0.05) >= 4.5, `${scheme} button contrast below 4.5`);
     });
   } finally { document.documentElement.style.colorScheme = previous; }

@@ -218,7 +218,7 @@ button:hover:not(:disabled) {
 }
 
 button.primary {
-  color: white;
+  color: light-dark(white, #111);
   background: var(--s2-blue-900, #0265dc);
   border-color: transparent;
 }
@@ -228,7 +228,7 @@ button.primary:hover:not(:disabled) {
 }
 
 button.negative {
-  color: white;
+  color: light-dark(white, #111);
   background: var(--s2-red-900, #c9252d);
   border-color: transparent;
 }

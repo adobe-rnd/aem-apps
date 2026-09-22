@@ -34,6 +34,7 @@ class RequestForPublish extends LitElement {
     _confirmation: { state: true },
     _fieldError: { state: true },
     _receipt: { state: true },
+    _unknown: { state: true },
   };
 
   _epoch = 0;
@@ -62,19 +63,25 @@ class RequestForPublish extends LitElement {
     document.removeEventListener('visibilitychange', this._return);
   }
 
-  updated(changed) {
+  willUpdate(changed) {
     if (changed.has('context') || changed.has('client')) {
       this._epoch += 1;
       this._data = undefined;
       this._notice = undefined;
       this._receipt = undefined;
+      this._unknown = undefined;
       this._confirmation = undefined;
       this._busy = undefined;
       this._comment = '';
       this._reason = '';
       this._fieldError = undefined;
-      this.refresh();
+      this._error = undefined;
+      this._loading = !!this.page;
     }
+  }
+
+  updated(changed) {
+    if (changed.has('context') || changed.has('client')) this.refresh();
   }
 
   get page() { return normalizeContext(this.context); }
@@ -123,7 +130,7 @@ class RequestForPublish extends LitElement {
   }
 
   async act(action) {
-    if (this.disabled) return;
+    if (this.disabled || this._unknown) return;
     const context = this.page;
     const {
       request, canApprove, canWithdraw, view,
@@ -172,6 +179,7 @@ class RequestForPublish extends LitElement {
     } catch (error) {
       if (epoch !== this._epoch) return;
       if (error.published) this._receipt = expected;
+      if (error.publishUnknown) this._unknown = expected;
       this._notice = { type: 'error', text: error.message };
     } finally {
       if (epoch === this._epoch) {
@@ -226,6 +234,12 @@ class RequestForPublish extends LitElement {
   }
 
   renderContent() {
+    if (this._unknown && this.page) {
+      return html`<section class="receipt" role="status"><h2>Publication outcome unknown</h2>
+        <p>The publish response was lost or could not be confirmed. The page may already be live. Check it before taking another action; do not publish again just to retry the request.</p>
+        <a href=${pageLinks(this.page).live} target="_blank" rel="noopener noreferrer">Open live page ↗</a>
+      </section>`;
+    }
     if (this._receipt && this.page) return this.renderReceipt();
     if (this._error) {
       return html`<section class="empty"><h2>Request status unavailable</h2>
@@ -244,7 +258,7 @@ class RequestForPublish extends LitElement {
       : 'A reviewer needs to approve and publish this page.';
     return html`
       <section class="summary">
-        <span class="status ${requesting ? 'neutral' : 'pending'}">${requesting ? 'Not requested' : 'Pending approval'}</span>
+        <span class="status ${requesting ? 'neutral' : 'pending'}">${requesting ? 'Ready to request' : 'Pending approval'}</span>
         <h2>${requesting ? 'Request approval' : heading}</h2>
         <p>${requesting ? 'Send this page to its reviewers before publishing.' : nextStep}</p>
       </section>

@@ -138,9 +138,14 @@ export function createClient({
   async function contentAction(action, context, label) {
     let resp;
     try { resp = await action(context); } catch {
-      throw failure(`${label} could not be confirmed. Check the page before trying again.`);
+      throw failure(`${label} could not be confirmed. Check the live page before taking another action.`, { publishUnknown: label === 'Publish' });
     }
-    if (!resp?.ok) throw failure(`${label} failed (${resp?.status || 'unavailable'}). The request was not completed.`);
+    if (!resp?.ok) {
+      const unknown = label === 'Publish' && (!resp || resp.status >= 500 || resp.status === 408);
+      const message = unknown ? 'Publish could not be confirmed. Check the live page before taking another action.'
+        : `${label} failed (${resp?.status || 'unavailable'}). The request was not completed.`;
+      throw failure(message, { publishUnknown: unknown });
+    }
   }
 
   async function record(context) {

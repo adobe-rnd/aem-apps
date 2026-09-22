@@ -173,7 +173,10 @@ describe('workflow operations', () => {
   });
   it('marks a failed publish response as an unknown publication outcome', async () => {
     const { client } = fixture({ approvable: [pending], publishFail: true });
-    await assert.rejects(client.approve(context, pending), (error) => error.publishUnknown === true);
+    await assert.rejects(
+      client.approve(context, pending),
+      (error) => error.publishUnknown === true,
+    );
   });
 
   it('retries completion without publishing a second time', async () => {
