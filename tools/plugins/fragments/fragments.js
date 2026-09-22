@@ -917,7 +917,7 @@ async function loadFragments() {
               
               files.forEach((file) => {
                 const fileName = file.name;
-                const fileExt = fileName.split('.').pop()?.toLowerCase() || '';
+                const fileExt = file.ext?.toLowerCase() || '';
                 const isJson = fileExt === 'json';
 
                 console.log(`[File] ${fileName}, ext=${fileExt}, isJson=${isJson}`);
