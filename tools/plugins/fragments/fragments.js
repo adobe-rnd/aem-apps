@@ -234,7 +234,7 @@ function createFileTree(files, basePath) {
   return tree;
 }
 
-function showPreview(fragmentPath, fragmentName, context, fragmentElement, buildPreviewUrl) {
+async function showPreview(fragmentPath, fragmentName, context, fragmentElement, buildPreviewUrl) {
   const iframe = document.querySelector('.preview-iframe');
   const placeholder = document.querySelector('.preview-placeholder');
   const insertBtn = document.querySelector('.insert-btn');
@@ -264,7 +264,18 @@ function showPreview(fragmentPath, fragmentName, context, fragmentElement, build
   insertBtn.disabled = false;
   insertBtn.setAttribute('aria-label', `Insert fragment "${fragmentName}"`);
 
-  iframe.src = previewUrl;
+  try {
+    // Fetch the fragment content and use srcdoc instead of src for auth support
+    const response = await fetch(previewUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch: ${response.status}`);
+    }
+    const html = await response.text();
+    iframe.srcdoc = html;
+  } catch (err) {
+    iframe.srcdoc = `<p style="color: red;">Failed to load preview: ${err.message}</p>`;
+  }
+
   iframe.classList.remove('hidden');
   placeholder.classList.add('hidden');
 }
@@ -295,8 +306,8 @@ function createTreeItem(name, node, context) {
     button.appendChild(textSpan);
     button.title = `Click to preview "${displayName}"`;
 
-    button.addEventListener('click', () => {
-      showPreview(node.path, displayName, context, item, buildPreviewUrl);
+    button.addEventListener('click', async () => {
+      await showPreview(node.path, displayName, context, item, buildPreviewUrl);
     });
 
     content.appendChild(button);
@@ -1002,9 +1013,7 @@ async function loadFragments() {
           // For sheets, show preview using buildSheetPreviewHtml
           try {
             const sheetContent = await fetchSheetContent(path);
-            console.log('[Sheet Debug] Fetched content:', sheetContent);
             const previewHtml = buildSheetPreviewHtml(sheetContent);
-            console.log('[Sheet Debug] Preview HTML:', previewHtml);
             const iframe = document.querySelector('.preview-iframe');
             const placeholder = document.querySelector('.preview-placeholder');
             const insertBtn = document.querySelector('.insert-btn');

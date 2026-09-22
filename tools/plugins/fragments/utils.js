@@ -341,7 +341,30 @@ export function extractSheetTabs(sheetContent) {
   if (!sheetContent || !sheetContent.data) {
     return {};
   }
-  return sheetContent.data;
+  
+  // sheetContent.data is an array of tabs, convert to object with tab indices as keys
+  const tabs = {};
+  const dataArray = sheetContent.data;
+  
+  if (Array.isArray(dataArray)) {
+    dataArray.forEach((tabData, index) => {
+      // Each tab is either an array of rows or an object with data property
+      if (Array.isArray(tabData)) {
+        tabs[index] = tabData;
+      } else if (tabData && Array.isArray(tabData.data)) {
+        tabs[index] = tabData.data;
+      } else if (tabData && Array.isArray(tabData.rows)) {
+        tabs[index] = tabData.rows;
+      } else {
+        tabs[index] = [tabData]; // Wrap single object in array
+      }
+    });
+  } else {
+    // If data is not an array, treat it as an object
+    tabs['0'] = dataArray;
+  }
+  
+  return tabs;
 }
 
 /**
