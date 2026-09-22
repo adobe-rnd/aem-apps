@@ -782,10 +782,10 @@ async function loadFragments() {
       path: context.path 
     });
 
-    // Extract site name: try context.site first, then from path, fallback to repo
+    // Extract site name: try context.site first, then repo (most reliable), then from path
     const site = context.site || 
-                  (context.path ? context.path.split('/').filter(Boolean)[0] : null) || 
                   context.repo || 
+                  (context.path ? context.path.split('/').filter(Boolean)[0] : null) || 
                   'main';
 
     console.log('[Fragments Plugin] Using site:', site);
