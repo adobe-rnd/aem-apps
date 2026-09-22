@@ -210,6 +210,16 @@ await test('late page A response cannot overwrite page B', async () => {
 });
 
 const scenario = new URLSearchParams(window.location.search).get('view') || 'request';
-await show({ ...base, own: scenario === 'requester' ? [row] : [], approvable: scenario === 'approver' ? [row] : [] });
+const demo = { ...base, own: scenario === 'requester' ? [row] : [], approvable: scenario === 'approver' ? [row] : [] };
+const clear = async () => { demo.own = []; demo.approvable = []; };
+await show(demo, {
+  load: async () => structuredClone(demo),
+  submit: async (context, comment) => { demo.own = [{ ...row, comment }]; },
+  resend: async () => {},
+  withdraw: clear,
+  reject: clear,
+  approve: clear,
+  complete: clear,
+});
 document.querySelector('#results').textContent = results.join('\n');
 document.documentElement.dataset.result = results.some((result) => result.startsWith('FAIL')) ? 'fail' : 'pass';
