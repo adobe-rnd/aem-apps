@@ -312,14 +312,12 @@ async function listFolderContents(org, site, path) {
 
 /**
  * Fetch sheet content from DA source API
- * @param {string} org - Organization
- * @param {string} site - Site name
- * @param {string} path - Sheet path (with .json extension)
+ * @param {string} fullPath - Absolute sheet path (e.g., /org/site/path/to/sheet.json)
  * @returns {Promise<object|null>} Parsed sheet JSON or null if error
  */
-export async function fetchSheetContent(org, site, path) {
+export async function fetchSheetContent(fullPath) {
   try {
-    const sourceUrl = `${DA_ADMIN}/source/${org}/${site}${path}`;
+    const sourceUrl = `${DA_ADMIN}/source${fullPath}`;
     const response = await daFetch(sourceUrl);
     if (!response.ok) {
       console.error(`[Sheets Preview] Failed to fetch sheet: ${sourceUrl} (${response.status})`);
