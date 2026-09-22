@@ -312,12 +312,24 @@ async function listFolderContents(org, site, path) {
 
 /**
  * Fetch sheet content from DA source API
- * @param {string} fullPath - Absolute sheet path (e.g., /org/site/path/to/sheet.json)
+ * @param {string} org - Organization
+ * @param {string} site - Site name  
+ * @param {string} path - Sheet path (absolute or relative)
  * @returns {Promise<object|null>} Parsed sheet JSON or null if error
  */
-export async function fetchSheetContent(fullPath) {
+export async function fetchSheetContent(org, site, path) {
   try {
+    // Construct full path: if path already starts with /org, use as-is; otherwise prepend org/site
+    let fullPath = path;
+    if (!path.startsWith(`/${org}/`)) {
+      fullPath = `/${org}/${site}${path}`;
+    }
+    
     const sourceUrl = `${DA_ADMIN}/source${fullPath}`;
+    console.log('[fetchSheetContent] org:', org, 'site:', site, 'path:', path);
+    console.log('[fetchSheetContent] fullPath:', fullPath);
+    console.log('[fetchSheetContent] sourceUrl:', sourceUrl);
+    
     const response = await daFetch(sourceUrl);
     if (!response.ok) {
       console.error(`[Sheets Preview] Failed to fetch sheet: ${sourceUrl} (${response.status})`);
@@ -490,12 +502,11 @@ export function createSharedPathElement(pathEntry, org, site) {
     button.appendChild(textSpan);
 
     button.addEventListener('click', () => {
-      console.log('[File Click] Root level file:', pathEntry.display);
+      console.log('[Root File Click] Clicked:', pathEntry.display, 'path:', pathEntry.path, 'type:', pathEntry.type);
       const event = new CustomEvent('sheet-selected', {
         detail: { path: pathEntry.path, org, site, type: pathEntry.type },
         bubbles: true,
       });
-      console.log('[File Click] Dispatching with bubbles=true');
       item.dispatchEvent(event);
     });
 
