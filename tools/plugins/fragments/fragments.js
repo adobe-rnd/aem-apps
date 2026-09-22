@@ -21,7 +21,8 @@ import {
   fetchSiteConfig,
   analyzeSharedPaths,
   createSharedPathElement,
-  createSheetIcon,
+  fetchSheetContent,
+  buildSheetPreviewHtml,
 } from './utils.js';
 
 console.log('[Fragments Plugin v2] Loaded - with tabs support');
@@ -32,6 +33,7 @@ const LOCALE_PATTERN = /^[a-z]{2}(-[a-z]{2,4})?$/i;
 const DA_ADMIN = 'https://admin.da.live';
 
 let selectedFragment = null;
+let selectedSheet = null;
 let currentPageLocale = null;
 
 function isLocaleFolder(name) {
@@ -868,84 +870,172 @@ async function loadFragments() {
       sharedPathsList.appendChild(list);
 
       // Add expand/collapse handlers for folders
-      sharedPathsList.querySelectorAll('.tree-item-toggle').forEach((toggleBtn) => {
-        toggleBtn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const li = toggleBtn.closest('.tree-item');
-          const childrenDiv = li.querySelector('.tree-item-children');
-          const isExpanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+      // Listen for clicks on folder buttons to load contents on first expand
+      sharedPathsList.addEventListener('click', async (e) => {
+        const folderBtn = e.target.closest('.folder-btn');
+        if (!folderBtn) return;
 
-          // Only load on first expand
-          if (!isExpanded && childrenDiv.querySelector('div:first-child')?.textContent === 'Loading...') {
-            try {
-              const { token } = await DA_SDK;
-              const pathFull = li.dataset.pathFull;
-              const org = li.dataset.org;
-              const siteName = li.dataset.site;
-              
-              // Use crawl to get folder contents
-              const fullPath = `/${org}/${siteName}${pathFull}`;
-              const files = [];
+        const item = folderBtn.closest('.tree-item');
+        const treeList = item.querySelector('.tree-list');
+        const isExpanded = folderBtn.classList.contains('expanded');
 
-              const { results } = crawl({
-                path: fullPath,
-                callback: (file) => {
-                  files.push(file);
-                },
-                throttle: 10,
-              });
+        // Only load on first expand (when tree-list is still empty)
+        if (isExpanded && treeList.children.length === 0) {
+          try {
+            const pathFull = item.dataset.pathFull;
+            const org = item.dataset.org;
+            const siteName = item.dataset.site;
+            
+            // Use crawl to get folder contents
+            const fullPath = `/${org}/${siteName}${pathFull}`;
+            const files = [];
 
-              await results;
+            const { results } = crawl({
+              path: fullPath,
+              callback: (file) => {
+                files.push(file);
+              },
+              throttle: 10,
+            });
 
-              // Build tree items for each file
-              childrenDiv.innerHTML = '';
-              if (files.length === 0) {
-                const empty = document.createElement('div');
-                empty.textContent = 'Empty folder';
-                empty.style.cssText = 'font-size: 12px; color: #999; padding: 4px 0;';
-                childrenDiv.appendChild(empty);
-              } else {
-                files.forEach((file) => {
-                  const item = document.createElement('div');
-                  item.className = 'tree-item';
-                  item.role = 'listitem';
-                  
-                  const itemContent = document.createElement('div');
-                  itemContent.className = 'tree-item-content';
-                  itemContent.style.cssText = 'display: flex; align-items: center; padding: 4px 0; gap: 8px;';
-                  
-                  // No expand icon for files
-                  const spacer = document.createElement('span');
-                  spacer.style.width = '16px';
-                  itemContent.appendChild(spacer);
-                  
-                  // Icon based on file type
-                  const icon = document.createElement('span');
-                  icon.style.cssText = 'flex-shrink: 0;';
-                  if (file.path.endsWith('.json')) {
-                    icon.appendChild(createSheetIcon());
-                  } else if (file.path.endsWith('.html')) {
-                    icon.textContent = '📄';
-                  } else {
-                    icon.textContent = '📋';
-                  }
-                  itemContent.appendChild(icon);
-                  
-                  // Label
-                  const label = document.createElement('span');
-                  label.textContent = file.name;
-                  label.style.cssText = 'flex: 1;';
-                  itemContent.appendChild(label);
-                  
-                  item.appendChild(itemContent);
-                  childrenDiv.appendChild(item);
+            await results;
+
+            // Build tree items for each file
+            treeList.innerHTML = '';
+            if (files.length === 0) {
+              const emptyMsg = document.createElement('div');
+              emptyMsg.textContent = 'Empty folder';
+              emptyMsg.className = 'empty-state';
+              treeList.appendChild(emptyMsg);
+            } else {
+              files.forEach((file) => {
+                const fileName = file.name;
+                const fileExt = fileName.split('.').pop()?.toLowerCase() || '';
+                const isJson = fileExt === 'json';
+
+                // Create tree-item for file
+                const fileItem = document.createElement('div');
+                fileItem.className = 'tree-item';
+                fileItem.setAttribute('role', 'listitem');
+
+                const content = document.createElement('div');
+                content.className = 'tree-item-content';
+
+                // Create file button (matching fragment-btn-item style)
+                const fileBtn = document.createElement('button');
+                fileBtn.className = 'fragment-btn-item';
+                fileBtn.setAttribute('role', 'button');
+                fileBtn.setAttribute('aria-label', `Preview "${fileName}"`);
+                fileBtn.title = `Click to preview "${fileName}"`;
+
+                // Icon
+                const iconSpan = document.createElement('span');
+                iconSpan.className = 'tree-icon';
+                iconSpan.setAttribute('aria-hidden', 'true');
+                if (isJson) {
+                  iconSpan.classList.add('sheet-icon');
+                } else {
+                  iconSpan.classList.add('document-icon');
+                }
+
+                // Text
+                const textSpan = document.createElement('span');
+                textSpan.textContent = fileName;
+
+                fileBtn.appendChild(iconSpan);
+                fileBtn.appendChild(textSpan);
+
+                // Click handler for preview
+                fileBtn.addEventListener('click', () => {
+                  const event = new CustomEvent('sheet-selected', {
+                    detail: {
+                      path: file.path,
+                      org,
+                      site: siteName,
+                      type: isJson ? 'json' : 'document',
+                    },
+                  });
+                  fileItem.dispatchEvent(event);
                 });
-              }
-            } catch (err) {
-              childrenDiv.innerHTML = '<div style="font-size: 12px; color: #d00; padding: 4px 0;">Error loading folder</div>';
+
+                content.appendChild(fileBtn);
+                fileItem.appendChild(content);
+                treeList.appendChild(fileItem);
+              });
+            }
+          } catch (err) {
+            const errorMsg = document.createElement('div');
+            errorMsg.textContent = 'Error loading folder';
+            errorMsg.className = 'error-state';
+            treeList.innerHTML = '';
+            treeList.appendChild(errorMsg);
+          }
+        }
+      });
+
+      // Handle sheet selection events (both from root items and nested items)
+      sharedPathsList.addEventListener('sheet-selected', async (e) => {
+        const { path, org, site, type } = e.detail;
+        const selectedItem = e.target;
+
+        // Update selection styling
+        document.querySelectorAll('.tree-item.selected').forEach((item) => {
+          item.classList.remove('selected');
+          item.classList.add('was-selected');
+        });
+        selectedItem.classList.remove('was-selected');
+        selectedItem.classList.add('selected');
+
+        // Show preview
+        if (type === 'json') {
+          // For sheets, show preview using buildSheetPreviewHtml
+          try {
+            const sheetContent = await fetchSheetContent(path, org, site);
+            const previewHtml = buildSheetPreviewHtml(sheetContent);
+            const iframe = document.querySelector('.preview-iframe');
+            const placeholder = document.querySelector('.preview-placeholder');
+            const insertBtn = document.querySelector('.insert-btn');
+
+            if (iframe && placeholder && insertBtn) {
+              iframe.srcdoc = previewHtml;
+              iframe.classList.remove('hidden');
+              placeholder.classList.add('hidden');
+              insertBtn.disabled = false;
+
+              selectedSheet = {
+                path,
+                org,
+                site,
+                type: 'sheet',
+              };
+            }
+          } catch (err) {
+            const placeholder = document.querySelector('.preview-placeholder');
+            if (placeholder) {
+              placeholder.innerHTML = `<p style="color: red;">Error loading sheet preview</p>`;
             }
           }
-        });
+        } else {
+          // For documents, show HTML preview
+          const iframe = document.querySelector('.preview-iframe');
+          const placeholder = document.querySelector('.preview-placeholder');
+          const insertBtn = document.querySelector('.insert-btn');
+
+          if (iframe && placeholder && insertBtn) {
+            const previewUrl = `https://main--${context.repo}--${context.org}.aem.page${path}`;
+            iframe.src = previewUrl;
+            iframe.classList.remove('hidden');
+            placeholder.classList.add('hidden');
+            insertBtn.disabled = false;
+
+            selectedSheet = {
+              path,
+              org,
+              site,
+              type: 'document',
+            };
+          }
+        }
       });
     } else if (sharedPathsData) {
       sharedPathsList.innerHTML = '<p style="padding: 16px; color: #999;">No shared paths configured.</p>';

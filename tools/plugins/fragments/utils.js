@@ -429,152 +429,117 @@ export function buildSheetPreviewHtml(sheetContent) {
 }
 
 /**
- * Create img element for sheet icon using SVG file
- */
-export function createSheetIcon() {
-  const img = document.createElement('img');
-  img.src = '/tools/plugins/fragments/img/Smock_Data_18_N.svg';
-  img.alt = 'Sheet';
-  img.style.cssText = 'flex-shrink: 0; width: 18px; height: 18px;';
-  return img;
-}
-
-/**
  * Build DOM element for a shared path (file or folder)
+ * Matches the structure used by fragments picker for consistency
  * @param {object} pathEntry - Path entry from analyzeSharedPaths result
  * @param {string} org - Organization
  * @param {string} site - Site name
  * @returns {HTMLElement} List item element with expandable content
  */
 export function createSharedPathElement(pathEntry, org, site) {
-  const li = document.createElement('li');
-  li.className = 'tree-item';
-  li.setAttribute('role', 'listitem');
+  const item = document.createElement('div');
+  item.className = 'tree-item';
+  item.setAttribute('role', 'listitem');
   
   // Store data for later retrieval when expanding
-  li.dataset.pathFull = pathEntry.path;
-  li.dataset.org = org;
-  li.dataset.site = site;
-  li.dataset.itemType = pathEntry.itemType;
-  li.dataset.pathDisplay = pathEntry.display;
+  item.dataset.pathFull = pathEntry.path;
+  item.dataset.org = org;
+  item.dataset.site = site;
+  item.dataset.itemType = pathEntry.itemType;
+  item.dataset.pathDisplay = pathEntry.display;
 
   const content = document.createElement('div');
   content.className = 'tree-item-content';
 
-  // For folders, create expandable button
-  if (pathEntry.itemType === 'folder') {
-    const toggleBtn = document.createElement('button');
-    toggleBtn.className = 'tree-item-toggle';
-    toggleBtn.type = 'button';
-    toggleBtn.setAttribute('aria-expanded', 'false');
-    toggleBtn.style.cssText = 'display: inline-block; width: 16px; padding: 0; margin: 0; border: none; background: none; cursor: pointer; color: inherit;';
-    toggleBtn.textContent = '▼';
-    toggleBtn.style.transform = 'rotate(-90deg)';
-    toggleBtn.style.transition = 'transform 0.2s ease';
-    content.appendChild(toggleBtn);
-  } else {
-    // For files, add spacer
-    const spacer = document.createElement('span');
-    spacer.style.cssText = 'display: inline-block; width: 16px;';
-    content.appendChild(spacer);
-  }
-
-  // Add icon
-  const iconSpan = document.createElement('span');
-  iconSpan.className = 'tree-icon';
-  iconSpan.style.cssText = 'display: inline-flex; align-items: center; flex-shrink: 0; margin-right: 8px; width: 18px; height: 18px;';
-  
   if (pathEntry.itemType === 'file') {
-    if (pathEntry.type === 'json') {
-      iconSpan.appendChild(createSheetIcon());
-    } else {
-      // Document icon from SVG file
-      const docImg = document.createElement('img');
-      docImg.src = '/tools/plugins/fragments/img/Smock_DocumentFragment_18_N.svg';
-      docImg.alt = 'Document';
-      docImg.style.cssText = 'width: 18px; height: 18px;';
-      iconSpan.appendChild(docImg);
-    }
-  } else if (pathEntry.itemType === 'folder') {
-    // Folder icon from SVG file
-    const folderImg = document.createElement('img');
-    folderImg.src = '/tools/plugins/fragments/img/Smock_Folder_18_N.svg';
-    folderImg.alt = 'Folder';
-    folderImg.className = 'folder-icon-closed';
-    folderImg.style.cssText = 'width: 18px; height: 18px;';
-    iconSpan.appendChild(folderImg);
-  }
-  
-  content.appendChild(iconSpan);
-
-  // Add label
-  const labelBtn = document.createElement('button');
-  labelBtn.className = 'tree-label-btn';
-  labelBtn.type = 'button';
-  labelBtn.style.cssText = 'flex: 1; text-align: left; padding: 4px 0; border: none; background: none; cursor: pointer; color: inherit; font-size: inherit; font-family: inherit;';
-  labelBtn.textContent = pathEntry.display;
-  
-  content.appendChild(labelBtn);
-
-  // Add info text for folders
-  if (pathEntry.itemType === 'folder') {
-    const infoSpan = document.createElement('span');
-    infoSpan.className = 'tree-item-info';
-    infoSpan.textContent = `(${pathEntry.sheets} sheets, ${pathEntry.documents} docs)`;
-    infoSpan.style.cssText = 'font-size: 12px; color: #999; margin-left: 8px; flex-shrink: 0;';
-    content.appendChild(infoSpan);
-  }
-
-  li.appendChild(content);
-
-  // Handle folder expansion/collapse
-  if (pathEntry.itemType === 'folder') {
-    const toggleBtn = content.querySelector('.tree-item-toggle');
-    const children = document.createElement('div');
-    children.className = 'tree-item-children';
-    children.style.cssText = 'display: none; padding-left: 24px;';
-    children.setAttribute('role', 'group');
-    
-    const loadingMsg = document.createElement('div');
-    loadingMsg.textContent = 'Loading...';
-    loadingMsg.style.cssText = 'font-size: 12px; color: #999; padding: 4px 0;';
-    children.appendChild(loadingMsg);
-    
-    li.appendChild(children);
-
-    toggleBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const isExpanded = toggleBtn.getAttribute('aria-expanded') === 'true';
-      toggleBtn.setAttribute('aria-expanded', !isExpanded);
-      children.style.display = isExpanded ? 'none' : 'block';
-      toggleBtn.style.transform = isExpanded ? 'rotate(-90deg)' : 'rotate(0deg)';
-      
-      // Swap folder icon
-      const folderImg = iconSpan.querySelector('img');
-      if (folderImg && folderImg.classList.contains('folder-icon-closed')) {
-        folderImg.src = '/tools/plugins/fragments/img/Smock_FolderOpen_18_N.svg';
-        folderImg.classList.remove('folder-icon-closed');
-        folderImg.classList.add('folder-icon-open');
-      } else if (folderImg) {
-        folderImg.src = '/tools/plugins/fragments/img/Smock_Folder_18_N.svg';
-        folderImg.classList.remove('folder-icon-open');
-        folderImg.classList.add('folder-icon-closed');
-      }
-    });
-
-    labelBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleBtn.click();
-    });
-  } else if (pathEntry.itemType === 'file') {
     // File item - clickable for preview
-    labelBtn.addEventListener('click', () => {
+    const button = document.createElement('button');
+    button.className = 'fragment-btn-item';
+    button.setAttribute('role', 'button');
+    button.setAttribute('aria-label', `Preview "${pathEntry.display}"`);
+    button.title = `Click to preview "${pathEntry.display}"`;
+
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'tree-icon';
+    if (pathEntry.type === 'json') {
+      iconSpan.classList.add('sheet-icon');
+    } else {
+      iconSpan.classList.add('document-icon');
+    }
+    iconSpan.setAttribute('aria-hidden', 'true');
+
+    const textSpan = document.createElement('span');
+    textSpan.textContent = pathEntry.display;
+
+    button.appendChild(iconSpan);
+    button.appendChild(textSpan);
+
+    button.addEventListener('click', () => {
       const event = new CustomEvent('sheet-selected', {
         detail: { path: pathEntry.path, org, site, type: pathEntry.type },
       });
-      li.dispatchEvent(event);
+      item.dispatchEvent(event);
     });
+
+    content.appendChild(button);
+  } else if (pathEntry.itemType === 'folder') {
+    // Folder item - expandable
+    const folderButton = document.createElement('button');
+    folderButton.className = 'folder-btn';
+    folderButton.setAttribute('role', 'button');
+    folderButton.setAttribute('aria-expanded', 'false');
+    folderButton.setAttribute('aria-label', `Folder ${pathEntry.display}`);
+
+    const folderIcon = document.createElement('span');
+    folderIcon.className = 'tree-icon folder-icon';
+    folderIcon.setAttribute('aria-hidden', 'true');
+
+    const label = document.createElement('span');
+    label.className = 'folder-name';
+    label.textContent = pathEntry.display;
+
+    const infoSpan = document.createElement('span');
+    infoSpan.className = 'tree-item-info';
+    infoSpan.textContent = `(${pathEntry.sheets} sheets, ${pathEntry.documents} docs)`;
+
+    folderButton.appendChild(folderIcon);
+    folderButton.appendChild(label);
+    folderButton.appendChild(infoSpan);
+
+    const toggleFolder = () => {
+      folderButton.classList.toggle('expanded');
+      const isExpanded = folderButton.classList.contains('expanded');
+      folderButton.setAttribute('aria-expanded', isExpanded);
+
+      // Update icon
+      if (isExpanded) {
+        folderIcon.classList.remove('folder-icon');
+        folderIcon.classList.add('folder-open-icon');
+      } else {
+        folderIcon.classList.remove('folder-open-icon');
+        folderIcon.classList.add('folder-icon');
+      }
+
+      const list = item.querySelector('.tree-list');
+      if (list) {
+        list.classList.toggle('hidden');
+      }
+    };
+
+    folderButton.addEventListener('click', toggleFolder);
+    content.appendChild(folderButton);
+
+    // Create tree-list for children (populated when first expanded)
+    const list = document.createElement('div');
+    list.className = 'tree-list hidden';
+    list.setAttribute('role', 'list');
+    item.appendChild(content);
+    item.appendChild(list);
   }
 
-  return li;
+  if (!content.parentElement) {
+    item.appendChild(content);
+  }
+
+  return item;
 }
