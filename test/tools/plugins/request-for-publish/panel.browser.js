@@ -17,8 +17,12 @@
 import '../../../../tools/plugins/request-for-publish/panel.js';
 
 const ctx = { org: 'example', site: 'website', path: '/drafts/page' };
-const row = { path: ctx.path, status: 'pending', requester: 'author@example.com', comment: 'Updated the introduction.', created: '2026-01-01T10:00:00Z' };
-const base = { own: [], approvable: [], approvers: ['reviewer@example.com'], cc: [], settings: { commentsRequired: false, commentsMinLength: 1 } };
+const row = {
+  path: ctx.path, status: 'pending', requester: 'author@example.com', comment: 'Updated the introduction.', created: '2026-01-01T10:00:00Z',
+};
+const base = {
+  own: [], approvable: [], approvers: ['reviewer@example.com'], cc: [], settings: { commentsRequired: false, commentsMinLength: 1 },
+};
 const mount = document.querySelector('#mount');
 const results = [];
 let current;
@@ -88,10 +92,12 @@ await test('reject requires a reason and confirmation', async () => {
   await tick();
   assert(count === 1, 'confirmed rejection not sent');
 });
-await test('double-click submission is guarded and note survives failure', async () => {
+await test('double-click guard and draft preservation', async () => {
   let count = 0;
   let fail;
-  await show(base, { submit: () => { count += 1; return new Promise((resolve, reject) => { fail = reject; }); } });
+  await show(base, {
+    submit: () => { count += 1; return new Promise((resolve, reject) => { fail = reject; }); },
+  });
   const note = current.shadowRoot.querySelector('#comment');
   note.value = 'Keep this note';
   note.dispatchEvent(new Event('input', { bubbles: true }));
@@ -102,7 +108,7 @@ await test('double-click submission is guarded and note survives failure', async
   await tick();
   assert(current.shadowRoot.querySelector('#comment').value === 'Keep this note', 'draft lost');
 });
-await test('known publication followed by failure offers completion-only recovery', async () => {
+await test('publication failure offers completion-only recovery', async () => {
   let completion = 0;
   await show({ ...base, approvable: [row] }, {
     approve: async () => { throw Object.assign(new Error('Recording failed'), { published: true }); },
@@ -118,7 +124,10 @@ await test('known publication followed by failure offers completion-only recover
 });
 await test('late page A response cannot overwrite page B', async () => {
   let finish;
-  await show(base, { load: (context) => (context.path === ctx.path ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve(base)) });
+  await show(base, {
+    load: (context) => (context.path === ctx.path
+      ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve(base)),
+  });
   current.context = { ...ctx, path: '/drafts/second' };
   await tick();
   finish({ ...base, own: [row] });
@@ -126,7 +135,7 @@ await test('late page A response cannot overwrite page B', async () => {
   assert(text().includes('/drafts/second') && !text().includes(row.comment), 'old response displayed on new page');
 });
 
-const scenario = new URLSearchParams(location.search).get('view') || 'request';
+const scenario = new URLSearchParams(window.location.search).get('view') || 'request';
 await show({ ...base, own: scenario === 'requester' ? [row] : [], approvable: scenario === 'approver' ? [row] : [] });
 document.querySelector('#results').textContent = results.join('\n');
 document.documentElement.dataset.result = results.some((result) => result.startsWith('FAIL')) ? 'fail' : 'pass';

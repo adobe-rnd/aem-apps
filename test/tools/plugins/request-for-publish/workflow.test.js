@@ -21,16 +21,25 @@ import {
 
 const context = { org: 'example', site: 'website', path: '/drafts/page' };
 const pending = {
-  path: context.path, status: 'pending', requester: 'author@example.com',
-  created: '2026-01-01T10:00:00Z', comment: 'Updated introduction',
+  path: context.path,
+  status: 'pending',
+  requester: 'author@example.com',
+  created: '2026-01-01T10:00:00Z',
+  comment: 'Updated introduction',
 };
 const data = (overrides = {}) => ({
-  own: [], approvable: [], approvers: ['reviewer@example.com'], cc: [],
-  settings: { commentsRequired: false, commentsMinLength: 1 }, ...overrides,
+  own: [],
+  approvable: [],
+  approvers: ['reviewer@example.com'],
+  cc: [],
+  settings: { commentsRequired: false, commentsMinLength: 1 },
+  ...overrides,
 });
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status });
 
-function fixture({ own = [], approvable = [], fail, publishFail = false } = {}) {
+function fixture({
+  own = [], approvable = [], fail, publishFail = false,
+} = {}) {
   const calls = [];
   const client = createClient({
     base: 'https://workflow.example',
@@ -57,13 +66,14 @@ function fixture({ own = [], approvable = [], fail, publishFail = false } = {}) 
 describe('context-derived views', () => {
   it('accepts both EW site and legacy repo context, without changing the request path', () => {
     assert.deepEqual(normalizeContext({ ...context, ref: 'feature' }), { ...context, ref: 'feature' });
-    assert.equal(normalizeContext({ org: context.org, repo: context.site, path: context.path }).site, context.site);
+    const legacy = { org: context.org, repo: context.site, path: context.path };
+    assert.equal(normalizeContext(legacy).site, context.site);
     assert.equal(normalizeContext({ ...context, path: '/drafts/index' }).path, '/drafts/index');
   });
   it('rejects incomplete, non-page and unsafe context', () => {
-    for (const ctx of [{}, { ...context, path: '' }, { ...context, path: '/a/../b' }, { ...context, path: '/data.json' }, { ...context, org: 'a/b' }]) {
+    [{}, { ...context, path: '' }, { ...context, path: '/a/../b' }, { ...context, path: '/data.json' }, { ...context, org: 'a/b' }].forEach((ctx) => {
       assert.equal(normalizeContext(ctx), null);
-    }
+    });
   });
   it('derives initiation only after loaded data and a matching rule', () => {
     assert.equal(deriveView(context, undefined).view, 'loading');
