@@ -322,8 +322,6 @@ export async function fetchSheetContent(org, site, path) {
     // Path is always already full (either /org/site/path or /org/site/path for cross-site)
     // Do NOT reconstruct - use as-is
     const sourceUrl = `${DA_ADMIN}/source${path}`;
-    console.log('[fetchSheetContent] org:', org, 'site:', site, 'path:', path);
-    console.log('[fetchSheetContent] sourceUrl:', sourceUrl);
     
     const response = await daFetch(sourceUrl);
     if (!response.ok) {
@@ -379,8 +377,6 @@ export function buildTableHtml(tabData) {
     return '<p>No data available</p>';
   }
 
-  console.log('[buildTableHtml] tabData length:', tabData.length, 'first item:', tabData[0]);
-
   let headers;
   let dataRows;
   
@@ -394,8 +390,6 @@ export function buildTableHtml(tabData) {
     headers = Object.keys(headerRow);
     dataRows = tabData.slice(1);
   }
-  
-  console.log('[buildTableHtml] headers:', headers, 'dataRows:', dataRows.length);
   
   let html = '<table style="border-collapse: collapse; width: 100%; font-family: system-ui; font-size: 14px;">';
   html += '<thead style="background-color: #f0f0f0; border-bottom: 2px solid #ccc;">';
@@ -436,15 +430,16 @@ export function buildSheetPreviewHtml(sheetContent) {
     return '<p>No tabs found in sheet</p>';
   }
 
-  let html = '<div style="display: flex; flex-direction: column; gap: 16px;">';
+  let html = '<html><head><style>body { font-family: system-ui; margin: 0; padding: 16px; }</style></head><body>';
+  html += '<div style="display: flex; flex-direction: column; gap: 16px;">';
   
   // Tab buttons
   html += '<div style="display: flex; gap: 4px; border-bottom: 2px solid #ccc;">';
   tabNames.forEach((tabName, idx) => {
-    const isActive = idx === 0 ? 'true' : 'false';
-    const bgColor = idx === 0 ? '#007bff' : '#e0e0e0';
-    const textColor = idx === 0 ? '#fff' : '#000';
-    html += `<button data-tab="${tabName}" class="sheet-tab" style="padding: 8px 16px; background-color: ${bgColor}; color: ${textColor}; border: none; cursor: pointer; border-radius: 4px 4px 0 0; font-size: 14px; font-weight: ${idx === 0 ? 'bold' : 'normal'};" data-active="${isActive}">${tabName}</button>`;
+    const isActive = idx === 0;
+    const bgColor = isActive ? '#007bff' : '#e0e0e0';
+    const textColor = isActive ? '#fff' : '#000';
+    html += `<button onclick="switchTab('${tabName}')" data-tab="${tabName}" class="sheet-tab" style="padding: 8px 16px; background-color: ${bgColor}; color: ${textColor}; border: none; cursor: pointer; border-radius: 4px 4px 0 0; font-size: 14px; font-weight: ${isActive ? 'bold' : 'normal'};">${tabName}</button>`;
   });
   html += '</div>';
   
@@ -457,6 +452,41 @@ export function buildSheetPreviewHtml(sheetContent) {
     html += '</div>';
   });
   html += '</div></div>';
+  
+  // Inline JavaScript for tab switching
+  html += `<script>
+function switchTab(tabName) {
+  // Hide all tabs
+  const contents = document.querySelectorAll('.sheet-tab-content');
+  contents.forEach(content => {
+    content.style.display = 'none';
+  });
+  
+  // Deactivate all buttons
+  const buttons = document.querySelectorAll('.sheet-tab');
+  buttons.forEach(btn => {
+    btn.style.backgroundColor = '#e0e0e0';
+    btn.style.color = '#000';
+    btn.style.fontWeight = 'normal';
+  });
+  
+  // Show selected tab
+  const selectedContent = document.querySelector('.sheet-tab-content[data-tab="' + tabName + '"]');
+  if (selectedContent) {
+    selectedContent.style.display = 'block';
+  }
+  
+  // Activate selected button
+  const selectedBtn = document.querySelector('.sheet-tab[data-tab="' + tabName + '"]');
+  if (selectedBtn) {
+    selectedBtn.style.backgroundColor = '#007bff';
+    selectedBtn.style.color = '#fff';
+    selectedBtn.style.fontWeight = 'bold';
+  }
+}
+</script>`;
+  
+  html += '</body></html>';
   
   return html;
 }
@@ -508,7 +538,6 @@ export function createSharedPathElement(pathEntry, org, site) {
     button.appendChild(textSpan);
 
     button.addEventListener('click', () => {
-      console.log('[Root File Click] Clicked:', pathEntry.display, 'path:', pathEntry.path, 'type:', pathEntry.type);
       const event = new CustomEvent('sheet-selected', {
         detail: { path: pathEntry.path, org, site, type: pathEntry.type },
         bubbles: true,
