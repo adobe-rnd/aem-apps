@@ -793,6 +793,7 @@ async function loadFragments() {
     // Test: Analyze shared paths from site config
     console.log('[Fragments Plugin] Analyzing shared paths from site config...');
     const { canAccess, config } = await fetchSiteConfig(context.org, site);
+    console.log('[Fragments Plugin] Site config received:', config);
     if (canAccess && config) {
       const sharedPathsAnalysis = await analyzeSharedPaths(config, context.org, site);
       console.log('[Fragments Plugin] Shared paths analysis:', sharedPathsAnalysis);

@@ -76,8 +76,8 @@ export function isSheetOrDocument(item) {
 
 /**
  * Extract shared paths from site config JSON
- * Looks for "shared.paths" key containing comma-separated path strings
- * Can be used for sheets, fragments, or any other shared content
+ * Looks for "shared.paths" key in config.data array
+ * Config structure: { data: [{ key: "shared.paths", value: "..." }, ...] }
  * 
  * @param {object} siteConfig - Site configuration object from DA
  * @returns {string[]} Array of trimmed path strings, empty array if not found or invalid
@@ -87,15 +87,16 @@ export function extractSharedPaths(siteConfig) {
     return [];
   }
 
-  // Look for shared.paths in the config
-  const pathsValue = siteConfig['shared.paths'] || siteConfig?.shared?.paths;
+  // Look for shared.paths in config.data array
+  const dataArray = siteConfig.data || [];
+  const sharedPathsRow = dataArray.find((row) => row.key === 'shared.paths');
 
-  if (!pathsValue || typeof pathsValue !== 'string') {
+  if (!sharedPathsRow || !sharedPathsRow.value || typeof sharedPathsRow.value !== 'string') {
     return [];
   }
 
   // Parse comma-separated paths and filter empty ones
-  return pathsValue
+  return sharedPathsRow.value
     .split(',')
     .map((p) => p.trim())
     .filter(Boolean);
