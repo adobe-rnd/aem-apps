@@ -76,8 +76,8 @@ export function isSheetOrDocument(item) {
 
 /**
  * Extract shared paths from site config JSON
- * Looks for "shared.paths" key in config.data array
- * Config structure: { data: [{ key: "shared.paths", value: "..." }, ...] }
+ * Looks for "shared.paths" key in config.data.data array
+ * Config structure: { data: { data: [{ key: "shared.paths", value: "..." }, ...] } }
  * 
  * @param {object} siteConfig - Site configuration object from DA
  * @returns {string[]} Array of trimmed path strings, empty array if not found or invalid
@@ -87,8 +87,8 @@ export function extractSharedPaths(siteConfig) {
     return [];
   }
 
-  // Look for shared.paths in config.data array
-  const dataArray = siteConfig.data || [];
+  // Look for shared.paths in config.data.data array (nested)
+  const dataArray = siteConfig.data?.data || siteConfig.data || [];
   const sharedPathsRow = dataArray.find((row) => row.key === 'shared.paths');
 
   if (!sharedPathsRow || !sharedPathsRow.value || typeof sharedPathsRow.value !== 'string') {
