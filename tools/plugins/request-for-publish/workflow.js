@@ -42,7 +42,7 @@ export function normalizeContext(context = {}) {
 }
 
 const forPage = (rows, path) => rows.filter((row) => row.path === path && row.status === 'pending');
-const sameRequest = (a, b) => !!a && !!b && ['path', 'requester', 'created', 'comment'].every((key) => a[key] === b[key]);
+export const sameRequest = (a, b) => !!a && !!b && ['path', 'requester', 'created', 'comment'].every((key) => a[key] === b[key]);
 
 export function deriveView(context, data) {
   const blocked = { view: 'blocked', canApprove: false, canWithdraw: false };

@@ -15,7 +15,9 @@
  */
 /* eslint-disable no-underscore-dangle, import/no-unresolved */
 import { LitElement, html, nothing } from 'da-lit';
-import { normalizeContext, deriveView, pageLinks } from './workflow.js';
+import {
+  normalizeContext, deriveView, pageLinks, sameRequest,
+} from './workflow.js';
 
 const style = new CSSStyleSheet();
 style.replaceSync(await (await fetch(new URL('./request-for-publish.css', import.meta.url))).text());
@@ -209,7 +211,22 @@ class RequestForPublish extends LitElement {
     return html`<p id="field-error" class="field-error" role="alert">${this._fieldError || ''}</p>`;
   }
 
+  renderReceipt() {
+    const links = pageLinks(this.page);
+    const canRetry = sameRequest(this.state.request, this._receipt);
+    let nextStep = 'The request is no longer pending. Notification delivery could not be confirmed.';
+    if (this._error) nextStep = 'Request status could not be checked. Refresh before taking another action.';
+    if (canRetry) nextStep = 'The page was published. Retry only the request update; this will not publish again.';
+    return html`<section class="receipt" role="status">
+      <h2>Published; request update incomplete</h2>
+      <p>${nextStep}</p>
+      <a href=${links.live} target="_blank" rel="noopener noreferrer">Open live page ↗</a>
+      ${canRetry ? html`<button ?disabled=${this.disabled} @click=${() => this.act('complete')}>Retry request update</button>` : nothing}
+    </section>`;
+  }
+
   renderContent() {
+    if (this._receipt && this.page) return this.renderReceipt();
     if (this._error) {
       return html`<section class="empty"><h2>Request status unavailable</h2>
       <p>${this._error.status === 401 ? 'Your session has expired. Reopen the plugin after signing in.' : this._error.message}</p></section>`;
@@ -242,11 +259,6 @@ class RequestForPublish extends LitElement {
         <a href=${links.preview} target="_blank" rel="noopener noreferrer">Open preview <span aria-hidden="true">↗</span></a>
         <p class="hint">Compare the current preview with the live page.</p>
       </div>
-      ${this._receipt ? html`<section class="receipt" role="status"><h3>Published; request update incomplete</h3>
-        <p>The page was published. Check the request before retrying its update. This will not publish the page again.</p>
-        <a href=${links.live} target="_blank" rel="noopener noreferrer">Open live page ↗</a>
-        <button ?disabled=${this.disabled} @click=${() => this.act('complete')}>Retry request update</button>
-      </section>` : html`
         ${requesting ? html`<div class="request-form">
           <label for="comment">Note to reviewers <span class="hint">${this._data.settings.commentsRequired ? '(required)' : '(optional)'}</span></label>
           <textarea id="comment" rows="3" .value=${this._comment} ?disabled=${this.disabled}
@@ -263,7 +275,6 @@ class RequestForPublish extends LitElement {
               <button class="quiet" data-action="withdraw" ?disabled=${this.disabled} @click=${() => this.confirm('withdraw')}>Withdraw…</button>` : nothing}
           </div>` : this.renderConfirmation()}
         `}
-      `}
     `;
   }
 
