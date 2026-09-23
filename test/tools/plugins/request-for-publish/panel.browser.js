@@ -88,7 +88,9 @@ await test('unsupported comparison stays in the rail without an external fallbac
 await test('late comparison failure cannot overwrite a new page context', async () => {
   await show();
   let fail;
-  current.workspace = { canCompare: true, review: () => new Promise((resolve, reject) => { fail = reject; }) };
+  current.workspace = {
+    canCompare: true, review: () => new Promise((resolve, reject) => { fail = reject; }),
+  };
   await tick();
   assert(button('Review changes'), 'native review button missing');
   button('Review changes').click();

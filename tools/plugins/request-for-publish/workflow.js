@@ -70,14 +70,33 @@ export function pageLinks(context, env) {
   const delivered = path.replace(/\.html$/, '').replace(/\/index$/, '/');
   const query = new URLSearchParams({ org, site });
   if (env === 'ci') query.set('env', env);
-  const diff = new URL('https://tools.aem.live/tools/page-status/diff.html');
-  diff.search = new URLSearchParams({ org, site, path }).toString();
   return {
     preview: `https://main--${site}--${org}.aem.page${delivered}`,
     live: `https://main--${site}--${org}.aem.live${delivered}`,
-    diff: diff.href,
     inbox: `${INBOX}?${query}`,
     myRequests: `${INBOX}?${query}&requester=true`,
+  };
+}
+
+export function createWorkspaceActions({ actions = {}, capabilities = {} } = {}) {
+  const supported = (capability, action) => capabilities[capability] === 1
+    && typeof actions[action] === 'function';
+  const invoke = async (capability, action, details) => {
+    if (!supported(capability, action)) {
+      throw new Error('This EW host does not support this action. Open the page in an updated Experience Workspace.');
+    }
+    const result = await actions[action](details);
+    if (!result?.ok) throw new Error(`Workspace action could not complete (${result?.error || 'unavailable'}).`);
+    return result;
+  };
+  return {
+    canCompare: supported('comparison', 'openComparison'),
+    review: (view) => invoke('comparison', 'openComparison', {
+      candidate: view === 'request' ? 'document' : 'preview', baseline: 'live',
+    }),
+    save: () => invoke('saveDocument', 'saveDocument'),
+    close: () => (supported('comparison', 'closeComparison')
+      ? invoke('comparison', 'closeComparison') : Promise.resolve({ ok: false })),
   };
 }
 
@@ -99,7 +118,7 @@ function settingsFrom(config) {
 }
 
 export function createClient({
-  base, request, preview, publish,
+  base, request, preview, publish, beforePreview,
 }) {
   async function json(route, context, body, extra = {}) {
     const { org, site } = context;
@@ -178,6 +197,10 @@ export function createClient({
       };
     },
     async submit(context, comment, onPhase = () => {}) {
+      if (beforePreview) {
+        onPhase('Saving current edits…');
+        await beforePreview(context);
+      }
       onPhase('Updating preview…');
       await contentAction(preview, context, 'Preview');
       onPhase('Sending request…');

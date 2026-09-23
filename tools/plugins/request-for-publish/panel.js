@@ -26,6 +26,8 @@ class RequestForPublish extends LitElement {
   static properties = {
     context: { attribute: false },
     client: { attribute: false },
+    workspace: { attribute: false },
+    _reviewing: { state: true },
     _data: { state: true },
     _loading: { state: true },
     _busy: { state: true },
@@ -72,6 +74,7 @@ class RequestForPublish extends LitElement {
       this._unknown = undefined;
       this._confirmation = undefined;
       this._busy = undefined;
+      this._reviewing = false;
       this._comment = '';
       this._reason = '';
       this._fieldError = undefined;
@@ -88,7 +91,20 @@ class RequestForPublish extends LitElement {
 
   get state() { return deriveView(this.page, this._data); }
 
-  get disabled() { return !!this._busy || !!this._loading; }
+  get disabled() { return !!this._busy || !!this._loading || !!this._reviewing; }
+
+  async reviewChanges() {
+    if (this.disabled || !this.workspace?.canCompare) return;
+    const epoch = this._epoch;
+    this._reviewing = true;
+    try {
+      await this.workspace.review(this.state.view);
+    } catch (error) {
+      if (epoch === this._epoch) this._notice = { type: 'error', text: error.message };
+    } finally {
+      if (epoch === this._epoch) this._reviewing = false;
+    }
+  }
 
   async refresh() {
     const { page } = this;
@@ -172,6 +188,9 @@ class RequestForPublish extends LitElement {
       else if (action === 'reject') await client.reject(context, expected, this._reason);
       else await client[action](context, expected, phase);
       if (epoch !== this._epoch) return;
+      if (['submit', 'approve', 'reject', 'withdraw'].includes(action)) {
+        this.workspace?.close?.().catch(() => {});
+      }
       this._notice = { type: 'success', text: messages[action] };
       if (action === 'submit') this._comment = '';
       if (action === 'approve' || action === 'complete') this._receipt = undefined;
@@ -180,6 +199,7 @@ class RequestForPublish extends LitElement {
       if (epoch !== this._epoch) return;
       if (error.published) this._receipt = expected;
       if (error.publishUnknown) this._unknown = expected;
+      if (error.published || error.publishUnknown) this.workspace?.close?.().catch(() => {});
       this._notice = { type: 'error', text: error.message };
     } finally {
       if (epoch === this._epoch) {
@@ -269,9 +289,12 @@ class RequestForPublish extends LitElement {
       ${this.renderReviewers()}
       ${request?.comment ? html`<div class="detail"><span class="label">Request note</span><p class="note">${request.comment}</p></div>` : nothing}
       <div class="review-links">
-        <a class="review-link" href=${links.diff} target="_blank" rel="noopener noreferrer">Review changes <span aria-hidden="true">↗</span></a>
+        <button class="review-link" ?disabled=${this.disabled || !this.workspace?.canCompare}
+          @click=${this.reviewChanges}>${this._reviewing ? 'Opening comparison…' : 'Review changes'}</button>
         <a href=${links.preview} target="_blank" rel="noopener noreferrer">Open preview <span aria-hidden="true">↗</span></a>
-        <p class="hint">Compare the current preview with the live page.</p>
+        <p class="hint">${this.workspace?.canCompare
+    ? `Compare the current ${requesting ? 'document' : 'preview'} with the live page.`
+    : 'Native comparison is not available in this host. Open the page in an updated Experience Workspace.'}</p>
       </div>
         ${requesting ? html`<div class="request-form">
           <label for="comment">Note to reviewers <span class="hint">${this._data.settings.commentsRequired ? '(required)' : '(optional)'}</span></label>

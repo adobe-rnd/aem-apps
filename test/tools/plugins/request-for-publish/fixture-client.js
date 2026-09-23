@@ -27,12 +27,14 @@ const response = (body, status = 200) => new Response(JSON.stringify(body), { st
 
 // In-memory transport only: no workflow, preview, publish or email network calls.
 export default function fixture(options = {}) {
+  const page = options.context || context;
   const state = { role: 'requester', rows: [], ...options };
   const calls = [];
   const wait = async (phase) => {
     if (state.hold === phase) await new Promise((resolve) => { state.release = resolve; });
   };
   const client = createClient({
+    beforePreview: options.beforePreview,
     base: 'https://workflow.example',
     request: async (href, opts = {}) => {
       const url = new URL(href);
@@ -64,7 +66,7 @@ export default function fixture(options = {}) {
       if (route === '/api/requests') {
         await wait('request');
         if (state.failRequest) return response({ error: 'Request notification failed.' }, 503);
-        if (!body.resend) state.rows = [{ ...pending, comment: body.comment }];
+        if (!body.resend) state.rows = [{ ...pending, path: page.path, comment: body.comment }];
         return response({ success: true });
       }
       if (route === '/api/requests/approve') {
@@ -75,7 +77,7 @@ export default function fixture(options = {}) {
           return response({ error: 'Approval notification could not be confirmed.' }, 503);
         }
         state.rows = [];
-        return response({ approved: [context.path], notFound: [], unauthorized: [] });
+        return response({ approved: [page.path], notFound: [], unauthorized: [] });
       }
       if (['/api/requests/reject', '/api/requests/withdraw'].includes(route)) {
         if (state.failDecision) return response({ error: 'Request update failed.' }, 503);

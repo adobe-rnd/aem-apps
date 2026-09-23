@@ -16,10 +16,12 @@
 /* eslint-disable import/no-unresolved */
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { daFetch, setImsDetails } from 'https://da.live/nx/utils/daFetch.js';
-import { createClient, workerOrigin } from './workflow.js';
+import { createClient, workerOrigin, createWorkspaceActions } from './workflow.js';
 import './panel.js';
 
-function makePanel({ context, token, actions }) {
+function makePanel({
+  context, token, actions, capabilities,
+}) {
   if (token) setImsDetails(token);
   const request = actions?.daFetch || daFetch;
   const content = (operation) => (page) => {
@@ -29,8 +31,13 @@ function makePanel({ context, token, actions }) {
   };
   const panel = document.createElement('request-for-publish');
   panel.context = context;
+  panel.workspace = createWorkspaceActions({ actions, capabilities });
   panel.client = createClient({
-    base: workerOrigin(window.location), request, preview: content('preview'), publish: content('live'),
+    base: workerOrigin(window.location),
+    request,
+    preview: content('preview'),
+    publish: content('live'),
+    beforePreview: () => panel.workspace.save(),
   });
   return panel;
 }

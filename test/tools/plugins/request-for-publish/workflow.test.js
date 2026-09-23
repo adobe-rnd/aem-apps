@@ -107,10 +107,10 @@ describe('context-derived views', () => {
     assert.equal(view.view, 'blocked');
     assert.equal(view.canApprove, false);
   });
-  it('preserves index identity but derives correct delivery and diff links', () => {
+  it('preserves index identity and derives delivery links without an external diff', () => {
     const links = pageLinks({ ...context, path: '/drafts/index' });
     assert.equal(links.preview, 'https://main--website--example.aem.page/drafts/');
-    assert.equal(new URL(links.diff).searchParams.get('path'), '/drafts/index');
+    assert.equal(links.diff, undefined);
     assert.equal(new URL(links.myRequests).searchParams.get('requester'), 'true');
   });
   it('uses only explicit known worker environments', () => {
