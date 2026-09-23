@@ -913,8 +913,13 @@ async function loadFragments() {
     // Analyze shared paths from site config
     let sharedPathsData = null;
     const { canAccess, config } = await fetchSiteConfig(context.org, site);
+    console.log(`[Shared Paths] fetchSiteConfig returned: canAccess=${canAccess}, config=`, config);
     if (canAccess && config) {
+      console.log(`[Shared Paths] Calling analyzeSharedPaths with org=${context.org}, site=${site}`);
       sharedPathsData = await analyzeSharedPaths(config, context.org, site);
+      console.log(`[Shared Paths] analyzeSharedPaths returned:`, sharedPathsData);
+    } else {
+      console.log(`[Shared Paths] Cannot access config - canAccess=${canAccess}`);
     }
 
     searchInput.addEventListener('input', (e) => {

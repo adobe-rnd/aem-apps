@@ -214,6 +214,7 @@ export async function detectPathType(org, site, path) {
  */
 export async function analyzeSharedPaths(siteConfig, currentOrg, currentSite) {
   const paths = extractSharedPaths(siteConfig);
+  console.log(`[analyzeSharedPaths] Found ${paths.length} shared paths:`, paths);
 
   // No shared paths - use default fragments picker
   if (paths.length === 0) {
@@ -228,6 +229,7 @@ export async function analyzeSharedPaths(siteConfig, currentOrg, currentSite) {
 
   for (const userPath of paths) {
     const analyzed = analyzePath(userPath, currentOrg, currentSite);
+    console.log(`[analyzeSharedPaths] Analyzed path: "${userPath}" →`, analyzed);
 
     if (!analyzed) {
       result.invalid.push(userPath);
