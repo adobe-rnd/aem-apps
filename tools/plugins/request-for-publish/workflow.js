@@ -42,10 +42,68 @@ export function normalizeContext(context = {}) {
 }
 
 const forPage = (rows, path) => rows.filter((row) => row.path === path && row.status === 'pending');
-export const sameRequest = (a, b) => !!a && !!b && ['path', 'requester', 'created', 'comment'].every((key) => a[key] === b[key]);
+export const sameRequest = (a, b) => !!a && !!b && ['path', 'requester', 'created', 'comment', 'step'].every((key) => (a[key] || '') === (b[key] || ''));
+
+/** Parses the request row's `step` log: `email:step:ISO-date, ...`. */
+export function parseStepLog(value) {
+  if (!value) return [];
+  return String(value).split(',').map((part) => part.trim()).filter(Boolean)
+    .reduce((acc, entry) => {
+      const parts = entry.split(':');
+      const email = (parts[0] || '').trim();
+      const step = Number.parseInt((parts[1] || '').trim(), 10);
+      if (!email || !Number.isInteger(step) || step < 1) return acc;
+      // ISO dates contain colons, so rejoin the remainder.
+      acc.push({ email, step, date: parts.slice(2).join(':').trim() });
+      return acc;
+    }, []);
+}
+
+/**
+ * Merges the worker's step definitions with a request's approval log into the
+ * render model. `state` is approved | skipped | current | upcoming; a step with
+ * no approvers is skipped, and `complete` means every step is done.
+ */
+export function buildStepModel(definitions = [], logValue = '') {
+  const log = parseStepLog(logValue);
+  const steps = definitions.map((definition, position) => {
+    const index = definition.index || position + 1;
+    const record = log.find((entry) => entry.step === index);
+    return {
+      index,
+      title: definition.title || `Step ${index}`,
+      description: definition.description || '',
+      approvers: definition.approvers || [],
+      cc: definition.cc || [],
+      approvedBy: record?.email || null,
+      approvedAt: record?.date || null,
+      state: 'upcoming',
+    };
+  });
+
+  // Highest approved step + 1, skipping approver-less and already-logged steps.
+  let current = log.reduce((max, entry) => Math.max(max, entry.step), 0) + 1;
+  while (current <= steps.length) {
+    const step = steps[current - 1];
+    if (step.approvers.length > 0 && !step.approvedBy) break;
+    current += 1;
+  }
+
+  steps.forEach((step) => {
+    if (step.approvedBy) step.state = 'approved';
+    else if (step.approvers.length === 0) step.state = 'skipped';
+    else if (step.index === current) step.state = 'current';
+  });
+
+  return {
+    steps, current, count: steps.length, complete: current > steps.length,
+  };
+}
 
 export function deriveView(context, data) {
-  const blocked = { view: 'blocked', canApprove: false, canWithdraw: false };
+  const blocked = {
+    view: 'blocked', canApprove: false, canWithdraw: false, steps: [], current: 1, count: 0,
+  };
   if (!context) return { ...blocked, message: 'Open a page in the editor to manage its publish request.' };
   if (!data) return { view: 'loading' };
   const own = forPage(data.own, context.path);
@@ -57,10 +115,13 @@ export function deriveView(context, data) {
   const request = approvable[0] || own[0];
   if (!request && !data.approvers.length) return { ...blocked, message: 'No approver is configured for this page. Contact your site administrator.' };
   const waitingView = own.length ? 'requester' : 'request';
+  // Approver eligibility stays worker-authoritative; an older worker omits the flag.
+  const canApprove = !!approvable.length && approvable[0].canApproveNow !== false;
   return {
+    ...buildStepModel(data.steps, request?.step),
     view: approvable.length ? 'approver' : waitingView,
     request,
-    canApprove: !!approvable.length,
+    canApprove,
     canWithdraw: !!own.length,
   };
 }
@@ -148,8 +209,11 @@ export function createClient({
     }
   }
 
-  async function record(context) {
-    const result = await json('/api/requests/approve', context, { paths: [context.path] });
+  async function record(context, step) {
+    const result = await json('/api/requests/approve', context, { paths: [context.path], step });
+    if (result.stale?.includes(context.path)) {
+      throw failure('This request was advanced by someone else. Refresh before taking action.');
+    }
     if (!result.approved?.includes(context.path) || result.unauthorized?.includes(context.path)
       || result.notFound?.includes(context.path)) {
       throw failure('The page was published, but approval was not recorded. Refresh to check access and request status.');
@@ -169,11 +233,18 @@ export function createClient({
       if (!Array.isArray(people.approvers) || !Array.isArray(people.cc)) {
         throw failure('The workflow service returned invalid reviewers.');
       }
+      // An older worker returns no step definitions; treat that as a single step.
+      const steps = Array.isArray(people.steps) && people.steps.length
+        ? people.steps
+        : [{
+          index: 1, title: '', description: '', approvers: people.approvers, cc: people.cc,
+        }];
       return {
         own,
         approvable,
         approvers: people.approvers,
         cc: people.cc,
+        steps,
         settings: settingsFrom(configResult.config),
       };
     },
@@ -200,19 +271,23 @@ export function createClient({
       if (result.success !== true) throw failure('This request is no longer pending. Refresh to check its status.');
       return result;
     },
-    async approve(context, expected, onPhase = () => {}) {
+    async approve(context, expected, { step, final } = {}, onPhase = () => {}) {
       await revalidate(context, expected);
-      onPhase('Publishing page…');
-      await contentAction(publish, context, 'Publish');
+      // Only the last step publishes, so earlier approvals cannot leave the
+      // page live with the request unrecorded.
+      if (final) {
+        onPhase('Publishing page…');
+        await contentAction(publish, context, 'Publish');
+      }
       onPhase('Updating request…');
-      try { return await record(context); } catch (error) {
-        throw failure(error.message, { status: error.status, published: true });
+      try { return await record(context, step); } catch (error) {
+        throw failure(error.message, { status: error.status, published: !!final });
       }
     },
-    async complete(context, expected) {
+    async complete(context, expected, { step } = {}) {
       try {
         await revalidate(context, expected);
-        return await record(context);
+        return await record(context, step);
       } catch (error) {
         throw failure(error.message, { status: error.status, published: true });
       }

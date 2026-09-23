@@ -16,7 +16,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeContext, deriveView, pageLinks, workerOrigin, createClient,
+  normalizeContext, deriveView, pageLinks, workerOrigin, createClient, buildStepModel,
 } from '../../../../tools/plugins/request-for-publish/workflow.js';
 
 const context = { org: 'example', site: 'website', path: '/drafts/page' };
@@ -27,14 +27,27 @@ const pending = {
   created: '2026-01-01T10:00:00Z',
   comment: 'Updated introduction',
 };
+const oneStep = [{
+  index: 1, title: 'Review', description: 'Sign off before publishing.', approvers: ['reviewer@example.com'], cc: [],
+}];
+const twoSteps = [
+  {
+    index: 1, title: 'Legal review', description: 'Claims.', approvers: ['legal@example.com'], cc: [],
+  },
+  {
+    index: 2, title: 'Brand review', description: 'Tone.', approvers: ['brand@example.com'], cc: ['watcher@example.com'],
+  },
+];
 const data = (overrides = {}) => ({
   own: [],
   approvable: [],
   approvers: ['reviewer@example.com'],
   cc: [],
+  steps: oneStep,
   settings: { commentsRequired: false, commentsMinLength: 1 },
   ...overrides,
 });
+const last = { step: 1, final: true };
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status });
 
 function fixture({
@@ -52,7 +65,7 @@ function fixture({
         if (failed) return failed;
       }
       if (url.pathname === '/api/config') return response({ config: { 'publish-workflow-settings': { data: [] } } });
-      if (url.pathname === '/api/approvers') return response({ approvers: ['reviewer@example.com'], cc: [] });
+      if (url.pathname === '/api/approvers') return response({ approvers: ['reviewer@example.com'], cc: [], steps: oneStep });
       if (url.pathname === '/api/requests' && !opts.method) return response({ requests: url.searchParams.get('role') === 'requester' ? own : approvable });
       if (url.pathname.endsWith('/approve')) return response({ approved: [context.path], notFound: [], unauthorized: [] });
       return response({ success: true, notifiedApprovers: ['reviewer@example.com'] });
@@ -121,6 +134,59 @@ describe('context-derived views', () => {
   });
 });
 
+describe('approval steps', () => {
+  it('marks the first step current and the rest upcoming for a fresh request', () => {
+    const model = buildStepModel(twoSteps, '');
+    assert.deepEqual(model.steps.map((step) => step.state), ['current', 'upcoming']);
+    assert.equal(model.current, 1);
+    assert.equal(model.complete, false);
+  });
+  it('advances past an approved step and records who approved it and when', () => {
+    const model = buildStepModel(twoSteps, 'legal@example.com:1:2026-01-02T09:30:00Z');
+    assert.deepEqual(model.steps.map((step) => step.state), ['approved', 'current']);
+    assert.equal(model.steps[0].approvedBy, 'legal@example.com');
+    assert.equal(model.steps[0].approvedAt, '2026-01-02T09:30:00Z');
+    assert.equal(model.current, 2);
+  });
+  it('reports completion once the last step is approved', () => {
+    const model = buildStepModel(twoSteps, 'legal@example.com:1:T, brand@example.com:2:T');
+    assert.equal(model.complete, true);
+    assert.equal(model.current, 3);
+  });
+  it('skips a step with no approvers instead of deadlocking', () => {
+    const unstaffed = {
+      index: 2, title: 'Unstaffed', approvers: [], cc: [],
+    };
+    const gapped = [twoSteps[0], unstaffed, { ...twoSteps[1], index: 3 }];
+    const model = buildStepModel(gapped, 'legal@example.com:1:T');
+    assert.deepEqual(model.steps.map((step) => step.state), ['approved', 'skipped', 'current']);
+    assert.equal(model.current, 3);
+  });
+  it('collapses duplicate approvals of one step rather than skipping the next', () => {
+    const model = buildStepModel(twoSteps, 'legal@example.com:1:T, other@example.com:1:T');
+    assert.equal(model.current, 2);
+  });
+  it('falls back to a generic title and tolerates a malformed log', () => {
+    const model = buildStepModel([{ index: 1, approvers: ['a@example.com'], cc: [] }], 'garbage, :2:, a@example.com');
+    assert.equal(model.steps[0].title, 'Step 1');
+    assert.equal(model.current, 1);
+  });
+  it('derives the current step for the view and defers approver eligibility to the worker', () => {
+    const advanced = { ...pending, step: 'legal@example.com:1:T' };
+    const view = deriveView(context, data({ steps: twoSteps, approvable: [advanced] }));
+    assert.equal(view.current, 2);
+    assert.equal(view.count, 2);
+    assert.equal(view.canApprove, true);
+    const blocked = { ...advanced, canApproveNow: false };
+    const later = deriveView(context, data({ steps: twoSteps, approvable: [blocked] }));
+    assert.equal(later.canApprove, false);
+  });
+  it('treats an advanced step log as a different request', () => {
+    const view = deriveView(context, data({ steps: twoSteps, approvable: [{ ...pending, step: 'legal@example.com:1:T' }], own: [pending] }));
+    assert.equal(view.view, 'blocked');
+  });
+});
+
 describe('workflow operations', () => {
   it('loads both role queues and server-resolved recipients', async () => {
     const { client, calls } = fixture({ own: [pending] });
@@ -150,38 +216,57 @@ describe('workflow operations', () => {
   });
   it('revalidates before publishing and records only after success', async () => {
     const { client, calls } = fixture({ approvable: [pending] });
-    await client.approve(context, pending);
+    await client.approve(context, pending, last);
     assert.deepEqual(calls.map((call) => call.path), ['/api/requests', 'publish', '/api/requests/approve']);
+    assert.equal(calls[2].body.step, 1);
   });
   it('does not publish a replaced or missing request', async () => {
     const { client, calls } = fixture({ approvable: [{ ...pending, created: '2026-02-01T10:00:00Z' }] });
-    await assert.rejects(client.approve(context, pending), /changed|pending/i);
+    await assert.rejects(client.approve(context, pending, last), /changed|pending/i);
     assert.equal(calls.some((call) => call.path === 'publish'), false);
   });
   it('does not record approval after publishing fails', async () => {
     const { client, calls } = fixture({ approvable: [pending], publishFail: true });
-    await assert.rejects(client.approve(context, pending), /publish/i);
+    await assert.rejects(client.approve(context, pending, last), /publish/i);
     assert.equal(calls.some((call) => call.path.endsWith('/approve')), false);
   });
   it('keeps known publication success when recording fails', async () => {
     const { client } = fixture({ approvable: [pending], fail: (url) => url.pathname.endsWith('/approve') && response({ error: 'Email failed' }, 400) });
-    await assert.rejects(client.approve(context, pending), (error) => error.published === true && /Email failed/.test(error.message));
+    await assert.rejects(client.approve(context, pending, last), (error) => error.published === true && /Email failed/.test(error.message));
   });
   it('checks per-path approval results even on HTTP 200', async () => {
     const { client } = fixture({ approvable: [pending], fail: (url) => url.pathname.endsWith('/approve') && response({ approved: [], unauthorized: [context.path], notFound: [] }) });
-    await assert.rejects(client.approve(context, pending), (error) => error.published === true && /record|authoriz/i.test(error.message));
+    await assert.rejects(client.approve(context, pending, last), (error) => error.published === true && /record|authoriz/i.test(error.message));
   });
   it('marks a failed publish response as an unknown publication outcome', async () => {
     const { client } = fixture({ approvable: [pending], publishFail: true });
     await assert.rejects(
-      client.approve(context, pending),
+      client.approve(context, pending, last),
       (error) => error.publishUnknown === true,
     );
+  });
+  it('approves an intermediate step without publishing', async () => {
+    const { client, calls } = fixture({ approvable: [pending] });
+    await client.approve(context, pending, { step: 1, final: false });
+    assert.deepEqual(calls.map((call) => call.path), ['/api/requests', '/api/requests/approve']);
+    assert.equal(calls[1].body.step, 1);
+  });
+  it('does not claim publication when an intermediate step fails to record', async () => {
+    const { client } = fixture({ approvable: [pending], fail: (url) => url.pathname.endsWith('/approve') && response({ error: 'Email failed' }, 400) });
+    const stepOnly = { step: 1, final: false };
+    await assert.rejects(client.approve(context, pending, stepOnly), (e) => e.published === false);
+  });
+  it('reports a step the worker considers already advanced', async () => {
+    const stale = {
+      approved: [], notFound: [], unauthorized: [], stale: [context.path],
+    };
+    const { client } = fixture({ approvable: [pending], fail: (url) => url.pathname.endsWith('/approve') && response(stale) });
+    await assert.rejects(client.approve(context, pending, last), /advanced|refresh/i);
   });
 
   it('retries completion without publishing a second time', async () => {
     const { client, calls } = fixture({ approvable: [pending] });
-    await client.complete(context, pending);
+    await client.complete(context, pending, { step: 1 });
     assert.deepEqual(calls.map((call) => call.path), ['/api/requests', '/api/requests/approve']);
   });
   it('rejects empty reasons without a network request', async () => {
