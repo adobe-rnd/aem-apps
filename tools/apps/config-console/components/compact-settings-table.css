@@ -1,0 +1,247 @@
+/* Compact Settings Table Component Styles */
+
+.settings-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--s2-gray-200);
+  border-radius: var(--s2-corner-radius-700);
+  overflow: hidden;
+}
+
+.settings-header {
+  padding: var(--s2-spacing-200) var(--s2-spacing-300);
+  background: var(--s2-gray-75, #f8f8f8);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--s2-gray-600);
+}
+
+.header-cell {
+  display: flex;
+  align-items: center;
+}
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.setting-row {
+  display: grid;
+  grid-template-columns: 2fr 3fr 2fr;
+  gap: var(--s2-spacing-200);
+  padding: 10px var(--s2-spacing-300);
+  border-bottom: 1px solid var(--s2-gray-100);
+  min-height: 72px;
+  align-items: center;
+}
+
+.setting-row:last-child {
+  border-bottom: none;
+}
+
+.setting-row:hover {
+  background-color: var(--s2-gray-50);
+}
+
+/* Setting Name Column */
+.setting-name {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2-spacing-100);
+  cursor: help;
+}
+
+.setting-label {
+  font-weight: 500;
+  color: var(--s2-gray-800);
+  font-size: 14px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--s2-corner-radius-100);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  width: fit-content;
+}
+
+.badge-required {
+  background-color: var(--s2-red-100);
+  color: var(--s2-red-900);
+}
+
+.badge-optional {
+  background-color: var(--s2-gray-100);
+  color: var(--s2-gray-700);
+}
+
+/* Inheritance Indicators */
+.inheritance-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--s2-corner-radius-100);
+  font-size: 11px;
+  font-weight: 500;
+  width: fit-content;
+  margin-top: 4px;
+}
+
+.inheritance-indicator.inherited {
+  background-color: var(--s2-blue-100);
+  color: var(--s2-blue-900);
+}
+
+.inheritance-indicator.override {
+  background-color: var(--s2-orange-100);
+  color: var(--s2-orange-900);
+}
+
+.inheritance-icon {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inheritance-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.indicator-text {
+  white-space: nowrap;
+}
+
+/* Value/Input Column */
+.setting-value {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2-spacing-100);
+  align-items: flex-start;
+  min-height: 32px;
+}
+
+.setting-value > sl-input,
+.setting-value > .setting-input {
+  width: 100%;
+}
+
+/* Organization Default Value Display */
+.org-default-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--s2-gray-700);
+  padding: 4px 8px;
+  background-color: var(--s2-gray-50);
+  border-radius: var(--s2-corner-radius-100);
+  border-left: 3px solid var(--s2-blue-400);
+  margin-top: 4px;
+}
+
+.org-default-label {
+  font-weight: 600;
+  color: var(--s2-gray-800);
+}
+
+.org-default-text {
+  font-family: monospace;
+  color: var(--s2-gray-900);
+  background-color: var(--s2-gray-100);
+  padding: 2px 6px;
+  border-radius: var(--s2-corner-radius-100);
+}
+
+/* Shoelace input styling */
+.setting-value sl-input {
+  --sl-input-height-medium: 40px;
+  --sl-input-font-size-medium: 14px;
+}
+
+.setting-value sl-input::part(base) {
+  font-size: 14px;
+}
+
+/* Native select for dropdowns (if used) */
+.setting-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--s2-gray-400);
+  border-radius: var(--s2-corner-radius-100);
+  font-size: 14px;
+  font-family: inherit;
+  background-color: white;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  height: 40px;
+}
+
+.setting-input:hover {
+  border-color: var(--s2-gray-500);
+}
+
+.setting-input:focus {
+  outline: none;
+  border-color: light-dark(#1473E6, var(--s2-blue-400, #8AB4F8));
+  box-shadow: 0 0 0 1px light-dark(#1473E6, var(--s2-blue-400, #8AB4F8));
+}
+
+/* Actions Column */
+.setting-actions {
+  display: flex;
+  gap: var(--s2-spacing-100);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Empty State */
+.settings-empty {
+  padding: var(--s2-spacing-600);
+  text-align: center;
+  color: var(--s2-color-gray-500);
+}
+
+/* Responsive */
+@media (width <= 900px) {
+  .settings-header,
+  .setting-row {
+    grid-template-columns: 1fr;
+    gap: var(--s2-spacing-200);
+  }
+
+  .header-cell:not(:first-child) {
+    display: none;
+  }
+
+  .setting-row > div {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: var(--s2-spacing-200);
+    align-items: center;
+  }
+
+  .setting-row > div::before {
+    content: attr(data-label);
+    font-weight: 600;
+    font-size: var(--s2-font-size-100);
+    color: var(--s2-color-gray-600);
+  }
+
+  .setting-name,
+  .setting-value,
+  .setting-status,
+  .setting-help,
+  .setting-actions {
+    grid-column: 2;
+  }
+}
