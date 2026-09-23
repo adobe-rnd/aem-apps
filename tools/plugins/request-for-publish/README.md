@@ -31,7 +31,7 @@ HTTP failures and malformed queue responses are not treated as empty queues. The
 
 The worker deletes completed requests; it does not supply retained workflow history or an immutable revision/request ID. Disappearance is not proof of approval. Invisible requests belonging to someone else can still cause a duplicate-request error. Duplicate pending rows returned for a page block ambiguous actions. Revalidation reduces stale actions but cannot make publication and workflow completion atomic or repair source-read failures hidden by the worker.
 
-**Review changes** invokes the native EW center comparison while leaving this rail mounted. Before submission it compares the **current document versus live**. For a pending request (requester or approver), it compares **preview versus live**. It does not compare a frozen submission revision. There is no external comparison fallback.
+**Review changes** invokes the native EW center comparison while leaving this rail mounted. Authors compare the **current document versus live**, both before submission and while their request is pending. The approver view compares **preview versus live**, matching the content that approval publishes. It does not compare a frozen submission revision. There is no external comparison fallback.
 
 The separate EW host/SDK capability is detected from the host handshake (`comparison: 1`), not just the existence of a JavaScript method. Unsupported hosts show an unavailable explanation. The public host action remains role-agnostic; this plugin chooses the comparison inputs from its worker-derived view.
 

@@ -291,7 +291,7 @@ class RequestForPublish extends LitElement {
           @click=${this.reviewChanges}>${this._reviewing ? 'Opening comparison…' : 'Review changes'}</button>
         <a href=${links.preview} target="_blank" rel="noopener noreferrer">Open preview <span aria-hidden="true">↗</span></a>
         <p class="hint">${this.workspace?.canCompare
-    ? `Compare the current ${requesting ? 'document' : 'preview'} with the live page.`
+    ? `Compare the current ${state.view === 'approver' ? 'preview' : 'document'} with the live page.`
     : 'Native comparison is not available in this host. Open the page in an updated Experience Workspace.'}</p>
       </div>
         ${requesting ? html`<div class="request-form">

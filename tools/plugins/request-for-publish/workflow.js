@@ -92,7 +92,7 @@ export function createWorkspaceActions({ actions = {}, capabilities = {} } = {})
   return {
     canCompare: supported('comparison', 'openComparison'),
     review: (view) => invoke('comparison', 'openComparison', {
-      candidate: view === 'request' ? 'document' : 'preview', baseline: 'live',
+      candidate: view === 'approver' ? 'preview' : 'document', baseline: 'live',
     }),
     save: () => invoke('saveDocument', 'saveDocument'),
     close: () => (supported('comparison', 'closeComparison')
