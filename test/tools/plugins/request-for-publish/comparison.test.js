@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as workflow from '../../../../tools/plugins/request-for-publish/workflow.js';
 
 describe('native workspace comparison adapter', () => {
-  it('selects document/live before submission and preview/live for pending review', async () => {
+  it('selects document/live for authors before and after submission, preview/live for approvers', async () => {
     assert.equal(typeof workflow.createWorkspaceActions, 'function');
     const calls = [];
     const workspace = workflow.createWorkspaceActions({
@@ -16,7 +16,7 @@ describe('native workspace comparison adapter', () => {
     assert.deepEqual(calls, [
       { candidate: 'document', baseline: 'live' },
       { candidate: 'preview', baseline: 'live' },
-      { candidate: 'preview', baseline: 'live' },
+      { candidate: 'document', baseline: 'live' },
     ]);
   });
 

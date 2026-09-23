@@ -86,6 +86,14 @@ await test('native review keeps the note and maps the current workflow view', as
   await tick();
   assert(views[1] === 'approver', 'wrong approver comparison view');
   assert(text().includes('current preview'), 'approver input label is wrong');
+  await show({ ...base, own: [row] });
+  current.workspace = { canCompare: true, review: async (view) => { views.push(view); } };
+  await tick();
+  button('Review changes').click();
+  await tick();
+  assert(views[2] === 'requester', 'wrong pending author comparison view');
+  assert(text().includes('current document'), 'pending author input label is wrong');
+  assert(text().includes(row.comment), 'pending request note lost');
 });
 await test('unsupported comparison stays in the rail without an external fallback', async () => {
   await show();
