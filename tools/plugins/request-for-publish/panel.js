@@ -104,7 +104,7 @@ class RequestForPublish extends LitElement {
       const previous = this.state.request;
       this._data = data;
       if (previous && !this.state.request && !this._notice && !this._receipt) {
-        this._notice = { text: 'This request is no longer pending. Refreshing cannot tell whether it was approved, rejected or withdrawn.' };
+        this._notice = { text: 'This request is no longer pending. It has been approved, rejected or withdrawn.' };
       }
     } catch (error) {
       if (epoch !== this._epoch || read !== this._read) return;
