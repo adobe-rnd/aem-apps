@@ -53,6 +53,14 @@ await test('initiation derives from an empty queue, with no role selector or SMA
   assert(!/SMART|Streamline Site Structure/.test(text()), 'guidance was not removed');
   assert(current.shadowRoot.querySelector('a[href*="diff.html"]'), 'missing diff link');
 });
+await test('request copy explains preview without requiring a manual save', async () => {
+  await show();
+  assert(!/save your edits|save first/i.test(text()), 'manual-save instruction shown in DA');
+  assert(
+    text().includes('Updates the preview for reviewers. It does not publish your changes.'),
+    'request effect is not clear',
+  );
+});
 await test('pending request automatically shows requester actions', async () => {
   await show({ ...base, own: [row] });
   assert(/Awaiting approval/.test(text()), 'wrong requester status');
