@@ -2,6 +2,7 @@
 import { html, nothing } from 'da-lit';
 import { BaseSectionElement } from '../../shared/components/base-section.js';
 import { fetchSiteConfig, updateSiteConfig } from '../../shared/utils/da-api.js';
+import { setSheet } from '../../shared/utils/sheet-json.js';
 import '../../components/explainer-info-card.js';
 
 const NX = 'https://da.live/nx2';
@@ -112,10 +113,7 @@ export default class AppsSection extends BaseSectionElement {
         throw new Error('Site configuration not found');
       }
 
-      config.apps = config.apps || {};
-      config.apps.data = apps;
-      config.apps.total = apps.length;
-      config.apps.limit = apps.length;
+      setSheet(config, 'apps', apps);
 
       const result = await updateSiteConfig(this.org, this.site, config);
       return result;

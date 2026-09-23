@@ -2,6 +2,7 @@
 import { html, nothing } from 'da-lit';
 import { BaseSectionElement } from '../../shared/components/base-section.js';
 import { fetchSiteConfig, updateSiteConfig } from '../../shared/utils/da-api.js';
+import { setSheet } from '../../shared/utils/sheet-json.js';
 import '../../components/explainer-info-card.js';
 
 const NX = 'https://da.live/nx2';
@@ -153,10 +154,7 @@ export default class PluginsSection extends BaseSectionElement {
       );
       const updatedLibraryData = [...standardItems, ...plugins];
 
-      config.library = config.library || {};
-      config.library.data = updatedLibraryData;
-      config.library.total = updatedLibraryData.length;
-      config.library.limit = updatedLibraryData.length;
+      setSheet(config, 'library', updatedLibraryData);
 
       const result = await updateSiteConfig(this.org, this.site, config);
       return result;
