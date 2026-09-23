@@ -54,14 +54,12 @@ class RequestForPublish extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.shadowRoot.adoptedStyleSheets = [style];
-    window.addEventListener('focus', this._return);
     document.addEventListener('visibilitychange', this._return);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this._epoch += 1;
-    window.removeEventListener('focus', this._return);
     document.removeEventListener('visibilitychange', this._return);
   }
 
