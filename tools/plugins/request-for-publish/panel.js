@@ -290,9 +290,7 @@ class RequestForPublish extends LitElement {
         <button class="review-link" ?disabled=${this.disabled || !this.workspace?.canCompare}
           @click=${this.reviewChanges}>${this._reviewing ? 'Opening comparison…' : 'Review changes'}</button>
         <a href=${links.preview} target="_blank" rel="noopener noreferrer">Open preview <span aria-hidden="true">↗</span></a>
-        <p class="hint">${this.workspace?.canCompare
-    ? `Compare the current ${state.view === 'approver' ? 'preview' : 'document'} with the live page.`
-    : 'Native comparison is not available in this host. Open the page in an updated Experience Workspace.'}</p>
+        ${this.workspace?.canCompare ? html`<p class="hint">Compare the current ${state.view === 'approver' ? 'preview' : 'document'} with the live page.</p>` : nothing}
       </div>
         ${requesting ? html`<div class="request-form">
           <label for="comment">Note to reviewers <span class="hint">${this._data.settings.commentsRequired ? '(required)' : '(optional)'}</span></label>

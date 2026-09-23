@@ -83,7 +83,7 @@ export function createWorkspaceActions({ actions = {}, capabilities = {} } = {})
     && typeof actions[action] === 'function';
   const invoke = async (capability, action, details) => {
     if (!supported(capability, action)) {
-      throw new Error('This EW host does not support this action. Open the page in an updated Experience Workspace.');
+      throw new Error('The editor could not complete this action.');
     }
     const result = await actions[action](details);
     if (!result?.ok) throw new Error(`Workspace action could not complete (${result?.error || 'unavailable'}).`);

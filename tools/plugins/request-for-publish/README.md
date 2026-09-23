@@ -33,7 +33,7 @@ The worker deletes completed requests; it does not supply retained workflow hist
 
 **Review changes** invokes the native EW center comparison while leaving this rail mounted. Authors compare the **current document versus live**, both before submission and while their request is pending. The approver view compares **preview versus live**, matching the content that approval publishes. It does not compare a frozen submission revision. There is no external comparison fallback.
 
-The separate EW host/SDK capability is detected from the host handshake (`comparison: 1`), not just the existence of a JavaScript method. Unsupported hosts show an unavailable explanation. The public host action remains role-agnostic; this plugin chooses the comparison inputs from its worker-derived view.
+The separate EW host/SDK capability is detected from the host handshake (`comparison: 1`), not just the existence of a JavaScript method. The public host action remains role-agnostic; this plugin chooses the comparison inputs from its worker-derived view.
 
 Before submitting, the integrated client invokes the separate `saveDocument: 1` capability to confirm current editor edits are saved. Failure or an unsupported host blocks preview and submission rather than silently reviewing one state and staging another. Approval does not save or preview: it publishes the current preview as before. Successful workflow transitions close comparison; failed/unknown publication also closes it to avoid leaving misleading pre-publication content visible.
 
