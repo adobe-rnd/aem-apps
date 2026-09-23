@@ -52,7 +52,51 @@ await test('initiation derives from an empty queue, with no role selector or SMA
   assert(button('Request publish'), 'missing request action');
   assert(!current.shadowRoot.querySelector('select'), 'role selector present');
   assert(!/SMART|Streamline Site Structure/.test(text()), 'guidance was not removed');
-  assert(current.shadowRoot.querySelector('a[href*="diff.html"]'), 'missing diff link');
+  assert(button('Review changes'), 'missing native comparison action');
+  assert(!current.shadowRoot.querySelector('a[href*="tools.aem.live"]'), 'external comparison link remains');
+});
+await test('native review keeps the note and maps the current workflow view', async () => {
+  await show();
+  const views = [];
+  current.workspace = { canCompare: true, review: async (view) => { views.push(view); } };
+  await tick();
+  const note = current.shadowRoot.querySelector('#comment');
+  note.value = 'Keep this review note';
+  note.dispatchEvent(new Event('input', { bubbles: true }));
+  assert(button('Review changes'), 'native review button missing');
+  button('Review changes').click();
+  await tick();
+  assert(views[0] === 'request', 'wrong author comparison view');
+  assert(current.shadowRoot.querySelector('#comment').value === 'Keep this review note', 'note lost');
+  assert(text().includes('current document'), 'author input label is wrong');
+  await show({ ...base, approvable: [row] });
+  current.workspace = { canCompare: true, review: async (view) => { views.push(view); } };
+  await tick();
+  button('Review changes').click();
+  await tick();
+  assert(views[1] === 'approver', 'wrong approver comparison view');
+  assert(text().includes('current preview'), 'approver input label is wrong');
+});
+await test('unsupported comparison stays in the rail without an external fallback', async () => {
+  await show();
+  current.workspace = { canCompare: false };
+  await tick();
+  assert(button('Review changes')?.disabled, 'unsupported action not disabled');
+  assert(text().includes('not available'), 'missing host capability explanation');
+  assert(!current.shadowRoot.querySelector('a[href*="tools.aem.live"]'), 'external fallback remains');
+});
+await test('late comparison failure cannot overwrite a new page context', async () => {
+  await show();
+  let fail;
+  current.workspace = { canCompare: true, review: () => new Promise((resolve, reject) => { fail = reject; }) };
+  await tick();
+  assert(button('Review changes'), 'native review button missing');
+  button('Review changes').click();
+  current.context = { ...ctx, path: '/another-page' };
+  await tick();
+  fail(new Error('Old comparison failed'));
+  await tick();
+  assert(!text().includes('Old comparison failed'), 'stale comparison error leaked');
 });
 await test('request form only shows a hint when a minimum note length is required', async () => {
   await show();
