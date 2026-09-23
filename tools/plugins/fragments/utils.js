@@ -131,7 +131,7 @@ export function analyzePath(userPath, currentOrg, currentSite) {
       type: 'same-site',
       fullPath: `/${currentOrg}/${currentSite}${path}`,
       folder: path,
-      display: path,
+      display: path.startsWith('/') ? path.substring(1) : path, // Remove leading slash for display
     };
   }
 
@@ -152,7 +152,7 @@ export function analyzePath(userPath, currentOrg, currentSite) {
       org,
       site,
       folder: rest.length > 0 ? `/${rest.join('/')}` : '',
-      display: path,
+      display: `${org}/${site}${rest.length > 0 ? '/' + rest.join('/') : ''}`, // Show org/site for cross-site
     };
   }
 
