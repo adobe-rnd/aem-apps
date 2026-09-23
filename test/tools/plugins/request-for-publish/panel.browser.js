@@ -328,6 +328,15 @@ await test('local integration: unknown publication cannot be retried', async () 
   assert(!calls.some((call) => call.route.endsWith('/approve')), 'unconfirmed publication recorded');
 });
 
+await test('resolved request notice lists the possible outcomes without refresh guidance', async () => {
+  const { client, state } = fixture({ rows: [row] });
+  await show(base, client);
+  state.rows = [];
+  await current.refresh();
+  await tick();
+  assert(current.shadowRoot.querySelector('.notice')?.textContent === 'This request is no longer pending. It has been approved, rejected or withdrawn.', 'incorrect resolved request notice');
+});
+
 const scenario = new URLSearchParams(window.location.search).get('view') || 'request';
 const demo = fixture({ role: scenario === 'approver' ? 'approver' : 'requester', rows: scenario === 'request' ? [] : [row] });
 await show(base, demo.client);
