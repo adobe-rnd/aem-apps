@@ -978,9 +978,12 @@ async function loadFragments() {
 
       // Group cross-site paths by org/site
       if (sharedPathsData.crossSite.length > 0) {
+        console.log(`[Shared Paths] Processing ${sharedPathsData.crossSite.length} cross-site entries:`, sharedPathsData.crossSite);
         const crossSiteGroups = new Map();
         sharedPathsData.crossSite.forEach((entry) => {
+          console.log(`[Shared Paths] Entry: org=${entry.org}, site=${entry.site}, display=${entry.display}`, entry);
           const key = `${entry.org}/${entry.site}`;
+          console.log(`[Shared Paths] Group key: "${key}"`);
           if (!crossSiteGroups.has(key)) {
             crossSiteGroups.has(key) || crossSiteGroups.set(key, []);
           }
@@ -991,6 +994,7 @@ async function loadFragments() {
         Array.from(crossSiteGroups.entries())
           .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
           .forEach(([groupKey, entries]) => {
+            console.log(`[Shared Paths] Rendering group: "${groupKey}" with ${entries.length} entries`);
             // Create collapsible group header for org/site
             const groupItem = document.createElement('div');
             groupItem.className = 'tree-item';
