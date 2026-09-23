@@ -918,6 +918,11 @@ async function loadFragments() {
       console.log(`[Shared Paths] Calling analyzeSharedPaths with org=${context.org}, site=${site}`);
       sharedPathsData = await analyzeSharedPaths(config, context.org, site);
       console.log(`[Shared Paths] analyzeSharedPaths returned:`, sharedPathsData);
+      console.log(`[Shared Paths] Cross-site entries:`, sharedPathsData.crossSite);
+      if (sharedPathsData.crossSite.length > 0) {
+        console.log(`[Shared Paths] First cross-site entry:`, sharedPathsData.crossSite[0]);
+        console.log(`[Shared Paths] First entry org=${sharedPathsData.crossSite[0].org}, site=${sharedPathsData.crossSite[0].site}`);
+      }
     } else {
       console.log(`[Shared Paths] Cannot access config - canAccess=${canAccess}`);
     }
