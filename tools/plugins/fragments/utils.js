@@ -127,11 +127,13 @@ export function analyzePath(userPath, currentOrg, currentSite) {
 
   // Relative path: starts with "/"
   if (firstChar === '/') {
+    const display = path.startsWith('/') ? path.substring(1) : path; // Remove leading slash for display
+    console.log(`[analyzePath] Same-site path: "${path}" → display: "${display}"`);
     return {
       type: 'same-site',
       fullPath: `/${currentOrg}/${currentSite}${path}`,
       folder: path,
-      display: path.startsWith('/') ? path.substring(1) : path, // Remove leading slash for display
+      display,
     };
   }
 
@@ -145,14 +147,15 @@ export function analyzePath(userPath, currentOrg, currentSite) {
     }
 
     const [org, site, ...rest] = segments;
-
+    const display = `${org}/${site}${rest.length > 0 ? '/' + rest.join('/') : ''}`;
+    console.log(`[analyzePath] Cross-site path: "${path}" → display: "${display}"`);
     return {
       type: 'cross-site',
       fullPath: `/${org}/${site}/${rest.join('/')}`,
       org,
       site,
       folder: rest.length > 0 ? `/${rest.join('/')}` : '',
-      display: `${org}/${site}${rest.length > 0 ? '/' + rest.join('/') : ''}`, // Show org/site for cross-site
+      display,
     };
   }
 
