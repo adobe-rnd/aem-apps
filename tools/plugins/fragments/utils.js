@@ -262,6 +262,9 @@ export async function analyzeSharedPaths(siteConfig, currentOrg, currentSite) {
       if (analyzed.type === 'same-site') {
         result.sameSite.push(entry);
       } else {
+        // Add org and site for cross-site entries so they can be grouped
+        entry.org = analyzed.org;
+        entry.site = analyzed.site;
         result.crossSite.push(entry);
       }
     } else if (pathInfo.type === 'folder') {
@@ -287,6 +290,9 @@ export async function analyzeSharedPaths(siteConfig, currentOrg, currentSite) {
       if (analyzed.type === 'same-site') {
         result.sameSite.push(entry);
       } else {
+        // Add org and site for cross-site entries so they can be grouped
+        entry.org = analyzed.org;
+        entry.site = analyzed.site;
         result.crossSite.push(entry);
       }
     } else {
