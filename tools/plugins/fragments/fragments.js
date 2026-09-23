@@ -962,22 +962,78 @@ async function loadFragments() {
       const list = document.createElement('ul');
       list.style.cssText = 'list-style: none; margin: 0; padding: 8px 0;';
 
-      // Add same-site paths
-      sharedPathsData.sameSite.forEach((entry) => {
+      // Add same-site paths (sorted alphabetically)
+      const sortedSameSite = sharedPathsData.sameSite.sort((a, b) => 
+        a.display.localeCompare(b.display)
+      );
+      sortedSameSite.forEach((entry) => {
         const element = createSharedPathElement(entry, context.org, site);
         list.appendChild(element);
       });
 
-      // Add cross-site paths
-      sharedPathsData.crossSite.forEach((entry) => {
-        const element = createSharedPathElement(entry, entry.org, entry.site);
-        list.appendChild(element);
-      });
+      // Group cross-site paths by org/site
+      if (sharedPathsData.crossSite.length > 0) {
+        const crossSiteGroups = new Map();
+        sharedPathsData.crossSite.forEach((entry) => {
+          const key = `${entry.org}/${entry.site}`;
+          if (!crossSiteGroups.has(key)) {
+            crossSiteGroups.has(key) || crossSiteGroups.set(key, []);
+          }
+          crossSiteGroups.get(key).push(entry);
+        });
+
+        // Sort groups alphabetically and render each
+        Array.from(crossSiteGroups.entries())
+          .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+          .forEach(([groupKey, entries]) => {
+            // Create collapsible group header for org/site
+            const groupItem = document.createElement('div');
+            groupItem.className = 'tree-item';
+            groupItem.setAttribute('role', 'listitem');
+            groupItem.dataset.orgSiteGroup = groupKey;
+
+            const content = document.createElement('div');
+            content.className = 'tree-item-content';
+
+            const groupBtn = document.createElement('button');
+            groupBtn.className = 'folder-btn';
+            groupBtn.setAttribute('role', 'button');
+            groupBtn.setAttribute('aria-expanded', 'false');
+            groupBtn.setAttribute('aria-label', `Cross-site paths from ${groupKey}`);
+
+            const groupIcon = document.createElement('span');
+            groupIcon.className = 'tree-icon folder-icon';
+            groupIcon.setAttribute('aria-hidden', 'true');
+
+            const groupLabel = document.createElement('span');
+            groupLabel.className = 'folder-name';
+            groupLabel.textContent = groupKey;
+
+            groupBtn.appendChild(groupIcon);
+            groupBtn.appendChild(groupLabel);
+            content.appendChild(groupBtn);
+            groupItem.appendChild(content);
+
+            // Create tree-list for group items
+            const groupList = document.createElement('div');
+            groupList.className = 'tree-list hidden';
+            groupList.setAttribute('role', 'list');
+            groupList.style.cssText = 'list-style: none; margin: 0;';
+
+            // Sort entries alphabetically and add to group
+            entries.sort((a, b) => a.display.localeCompare(b.display)).forEach((entry) => {
+              const element = createSharedPathElement(entry, entry.org, entry.site);
+              groupList.appendChild(element);
+            });
+
+            groupItem.appendChild(groupList);
+            list.appendChild(groupItem);
+          });
+      }
 
       sharedPathsList.appendChild(list);
 
-      // Add expand/collapse handlers for folders
-      // Listen for clicks on folder buttons to load contents on first expand
+      // Add expand/collapse handlers for group folders and content folders
       sharedPathsList.addEventListener('click', async (e) => {
         const folderBtn = e.target.closest('.folder-btn');
         if (!folderBtn) return;
@@ -986,7 +1042,24 @@ async function loadFragments() {
         const treeList = item.querySelector('.tree-list');
         const isExpanded = folderBtn.classList.contains('expanded');
 
-        // Only load on first expand (when tree-list is still empty)
+        // Handle org/site group folders - these don't need to load content, just toggle
+        if (item.dataset.orgSiteGroup) {
+          folderBtn.classList.toggle('expanded', !isExpanded);
+          folderBtn.setAttribute('aria-expanded', String(!isExpanded));
+          
+          const folderIcon = folderBtn.querySelector('.folder-icon');
+          if (!isExpanded) {
+            folderIcon.classList.remove('folder-icon');
+            folderIcon.classList.add('folder-open-icon');
+          } else {
+            folderIcon.classList.remove('folder-open-icon');
+            folderIcon.classList.add('folder-icon');
+          }
+          treeList.classList.toggle('hidden');
+          return;
+        }
+
+        // Handle content folders - load files on first expand
         if (isExpanded && treeList.children.length === 0) {
           try {
             const pathFull = item.dataset.pathFull;
