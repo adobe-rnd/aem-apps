@@ -644,6 +644,58 @@ function filterFragments(searchText, fragmentsList) {
   applyFilterToTree(items, matchingPaths, searchText);
 }
 
+function filterSharedPaths(searchText, sharedPathsList) {
+  const items = sharedPathsList.querySelectorAll('.tree-item');
+
+  if (!searchText) {
+    // Clear all hidden states and reset to defaults
+    items.forEach((item) => {
+      item.classList.remove('hidden');
+      const content = item.querySelector('.tree-item-content');
+      if (content) clearHighlights([item]);
+    });
+    return;
+  }
+
+  // Filter tree items by matching name
+  const textLower = searchText.toLowerCase();
+  items.forEach((item) => {
+    const button = item.querySelector('.fragment-btn-item, .folder-btn');
+    if (!button) {
+      item.classList.add('hidden');
+      return;
+    }
+
+    const text = button.textContent.toLowerCase();
+    if (text.includes(textLower)) {
+      item.classList.remove('hidden');
+      // Also show all parent folders
+      let parent = item.parentElement;
+      while (parent && parent !== sharedPathsList) {
+        const parentItem = parent.closest('.tree-item');
+        if (parentItem) {
+          parentItem.classList.remove('hidden');
+          const parentBtn = parentItem.querySelector('.folder-btn');
+          if (parentBtn && !parentBtn.classList.contains('expanded')) {
+            parentBtn.classList.add('expanded');
+            parentBtn.setAttribute('aria-expanded', 'true');
+            const folderIcon = parentBtn.querySelector('.folder-icon');
+            if (folderIcon) {
+              folderIcon.classList.remove('folder-icon');
+              folderIcon.classList.add('folder-open-icon');
+            }
+            const list = parentItem.querySelector('.tree-list');
+            if (list) list.classList.remove('hidden');
+          }
+        }
+        parent = parent.parentElement;
+      }
+    } else {
+      item.classList.add('hidden');
+    }
+  });
+}
+
 async function loadFragments() {
   const fragmentsContainer = document.querySelector('.fragments-list');
 
@@ -866,7 +918,13 @@ async function loadFragments() {
     }
 
     searchInput.addEventListener('input', (e) => {
-      filterFragments(e.target.value, fragmentsList);
+      // Determine which tab is active and filter accordingly
+      const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+      if (activeTab === 'shared-paths') {
+        filterSharedPaths(e.target.value, sharedPathsList);
+      } else {
+        filterFragments(e.target.value, fragmentsList);
+      }
     });
 
     insertBtn.addEventListener('click', () => {
