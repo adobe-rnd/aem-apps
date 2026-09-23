@@ -1086,6 +1086,9 @@ async function loadFragments() {
               emptyMsg.className = 'empty-state';
               treeList.appendChild(emptyMsg);
             } else {
+              // Sort files alphabetically
+              files.sort((a, b) => a.name.localeCompare(b.name));
+              
               files.forEach((file) => {
                 const fileName = file.name;
                 const fileExt = file.ext?.toLowerCase() || '';
