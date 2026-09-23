@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import * as workflow from '../../../../tools/plugins/request-for-publish/workflow.js';
 
 describe('native workspace comparison adapter', () => {
@@ -27,7 +28,7 @@ describe('native workspace comparison adapter', () => {
       actions: { openComparison: async () => { called = true; } },
     });
     assert.equal(workspace.canCompare, false);
-    await assert.rejects(workspace.review('request'), /support/i);
+    await assert.rejects(workspace.review('request'), { message: 'The editor could not complete this action.' });
     assert.equal(called, false);
   });
 
@@ -42,7 +43,12 @@ describe('native workspace comparison adapter', () => {
     });
     await assert.rejects(workspace.review('request'), /stale-context/);
     await assert.rejects(workspace.save(), /save-failed/);
-    await assert.rejects(workflow.createWorkspaceActions().save(), /support/i);
+    await assert.rejects(workflow.createWorkspaceActions().save(), { message: 'The editor could not complete this action.' });
+  });
+
+  it('does not include host rollout guidance in the panel', async () => {
+    const panel = await readFile(new URL('../../../../tools/plugins/request-for-publish/panel.js', import.meta.url), 'utf8');
+    assert.doesNotMatch(panel, /Native comparison is not available|updated Experience Workspace/);
   });
 
   it('removes the external comparison URL instead of retaining a tools fallback', () => {

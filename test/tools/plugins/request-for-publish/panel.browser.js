@@ -100,7 +100,7 @@ await test('unsupported comparison stays in the rail without an external fallbac
   current.workspace = { canCompare: false };
   await tick();
   assert(button('Review changes')?.disabled, 'unsupported action not disabled');
-  assert(text().includes('not available'), 'missing host capability explanation');
+  assert(!current.shadowRoot.querySelector('.review-links .hint'), 'host rollout guidance shown');
   assert(!current.shadowRoot.querySelector('a[href*="tools.aem.live"]'), 'external fallback remains');
 });
 await test('late comparison failure cannot overwrite a new page context', async () => {
