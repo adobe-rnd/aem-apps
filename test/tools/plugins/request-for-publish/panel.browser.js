@@ -55,6 +55,16 @@ await test('initiation derives from an empty queue, with no role selector or SMA
   assert(button('Review changes'), 'missing native comparison action');
   assert(!current.shadowRoot.querySelector('a[href*="tools.aem.live"]'), 'external comparison link remains');
 });
+await test('moving focus between the comparison and rail does not restart workflow loading', async () => {
+  let loads = 0;
+  await show(base, { load: async () => { loads += 1; return structuredClone(base); } });
+  const before = loads;
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+  window.dispatchEvent(new Event('focus'));
+  await tick();
+  delete document.visibilityState;
+  assert(loads === before, 'focus restarted workflow load and can swallow the next interaction');
+});
 await test('native review keeps the note and maps the current workflow view', async () => {
   await show();
   const views = [];
