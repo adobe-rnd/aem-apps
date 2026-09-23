@@ -15,6 +15,7 @@
  */
 /* eslint-disable no-await-in-loop */
 import '../../../../tools/plugins/request-for-publish/panel.js';
+import fixture from './fixture-client.js';
 
 const ctx = { org: 'example', site: 'website', path: '/drafts/page' };
 const row = {
@@ -217,17 +218,118 @@ await test('late page A response cannot overwrite page B', async () => {
   assert(text().includes('/drafts/second') && !text().includes(row.comment), 'old response displayed on new page');
 });
 
-const scenario = new URLSearchParams(window.location.search).get('view') || 'request';
-const demo = { ...base, own: scenario === 'requester' ? [row] : [], approvable: scenario === 'approver' ? [row] : [] };
-const clear = async () => { demo.own = []; demo.approvable = []; };
-await show(demo, {
-  load: async () => structuredClone(demo),
-  submit: async (context, comment) => { demo.own = [{ ...row, comment }]; },
-  resend: async () => {},
-  withdraw: clear,
-  reject: clear,
-  approve: clear,
-  complete: clear,
+const enter = (selector, value) => {
+  const field = current.shadowRoot.querySelector(selector);
+  field.value = value;
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+};
+const mutations = (calls) => calls.filter((call) => call.body || ['preview', 'publish'].includes(call.route));
+
+await test('local integration: request, approver review and successful publication', async () => {
+  const { client, calls, state } = fixture();
+  await show(base, client);
+  enter('#comment', 'Please review the updated introduction.');
+  button('Request publish').click();
+  await tick();
+  assert(text().includes('Request sent.') && button('Withdraw…'), 'requester did not become pending');
+  state.role = 'approver';
+  await current.refresh();
+  await tick();
+  assert(text().includes('Please review the updated introduction.'), 'reviewer lost request note');
+  button('Approve & publish').click();
+  await tick();
+  assert(text().includes('Published. The publish request is complete.'), 'approval completion missing');
+  assert(state.rows.length === 0, 'approved request remains pending');
+  assert(mutations(calls).map((call) => call.route).join(',')
+    === 'preview,/api/requests,publish,/api/requests/approve', 'incorrect approval sequence');
+  const { body } = mutations(calls)[1];
+  assert(Object.keys(body).sort().join(',') === 'comment,org,path,site', 'client supplied identity or recipients');
 });
+await test('local integration: request, denial validation, cancel and confirmed denial', async () => {
+  const { client, calls, state } = fixture();
+  await show(base, client);
+  button('Request publish').click();
+  await tick();
+  state.role = 'approver';
+  await current.refresh();
+  await tick();
+  button('Reject…').click();
+  await tick();
+  button('Cancel').click();
+  await tick();
+  assert(button('Approve & publish'), 'cancel did not restore review');
+  button('Reject…').click();
+  await tick();
+  button('Reject request').click();
+  await tick();
+  assert(text().includes('Enter a reason for rejection.'), 'missing denial validation');
+  assert(!calls.some((call) => call.route.endsWith('/reject')), 'empty denial sent');
+  enter('#reason', 'Please correct the page heading.');
+  button('Reject request').click();
+  await tick();
+  assert(text().includes('Request rejected.') && state.rows.length === 0, 'denial did not complete');
+  assert(!calls.some((call) => call.route === 'publish'), 'denial published content');
+  assert(calls.find((call) => call.route.endsWith('/reject')).body.reason === 'Please correct the page heading.', 'denial reason lost');
+});
+await test('local integration: resend then withdraw without another preview or publication', async () => {
+  const { client, calls, state } = fixture({ rows: [row] });
+  await show(base, client);
+  button('Resend notification').click();
+  await tick();
+  assert(text().includes('Notification sent again.'), 'resend receipt missing');
+  assert(state.rows[0].comment === row.comment, 'resend changed note');
+  button('Withdraw…').click();
+  await tick();
+  button('Withdraw request').click();
+  await tick();
+  assert(text().includes('Request withdrawn.') && state.rows.length === 0, 'withdrawal incomplete');
+  assert(mutations(calls).map((call) => call.route).join(',') === '/api/requests,/api/requests/withdraw', 'unexpected content mutation');
+});
+await test('local integration: required note blocks preview and submission', async () => {
+  const { client, calls } = fixture({ required: true });
+  await show(base, client);
+  enter('#comment', 'Short');
+  button('Request publish').click();
+  await tick();
+  assert(text().includes('Enter at least 10 characters.'), 'required note not validated');
+  assert(mutations(calls).length === 0, 'invalid request produced mutations');
+});
+await test('local integration: preview failure keeps the note and sends no request', async () => {
+  const { client, calls } = fixture({ failPreview: 503 });
+  await show(base, client);
+  enter('#comment', 'Preserve this review note.');
+  button('Request publish').click();
+  await tick();
+  assert(text().includes('Preview failed'), 'preview failure not reported');
+  assert(current.shadowRoot.querySelector('#comment').value === 'Preserve this review note.', 'note lost');
+  assert(mutations(calls).map((call) => call.route).join(',') === 'preview', 'request sent after preview failure');
+});
+await test('local integration: completion retry does not publish twice', async () => {
+  const { client, calls, state } = fixture({ role: 'approver', rows: [row], failRecord: true });
+  await show(base, client);
+  button('Approve & publish').click();
+  await tick();
+  assert(button('Retry request update') && !button('Approve & publish'), 'unsafe recovery controls');
+  state.failRecord = false;
+  button('Retry request update').click();
+  await tick();
+  assert(text().includes('The publish request is now complete.'), 'recovery incomplete');
+  assert(calls.filter((call) => call.route === 'publish').length === 1, 'recovery republished');
+});
+await test('local integration: unknown publication cannot be retried', async () => {
+  const { client, calls } = fixture({ role: 'approver', rows: [row], unknownPublish: true });
+  await show(base, client);
+  button('Approve & publish').click();
+  await tick();
+  assert(text().includes('Publication outcome unknown'), 'unknown outcome hidden');
+  assert(!button('Approve & publish') && !button('Retry request update'), 'unsafe retry offered');
+  await current.act('approve');
+  assert(calls.filter((call) => call.route === 'publish').length === 1, 'unknown publication retried');
+  assert(!calls.some((call) => call.route.endsWith('/approve')), 'unconfirmed publication recorded');
+});
+
+const scenario = new URLSearchParams(window.location.search).get('view') || 'request';
+const demo = fixture({ role: scenario === 'approver' ? 'approver' : 'requester', rows: scenario === 'request' ? [] : [row] });
+await show(base, demo.client);
 document.querySelector('#results').textContent = results.join('\n');
 document.documentElement.dataset.result = results.some((result) => result.startsWith('FAIL')) ? 'fail' : 'pass';

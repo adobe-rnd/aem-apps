@@ -278,7 +278,7 @@ class RequestForPublish extends LitElement {
           <textarea id="comment" rows="3" .value=${this._comment} ?disabled=${this.disabled}
             ?required=${this._data.settings.commentsRequired} aria-invalid=${this._fieldError ? 'true' : 'false'}
             aria-describedby="comment-hint field-error" @input=${(e) => { this._comment = e.target.value; }}></textarea>
-          <p class="hint" id="comment-hint">${this._data.settings.commentsRequired ? `At least ${this._data.settings.commentsMinLength} characters. ` : ''}Save your edits first. Requesting approval updates the preview.</p>
+          <p class="hint" id="comment-hint">${this._data.settings.commentsRequired ? `At least ${this._data.settings.commentsMinLength} characters. ` : ''}Updates the preview for reviewers. It does not publish your changes.</p>
           ${this.renderFieldError()}
           <button class="primary" ?disabled=${this.disabled} @click=${() => this.act('submit')}>Request publish</button>
         </div>` : html`
