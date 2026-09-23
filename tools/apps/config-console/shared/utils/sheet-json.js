@@ -27,3 +27,18 @@ function getSheetDataArray(json, excludeNames = ['options']) {
 }
 
 export default getSheetDataArray;
+
+/**
+ * Set a sheet's rows on a multi-sheet config and register its name in :names,
+ * which is what da.live uses to discover sheets.
+ * @param {object} config - Parsed multi-sheet config JSON (mutated)
+ * @param {string} name - Sheet name
+ * @param {object[]} rows - Sheet rows
+ */
+export function setSheet(config, name, rows) {
+  config[name] = {
+    ...config[name], data: rows, total: rows.length, limit: rows.length,
+  };
+  config[':names'] = config[':names'] || [];
+  if (!config[':names'].includes(name)) config[':names'].push(name);
+}

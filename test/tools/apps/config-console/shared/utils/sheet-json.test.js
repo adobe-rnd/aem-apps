@@ -18,5 +18,4 @@ describe('setSheet', () => {
     assert.equal(config.library.total, 2);
     assert.deepEqual(config.library[':colWidths'], [100]);
   });
-
 });
