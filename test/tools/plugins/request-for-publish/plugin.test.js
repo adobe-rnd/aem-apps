@@ -183,6 +183,33 @@ describe('getStatus', () => {
     assert.deepEqual(spy.params, { org: 'bpauli', site: 'frescopa', token: 'init-token' });
   });
 
+  it('returns null rather than throwing when loadRequests rejects', async () => {
+    const { getStatus } = createHandle({
+      context: CONTEXT,
+      token: 'init-token',
+      loadRequests: async () => { throw new Error('network down'); },
+    });
+    assert.equal(await getStatus(item('/tea2'), CTX), null);
+  });
+
+  it('retries the load on the next call after a rejection, rather than caching the failure', async () => {
+    let attempt = 0;
+    const { getStatus } = createHandle({
+      context: CONTEXT,
+      token: 'init-token',
+      loadRequests: async () => {
+        attempt += 1;
+        if (attempt === 1) throw new Error('network down');
+        return [pending('/tea2')];
+      },
+    });
+
+    assert.equal(await getStatus(item('/tea2'), CTX), null);
+    const status = await getStatus(item('/tea2'), CTX);
+    assert.equal(status.state, 'pending');
+    assert.equal(attempt, 2);
+  });
+
   it('derives org and site from the browsed path when only it is given', async () => {
     const spy = {};
     const handle = createHandle({

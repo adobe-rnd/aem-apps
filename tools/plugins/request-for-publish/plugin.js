@@ -154,22 +154,29 @@ export function toStatus(row, { org, site } = {}) {
  */
 async function fetchPendingRequests({ org, site, token }) {
   if (!org || !site) return [];
-  // utils.js imports daFetch from da.live at module scope; only the browser
-  // needs it, so it is pulled in here rather than at the top of this module.
-  const { getWorkerUrl, getOpts } = await import('./utils.js');
-  const base = getWorkerUrl();
-  const query = `org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
-  const lists = await Promise.all(ROLES.map(async (role) => {
-    try {
-      const resp = await fetch(`${base}/api/requests?${query}&role=${role}`, getOpts(token));
-      if (!resp.ok) return [];
-      const { requests = [] } = await resp.json();
-      return requests;
-    } catch {
-      return [];
-    }
-  }));
-  return mergePendingRequests(lists);
+  try {
+    // utils.js imports daFetch from da.live at module scope; only the browser
+    // needs it, so it is pulled in here rather than at the top of this module.
+    const { getWorkerUrl, getOpts } = await import('./utils.js');
+    const base = getWorkerUrl();
+    const query = `org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
+    const lists = await Promise.all(ROLES.map(async (role) => {
+      try {
+        // The worker's approver-scoped queue is the default (no role param);
+        // only the requester-scoped queue needs an explicit role value.
+        const roleParam = role === 'requester' ? `&role=${role}` : '';
+        const resp = await fetch(`${base}/api/requests?${query}${roleParam}`, getOpts(token));
+        if (!resp.ok) return [];
+        const { requests = [] } = await resp.json();
+        return requests;
+      } catch {
+        return [];
+      }
+    }));
+    return mergePendingRequests(lists);
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -206,7 +213,14 @@ export function createHandle({ context = {}, token, loadRequests = fetchPendingR
       if (!requests) {
         requests = loadRequests({ org, site, token: ctx.token || token });
       }
-      const row = findPendingRequest(await requests, sitePath);
+      let rows;
+      try {
+        rows = await requests;
+      } catch {
+        requests = null;
+        return null;
+      }
+      const row = findPendingRequest(rows, sitePath);
       return row ? toStatus(row, { org, site }) : null;
     },
   };

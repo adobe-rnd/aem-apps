@@ -189,9 +189,10 @@ Behaviour:
   request row itself, plus a link to the inbox app. There is no second network
   call.
 - Pending requests are caller-scoped, so the module lists both
-  `role=requester` and `role=approver` and dedupes by path. The host caches
-  nothing and calls `getStatus` once per expand, so the listing is fetched once
-  per `init` and shared by every item in the list.
+  `role=requester` and the default (no `role` param) approver-scoped queue,
+  then dedupes by path. The host caches nothing and calls `getStatus` once per
+  expand, so the listing is fetched once per `init` and shared by every item
+  in the list.
 - `ctx.token` is the raw IMS token: `daFetch` only attaches credentials for DA
   and AEM origins, so the worker would otherwise get an unauthenticated call.
 
