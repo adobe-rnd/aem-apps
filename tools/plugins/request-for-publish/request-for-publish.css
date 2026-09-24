@@ -62,7 +62,7 @@ p {
 }
 
 a {
-  color: var(--s2-blue-900, light-dark(#0265dc, #8cb4ff));
+  color: var(--pw-accent, var(--s2-blue-900, light-dark(#0265dc, #8cb4ff)));
   text-decoration: none;
 }
 
@@ -337,7 +337,7 @@ button:disabled {
 }
 
 button:focus-visible, a:focus-visible, textarea:focus-visible {
-  outline: 2px solid var(--s2-blue-900, #0265dc);
+  outline: 2px solid var(--pw-accent, var(--s2-blue-900, #0265dc));
   outline-offset: 3px;
 }
 
@@ -347,12 +347,17 @@ button:hover:not(:disabled) {
 
 button.primary {
   color: light-dark(white, #111);
-  background: var(--s2-blue-900, #0265dc);
+  background: var(--pw-accent, var(--s2-blue-900, #0265dc));
   border-color: transparent;
 }
 
+/* A configured brand accent is one colour in both schemes, so keep white text on it. */
+:host([themed]) button.primary {
+  color: white;
+}
+
 button.primary:hover:not(:disabled) {
-  background: var(--s2-blue-1000, #0054b6);
+  background: var(--pw-accent-hover, var(--s2-blue-1000, #0054b6));
 }
 
 button.negative {

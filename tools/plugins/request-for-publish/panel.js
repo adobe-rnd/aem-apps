@@ -97,6 +97,12 @@ class RequestForPublish extends LitElement {
 
   updated(changed) {
     if (changed.has('context') || changed.has('client')) this.refresh();
+    if (changed.has('_data')) {
+      const { accentColor = '', accentColorHover = '' } = this._data?.settings || {};
+      this.style.setProperty('--pw-accent', accentColor);
+      this.style.setProperty('--pw-accent-hover', accentColorHover);
+      this.toggleAttribute('themed', !!accentColor);
+    }
   }
 
   get page() { return normalizeContext(this.context); }

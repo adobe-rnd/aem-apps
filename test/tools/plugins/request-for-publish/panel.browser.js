@@ -240,7 +240,7 @@ await test('site theme colours the primary action and links with AA contrast, an
       const styles = getComputedStyle(button('Approve & publish'));
       assert(styles.backgroundColor === 'rgb(153, 0, 51)', `${scheme} primary action ignores theme.accent-color`);
       assert(contrast(styles) >= 4.5, `${scheme} themed button contrast below 4.5`);
-      const link = getComputedStyle(current.shadowRoot.querySelector('a[href*="diff.html"]'));
+      const link = getComputedStyle(current.shadowRoot.querySelector('footer a'));
       assert(link.color === 'rgb(153, 0, 51)', `${scheme} link ignores theme.accent-color`);
     });
   } finally { document.documentElement.style.colorScheme = previous; }

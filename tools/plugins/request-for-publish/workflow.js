@@ -156,6 +156,8 @@ function settingsFrom(config) {
     commentsRequired: value('request.comments.required').toLowerCase() === 'true',
     commentsMinLength: Math.max(1, parseInt(value('request.comments.length'), 10) || 1),
     supportContact: value('request.support.contact'),
+    accentColor: value('theme.accent-color'),
+    accentColorHover: value('theme.accent-color-hover'),
   };
 }
 
