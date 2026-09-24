@@ -24,6 +24,7 @@ import {
   pollJobStatus,
   checkPublishRequest,
   approveRequests,
+  isFinalStep,
   rejectRequest,
   withdrawRequest,
   getApproversForPath,
@@ -99,6 +100,8 @@ class PublishRequestsApp extends LitElement {
     _previewUrl: { state: true },
     _comment: { state: true },
     _requester: { state: true },
+    // Single-review mode: the pending row, kept for its step position
+    _reviewRequest: { state: true },
     // Inbox mode
     _pendingRequests: { state: true },
     _processingPaths: { state: true },
@@ -125,6 +128,7 @@ class PublishRequestsApp extends LitElement {
     this._authorEmail = '';
     this._previewUrl = '';
     this._comment = '';
+    this._reviewRequest = null;
     this._pendingRequests = [];
     this._processingPaths = new Set();
     this._approveAllProcessing = false;
@@ -312,6 +316,7 @@ class PublishRequestsApp extends LitElement {
       this._message = { type: 'error', text: 'No pending publish request found for this content path.' };
       return;
     }
+    this._reviewRequest = pendingRequest;
 
     // Use requester from sheet if author not in URL params
     if (!this._authorEmail && pendingRequest.requester) {
@@ -467,13 +472,29 @@ class PublishRequestsApp extends LitElement {
     this._message = null;
 
     try {
+      const request = this._reviewRequest;
+      const step = request?.stepInfo?.current;
+      // Intermediate steps must not publish: later reviewers have yet to approve.
+      if (!isFinalStep(request)) {
+        const advance = await approveRequests(
+          this._org, this._site, [this._path], this.token, step,
+        );
+        this._message = advance.success
+          ? { type: 'success', text: 'Step approved. The next reviewers have been notified.' }
+          : { type: 'error', text: advance.error };
+        if (advance.success) this._state = 'approved';
+        return;
+      }
+
       // Publish the content via Helix Admin API (under the user's session)
       const result = await publishContent(this._org, this._site, this._path);
 
       if (result.success) {
         this._state = 'approved';
         // Record the approval server-side: removes the pending row + emails the author.
-        const bookkeep = await approveRequests(this._org, this._site, [this._path], this.token);
+        const bookkeep = await approveRequests(
+          this._org, this._site, [this._path], this.token, step,
+        );
         if (!bookkeep.success) {
           this._message = { type: 'info', text: `Published, but recording the approval failed: ${bookkeep.error}` };
         }
@@ -522,17 +543,36 @@ class PublishRequestsApp extends LitElement {
     this._processingPaths = new Set([...this._processingPaths, request.path]);
     this.requestUpdate();
 
-    const result = await publishContent(this._org, this._site, request.path);
-
-    if (result.success) {
-      this._pendingRequests = this._pendingRequests.filter((r) => r.path !== request.path);
-      // Record approval server-side (sheet removal + author email).
-      const bookkeep = await approveRequests(this._org, this._site, [request.path], this.token);
-      this._message = bookkeep.success
-        ? { type: 'success', text: `Published: ${request.path}` }
-        : { type: 'info', text: `Published: ${request.path}. Recording approval failed: ${bookkeep.error}` };
+    const step = request.stepInfo?.current;
+    if (!isFinalStep(request)) {
+      // Intermediate step: advance the workflow without publishing.
+      const advance = await approveRequests(
+        this._org, this._site, [request.path], this.token, step,
+      );
+      if (advance.success) {
+        this._pendingRequests = this._pendingRequests.filter((r) => r.path !== request.path);
+        this._message = {
+          type: 'success',
+          text: `Step approved for ${request.path}. The next reviewers have been notified.`,
+        };
+      } else {
+        this._message = { type: 'error', text: `Failed to approve ${request.path}: ${advance.error}` };
+      }
     } else {
-      this._message = { type: 'error', text: `Failed to publish ${request.path}: ${result.error}` };
+      const result = await publishContent(this._org, this._site, request.path);
+
+      if (result.success) {
+        this._pendingRequests = this._pendingRequests.filter((r) => r.path !== request.path);
+        // Record approval server-side (sheet removal + author email).
+        const bookkeep = await approveRequests(
+          this._org, this._site, [request.path], this.token, step,
+        );
+        this._message = bookkeep.success
+          ? { type: 'success', text: `Published: ${request.path}` }
+          : { type: 'info', text: `Published: ${request.path}. Recording approval failed: ${bookkeep.error}` };
+      } else {
+        this._message = { type: 'error', text: `Failed to publish ${request.path}: ${result.error}` };
+      }
     }
 
     const updated = new Set(this._processingPaths);
@@ -540,83 +580,106 @@ class PublishRequestsApp extends LitElement {
     this._processingPaths = updated;
   }
 
+  /**
+   * Record approval for several requests, grouped by the step each is waiting
+   * on. Sequential: every call rewrites the whole requests sheet, so concurrent
+   * writes would lose updates.
+   */
+  async approveGrouped(requests) {
+    const byStep = new Map();
+    requests.forEach((request) => {
+      const step = request.stepInfo?.current;
+      const key = step ?? 'none';
+      if (!byStep.has(key)) byStep.set(key, { step, paths: [] });
+      byStep.get(key).paths.push(request.path);
+    });
+
+    const approved = [];
+    const errors = [];
+    const groups = [...byStep.values()];
+    await groups.reduce(async (previous, { step, paths }) => {
+      await previous;
+      const result = await approveRequests(this._org, this._site, paths, this.token, step);
+      if (result.success) approved.push(...paths);
+      else errors.push(result.error);
+    }, Promise.resolve());
+
+    return { approved, error: errors.join(' ') || null };
+  }
+
   async handleApproveAll() {
-    if (this._pendingRequests.length === 0) return;
+    const actionable = this._pendingRequests.filter((r) => r.canApproveNow !== false);
+    const waiting = this._pendingRequests.length - actionable.length;
+    if (actionable.length === 0) return;
 
     this._approveAllProcessing = true;
     this._message = null;
 
-    const allPaths = this._pendingRequests.map((r) => r.path);
-    const totalCount = allPaths.length;
+    const finals = actionable.filter((r) => isFinalStep(r));
+    const intermediates = actionable.filter((r) => !isFinalStep(r));
 
-    // Use bulk publish API for all paths in a single request
-    // https://www.aem.live/docs/admin.html#tag/publish/operation/bulkPublish
-    this._message = { type: 'info', text: `Starting bulk publish of ${totalCount} pages...` };
-    this.requestUpdate();
+    let publishedPaths = [];
+    let publishError = null;
 
-    const bulkResult = await bulkPublishContent(this._org, this._site, allPaths);
-
-    if (!bulkResult.success) {
-      this._approveAllProcessing = false;
-      this._message = { type: 'error', text: `Bulk publish failed: ${bulkResult.error}` };
-      return;
-    }
-
-    // Poll the job until it completes using the self link from the response
-    const jobSelfUrl = bulkResult.links?.self;
-    if (jobSelfUrl) {
-      this._message = { type: 'info', text: 'Bulk publish job started. Waiting for completion...' };
+    // Only requests on their last staffed step may go live.
+    if (finals.length > 0) {
+      const paths = finals.map((r) => r.path);
+      this._message = { type: 'info', text: `Starting bulk publish of ${paths.length} pages...` };
       this.requestUpdate();
 
-      const jobResult = await pollJobStatus(jobSelfUrl);
-
-      if (!jobResult.success) {
+      const bulkResult = await bulkPublishContent(this._org, this._site, paths);
+      if (!bulkResult.success) {
         this._approveAllProcessing = false;
-        this._message = {
-          type: 'error',
-          text: `Bulk publish job did not complete in time. Some pages may still be publishing. ${jobResult.error || ''}`,
-        };
+        this._message = { type: 'error', text: `Bulk publish failed: ${bulkResult.error}` };
         return;
       }
 
-      // Check for any failures in the job details
-      const jobData = jobResult.job;
-      // 200 = published, 304 = already up-to-date — both are success
-      const failedResources = jobData?.data?.resources
-        ?.filter((r) => r.status !== 200 && r.status !== 304) || [];
+      const jobSelfUrl = bulkResult.links?.self;
+      if (jobSelfUrl) {
+        this._message = { type: 'info', text: 'Bulk publish job started. Waiting for completion...' };
+        this.requestUpdate();
 
-      if (failedResources.length > 0) {
-        const failedPaths = failedResources.map((r) => r.path);
-        const succeededPaths = allPaths.filter((p) => !failedPaths.includes(p));
-        let partialNotifyError = null;
-
-        // Record approval for the succeeded paths (sheet removal + author email).
-        if (succeededPaths.length > 0) {
-          const bookkeep = await approveRequests(this._org, this._site, succeededPaths, this.token);
-          if (!bookkeep.success) partialNotifyError = bookkeep.error;
+        const jobResult = await pollJobStatus(jobSelfUrl);
+        if (!jobResult.success) {
+          this._approveAllProcessing = false;
+          this._message = {
+            type: 'error',
+            text: `Bulk publish job did not complete in time. Some pages may still be publishing. ${jobResult.error || ''}`,
+          };
+          return;
         }
 
-        const succeededSet = new Set(succeededPaths);
-        this._pendingRequests = this._pendingRequests.filter((r) => !succeededSet.has(r.path));
-
-        this._approveAllProcessing = false;
-        this._message = {
-          type: 'error',
-          text: `Published ${succeededPaths.length} of ${totalCount}. Failed: ${failedPaths.join(', ')}${partialNotifyError ? ` Author notification failed: ${partialNotifyError}` : ''}`,
-        };
-        return;
+        // 200 = published, 304 = already up-to-date — both are success
+        const failedPaths = (jobResult.job?.data?.resources || [])
+          .filter((r) => r.status !== 200 && r.status !== 304).map((r) => r.path);
+        publishedPaths = paths.filter((p) => !failedPaths.includes(p));
+        if (failedPaths.length > 0) publishError = `Failed to publish: ${failedPaths.join(', ')}.`;
+      } else {
+        publishedPaths = paths;
       }
     }
 
-    // All succeeded — record approval for all paths (sheet removal + author email).
-    const bookkeep = await approveRequests(this._org, this._site, allPaths, this.token);
-    const bulkNotifyError = bookkeep.success ? null : bookkeep.error;
+    const publishedSet = new Set(publishedPaths);
+    const { approved, error } = await this.approveGrouped([
+      ...intermediates,
+      ...finals.filter((r) => publishedSet.has(r.path)),
+    ]);
 
-    this._pendingRequests = [];
+    const approvedSet = new Set(approved);
+    this._pendingRequests = this._pendingRequests.filter((r) => !approvedSet.has(r.path));
     this._approveAllProcessing = false;
-    this._message = bulkNotifyError
-      ? { type: 'info', text: `All ${totalCount} requests published. Author notification failed: ${bulkNotifyError}` }
-      : { type: 'success', text: `All ${totalCount} requests published successfully!` };
+
+    const publishedCount = finals.filter((r) => approvedSet.has(r.path)).length;
+    const advancedCount = intermediates.filter((r) => approvedSet.has(r.path)).length;
+    const parts = [];
+    if (publishedCount > 0) parts.push(`${publishedCount} published`);
+    if (advancedCount > 0) parts.push(`${advancedCount} advanced to the next step`);
+    if (waiting > 0) parts.push(`${waiting} awaiting other reviewers`);
+    const summary = parts.length > 0 ? `${parts.join(', ')}.` : 'Nothing was approved.';
+
+    this._message = publishError || error
+      ? { type: 'error', text: `${summary} ${publishError || ''} ${error || ''}`.trim() }
+      : { type: 'success', text: summary };
   }
 
   // ======== My-requests action handlers ========
@@ -781,11 +844,11 @@ class PublishRequestsApp extends LitElement {
         <sl-button
           class="pw-fill-accent"
           @click=${this.handleApproveAll}
-          ?disabled=${this._approveAllProcessing}
+          ?disabled=${this._approveAllProcessing || this.actionableCount === 0}
         >
           ${this._approveAllProcessing
-            ? 'Publishing all...'
-            : `Approve & Publish All (${this._pendingRequests.length})`}
+            ? 'Processing all...'
+            : `Approve All (${this.actionableCount})`}
         </sl-button>
       </div>
     `;
@@ -814,9 +877,9 @@ class PublishRequestsApp extends LitElement {
             <sl-button
               class="pw-fill-accent pw-action-sm"
               @click=${(e) => { e.stopPropagation(); this.handleInboxApprove(request); }}
-              ?disabled=${isProcessing || this._approveAllProcessing}
+              ?disabled=${isProcessing || this._approveAllProcessing || request.canApproveNow === false}
             >
-              ${isProcessing ? 'Publishing...' : 'Approve & Publish'}
+              ${this.approveLabel(request, isProcessing)}
             </sl-button>
           </span>
         </summary>
@@ -825,6 +888,15 @@ class PublishRequestsApp extends LitElement {
             <span class="detail-label">Requested by</span>
             <span class="detail-value">${requester}</span>
           </div>
+          ${request.stepInfo && request.stepInfo.count > 1 ? html`
+            <div class="inbox-item-detail-row">
+              <span class="detail-label">Step</span>
+              <span class="detail-value">
+                ${request.stepInfo.current} of ${request.stepInfo.count}${request.stepInfo.title ? ` — ${request.stepInfo.title}` : ''}
+                ${request.canApproveNow === false ? ' (awaiting another reviewer)' : ''}
+              </span>
+            </div>
+          ` : nothing}
           ${request.comment ? html`
             <div class="inbox-item-detail-row">
               <span class="detail-label">Message</span>
@@ -834,6 +906,17 @@ class PublishRequestsApp extends LitElement {
         </div>
       </details>
     `;
+  }
+
+  approveLabel(request, isProcessing) {
+    if (request.canApproveNow === false) return 'Awaiting other reviewers';
+    if (!isFinalStep(request)) return isProcessing ? 'Approving...' : 'Approve Step';
+    return isProcessing ? 'Publishing...' : 'Approve & Publish';
+  }
+
+  /** Requests waiting on a step this user can act on right now. */
+  get actionableCount() {
+    return this._pendingRequests.filter((r) => r.canApproveNow !== false).length;
   }
 
   // ======== My Requests (requester view) renders ========
@@ -1141,9 +1224,10 @@ class PublishRequestsApp extends LitElement {
             <sl-button
               class="pw-fill-accent"
               @click=${this.handleApprove}
-              ?disabled=${this._isProcessing || this._needsEmail}
+              ?disabled=${this._isProcessing || this._needsEmail
+                || this._reviewRequest?.canApproveNow === false}
             >
-              ${this._isProcessing ? 'Publishing...' : 'Approve & Publish'}
+              ${this.approveLabel(this._reviewRequest || {}, this._isProcessing)}
             </sl-button>
           </div>
 
