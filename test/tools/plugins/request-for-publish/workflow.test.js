@@ -131,6 +131,28 @@ describe('context-derived views', () => {
     assert.equal(new URL(links.diff).searchParams.get('path'), '/drafts/index');
     assert.equal(new URL(links.myRequests).searchParams.get('requester'), 'true');
   });
+  it('opens the inbox on the plugin branch rather than the editor context ref', () => {
+    const moduleUrl = 'https://ewws0926--aem-apps--adobe-rnd.aem.page/tools/plugins/request-for-publish/workflow.js';
+    const links = pageLinks({
+      org: 'scdemos', site: 'benp5', path: '/guided-journey.html', ref: 'main',
+    }, undefined, moduleUrl);
+    assert.equal(
+      links.inbox,
+      'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox?org=scdemos&site=benp5&ref=ewws0926',
+    );
+    assert.equal(links.myRequests, `${links.inbox}&requester=true`);
+    assert.equal(new URL(pageLinks(context, 'ci', moduleUrl).inbox).searchParams.get('env'), 'ci');
+  });
+  it('omits the inbox ref for main and non-AEM plugin origins', () => {
+    [
+      'https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/request-for-publish/workflow.js',
+      'http://localhost:3000/tools/plugins/request-for-publish/workflow.js',
+    ].forEach((moduleUrl) => {
+      const links = pageLinks({ ...context, ref: 'other-branch' }, undefined, moduleUrl);
+      assert.equal(new URL(links.inbox).searchParams.has('ref'), false);
+      assert.equal(new URL(links.myRequests).searchParams.has('ref'), false);
+    });
+  });
   it('uses only explicit known worker environments', () => {
     assert.match(workerOrigin(new URL('http://localhost:3000/')), /localhost:8787/);
     assert.match(workerOrigin(new URL('http://localhost:3000/?env=ci')), /publish-requests-ci/);
