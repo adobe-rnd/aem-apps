@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 /* eslint-disable import/no-unresolved */
-import DA_SDK from 'https://da.live/nx/utils/sdk.js';
+import DA_SDK from 'https://ewws0926--da-nx--adobe.aem.live/nx/utils/sdk.js';
 import { daFetch, setImsDetails } from 'https://da.live/nx/utils/daFetch.js';
 import { createClient, workerOrigin, createWorkspaceActions } from './workflow.js';
 import './panel.js';
