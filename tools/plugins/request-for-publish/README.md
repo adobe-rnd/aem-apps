@@ -96,6 +96,7 @@ If the request fails to submit (network error, worker error, etc.), an error mes
 | `request-for-publish.css` | Styles for all component states (form, pending, success, loading) |
 | `plugin.js` | Lean browse status surface (`getStatus`); no editor styles, no Lit |
 | `utils.js` | Thin REST client over `publish-requests-worker` (approvers/config fetch, submit/resend/withdraw, existing-request check) + client-side Helix preview + IMS profile fetch |
+| `ims-profile.js` | Resolves the IMS profile URL for the environment that issued the token (prod, stage, ...) |
 
 ## Configuration
 
