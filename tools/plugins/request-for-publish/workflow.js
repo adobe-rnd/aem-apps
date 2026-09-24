@@ -139,11 +139,14 @@ export function deriveView(context, data) {
   };
 }
 
-export function pageLinks(context, env) {
+export function pageLinks(context, env, moduleUrl = import.meta.url) {
   const { org, site, path } = context;
   const delivered = path.replace(/\.html$/, '').replace(/\/index$/, '/');
   const query = new URLSearchParams({ org, site });
   if (env === 'ci') query.set('env', env);
+  const codeHost = new URL(moduleUrl).hostname;
+  const ref = codeHost.match(/^([a-z0-9-]+)--aem-apps--adobe-rnd\.aem\.(?:page|live)$/)?.[1];
+  if (ref && ref !== 'main') query.set('ref', ref);
   return {
     preview: `https://main--${site}--${org}.aem.page${delivered}`,
     live: `https://main--${site}--${org}.aem.live${delivered}`,
