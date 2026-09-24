@@ -908,6 +908,17 @@ class PublishRequestsApp extends LitElement {
     `;
   }
 
+  /** Who the current step is waiting on, for the requester's own queue. */
+  renderWaitingOn(request) {
+    const approvers = request.stepInfo?.approvers;
+    if (!approvers?.length) return nothing;
+    return html`
+      <div class="inbox-item-detail-row">
+        <span class="detail-label">Waiting on</span>
+        <span class="detail-value">${approvers.join(', ')}</span>
+      </div>`;
+  }
+
   approveLabel(request, isProcessing) {
     if (request.canApproveNow === false) return 'Awaiting other reviewers';
     if (!isFinalStep(request)) return isProcessing ? 'Approving...' : 'Approve Step';
@@ -992,8 +1003,9 @@ class PublishRequestsApp extends LitElement {
         <div class="inbox-item-details">
           <div class="inbox-item-detail-row">
             <span class="detail-label">Status</span>
-            <span class="status-badge pending">Pending Approval</span>
+            <span class="status-badge pending">${this.pendingLabel(request)}</span>
           </div>
+          ${this.renderWaitingOn(request)}
           ${request.comment ? html`
             <div class="inbox-item-detail-row">
               <span class="detail-label">Message</span>
@@ -1003,6 +1015,29 @@ class PublishRequestsApp extends LitElement {
         </div>
       </details>
     `;
+  }
+
+  /** Pending status, naming the step when the flow has more than one. */
+  pendingLabel(request) {
+    const info = request.stepInfo;
+    if (!info || info.count <= 1) return 'Pending Approval';
+    const title = info.title ? ` — ${info.title}` : '';
+    return `Step ${info.current} of ${info.count}${title}`;
+  }
+
+  /** Step context on the single-request review page. */
+  renderReviewStep() {
+    const request = this._reviewRequest;
+    const info = request?.stepInfo;
+    if (!info || info.count <= 1) return nothing;
+    const title = info.title ? ` — ${info.title}` : '';
+    let note = 'Approving this step publishes the page.';
+    if (!isFinalStep(request)) note = 'Approving advances the request; the page is not published yet.';
+    if (request.canApproveNow === false) note = 'This step is waiting on another reviewer.';
+    return html`
+      <p class="reviewer-info">
+        <strong>Step ${info.current} of ${info.count}${title}</strong> — ${note}
+      </p>`;
   }
 
   // ======== Status page renders ========
@@ -1208,6 +1243,8 @@ class PublishRequestsApp extends LitElement {
 
         <section class="review-card review-card--decision">
           <h3 class="review-card-title">Your Decision</h3>
+
+          ${this.renderReviewStep()}
 
           ${this._needsEmail
             ? html`
