@@ -74,7 +74,9 @@ export default function fixture(options = {}) {
           });
         }
         if (route === '/api/requests') {
-          const own = url.searchParams.get('role') === 'requester';
+          const role = url.searchParams.get('role');
+          if (role === 'page') return response({ requests: structuredClone(state.rows) });
+          const own = role === 'requester';
           const allowed = state.role === 'both' || state.role === (own ? 'requester' : 'approver');
           return response({ requests: allowed ? structuredClone(state.rows) : [] });
         }

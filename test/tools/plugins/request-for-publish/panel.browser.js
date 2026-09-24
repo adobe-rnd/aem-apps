@@ -30,7 +30,7 @@ const twoSteps = [
   },
 ];
 const base = {
-  own: [], approvable: [], approvers: ['reviewer@example.com'], cc: [], steps: singleStep, settings: { commentsRequired: false, commentsMinLength: 1 },
+  own: [], approvable: [], page: [], approvers: ['reviewer@example.com'], cc: [], steps: singleStep, settings: { commentsRequired: false, commentsMinLength: 1 },
 };
 const mount = document.querySelector('#mount');
 const results = [];
@@ -461,6 +461,26 @@ await test('an intermediate step approves without publishing', async () => {
   await show({ ...base, steps: twoSteps, approvable: [row] });
   assert(button('Approve') && !button('Approve & publish'), 'intermediate step offers publication');
 });
+await test('approving names the step that was notified next', async () => {
+  await show({ ...base, steps: twoSteps, approvable: [row] }, { approve: async () => {} });
+  button('Approve').click();
+  await tick();
+  assert(text().includes('Brand review'), 'next step not named in the approval notice');
+});
+await test('an untitled next step is named by its number', async () => {
+  const mixed = [twoSteps[0], { ...twoSteps[1], title: '' }];
+  await show({ ...base, steps: mixed, approvable: [row] }, { approve: async () => {} });
+  button('Approve').click();
+  await tick();
+  assert(text().includes('Step 2'), 'untitled next step not named by number');
+});
+await test('the last staffed step publishes even when later steps are empty', async () => {
+  const empty = {
+    index: 2, title: 'Empty', description: '', approvers: [], cc: [],
+  };
+  await show({ ...base, steps: [twoSteps[0], empty], approvable: [row] });
+  assert(button('Approve & publish'), 'last staffed step does not publish');
+});
 await test('the final step is the only one that publishes', async () => {
   const approved = { ...row, step: 'legal@example.com:1:2026-01-01T11:00:00Z' };
   await show({ ...base, steps: twoSteps, approvable: [approved] });
@@ -488,6 +508,37 @@ await test('an approver of a later step cannot act on the current one', async ()
   await open(1);
   assert(!button('Reject…'), 'rejection offered outside the current step');
 });
+await test('an uninvolved viewer sees a read-only stepper, not an initiation form', async () => {
+  await show({ ...base, steps: twoSteps, page: [row] });
+  assert(!button('Request publish'), 'initiation form offered while a request is pending');
+  assert(current.shadowRoot.querySelectorAll('.step').length === 2, 'steps not listed');
+  assert(/Awaiting approval/.test(text()), 'wrong status for an uninvolved viewer');
+  await open(1);
+  assert(!button('Approve') && !button('Reject…') && !button('Withdraw…'), 'actions offered to an uninvolved viewer');
+  assert(!current.shadowRoot.querySelector('.decision-actions'), 'empty action row rendered');
+});
+const untitledStep = [{
+  index: 1, title: '', description: '', approvers: ['reviewer@example.com'], cc: [],
+}];
+await test('a lone unlabelled step renders no stepper', async () => {
+  await show({ ...base, steps: untitledStep });
+  assert(!current.shadowRoot.querySelector('.steps'), 'stepper shown for a single unlabelled step');
+  assert(!/Step 1/.test(text()), 'placeholder step label shown');
+  assert(button('Request publish'), 'missing request action');
+  assert(current.shadowRoot.querySelector('a[href*="diff.html"]'), 'missing review link');
+});
+await test('a lone unlabelled step keeps the decisions inline', async () => {
+  await show({ ...base, steps: untitledStep, approvable: [row] });
+  assert(!current.shadowRoot.querySelector('.steps'), 'stepper shown for a single unlabelled step');
+  assert(button('Approve & publish') && button('Reject…'), 'decisions missing without a stepper');
+  assert(text().includes(row.comment), 'author note missing');
+  assert(/Pending approval/.test(text()), 'step counter shown for a single step');
+});
+await test('a lone unlabelled step keeps the requester actions inline', async () => {
+  await show({ ...base, steps: untitledStep, own: [row] });
+  assert(button('Resend notification') && button('Withdraw…'), 'requester actions missing without a stepper');
+  assert(!button('Approve & publish'), 'unauthorized approval shown');
+});
 await test('a step with no approvers is skipped', async () => {
   const gapped = [twoSteps[0], {
     index: 2, title: 'Unstaffed', description: '', approvers: [], cc: [],
@@ -501,7 +552,7 @@ await test('local integration: a two-step request publishes only on the last app
   await show({ ...base, steps: twoSteps }, client);
   button('Approve').click();
   await tick();
-  assert(text().includes('Step approved. The next reviewers have been notified.'), 'intermediate approval not reported');
+  assert(text().includes('Step approved.') && text().includes('Brand review'), 'intermediate approval not reported');
   assert(!calls.some((call) => call.route === 'publish'), 'intermediate approval published');
   assert(state.rows.length === 1 && state.rows[0].step.includes(':1:'), 'step log not written');
   assert(/Step 2 of 2/.test(text()), 'request did not advance');

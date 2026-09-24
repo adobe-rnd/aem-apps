@@ -41,6 +41,7 @@ const twoSteps = [
 const data = (overrides = {}) => ({
   own: [],
   approvable: [],
+  page: [],
   approvers: ['reviewer@example.com'],
   cc: [],
   steps: oneStep,
@@ -51,7 +52,7 @@ const last = { step: 1, final: true };
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status });
 
 function fixture({
-  own = [], approvable = [], fail, publishFail = false,
+  own = [], approvable = [], page = [], fail, publishFail = false,
 } = {}) {
   const calls = [];
   const client = createClient({
@@ -66,7 +67,11 @@ function fixture({
       }
       if (url.pathname === '/api/config') return response({ config: { 'publish-workflow-settings': { data: [] } } });
       if (url.pathname === '/api/approvers') return response({ approvers: ['reviewer@example.com'], cc: [], steps: oneStep });
-      if (url.pathname === '/api/requests' && !opts.method) return response({ requests: url.searchParams.get('role') === 'requester' ? own : approvable });
+      if (url.pathname === '/api/requests' && !opts.method) {
+        const role = url.searchParams.get('role');
+        if (role === 'page') return response({ requests: page });
+        return response({ requests: role === 'requester' ? own : approvable });
+      }
       if (url.pathname.endsWith('/approve')) return response({ approved: [context.path], notFound: [], unauthorized: [] });
       return response({ success: true, notifiedApprovers: ['reviewer@example.com'] });
     },
@@ -171,6 +176,32 @@ describe('approval steps', () => {
     assert.equal(model.steps[0].title, 'Step 1');
     assert.equal(model.current, 1);
   });
+  it('marks a lone unlabelled step as bare so no stepper is shown', () => {
+    assert.equal(buildStepModel([{ index: 1, approvers: ['a@example.com'], cc: [] }], '').bare, true);
+    assert.equal(buildStepModel(oneStep, '').bare, false);
+    assert.equal(buildStepModel(twoSteps, '').bare, false);
+  });
+  it('reports the last approvable step, ignoring an unstaffed tail', () => {
+    const trailing = [
+      twoSteps[0],
+      { ...twoSteps[1], index: 2 },
+      {
+        index: 3, title: 'Empty', approvers: [], cc: [],
+      },
+      {
+        index: 4, title: 'Also empty', approvers: [], cc: [],
+      },
+    ];
+    assert.equal(buildStepModel(trailing, '').lastStaffed, 2);
+    assert.equal(buildStepModel(twoSteps, '').lastStaffed, 2);
+    assert.equal(buildStepModel([], '').lastStaffed, 0);
+  });
+  it('treats an untitled step as bare even when it carries a description', () => {
+    const untitled = [{
+      index: 1, title: '', description: 'Sign off.', approvers: ['a@example.com'], cc: [],
+    }];
+    assert.equal(buildStepModel(untitled, '').bare, true);
+  });
   it('derives the current step for the view and defers approver eligibility to the worker', () => {
     const advanced = { ...pending, step: 'legal@example.com:1:T' };
     const view = deriveView(context, data({ steps: twoSteps, approvable: [advanced] }));
@@ -187,13 +218,52 @@ describe('approval steps', () => {
   });
 });
 
+describe('uninvolved viewers', () => {
+  it('shows a read-only stepper instead of an initiation form', () => {
+    const view = deriveView(context, data({ page: [pending] }));
+    assert.equal(view.view, 'observer');
+    assert.equal(view.canApprove, false);
+    assert.equal(view.canWithdraw, false);
+    assert.deepEqual(view.request, pending);
+  });
+  it('still derives the current step for an uninvolved viewer', () => {
+    const advanced = { ...pending, step: 'legal@example.com:1:T' };
+    const view = deriveView(context, data({ steps: twoSteps, page: [advanced] }));
+    assert.equal(view.current, 2);
+    assert.deepEqual(view.steps.map((step) => step.state), ['approved', 'current']);
+  });
+  it('prefers the role queues so participants keep their actions', () => {
+    const asOwner = deriveView(context, data({ own: [pending], page: [pending] }));
+    assert.equal(asOwner.view, 'requester');
+    assert.equal(asOwner.canWithdraw, true);
+    const asApprover = deriveView(context, data({ approvable: [pending], page: [pending] }));
+    assert.equal(asApprover.view, 'approver');
+    assert.equal(asApprover.canApprove, true);
+  });
+  it('offers initiation only when no request exists for the page', () => {
+    assert.equal(deriveView(context, data()).view, 'request');
+  });
+  it('blocks on duplicate page records', () => {
+    const view = deriveView(context, data({ page: [pending, { ...pending, requester: 'other@example.com' }] }));
+    assert.equal(view.view, 'blocked');
+  });
+  it('reads the page queue without a role filter', async () => {
+    const { client, calls } = fixture({ page: [pending] });
+    const loaded = await client.load(context);
+    assert.deepEqual(loaded.page, [pending]);
+    const pageCall = calls.find((call) => call.role === 'page');
+    assert.ok(pageCall, 'no page-scoped read issued');
+  });
+});
+
 describe('workflow operations', () => {
   it('loads both role queues and server-resolved recipients', async () => {
     const { client, calls } = fixture({ own: [pending] });
     const loaded = await client.load(context);
     assert.equal(loaded.own[0].requester, pending.requester);
     assert.deepEqual(loaded.approvers, ['reviewer@example.com']);
-    assert.equal(calls.filter((call) => call.path === '/api/requests').length, 2);
+    // requester, approver and page-scoped reads
+    assert.equal(calls.filter((call) => call.path === '/api/requests').length, 3);
   });
   it('reads the site theme from the settings tab and leaves it empty when unset', async () => {
     const themed = fixture({
