@@ -95,8 +95,16 @@ export function buildStepModel(definitions = [], logValue = '') {
     else if (step.index === current) step.state = 'current';
   });
 
+  const staffed = steps.filter((step) => step.approvers.length > 0);
   return {
-    steps, current, count: steps.length, complete: current > steps.length,
+    steps,
+    current,
+    count: steps.length,
+    complete: current > steps.length,
+    // The last step that can actually be approved; later empty steps are skipped.
+    lastStaffed: staffed.length ? staffed[staffed.length - 1].index : 0,
+    // A lone unlabelled step is an ordinary single approval: no stepper needed.
+    bare: steps.length <= 1 && !definitions[0]?.title,
   };
 }
 
@@ -108,18 +116,23 @@ export function deriveView(context, data) {
   if (!data) return { view: 'loading' };
   const own = forPage(data.own, context.path);
   const approvable = forPage(data.approvable, context.path);
-  if (own.length > 1 || approvable.length > 1
+  // Everything pending for this page, whatever the caller's role.
+  const onPage = forPage(data.page || [], context.path);
+  if (own.length > 1 || approvable.length > 1 || onPage.length > 1
     || (own[0] && approvable[0] && !sameRequest(own[0], approvable[0]))) {
     return { ...blocked, message: 'Multiple pending records were returned for this page. Contact your site administrator before taking action.' };
   }
-  const request = approvable[0] || own[0];
+  const request = approvable[0] || own[0] || onPage[0];
   if (!request && !data.approvers.length) return { ...blocked, message: 'No approver is configured for this page. Contact your site administrator.' };
-  const waitingView = own.length ? 'requester' : 'request';
+  let view = 'request';
+  if (approvable.length) view = 'approver';
+  else if (own.length) view = 'requester';
+  else if (onPage.length) view = 'observer';
   // Approver eligibility stays worker-authoritative; an older worker omits the flag.
   const canApprove = !!approvable.length && approvable[0].canApproveNow !== false;
   return {
     ...buildStepModel(data.steps, request?.step),
-    view: approvable.length ? 'approver' : waitingView,
+    view,
     request,
     canApprove,
     canWithdraw: !!own.length,
@@ -204,14 +217,14 @@ export function createClient({
     return result;
   }
 
-  async function list(context, role) {
-    const result = await json('/api/requests', context, null, role ? { role } : {});
+  async function list(context, extra = {}) {
+    const result = await json('/api/requests', context, null, extra);
     if (!Array.isArray(result.requests)) throw failure('The workflow service returned an invalid request list.');
     return result.requests;
   }
 
   async function revalidate(context, expected, role) {
-    const rows = forPage(await list(context, role), context.path);
+    const rows = forPage(await list(context, role ? { role } : {}), context.path);
     if (rows.length !== 1 || !sameRequest(rows[0], expected)) {
       throw failure('This request changed or is no longer pending. Refresh before taking action.', { stale: true });
     }
@@ -244,11 +257,12 @@ export function createClient({
 
   return {
     async load(context) {
-      const [configResult, people, own, approvable] = await Promise.all([
+      const [configResult, people, own, approvable, page] = await Promise.all([
         json('/api/config', context),
         json('/api/approvers', context, null, { path: context.path }),
-        list(context, 'requester'),
+        list(context, { role: 'requester' }),
         list(context),
+        list(context, { role: 'page', path: context.path }),
       ]);
       if (!configResult.config) throw failure('The publish workflow is not configured for this site.');
       if (!Array.isArray(people.approvers) || !Array.isArray(people.cc)) {
@@ -263,6 +277,7 @@ export function createClient({
       return {
         own,
         approvable,
+        page,
         approvers: people.approvers,
         cc: people.cc,
         steps,

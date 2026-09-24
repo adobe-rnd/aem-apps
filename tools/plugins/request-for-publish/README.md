@@ -4,7 +4,7 @@ One page-scoped DA/EW plugin showing a page's approval flow as an ordered list o
 
 Every view renders the same stepper. Steps already approved show a check mark and the approver; the step awaiting a decision shows an inline **Approve** button when the caller may act on it; later steps are greyed out. Expanding a step reveals its detail — approval time for completed steps, the approver list for upcoming ones, and the request actions for the current one. All steps are collapsed by default.
 
-There is no role selector. When the caller is both the requester and an approver of the current step, the current step offers both sets of actions. Approver eligibility comes from the worker, not a client-side comparison of email addresses. The full-page publish requests inbox remains available for queue and bulk work, but is not yet step-aware.
+There is no role selector. When the caller is both the requester and an approver of the current step, the current step offers both sets of actions. A user with no stake in a pending request — including an approver of a later step — gets the same stepper read-only, so they can see the request's progress without being offered the submission form. Approver eligibility comes from the worker, not a client-side comparison of email addresses. The full-page publish requests inbox remains available for queue and bulk work, but is not yet step-aware.
 
 ## Integration
 
@@ -19,7 +19,7 @@ Context accepts `org`, `site` (or legacy `repo`), and a site-relative page `path
 The panel uses:
 
 - `GET /api/config` and `GET /api/approvers` (the latter also returns the ordered `steps` for the path)
-- `GET /api/requests` and `GET /api/requests?role=requester`
+- `GET /api/requests`, `GET /api/requests?role=requester` and `GET /api/requests?role=page&path=` (the page-scoped read, which ignores the caller's role so an uninvolved user sees that a request already exists)
 - `POST /api/requests` (including `resend: true`)
 - `POST /api/requests/withdraw`, `/reject` and `/approve`
 
