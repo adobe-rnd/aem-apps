@@ -15,6 +15,8 @@
  */
 /* eslint-disable import/no-unresolved, no-console */
 
+import getImsProfileUrl from './ims-profile.js';
+
 const WORKER_URL = 'https://publish-requests.aem-poc-lab.workers.dev';
 const CI_WORKER_URL = 'https://publish-requests-ci.aem-poc-lab.workers.dev';
 const LOCAL_WORKER_URL = 'http://localhost:8787';
@@ -42,7 +44,7 @@ function extractSetting(config, key) {
  * `?env=ci` targets the CI worker.
  * @returns {string} Worker base URL
  */
-function getWorkerUrl() {
+export function getWorkerUrl() {
   const { hostname } = window.location;
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return LOCAL_WORKER_URL;
@@ -62,7 +64,7 @@ function getWorkerUrl() {
  * @param {Object} body - Optional request body
  * @returns {Object} Fetch options object
  */
-function getOpts(token, method = 'GET', body = null) {
+export function getOpts(token, method = 'GET', body = null) {
   const opts = {
     method,
     headers: {
@@ -302,12 +304,13 @@ export async function checkExistingRequest(org, site, path, _requesterEmail, tok
 
 /**
  * Fetch the current user's email from the Adobe IMS profile (for display).
+ * Uses the IMS environment that issued the token, so stage/local sessions work.
  * @param {string} token - The authorization token
  * @returns {Promise<string>} User email or empty string if unavailable
  */
 export async function getUserEmail(token) {
   try {
-    const resp = await fetch('https://ims-na1.adobelogin.com/ims/profile/v1', {
+    const resp = await fetch(getImsProfileUrl(token), {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!resp.ok) return '';

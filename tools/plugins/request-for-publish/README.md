@@ -12,7 +12,7 @@ Use `request-for-publish.html` as an **inline** library extension. The same entr
 
 Context accepts `org`, `site` (or legacy `repo`), and a site-relative page `path`. Missing or unsupported context blocks actions. The component reacts to new context properties and ignores superseded reads/actions. The EW iframe host must remount or provide new context on page navigation: the existing SDK only supplies an initial context snapshot.
 
-`request-for-publish.js` bootstraps the SDK and authenticated transport. `panel.js` contains the Lit view. `workflow.js` contains the testable view derivation, client and operation sequencing. Native semantic controls use Spectrum-compatible tokens; no additional UI dependency is required. Legacy `utils.js` remains available for existing imports but is not used by this panel.
+`request-for-publish.js` bootstraps the SDK and authenticated transport. `panel.js` contains the Lit view. `workflow.js` contains the testable view derivation, client and operation sequencing. Native semantic controls use Spectrum-compatible tokens; no additional UI dependency is required. Legacy `utils.js` remains available for existing imports but is not used by this panel; it resolves the IMS profile host through `ims-profile.js`, so a stage or local session reads the caller's email from the IMS environment that issued the token. `plugin.js` is a separate, panel-free entry point for the browse status surface (see below).
 
 ## Worker contract
 
@@ -68,6 +68,46 @@ legal@example.com:1:2026-09-23T10:14:00Z, brand@example.com:2:2026-09-23T11:02:0
 ```
 
 The current step is derived, not stored: the highest approved step plus one, skipped forward over approver-less and already-logged steps. Concurrent approvals of the same step therefore collapse rather than advancing the request twice. Timestamps are ISO; no field may contain a comma.
+
+## Browse status surface (`plugin.js`)
+
+DA's browse list can show a page's pending publish request as a status cell in
+the item's details drawer. `plugin.js` is the module that serves it. It is a
+sibling of `request-for-publish.js` on purpose: the editor entry point loads
+the DA editor styles and the Lit component at import time, and the browse list
+must not pay for those just to ask whether a page has a pending request.
+
+Declare it with a `library` config row on the site (or org) config:
+
+| title | surface | module | label | icon | kinds |
+|---|---|---|---|---|---|
+| Request Publish | status | `/tools/plugins/request-for-publish/plugin.js` | Workflow | workflow | page |
+
+Behaviour:
+
+- The module's `init({ context, token })` returns a handle with
+  `async getStatus(item, ctx)`.
+- A page with a pending request gets `{ state: 'pending', label: 'In Review',
+  icon: 'clock' }`. A page with none returns `null`, which renders nothing.
+  `pending` is the only state the list ever sees, because approve, reject and
+  withdraw delete the row.
+- Matching is on `item.sitePath`, the site-relative extensionless form the
+  worker stores (`/tea2` for `/bpauli/frescopa/tea2`). A folder index is
+  browsed as `/de/index`, so a request recorded against the folder `/de`
+  matches it too.
+- The popover detail (requester, approver, comment, created) comes from the
+  request row itself, plus an origin-relative link to the inbox app, so a local
+  run links to the local inbox. There is no second network call.
+- Pending requests are caller-scoped, so the module lists both
+  `role=requester` and the default (no `role` param) approver-scoped queue,
+  then dedupes by path. The host caches nothing and calls `getStatus` once per
+  expand, so the listing is fetched once per `init` and shared by every item
+  in the list.
+- `ctx.token` is the raw IMS token: `daFetch` only attaches credentials for DA
+  and AEM origins, so the worker would otherwise get an unauthenticated call.
+
+The full host contract is `blocks/browse/da-list/status-registry/README.md` in
+`da-live`.
 
 The worker requires site registration and the caller's DA access to the requests sheet (`/.da/publish-workflow-requests.json`). No registration or permission change is made by the plugin. The worker is authoritative for configuration, step resolution and comment validation.
 
