@@ -42,7 +42,7 @@ function extractSetting(config, key) {
  * `?env=ci` targets the CI worker.
  * @returns {string} Worker base URL
  */
-function getWorkerUrl() {
+export function getWorkerUrl() {
   const { hostname } = window.location;
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return LOCAL_WORKER_URL;
@@ -62,7 +62,7 @@ function getWorkerUrl() {
  * @param {Object} body - Optional request body
  * @returns {Object} Fetch options object
  */
-function getOpts(token, method = 'GET', body = null) {
+export function getOpts(token, method = 'GET', body = null) {
   const opts = {
     method,
     headers: {
