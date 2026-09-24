@@ -139,11 +139,14 @@ export function deriveView(context, data) {
   };
 }
 
-export function pageLinks(context, env) {
+export function pageLinks(context, env, moduleUrl = import.meta.url) {
   const { org, site, path } = context;
   const delivered = path.replace(/\.html$/, '').replace(/\/index$/, '/');
   const query = new URLSearchParams({ org, site });
   if (env === 'ci') query.set('env', env);
+  const codeHost = new URL(moduleUrl).hostname;
+  const ref = codeHost.match(/^([a-z0-9-]+)--aem-apps--adobe-rnd\.aem\.(?:page|live)$/)?.[1];
+  if (ref && ref !== 'main') query.set('ref', ref);
   const diff = new URL('https://tools.aem.live/tools/page-status/diff.html');
   diff.search = new URLSearchParams({ org, site, path }).toString();
   return {
