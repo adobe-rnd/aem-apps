@@ -125,7 +125,10 @@ describe('getStatus', () => {
     assert.equal(status.state, 'pending');
     assert.equal(status.label, 'In Review');
     assert.equal(status.icon, 'clock');
-    assert.match(status.href, /publish-requests-inbox\?org=bpauli&site=frescopa$/);
+    assert.equal(
+      status.href,
+      '/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox?org=bpauli&site=frescopa',
+    );
     assert.deepEqual(
       status.detail.map((d) => d.label),
       ['Requested by', 'Approver', 'Comment', 'Requested'],

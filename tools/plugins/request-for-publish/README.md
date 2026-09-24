@@ -186,8 +186,8 @@ Behaviour:
   browsed as `/de/index`, so a request recorded against the folder `/de`
   matches it too.
 - The popover detail (requester, approver, comment, created) comes from the
-  request row itself, plus a link to the inbox app. There is no second network
-  call.
+  request row itself, plus an origin-relative link to the inbox app, so a local
+  run links to the local inbox. There is no second network call.
 - Pending requests are caller-scoped, so the module lists both
   `role=requester` and the default (no `role` param) approver-scoped queue,
   then dedupes by path. The host caches nothing and calls `getStatus` once per

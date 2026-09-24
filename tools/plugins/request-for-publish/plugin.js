@@ -25,8 +25,12 @@
  * Host contract: blocks/browse/da-list/status-registry/README.md in da-live.
  */
 
-/** The inbox app, linked at the foot of the popover. */
-const INBOX_URL = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox';
+/**
+ * The inbox app, linked at the foot of the popover. Origin-relative on
+ * purpose: the host renders a site-relative href against the current origin,
+ * so a local run links to the local inbox and da.live links to the prod one.
+ */
+const INBOX_URL = '/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox';
 
 /**
  * The only state a request row can really be in. Approve, reject and withdraw
