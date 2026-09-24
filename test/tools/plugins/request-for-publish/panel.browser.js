@@ -221,6 +221,35 @@ await test('primary button has AA text contrast in light and dark themes', async
   } finally { document.documentElement.style.colorScheme = previous; }
 });
 
+await test('site theme colours the primary action and links with AA contrast, and clears when absent', async () => {
+  const luminance = (color) => color.match(/\d+(?:\.\d+)?/g).slice(0, 3)
+    .map((channel) => Number(channel) / 255)
+    .map((channel) => (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4))
+    .reduce((sum, channel, i) => sum + channel * [0.2126, 0.7152, 0.0722][i], 0);
+  const contrast = (styles) => {
+    const colors = [luminance(styles.color), luminance(styles.backgroundColor)]
+      .sort((a, b) => a - b);
+    return (colors[1] + 0.05) / (colors[0] + 0.05);
+  };
+  const settings = { ...base.settings, accentColor: '#903', accentColorHover: '#730026' };
+  await show({ ...base, approvable: [row], settings });
+  const previous = document.documentElement.style.colorScheme;
+  try {
+    ['light', 'dark'].forEach((scheme) => {
+      document.documentElement.style.colorScheme = scheme;
+      const styles = getComputedStyle(button('Approve & publish'));
+      assert(styles.backgroundColor === 'rgb(153, 0, 51)', `${scheme} primary action ignores theme.accent-color`);
+      assert(contrast(styles) >= 4.5, `${scheme} themed button contrast below 4.5`);
+      const link = getComputedStyle(current.shadowRoot.querySelector('a[href*="diff.html"]'));
+      assert(link.color === 'rgb(153, 0, 51)', `${scheme} link ignores theme.accent-color`);
+    });
+  } finally { document.documentElement.style.colorScheme = previous; }
+  assert(current.style.getPropertyValue('--pw-accent-hover') === '#730026', 'hover accent not applied');
+  current.client = { load: async () => structuredClone({ ...base, approvable: [row] }) };
+  await tick();
+  assert(getComputedStyle(button('Approve & publish')).backgroundColor !== 'rgb(153, 0, 51)', 'stale theme kept for an unthemed site');
+});
+
 await test('late page A response cannot overwrite page B', async () => {
   let finish;
   await show(base, {

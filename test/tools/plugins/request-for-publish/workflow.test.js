@@ -195,6 +195,26 @@ describe('workflow operations', () => {
     assert.deepEqual(loaded.approvers, ['reviewer@example.com']);
     assert.equal(calls.filter((call) => call.path === '/api/requests').length, 2);
   });
+  it('reads the site theme from the settings tab and leaves it empty when unset', async () => {
+    const themed = fixture({
+      fail: (url) => url.pathname === '/api/config' && response({
+        config: {
+          'publish-workflow-settings': {
+            data: [
+              { key: 'theme.accent-color', value: '#903' },
+              { key: 'theme.accent-color-hover', value: '#730026' },
+            ],
+          },
+        },
+      }),
+    });
+    const { settings } = await themed.client.load(context);
+    assert.equal(settings.accentColor, '#903');
+    assert.equal(settings.accentColorHover, '#730026');
+    const plain = await fixture().client.load(context);
+    assert.equal(plain.settings.accentColor, '');
+    assert.equal(plain.settings.accentColorHover, '');
+  });
   it('does not convert failed reads to an empty queue', async () => {
     const { client } = fixture({ fail: (url) => url.pathname === '/api/requests' && response({ error: 'Session expired' }, 401) });
     await assert.rejects(client.load(context), (error) => error.status === 401 && /Session expired/.test(error.message));
