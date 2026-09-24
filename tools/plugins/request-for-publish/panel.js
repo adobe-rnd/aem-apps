@@ -188,8 +188,10 @@ class RequestForPublish extends LitElement {
     const epoch = this._epoch;
     const { client } = this;
     const expected = action === 'complete' ? this._receipt : request;
-    const { current, count } = this.state;
-    const final = current >= count;
+    const { current, steps } = this.state;
+    // Trailing steps without approvers are skipped, so the last staffed step publishes.
+    const next = steps.find((step) => step.index > current && step.approvers.length > 0);
+    const final = !next;
     const messages = {
       submit: 'Request sent. An approver can now review this page.',
       resend: 'Notification sent again. Your request is still pending.',
@@ -197,7 +199,7 @@ class RequestForPublish extends LitElement {
       reject: 'Request rejected.',
       approve: final
         ? 'Published. The publish request is complete.'
-        : 'Step approved. The next reviewers have been notified.',
+        : `Step approved. The reviewers for ${next.title} have been notified.`,
       complete: 'The publish request is now complete.',
     };
     this._busy = 'Working…';
@@ -288,7 +290,7 @@ class RequestForPublish extends LitElement {
     </div>`;
   }
 
-  renderStepBody(step, state) {
+  renderStepBody(step, state, inline = false) {
     if (step.state === 'approved') {
       const when = step.approvedAt && new Date(step.approvedAt);
       return html`<dl class="metadata">
@@ -304,16 +306,19 @@ class RequestForPublish extends LitElement {
         ${peopleList('Also notified', step.cc)}`;
     }
     if (this._confirmation) return this.renderConfirmation();
+    const approveInline = inline && state.canApprove;
+    const actionable = approveInline || state.canApprove || state.canWithdraw;
     return html`
       ${peopleList('Approvers', step.approvers)}
       ${peopleList('Also notified', step.cc)}
       ${state.request.comment ? html`<div class="detail"><span class="label">Request note</span><p class="note">${state.request.comment}</p></div>` : nothing}
       ${this.renderLinks()}
-      <div class="decision-actions">
+      ${actionable ? html`<div class="decision-actions">
+        ${approveInline ? html`<button class="primary" ?disabled=${this.disabled} @click=${() => this.act('approve')}>${state.current >= state.lastStaffed ? 'Approve & publish' : 'Approve'}</button>` : nothing}
         ${state.canApprove ? html`<button class="quiet" data-action="reject" ?disabled=${this.disabled} @click=${() => this.confirm('reject')}>Reject…</button>` : nothing}
         ${state.canWithdraw ? html`<button class="quiet" ?disabled=${this.disabled} @click=${() => this.act('resend')}>Resend notification</button>
           <button class="quiet" data-action="withdraw" ?disabled=${this.disabled} @click=${() => this.confirm('withdraw')}>Withdraw…</button>` : nothing}
-      </div>`;
+      </div>` : nothing}`;
   }
 
   renderStep(step, state) {
@@ -331,7 +336,7 @@ class RequestForPublish extends LitElement {
             ${step.state === 'skipped' ? html`<span class="step-meta">Skipped — no approvers</span>` : nothing}
           </span>
         </button>
-        ${actionable ? html`<button class="primary step-action" ?disabled=${this.disabled} @click=${() => this.act('approve')}>${state.current >= state.count ? 'Approve & publish' : 'Approve'}</button>` : nothing}
+        ${actionable ? html`<button class="primary step-action" ?disabled=${this.disabled} @click=${() => this.act('approve')}>${state.current >= state.lastStaffed ? 'Approve & publish' : 'Approve'}</button>` : nothing}
       </div>
       ${expanded ? html`<div class="step-body">${this.renderStepBody(step, state)}</div>` : nothing}
     </li>`;
@@ -359,17 +364,24 @@ class RequestForPublish extends LitElement {
     const nextStep = state.canApprove
       ? 'Review the changes, then approve this step.'
       : 'A reviewer needs to approve the current step.';
+    const status = state.bare ? 'Pending approval' : `Step ${state.current} of ${state.count}`;
+    const intro = state.bare
+      ? 'Send this page to its reviewers before publishing.'
+      : 'Send this page through its approval steps before publishing.';
+    const current = state.steps.find((step) => step.state === 'current') || state.steps[0];
     return html`
       <section class="summary">
-        <span class="status ${requesting ? 'neutral' : 'pending'}">${requesting ? 'Ready to request' : `Step ${state.current} of ${state.count}`}</span>
+        <span class="status ${requesting ? 'neutral' : 'pending'}">${requesting ? 'Ready to request' : status}</span>
         <h2>${requesting ? 'Request approval' : waiting}</h2>
-        <p>${requesting ? 'Send this page through its approval steps before publishing.' : nextStep}</p>
+        <p>${requesting ? intro : nextStep}</p>
       </section>
       ${request ? html`<dl class="metadata">
         <div><dt>Requested by</dt><dd>${state.canWithdraw ? 'You' : request.requester}</dd></div>
         ${created && !Number.isNaN(created.getTime()) ? html`<div><dt>Submitted</dt><dd><time datetime=${request.created}>${created.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</time></dd></div>` : nothing}
       </dl>` : nothing}
-      <ol class="steps">${state.steps.map((step) => this.renderStep(step, state))}</ol>
+      ${state.bare
+    ? html`${current ? this.renderStepBody(current, state, true) : nothing}`
+    : html`<ol class="steps">${state.steps.map((step) => this.renderStep(step, state))}</ol>`}
       ${requesting ? html`${this.renderLinks()}${this.renderRequestForm()}` : nothing}
     `;
   }
