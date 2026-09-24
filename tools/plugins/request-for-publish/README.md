@@ -1,170 +1,76 @@
-# Request for Plugin
+# Publish request
 
-A DA (Document Authoring) plugin that enables content authors to submit publish requests for approval. This plugin is the **author-facing** side of the publish workflow, appearing as a dialog within the DA editing environment.
+One page-scoped DA/EW plugin showing a page's approval flow as an ordered list of steps. A request advances one step at a time; the page is published only when the last step is approved.
 
-## How It Works
+Every view renders the same stepper. Steps already approved show a check mark and the approver; the step awaiting a decision shows an inline **Approve** button when the caller may act on it; later steps are greyed out. Expanding a step reveals its detail — approval time for completed steps, the approver list for upcoming ones, and the request actions for the current one. All steps are collapsed by default.
 
-### Overview
+There is no role selector. When the caller is both the requester and an approver of the current step, the current step offers both sets of actions. A user with no stake in a pending request — including an approver of a later step — gets the same stepper read-only, so they can see the request's progress without being offered the submission form. Approver eligibility comes from the worker, not a client-side comparison of email addresses. The full-page publish requests inbox remains available for queue and bulk work, but is not yet step-aware.
 
-When an author finishes editing content and wants to publish it, they open this plugin from the DA interface. The plugin automatically detects the current content path, identifies the appropriate approvers and CC recipients from the workflow configuration (including resolving distribution list groups), and lets the author submit a publish request with an optional note. The designated approvers then receive a notification (email) with CC recipients copied, along with a link to the [Publish Requests App](../../apps/publish-requests-inbox/) where they can review and approve or reject the request.
+## Integration
 
-### Architecture
+Use `request-for-publish.html` as an **inline** library extension. The same entrypoint works in a fullsize dialog. The default JS export retains the panel `init({ context, token, actions })` contract.
 
-The plugin is a **thin REST client of [`publish-requests-worker`](https://github.com/adobe-rnd/publish-requests-worker)**. It no longer resolves approvers or reads/writes the requests sheet itself — the worker is the single source of truth for approver resolution (pattern matching + DL-group expansion), sheet I/O, and email.
+Context accepts `org`, `site` (or legacy `repo`), and a site-relative page `path`. Missing or unsupported context blocks actions. The component reacts to new context properties and ignores superseded reads/actions. The EW iframe host must remount or provide new context on page navigation: the existing SDK only supplies an initial context snapshot.
 
-- **Web Component**: LitElement custom element (`<request-for-publish>`).
-- **DA SDK**: authentication, context (org, site, path), and dialog rendering.
-- **publish-requests-worker (REST)** — the plugin calls:
-  - `GET /api/approvers` — resolved approvers + CC for the path
-  - `GET /api/config` — workflow config (for display-only settings, e.g. comment requirements)
-  - `POST /api/requests` — submit a request (worker resolves approvers, records the row, emails approvers + CC)
-  - `POST /api/requests/withdraw` — cancel the author's own pending request
-  - `GET /api/requests?role=requester` — the author's own pending requests
-- **Helix Admin (client-side)**: previews the page under the user's session before submitting; the worker never calls Helix.
-- **Adobe IMS**: the user's IMS token is sent to the worker, which **derives the caller's identity from it** (the plugin never sends an email/approver list). The plugin also reads the user's email from the IMS profile for display.
-- **Dual Mode**: fullsize-dialog (HTML entry point) or DA panel plugin (exported `init`).
+`request-for-publish.js` bootstraps the SDK and authenticated transport. `panel.js` contains the Lit view. `workflow.js` contains the testable view derivation, client and operation sequencing. Native semantic controls use Spectrum-compatible tokens; no additional UI dependency is required. Legacy `utils.js` remains available for existing imports but is not used by this panel.
 
-### Initialization & submission flow
+## Worker contract
 
-1. The plugin reads the user's email (IMS profile, for display) and the content path from the DA SDK context.
-2. It calls `GET /api/config` (display settings) and `GET /api/approvers` (resolved approvers + CC). If the worker reports missing config or no matching rule, an error is shown and the form is hidden.
-3. It calls `GET /api/requests?role=requester` to detect an existing pending request by this user for this path; if found, a "Request Pending" state is shown instead of the form.
-4. The author optionally reviews the diff, adds a note, and clicks **Request Publish**.
-5. The plugin previews the page via Helix (client-side), then `POST /api/requests` — the worker resolves approvers, records the pending row, and emails approvers + CC. A success confirmation lists the notified recipients.
+The panel uses:
 
-### Approver resolution (server-side)
+- `GET /api/config` and `GET /api/approvers` (the latter also returns the ordered `steps` for the path)
+- `GET /api/requests`, `GET /api/requests?role=requester` and `GET /api/requests?role=page&path=` (the page-scoped read, which ignores the caller's role so an uninvolved user sees that a request already exists)
+- `POST /api/requests` (including `resend: true`)
+- `POST /api/requests/withdraw`, `/reject` and `/approve`
 
-Approver/CC resolution — specificity-based pattern matching against the `publish-workflow-config` rules and distribution-list expansion via `publish-workflow-groups-to-email` — is performed by **`publish-requests-worker`**, not the plugin. See that repo for the matching semantics and rule format. The plugin only displays the approvers the worker returns; if no rule matches the path, the worker returns none and the plugin shows an error.
+`POST /api/requests/approve` carries the step the client believes is current. The worker re-derives it from the stored log and returns the path under `stale` when they disagree, so an out-of-date panel cannot approve a step twice or skip ahead. Rows returned in the approver queue carry `canApproveNow`, which is false when the caller approves some later step but not the current one.
 
-## Use Cases Handled
+Preview and publication still happen client-side under the user's session. Submission stops if preview fails. Approving an intermediate step only writes the log and notifies the next step's approvers — no content operation, so only the final approval can leave the page published with the request unrecorded. That case still offers **Retry request update**, which does not republish. Withdraw and reject require an inline confirmation; rejection also requires a reason and ends the request outright, discarding the step log with the row. An ambiguous publish response blocks another publication attempt in the panel and directs the user to check the live page. Mutations are not automatically retried.
 
-### 1. Submit a New Publish Request
+HTTP failures and malformed queue responses are not treated as empty queues. The panel re-reads after mutations and failures because an email failure may occur after a row was written/deleted. It also refreshes on explicit refresh and return to the document, without background polling. Notes survive failed submission and refresh.
 
-The primary use case. The author sees the content path, preview URL, resolved approvers and CC recipients (with DLs expanded), and a content diff link. They add a description/note (optional by default; mandatory when `request.comments.required` is `true` in `publish-workflow-settings`) and submit. This:
-- Sends the request via the Cloudflare Worker which emails the approvers (with CC recipients copied) with a review link
-- Records the pending request in the DA requests sheet (requester, approver, path, comment, status)
-- Shows a success confirmation with the list of notified approvers and CC'd recipients
+The worker deletes completed requests; it does not supply retained workflow history or an immutable revision/request ID. Disappearance is not proof of approval. Invisible requests belonging to someone else can still cause a duplicate-request error. Duplicate pending rows returned for a page block ambiguous actions. Revalidation reduces stale actions but cannot make publication and workflow completion atomic or repair source-read failures hidden by the worker.
 
-### 2. Existing Pending Request Detection
-
-If the author already has a pending request for the same content path, the plugin shows a "Request Pending" state instead of the form. This prevents duplicate submissions and displays:
-- The content path
-- The assigned approver
-- The current status (`pending`)
-- A note asking the author to wait for the existing request to be reviewed
-
-### 3. Review Content Diff Before Submitting
-
-Before submitting, the author can click the diff link to open the AEM Page Status diff tool (`https://tools.aem.live/tools/page-status/diff.html`). This shows a comparison of the preview (draft) content versus the currently live/published version, helping the author verify their changes are correct before requesting approval.
-
-### 4. View Preview
-
-The plugin generates and displays a preview URL (`https://main--{site}--{org}.aem.page/{path}`) that the author can click to see how the content will look when published.
-
-### 5. Approver Transparency
-
-The plugin clearly shows which approvers and CC recipients will receive the request (with DLs fully resolved to individual names), along with the source of the detection:
-- **Config-based**: "Approvers and CC determined by content path rules" — matched from the workflow config
-- **Error**: If no matching rule is found or the config is missing, an error message is shown instead of the form
-
-### 6. Missing Configuration
-
-If the `publish-workflow-config` tab is not found in the DA config at either the site level (`/config/{org}/{site}/`) or the org level (`/config/{org}/`), the plugin displays an error:
-
-> *"Publish workflow configuration not found. Please ensure the "publish-workflow-config" tab exists in the DA config for site "{org}/{site}" or org "{org}"."*
-
-Similarly, if the config exists but no rule matches the current content path, an error is shown:
-
-> *"No approver rule found matching path "{path}". Please add a matching pattern to the "publish-workflow-config" tab."*
-
-In both cases, the submission form is not rendered and the author cannot submit a request.
-
-### 7. Session/Auth Issues
-
-If the user's email cannot be determined from the Adobe IMS token (e.g., expired session), the submit is blocked with an error message: "Could not determine your email. Please try again."
-
-### 8. Submission Failure Handling
-
-If the request fails to submit (network error, worker error, etc.), an error message is displayed and the form remains active so the author can retry.
-
-## File Structure
-
-| File | Description |
-|------|-------------|
-| `request-for-publish.html` | Entry HTML for fullsize-dialog mode; loads DA SDK and the plugin module |
-| `request-for-publish.js` | Main LitElement component with form, states, and event handlers; includes both dialog and panel mode initialization |
-| `request-for-publish.css` | Styles for all component states (form, pending, success, loading) |
-| `utils.js` | Thin REST client over `publish-requests-worker` (approvers/config fetch, submit/resend/withdraw, existing-request check) + client-side Helix preview + IMS profile fetch |
+**Review changes** opens the existing Page Status comparison in a new tab. It compares current preview versus live, not unsaved editor edits or a frozen submission version. Preview and publish use the existing main content workflow even when the plugin code comes from a feature branch.
 
 ## Configuration
 
-### DA Config API (approver rules + groups)
+At the site or org level, the worker reads these DA config tabs:
 
-The workflow configuration is read from the **DA Config API** as tabs within the root config:
+| Tab | Columns / values |
+|---|---|
+| `publish-workflow-config` | `Pattern`, `Approvers`, `CC` (for example `/drafts/*`, `legal@example.com:1, brand@example.com:2`, `watcher@example.com:2`) |
+| `publish-workflow-settings` | `key`, `value`: `request.comments.required`, `request.comments.length`, `request.support.contact`, `approvals.cc.can-approve`, `workflow.step.N.title`, `workflow.step.N.description` |
+| `publish-workflow-groups-to-email` | Optional distribution-list expansion; not needed for direct reviewer addresses. |
 
-- **Site-level** (primary): `GET https://admin.da.live/config/{org}/{site}/`
-- **Org-level** (fallback): `GET https://admin.da.live/config/{org}/`
+### Steps
 
-These tabs are read by **`publish-requests-worker`** (for approver resolution and rule enforcement); the plugin only reads display-only settings from them via `GET /api/config`. The config is a multi-sheet JSON with these tabs:
+Each entry in `Approvers` and `CC` may carry a step suffix, `<email>:<step>`. A bare address without a suffix belongs to step 1, so existing single-step configurations keep working unchanged. The same address may appear on several steps. Distribution-list groups take a suffix too, and every expanded address inherits it.
 
-- **`publish-workflow-config`** tab: Path-based rules with `Pattern`, `Approvers`, `CC`, and `NotifyOnReject` columns. Patterns support wildcards (e.g., `/drafts/*`, `/*`)
-- **`publish-workflow-groups-to-email`** tab: Maps distribution list group names (e.g., `dl-reviewers@example.com`) to comma-separated individual email addresses
-- **`publish-workflow-settings`** tab: Key-value settings for the publish workflow (see below)
+The number of steps is the highest step referenced in the matched pattern's `Approvers`. Titles and descriptions are decoration only: `workflow.step.N.title` falls back to `Step N`, and a missing description renders nothing. These keys are global — patterns with different approver sets share them.
 
-If the `publish-workflow-config` tab is not found at either level, the plugin shows an error message and disables submission.
+A step with no approvers is skipped and rendered as such. Because step count comes from `Approvers`, this only happens for gaps between assigned steps, for example approvers on steps 1 and 3 but none on step 2.
 
-#### `publish-workflow-settings` tab
+A step completes when **any one** of its approvers approves. `CC` addresses for a step are notified when that step becomes active, and may approve it only when `approvals.cc.can-approve` is true.
 
-The `publish-workflow-settings` tab holds key-value pairs that control optional workflow behavior. Add a row for each setting:
+### Request state
 
-| Key | Value | Description |
-|-----|-------|-------------|
-| `request.comments.required` | `true` or `false` | When `true`, the description field ("Please provide a description of your website content changes...") becomes mandatory. Default: `false`. |
-| `request.comments.length` | number | Minimum character length for the description when comments are required. Fallback: `10` if missing or invalid. |
+`publish-workflow-requests` has a `step` column holding an append-only log of approvals:
 
-**Example:**
-
-| key | value |
-|-----|-------|
-| `request.comments.required` | `true` |
-| `request.comments.length` | `25` |
-
-### `/.da/publish-workflow-requests.json` (DA Source API)
-
-Tracks pending publish requests with columns: `requester`, `approver`, `path`, `comment`, `status`, `created`
-
-**Access requirements:** the worker reads and writes this sheet **on the author's behalf, using the author's forwarded IMS token** — so authors still need **write access** to `/{org}/{site}/.da/publish-workflow-requests.json` for the Request Publish workflow to work.
-
-Configure access in the DA config at `/config/{org}/` (or `/config/{org}/{site}/` if using site-level config). Grant the IMS group that contains your authors **write access** to the `/{org}/{site}/.da/publish-workflow-requests.json` sheet. Without this permission, the worker's write fails and the request is rejected.
-
-## Plugin Modes
-
-### Fullsize Dialog Mode (Primary)
-
-The plugin runs as a standalone page loaded in a DA dialog. The HTML file bootstraps the DA SDK, and the component self-initializes by reading context from the SDK.
-
-### Panel / Sidekick Mode (Available)
-
-The plugin exports a default `init` function compatible with the DA plugin panel API. This allows it to be rendered in a sidebar panel, though the dialog mode is the primary usage pattern.
-
-```javascript
-export default async function init({ context, token }) {
-  return {
-    title: 'Request Publish',
-    panel: {
-      render: (container) => { /* mounts the component */ },
-    },
-  };
-}
+```
+legal@example.com:1:2026-09-23T10:14:00Z, brand@example.com:2:2026-09-23T11:02:00Z
 ```
 
-## States
+The current step is derived, not stored: the highest approved step plus one, skipped forward over approver-less and already-logged steps. Concurrent approvals of the same step therefore collapse rather than advancing the request twice. Timestamps are ISO; no field may contain a comma.
 
-The plugin renders one of these states at any time:
+The worker requires site registration and the caller's DA access to the requests sheet (`/.da/publish-workflow-requests.json`). No registration or permission change is made by the plugin. The worker is authoritative for configuration, step resolution and comment validation.
 
-| State | Trigger |
-|-------|---------|
-| Loading | Initial load, fetching user profile and approver config |
-| Form | No existing pending request; ready for submission |
-| Pending | An existing pending request for this path/user already exists |
-| Submitted | Request was successfully submitted |
+## Local verification
+
+Run `npm test` and `npm run lint`. Also run `npx stylelint tools/plugins/request-for-publish/request-for-publish.css`; the repository's default CSS lint glob does not cover tools.
+
+Serve the repository over HTTP and open `/test/fixtures/request-for-publish.html`. The fixture runs browser assertions against the real component with a fake client and displays the results. Add `?view=requester` or `?view=approver` to inspect the other views. No workflow, email or content operation is sent by this fixture.
+
+Worker environments are fixed: localhost defaults to the local worker on port 8787; `?env=ci` selects CI and `?env=prod` explicitly selects production (including from a local plugin). Unknown environment values are rejected. Do not use a real worker for fixture tests.
+
+The production worker at this branch’s baseline does not allow localhost origins in CORS. `env=prod` cannot bypass that policy. Local testing can use `env=ci` after a CI worker with the exact localhost:3000 exception is deployed, or use plugin code served from an allowed HTTPS origin. CI is not a data sandbox: it can access real DA content and send notifications. Local fixtures remain backend-free.
