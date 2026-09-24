@@ -15,10 +15,10 @@
  */
 
 /*
- * Sibling copy of `tools/plugins/request-for-publish/ims-profile.js`, kept
- * identical on purpose: each App and Plugin is served standalone from its own
- * folder, so they do not share modules across directories. Change both files
- * together.
+ * Each App and Plugin under tools/ is served standalone from its own folder
+ * and does not share modules across directories, so this logic cannot be
+ * imported from elsewhere. If an equivalent fix is added for another App or
+ * Plugin (e.g. tools/plugins/request-for-publish), keep the logic consistent.
  */
 
 const PROD_IMS_PROFILE_URL = 'https://ims-na1.adobelogin.com/ims/profile/v1';
