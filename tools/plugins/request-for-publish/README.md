@@ -1,12 +1,10 @@
 # Publish request
 
-One page-scoped DA/EW plugin with three automatically derived views:
+One page-scoped DA/EW plugin showing a page's approval flow as an ordered list of steps. A request advances one step at a time; the page is published only when the last step is approved.
 
-- **Request approval** when the worker returns no own or approvable pending request for this page.
-- **Awaiting approval** for a request in the caller's requester queue, with resend and withdrawal.
-- **Ready for your review** for a request in the caller's approver queue, with approve-and-publish and rejection.
+Every view renders the same stepper. Steps already approved show a check mark and the approver; the step awaiting a decision shows an inline **Approve** button when the caller may act on it; later steps are greyed out. Expanding a step reveals its detail — approval time for completed steps, the approver list for upcoming ones, and the request actions for the current one. All steps are collapsed by default.
 
-There is no role selector. When both queues contain the same request, the review view also shows the requester actions. Approver eligibility comes from the worker, not a client-side comparison of email addresses. The full-page publish requests inbox remains available for queue and bulk work.
+There is no role selector. When the caller is both the requester and an approver of the current step, the current step offers both sets of actions. Approver eligibility comes from the worker, not a client-side comparison of email addresses. The full-page publish requests inbox remains available for queue and bulk work, but is not yet step-aware.
 
 ## Integration
 
@@ -18,14 +16,16 @@ Context accepts `org`, `site` (or legacy `repo`), and a site-relative page `path
 
 ## Worker contract
 
-The worker remains unchanged. The panel uses:
+The panel uses:
 
-- `GET /api/config` and `GET /api/approvers`
+- `GET /api/config` and `GET /api/approvers` (the latter also returns the ordered `steps` for the path)
 - `GET /api/requests` and `GET /api/requests?role=requester`
 - `POST /api/requests` (including `resend: true`)
 - `POST /api/requests/withdraw`, `/reject` and `/approve`
 
-Preview and publication still happen client-side under the user's session. Submission stops if preview fails. Approval revalidates the request, publishes, then records completion. If publication succeeds but completion fails, the panel offers **Retry request update**, which does not republish. Withdraw and reject require an inline confirmation; rejection also requires a reason. An ambiguous publish response blocks another publication attempt in the panel and directs the user to check the live page. Mutations are not automatically retried.
+`POST /api/requests/approve` carries the step the client believes is current. The worker re-derives it from the stored log and returns the path under `stale` when they disagree, so an out-of-date panel cannot approve a step twice or skip ahead. Rows returned in the approver queue carry `canApproveNow`, which is false when the caller approves some later step but not the current one.
+
+Preview and publication still happen client-side under the user's session. Submission stops if preview fails. Approving an intermediate step only writes the log and notifies the next step's approvers — no content operation, so only the final approval can leave the page published with the request unrecorded. That case still offers **Retry request update**, which does not republish. Withdraw and reject require an inline confirmation; rejection also requires a reason and ends the request outright, discarding the step log with the row. An ambiguous publish response blocks another publication attempt in the panel and directs the user to check the live page. Mutations are not automatically retried.
 
 HTTP failures and malformed queue responses are not treated as empty queues. The panel re-reads after mutations and failures because an email failure may occur after a row was written/deleted. It also refreshes on explicit refresh and return to a visible browser tab, without background polling. Moving focus between the center comparison and the rail does not restart loading or disable the next interaction. Notes survive failed submission and refresh.
 
@@ -45,11 +45,31 @@ At the site or org level, the worker reads these DA config tabs:
 
 | Tab | Columns / values |
 |---|---|
-| `publish-workflow-config` | `Pattern`, `Approvers`, `CC` (for example `/drafts/*`, `reviewer@example.com`, empty) |
-| `publish-workflow-settings` | `key`, `value`: `request.comments.required`, `request.comments.length`, `request.support.contact`, `approvals.cc.can-approve` |
+| `publish-workflow-config` | `Pattern`, `Approvers`, `CC` (for example `/drafts/*`, `legal@example.com:1, brand@example.com:2`, `watcher@example.com:2`) |
+| `publish-workflow-settings` | `key`, `value`: `request.comments.required`, `request.comments.length`, `request.support.contact`, `approvals.cc.can-approve`, `workflow.step.N.title`, `workflow.step.N.description` |
 | `publish-workflow-groups-to-email` | Optional distribution-list expansion; not needed for direct reviewer addresses. |
 
-The worker requires site registration and the caller's DA access to the requests sheet (`/.da/publish-workflow-requests.json`). No registration, permission or worker change is made by the plugin. The worker is authoritative for configuration and comment validation.
+### Steps
+
+Each entry in `Approvers` and `CC` may carry a step suffix, `<email>:<step>`. A bare address without a suffix belongs to step 1, so existing single-step configurations keep working unchanged. The same address may appear on several steps. Distribution-list groups take a suffix too, and every expanded address inherits it.
+
+The number of steps is the highest step referenced in the matched pattern's `Approvers`. Titles and descriptions are decoration only: `workflow.step.N.title` falls back to `Step N`, and a missing description renders nothing. These keys are global — patterns with different approver sets share them.
+
+A step with no approvers is skipped and rendered as such. Because step count comes from `Approvers`, this only happens for gaps between assigned steps, for example approvers on steps 1 and 3 but none on step 2.
+
+A step completes when **any one** of its approvers approves. `CC` addresses for a step are notified when that step becomes active, and may approve it only when `approvals.cc.can-approve` is true.
+
+### Request state
+
+`publish-workflow-requests` has a `step` column holding an append-only log of approvals:
+
+```
+legal@example.com:1:2026-09-23T10:14:00Z, brand@example.com:2:2026-09-23T11:02:00Z
+```
+
+The current step is derived, not stored: the highest approved step plus one, skipped forward over approver-less and already-logged steps. Concurrent approvals of the same step therefore collapse rather than advancing the request twice. Timestamps are ISO; no field may contain a comma.
+
+The worker requires site registration and the caller's DA access to the requests sheet (`/.da/publish-workflow-requests.json`). No registration or permission change is made by the plugin. The worker is authoritative for configuration, step resolution and comment validation.
 
 ## Local verification
 

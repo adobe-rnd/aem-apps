@@ -22,6 +22,13 @@ import {
 const style = new CSSStyleSheet();
 style.replaceSync(await (await fetch(new URL('./request-for-publish.css', import.meta.url))).text());
 
+function peopleList(label, people) {
+  const unique = [...new Set(people)];
+  if (!unique.length) return nothing;
+  return html`<div class="detail"><span class="label">${label}</span>
+    <ul class="people">${unique.map((email) => html`<li>${email}</li>`)}</ul></div>`;
+}
+
 class RequestForPublish extends LitElement {
   static properties = {
     context: { attribute: false },
@@ -37,6 +44,7 @@ class RequestForPublish extends LitElement {
     _fieldError: { state: true },
     _receipt: { state: true },
     _unknown: { state: true },
+    _expanded: { state: true },
   };
 
   _epoch = 0;
@@ -50,6 +58,12 @@ class RequestForPublish extends LitElement {
   _return = () => {
     if (!this._busy && !this._confirmation && document.visibilityState === 'visible') this.refresh();
   };
+
+  // A class field would shadow Lit's reactive accessor, so initialize here.
+  constructor() {
+    super();
+    this._expanded = new Set();
+  }
 
   connectedCallback() {
     super.connectedCallback();
@@ -75,6 +89,7 @@ class RequestForPublish extends LitElement {
       this._reviewing = false;
       this._comment = '';
       this._reason = '';
+      this._expanded = new Set();
       this._fieldError = undefined;
       this._error = undefined;
       this._loading = !!this.page;
@@ -83,6 +98,12 @@ class RequestForPublish extends LitElement {
 
   updated(changed) {
     if (changed.has('context') || changed.has('client')) this.refresh();
+    if (changed.has('_data')) {
+      const { accentColor = '', accentColorHover = '' } = this._data?.settings || {};
+      this.style.setProperty('--pw-accent', accentColor);
+      this.style.setProperty('--pw-accent-hover', accentColorHover);
+      this.toggleAttribute('themed', !!accentColor);
+    }
   }
 
   get page() { return normalizeContext(this.context); }
@@ -102,6 +123,17 @@ class RequestForPublish extends LitElement {
     } finally {
       if (epoch === this._epoch) this._reviewing = false;
     }
+  }
+
+  toggle(index) {
+    const expanded = new Set(this._expanded);
+    if (!expanded.delete(index)) expanded.add(index);
+    this._expanded = expanded;
+  }
+
+  expand(index) {
+    if (this._expanded.has(index)) return;
+    this._expanded = new Set(this._expanded).add(index);
   }
 
   async refresh() {
@@ -133,6 +165,7 @@ class RequestForPublish extends LitElement {
     this._confirmation = action;
     this._fieldError = undefined;
     this._reason = '';
+    this.expand(this.state.current);
     this.updateComplete.then(() => this.shadowRoot.querySelector(action === 'reject' ? '#reason' : '.confirm-primary')?.focus());
   }
 
@@ -169,12 +202,16 @@ class RequestForPublish extends LitElement {
     const epoch = this._epoch;
     const { client } = this;
     const expected = action === 'complete' ? this._receipt : request;
+    const { current, count } = this.state;
+    const final = current >= count;
     const messages = {
       submit: 'Request sent. An approver can now review this page.',
       resend: 'Notification sent again. Your request is still pending.',
       withdraw: 'Request withdrawn. You can submit a new request.',
       reject: 'Request rejected.',
-      approve: 'Published. The publish request is complete.',
+      approve: final
+        ? 'Published. The publish request is complete.'
+        : 'Step approved. The next reviewers have been notified.',
       complete: 'The publish request is now complete.',
     };
     this._busy = 'Working…';
@@ -184,6 +221,8 @@ class RequestForPublish extends LitElement {
     try {
       if (action === 'submit') await client.submit(context, comment, phase);
       else if (action === 'reject') await client.reject(context, expected, this._reason);
+      else if (action === 'approve') await client.approve(context, expected, { step: current, final }, phase);
+      else if (action === 'complete') await client.complete(context, expected, { step: current });
       else await client[action](context, expected, phase);
       if (epoch !== this._epoch) return;
       if (['submit', 'approve', 'reject', 'withdraw'].includes(action)) {
@@ -205,12 +244,6 @@ class RequestForPublish extends LitElement {
         await this.refresh();
       }
     }
-  }
-
-  renderReviewers() {
-    const people = [...new Set([...this._data.approvers, ...this._data.cc])];
-    return html`<div class="detail"><span class="label">Reviewers</span>
-      <ul class="people">${people.map((email) => html`<li>${email}</li>`)}</ul></div>`;
   }
 
   renderConfirmation() {
@@ -251,6 +284,78 @@ class RequestForPublish extends LitElement {
     </section>`;
   }
 
+  renderLinks() {
+    const links = pageLinks(this.page, new URLSearchParams(window.location.search).get('env'));
+    return html`<div class="review-links">
+      <button class="review-link" ?disabled=${this.disabled || !this.workspace?.canCompare}
+        @click=${this.reviewChanges}>${this._reviewing ? 'Opening comparison…' : 'Review changes'}</button>
+      <a href=${links.preview} target="_blank" rel="noopener noreferrer">Open preview <span aria-hidden="true">↗</span></a>
+      ${this.workspace?.canCompare ? html`<p class="hint">Compare the current ${this.state.view === 'approver' ? 'preview' : 'document'} with the live page.</p>` : nothing}
+    </div>`;
+  }
+
+  renderRequestForm() {
+    const { settings } = this._data;
+    return html`<div class="request-form">
+      <label for="comment">Note to reviewers <span class="hint">${settings.commentsRequired ? '(required)' : '(optional)'}</span></label>
+      <textarea id="comment" rows="3" .value=${this._comment} ?disabled=${this.disabled}
+        ?required=${settings.commentsRequired} aria-invalid=${this._fieldError ? 'true' : 'false'}
+        aria-describedby=${settings.commentsRequired ? 'comment-hint field-error' : 'field-error'} @input=${(e) => { this._comment = e.target.value; }}></textarea>
+      ${settings.commentsRequired ? html`<p class="hint" id="comment-hint">At least ${settings.commentsMinLength} characters.</p>` : nothing}
+      ${this.renderFieldError()}
+      <button class="primary" ?disabled=${this.disabled} @click=${() => this.act('submit')}>Request publish</button>
+    </div>`;
+  }
+
+  renderStepBody(step, state) {
+    if (step.state === 'approved') {
+      const when = step.approvedAt && new Date(step.approvedAt);
+      return html`<dl class="metadata">
+        <div><dt>Approved by</dt><dd>${step.approvedBy}</dd></div>
+        ${when && !Number.isNaN(when.getTime()) ? html`<div><dt>Approved</dt><dd><time datetime=${step.approvedAt}>${when.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</time></dd></div>` : nothing}
+      </dl>`;
+    }
+    if (step.state === 'skipped') {
+      return html`<p class="hint">No approvers are configured for this step, so it is skipped.</p>`;
+    }
+    if (step.state === 'upcoming' || !state.request) {
+      return html`${peopleList('Approvers', step.approvers)}
+        ${peopleList('Also notified', step.cc)}`;
+    }
+    if (this._confirmation) return this.renderConfirmation();
+    return html`
+      ${peopleList('Approvers', step.approvers)}
+      ${peopleList('Also notified', step.cc)}
+      ${state.request.comment ? html`<div class="detail"><span class="label">Request note</span><p class="note">${state.request.comment}</p></div>` : nothing}
+      ${this.renderLinks()}
+      <div class="decision-actions">
+        ${state.canApprove ? html`<button class="quiet" data-action="reject" ?disabled=${this.disabled} @click=${() => this.confirm('reject')}>Reject…</button>` : nothing}
+        ${state.canWithdraw ? html`<button class="quiet" ?disabled=${this.disabled} @click=${() => this.act('resend')}>Resend notification</button>
+          <button class="quiet" data-action="withdraw" ?disabled=${this.disabled} @click=${() => this.confirm('withdraw')}>Withdraw…</button>` : nothing}
+      </div>`;
+  }
+
+  renderStep(step, state) {
+    const expanded = this._expanded.has(step.index);
+    const current = step.state === 'current';
+    const actionable = current && state.canApprove && state.request && !this._confirmation;
+    return html`<li class="step ${step.state}">
+      <div class="step-head">
+        <button class="step-toggle" aria-expanded=${expanded ? 'true' : 'false'} @click=${() => this.toggle(step.index)}>
+          <span class="marker" aria-hidden="true"></span>
+          <span class="step-text">
+            <span class="step-title">${step.title}</span>
+            ${step.description ? html`<span class="step-description">${step.description}</span>` : nothing}
+            ${step.approvedBy ? html`<span class="step-meta">Approved by ${step.approvedBy}</span>` : nothing}
+            ${step.state === 'skipped' ? html`<span class="step-meta">Skipped — no approvers</span>` : nothing}
+          </span>
+        </button>
+        ${actionable ? html`<button class="primary step-action" ?disabled=${this.disabled} @click=${() => this.act('approve')}>${state.current >= state.count ? 'Approve & publish' : 'Approve'}</button>` : nothing}
+      </div>
+      ${expanded ? html`<div class="step-body">${this.renderStepBody(step, state)}</div>` : nothing}
+    </li>`;
+  }
+
   renderContent() {
     if (this._unknown && this.page) {
       return html`<section class="receipt" role="status"><h2>Publication outcome unknown</h2>
@@ -268,46 +373,23 @@ class RequestForPublish extends LitElement {
     if (state.view === 'blocked') return html`<section class="empty"><h2>Publish request unavailable</h2><p>${state.message}</p></section>`;
     const { request } = state;
     const requesting = state.view === 'request';
-    const links = pageLinks(this.page, new URLSearchParams(window.location.search).get('env'));
     const created = request?.created && new Date(request.created);
-    const heading = state.canApprove ? 'Ready for your review' : 'Awaiting approval';
+    const waiting = state.canApprove ? 'Ready for your review' : 'Awaiting approval';
     const nextStep = state.canApprove
-      ? 'Review the changes, then approve and publish or send them back.'
-      : 'A reviewer needs to approve and publish this page.';
+      ? 'Review the changes, then approve this step.'
+      : 'A reviewer needs to approve the current step.';
     return html`
       <section class="summary">
-        <span class="status ${requesting ? 'neutral' : 'pending'}">${requesting ? 'Ready to request' : 'Pending approval'}</span>
-        <h2>${requesting ? 'Request approval' : heading}</h2>
-        <p>${requesting ? 'Send this page to its reviewers before publishing.' : nextStep}</p>
+        <span class="status ${requesting ? 'neutral' : 'pending'}">${requesting ? 'Ready to request' : `Step ${state.current} of ${state.count}`}</span>
+        <h2>${requesting ? 'Request approval' : waiting}</h2>
+        <p>${requesting ? 'Send this page through its approval steps before publishing.' : nextStep}</p>
       </section>
       ${request ? html`<dl class="metadata">
         <div><dt>Requested by</dt><dd>${state.canWithdraw ? 'You' : request.requester}</dd></div>
         ${created && !Number.isNaN(created.getTime()) ? html`<div><dt>Submitted</dt><dd><time datetime=${request.created}>${created.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</time></dd></div>` : nothing}
       </dl>` : nothing}
-      ${this.renderReviewers()}
-      ${request?.comment ? html`<div class="detail"><span class="label">Request note</span><p class="note">${request.comment}</p></div>` : nothing}
-      <div class="review-links">
-        <button class="review-link" ?disabled=${this.disabled || !this.workspace?.canCompare}
-          @click=${this.reviewChanges}>${this._reviewing ? 'Opening comparison…' : 'Review changes'}</button>
-        <a href=${links.preview} target="_blank" rel="noopener noreferrer">Open preview <span aria-hidden="true">↗</span></a>
-        ${this.workspace?.canCompare ? html`<p class="hint">Compare the current ${state.view === 'approver' ? 'preview' : 'document'} with the live page.</p>` : nothing}
-      </div>
-        ${requesting ? html`<div class="request-form">
-          <label for="comment">Note to reviewers <span class="hint">${this._data.settings.commentsRequired ? '(required)' : '(optional)'}</span></label>
-          <textarea id="comment" rows="3" .value=${this._comment} ?disabled=${this.disabled}
-            ?required=${this._data.settings.commentsRequired} aria-invalid=${this._fieldError ? 'true' : 'false'}
-            aria-describedby=${this._data.settings.commentsRequired ? 'comment-hint field-error' : 'field-error'} @input=${(e) => { this._comment = e.target.value; }}></textarea>
-          ${this._data.settings.commentsRequired ? html`<p class="hint" id="comment-hint">At least ${this._data.settings.commentsMinLength} characters.</p>` : nothing}
-          ${this.renderFieldError()}
-          <button class="primary" ?disabled=${this.disabled} @click=${() => this.act('submit')}>Request publish</button>
-        </div>` : html`
-          ${!this._confirmation ? html`<div class="decision-actions">
-            ${state.canApprove ? html`<button class="primary" ?disabled=${this.disabled} @click=${() => this.act('approve')}>Approve & publish</button>
-              <button class="quiet" data-action="reject" ?disabled=${this.disabled} @click=${() => this.confirm('reject')}>Reject…</button>` : nothing}
-            ${state.canWithdraw ? html`<button class="quiet" ?disabled=${this.disabled} @click=${() => this.act('resend')}>Resend notification</button>
-              <button class="quiet" data-action="withdraw" ?disabled=${this.disabled} @click=${() => this.confirm('withdraw')}>Withdraw…</button>` : nothing}
-          </div>` : this.renderConfirmation()}
-        `}
+      <ol class="steps">${state.steps.map((step) => this.renderStep(step, state))}</ol>
+      ${requesting ? html`${this.renderLinks()}${this.renderRequestForm()}` : nothing}
     `;
   }
 

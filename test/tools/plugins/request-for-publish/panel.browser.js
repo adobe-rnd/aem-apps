@@ -15,14 +15,22 @@
  */
 /* eslint-disable no-await-in-loop */
 import '../../../../tools/plugins/request-for-publish/panel.js';
-import fixture from './fixture-client.js';
+import fixture, { singleStep } from './fixture-client.js';
 
 const ctx = { org: 'example', site: 'website', path: '/drafts/page' };
 const row = {
-  path: ctx.path, status: 'pending', requester: 'author@example.com', comment: 'Updated the introduction.', created: '2026-01-01T10:00:00Z',
+  path: ctx.path, status: 'pending', requester: 'author@example.com', comment: 'Updated the introduction.', created: '2026-01-01T10:00:00Z', step: '',
 };
+const twoSteps = [
+  {
+    index: 1, title: 'Legal review', description: 'Claims and disclaimers.', approvers: ['legal@example.com'], cc: [],
+  },
+  {
+    index: 2, title: 'Brand review', description: 'Tone and imagery.', approvers: ['brand@example.com'], cc: ['watcher@example.com'],
+  },
+];
 const base = {
-  own: [], approvable: [], approvers: ['reviewer@example.com'], cc: [], settings: { commentsRequired: false, commentsMinLength: 1 },
+  own: [], approvable: [], approvers: ['reviewer@example.com'], cc: [], steps: singleStep, settings: { commentsRequired: false, commentsMinLength: 1 },
 };
 const mount = document.querySelector('#mount');
 const results = [];
@@ -35,6 +43,9 @@ const tick = async () => {
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 const text = () => current.shadowRoot.textContent;
 const button = (label) => [...current.shadowRoot.querySelectorAll('button')].find((item) => item.textContent.trim() === label);
+const stepClass = (index) => current.shadowRoot.querySelectorAll('.step')[index - 1]?.className;
+// Step bodies are collapsed by default; expand before asserting on their contents.
+const open = async (index = 1) => { current.toggle(index); await tick(); };
 async function show(data = base, overrides = {}) {
   current = document.createElement('request-for-publish');
   current.context = ctx;
@@ -81,14 +92,14 @@ await test('native review keeps the note and maps the current workflow view', as
   assert(text().includes('current document'), 'author input label is wrong');
   await show({ ...base, approvable: [row] });
   current.workspace = { canCompare: true, review: async (view) => { views.push(view); } };
-  await tick();
+  await open();
   button('Review changes').click();
   await tick();
   assert(views[1] === 'approver', 'wrong approver comparison view');
   assert(text().includes('current preview'), 'approver input label is wrong');
   await show({ ...base, own: [row] });
   current.workspace = { canCompare: true, review: async (view) => { views.push(view); } };
-  await tick();
+  await open();
   button('Review changes').click();
   await tick();
   assert(views[2] === 'requester', 'wrong pending author comparison view');
@@ -129,17 +140,21 @@ await test('request form only shows a hint when a minimum note length is require
 await test('pending request automatically shows requester actions', async () => {
   await show({ ...base, own: [row] });
   assert(/Awaiting approval/.test(text()), 'wrong requester status');
+  await open();
   assert(button('Resend notification') && button('Withdraw…'), 'missing requester actions');
   assert(!button('Approve & publish'), 'unauthorized approval shown');
 });
 await test('approvable request automatically shows decisions and author note', async () => {
   await show({ ...base, approvable: [row] });
-  assert(button('Approve & publish') && button('Reject…'), 'missing decisions');
+  assert(button('Approve & publish'), 'missing inline approval on the collapsed current step');
+  await open();
+  assert(button('Reject…'), 'missing rejection');
   assert(text().includes(row.comment), 'author note missing');
   assert(!button('Withdraw…'), 'non-owner withdrawal shown');
 });
 await test('overlapping roles expose both capabilities without a selector', async () => {
   await show({ ...base, own: [row], approvable: [row] });
+  await open();
   assert(button('Approve & publish') && button('Withdraw…'), 'overlapping roles hidden');
 });
 await test('loading and failed lookups cannot become an initiation form', async () => {
@@ -153,6 +168,7 @@ await test('loading and failed lookups cannot become an initiation form', async 
 await test('reject requires a reason and confirmation', async () => {
   let count = 0;
   await show({ ...base, approvable: [row] }, { reject: async () => { count += 1; } });
+  await open();
   button('Reject…').click();
   await tick();
   button('Reject request').click();
@@ -269,6 +285,35 @@ await test('primary button has AA text contrast in light and dark themes', async
   } finally { document.documentElement.style.colorScheme = previous; }
 });
 
+await test('site theme colours the primary action and links with AA contrast, and clears when absent', async () => {
+  const luminance = (color) => color.match(/\d+(?:\.\d+)?/g).slice(0, 3)
+    .map((channel) => Number(channel) / 255)
+    .map((channel) => (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4))
+    .reduce((sum, channel, i) => sum + channel * [0.2126, 0.7152, 0.0722][i], 0);
+  const contrast = (styles) => {
+    const colors = [luminance(styles.color), luminance(styles.backgroundColor)]
+      .sort((a, b) => a - b);
+    return (colors[1] + 0.05) / (colors[0] + 0.05);
+  };
+  const settings = { ...base.settings, accentColor: '#903', accentColorHover: '#730026' };
+  await show({ ...base, approvable: [row], settings });
+  const previous = document.documentElement.style.colorScheme;
+  try {
+    ['light', 'dark'].forEach((scheme) => {
+      document.documentElement.style.colorScheme = scheme;
+      const styles = getComputedStyle(button('Approve & publish'));
+      assert(styles.backgroundColor === 'rgb(153, 0, 51)', `${scheme} primary action ignores theme.accent-color`);
+      assert(contrast(styles) >= 4.5, `${scheme} themed button contrast below 4.5`);
+      const link = getComputedStyle(current.shadowRoot.querySelector('footer a'));
+      assert(link.color === 'rgb(153, 0, 51)', `${scheme} link ignores theme.accent-color`);
+    });
+  } finally { document.documentElement.style.colorScheme = previous; }
+  assert(current.style.getPropertyValue('--pw-accent-hover') === '#730026', 'hover accent not applied');
+  current.client = { load: async () => structuredClone({ ...base, approvable: [row] }) };
+  await tick();
+  assert(getComputedStyle(button('Approve & publish')).backgroundColor !== 'rgb(153, 0, 51)', 'stale theme kept for an unthemed site');
+});
+
 await test('late page A response cannot overwrite page B', async () => {
   let finish;
   await show(base, {
@@ -295,7 +340,9 @@ await test('local integration: request, approver review and successful publicati
   enter('#comment', 'Please review the updated introduction.');
   button('Request publish').click();
   await tick();
-  assert(text().includes('Request sent.') && button('Withdraw…'), 'requester did not become pending');
+  assert(text().includes('Request sent.'), 'requester did not become pending');
+  await open();
+  assert(button('Withdraw…'), 'requester actions missing after submission');
   state.role = 'approver';
   await current.refresh();
   await tick();
@@ -317,6 +364,7 @@ await test('local integration: request, denial validation, cancel and confirmed 
   state.role = 'approver';
   await current.refresh();
   await tick();
+  await open();
   button('Reject…').click();
   await tick();
   button('Cancel').click();
@@ -338,6 +386,7 @@ await test('local integration: request, denial validation, cancel and confirmed 
 await test('local integration: resend then withdraw without another preview or publication', async () => {
   const { client, calls, state } = fixture({ rows: [row] });
   await show(base, client);
+  await open();
   button('Resend notification').click();
   await tick();
   assert(text().includes('Notification sent again.'), 'resend receipt missing');
@@ -399,6 +448,78 @@ await test('resolved request notice lists the possible outcomes without refresh 
   await current.refresh();
   await tick();
   assert(current.shadowRoot.querySelector('.notice')?.textContent === 'This request is no longer pending. It has been approved, rejected or withdrawn.', 'incorrect resolved request notice');
+});
+
+await test('every step is listed with its title and description, collapsed by default', async () => {
+  await show({ ...base, steps: twoSteps, approvable: [row] });
+  assert(current.shadowRoot.querySelectorAll('.step').length === 2, 'steps not listed');
+  assert(text().includes('Legal review') && text().includes('Claims and disclaimers.'), 'step title or description missing');
+  assert(!current.shadowRoot.querySelector('.step-body'), 'a step body was expanded by default');
+  assert(/Step 1 of 2/.test(text()), 'step position missing from the summary');
+});
+await test('an intermediate step approves without publishing', async () => {
+  await show({ ...base, steps: twoSteps, approvable: [row] });
+  assert(button('Approve') && !button('Approve & publish'), 'intermediate step offers publication');
+});
+await test('the final step is the only one that publishes', async () => {
+  const approved = { ...row, step: 'legal@example.com:1:2026-01-01T11:00:00Z' };
+  await show({ ...base, steps: twoSteps, approvable: [approved] });
+  assert(button('Approve & publish') && !button('Approve'), 'final step does not publish');
+  assert(/Step 2 of 2/.test(text()), 'wrong current step');
+});
+await test('completed steps show their approver and expand to the approval time', async () => {
+  const approved = { ...row, step: 'legal@example.com:1:2026-01-01T11:00:00Z' };
+  await show({ ...base, steps: twoSteps, approvable: [approved] });
+  assert(/approved/.test(stepClass(1)) && /current/.test(stepClass(2)), 'wrong step states');
+  assert(text().includes('Approved by legal@example.com'), 'approver missing from the completed step');
+  await open(1);
+  assert(current.shadowRoot.querySelector('time[datetime="2026-01-01T11:00:00Z"]'), 'approval time missing');
+});
+await test('an upcoming step is inert and expands to its approvers', async () => {
+  await show({ ...base, steps: twoSteps, approvable: [row] });
+  assert(/upcoming/.test(stepClass(2)), 'later step is not marked upcoming');
+  await open(2);
+  assert(text().includes('brand@example.com') && text().includes('watcher@example.com'), 'upcoming approvers or cc missing');
+  assert(!button('Approve') || button('Approve').closest('.step-body') === null, 'upcoming step offers an action');
+});
+await test('an approver of a later step cannot act on the current one', async () => {
+  await show({ ...base, steps: twoSteps, approvable: [{ ...row, canApproveNow: false }] });
+  assert(!button('Approve') && !button('Approve & publish'), 'action offered outside the current step');
+  await open(1);
+  assert(!button('Reject…'), 'rejection offered outside the current step');
+});
+await test('a step with no approvers is skipped', async () => {
+  const gapped = [twoSteps[0], {
+    index: 2, title: 'Unstaffed', description: '', approvers: [], cc: [],
+  }, { ...twoSteps[1], index: 3 }];
+  await show({ ...base, steps: gapped, approvable: [{ ...row, step: 'legal@example.com:1:T' }] });
+  assert(/skipped/.test(stepClass(2)), 'unstaffed step not skipped');
+  assert(/current/.test(stepClass(3)), 'current step did not move past the skipped one');
+});
+await test('local integration: a two-step request publishes only on the last approval', async () => {
+  const { client, calls, state } = fixture({ role: 'approver', rows: [row], steps: twoSteps });
+  await show({ ...base, steps: twoSteps }, client);
+  button('Approve').click();
+  await tick();
+  assert(text().includes('Step approved. The next reviewers have been notified.'), 'intermediate approval not reported');
+  assert(!calls.some((call) => call.route === 'publish'), 'intermediate approval published');
+  assert(state.rows.length === 1 && state.rows[0].step.includes(':1:'), 'step log not written');
+  assert(/Step 2 of 2/.test(text()), 'request did not advance');
+  button('Approve & publish').click();
+  await tick();
+  assert(calls.filter((call) => call.route === 'publish').length === 1, 'final approval did not publish');
+  assert(state.rows.length === 0, 'completed request remains pending');
+  assert(calls.filter((call) => call.route === '/api/requests/approve')
+    .map((call) => call.body.step).join(',') === '1,2', 'client did not send the step it acted on');
+});
+await test('local integration: approving a step someone else advanced is refused', async () => {
+  const { client, calls, state } = fixture({ role: 'approver', rows: [row], steps: twoSteps });
+  await show({ ...base, steps: twoSteps }, client);
+  state.rows = [{ ...row, step: 'someone@example.com:1:T' }];
+  button('Approve').click();
+  await tick();
+  assert(!calls.some((call) => call.route === 'publish'), 'stale approval published');
+  assert(/changed|no longer pending|advanced/.test(text()), 'stale approval was not reported');
 });
 
 const scenario = new URLSearchParams(window.location.search).get('view') || 'request';

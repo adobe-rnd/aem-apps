@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { createClient } from '../../../../tools/plugins/request-for-publish/workflow.js';
+import { createClient, buildStepModel } from '../../../../tools/plugins/request-for-publish/workflow.js';
 
 export const context = { org: 'example', site: 'website', path: '/drafts/page' };
 export const pending = {
@@ -22,13 +22,23 @@ export const pending = {
   requester: 'author@example.com',
   comment: 'Updated the introduction.',
   created: '2026-01-01T10:00:00Z',
+  step: '',
 };
+export const singleStep = [{
+  index: 1,
+  title: 'Review',
+  description: 'Sign off before publishing.',
+  approvers: ['reviewer@example.com'],
+  cc: [],
+}];
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status });
 
 // In-memory transport only: no workflow, preview, publish or email network calls.
 export default function fixture(options = {}) {
   const page = options.context || context;
-  const state = { role: 'requester', rows: [], ...options };
+  const state = {
+    role: 'requester', rows: [], steps: singleStep, ...options,
+  };
   const calls = [];
   const wait = async (phase) => {
     if (state.hold === phase) await new Promise((resolve) => { state.release = resolve; });
@@ -56,7 +66,13 @@ export default function fixture(options = {}) {
             },
           });
         }
-        if (route === '/api/approvers') return response({ approvers: state.noApprovers ? [] : ['reviewer@example.com'], cc: [] });
+        if (route === '/api/approvers') {
+          return response({
+            approvers: state.noApprovers ? [] : ['reviewer@example.com'],
+            cc: [],
+            steps: state.noApprovers ? [] : state.steps,
+          });
+        }
         if (route === '/api/requests') {
           const own = url.searchParams.get('role') === 'requester';
           const allowed = state.role === 'both' || state.role === (own ? 'requester' : 'approver');
@@ -76,8 +92,25 @@ export default function fixture(options = {}) {
           if (state.breakLoadOnFailure) state.loadError = 503;
           return response({ error: 'Approval notification could not be confirmed.' }, 503);
         }
-        state.rows = [];
-        return response({ approved: [page.path], notFound: [], unauthorized: [] });
+        const row = state.rows[0];
+        const model = buildStepModel(state.steps, row?.step);
+        if (!row || (body.step !== undefined && body.step !== model.current)) {
+          return response({
+            approved: [], notFound: [], unauthorized: [], stale: [page.path],
+          });
+        }
+        const entry = `reviewer@example.com:${model.current}:2026-01-01T12:00:00Z`;
+        // Replace rather than mutate: callers share the row objects across tests.
+        const updated = { ...row, step: row.step ? `${row.step}, ${entry}` : entry };
+        const completed = buildStepModel(state.steps, updated.step).complete;
+        state.rows = completed ? [] : [updated];
+        return response({
+          approved: [page.path],
+          notFound: [],
+          unauthorized: [],
+          stale: [],
+          completed: completed ? [page.path] : [],
+        });
       }
       if (['/api/requests/reject', '/api/requests/withdraw'].includes(route)) {
         if (state.failDecision) return response({ error: 'Request update failed.' }, 503);
