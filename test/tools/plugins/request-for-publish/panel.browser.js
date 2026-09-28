@@ -43,6 +43,7 @@ const tick = async () => {
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 const text = () => current.shadowRoot.textContent;
 const button = (label) => [...current.shadowRoot.querySelectorAll('button')].find((item) => item.textContent.trim() === label);
+const pageStatus = () => current.shadowRoot.querySelector('a.review-link[href^="https://tools.aem.live/tools/page-status/diff.html"]');
 const stepClass = (index) => current.shadowRoot.querySelectorAll('.step')[index - 1]?.className;
 // Step bodies are collapsed by default; expand before asserting on their contents.
 const open = async (index = 1) => { current.toggle(index); await tick(); };
@@ -63,8 +64,6 @@ await test('initiation derives from an empty queue, with no role selector or SMA
   assert(button('Request publish'), 'missing request action');
   assert(!current.shadowRoot.querySelector('select'), 'role selector present');
   assert(!/SMART|Streamline Site Structure/.test(text()), 'guidance was not removed');
-  assert(button('Review changes'), 'missing native comparison action');
-  assert(!current.shadowRoot.querySelector('a[href*="tools.aem.live"]'), 'external comparison link remains');
 });
 await test('moving focus between the comparison and rail does not restart workflow loading', async () => {
   let loads = 0;
@@ -93,6 +92,7 @@ await test('native review keeps the note and maps the current workflow view', as
   await show({ ...base, approvable: [row] });
   current.workspace = { canCompare: true, review: async (view) => { views.push(view); } };
   await open();
+  assert(!current.shadowRoot.querySelector('a[href*="tools.aem.live"]'), 'external comparison shown alongside native review');
   button('Review changes').click();
   await tick();
   assert(views[1] === 'approver', 'wrong approver comparison view');
@@ -106,13 +106,26 @@ await test('native review keeps the note and maps the current workflow view', as
   assert(text().includes('current document'), 'pending author input label is wrong');
   assert(text().includes(row.comment), 'pending request note lost');
 });
-await test('unsupported comparison stays in the rail without an external fallback', async () => {
+await test('without native comparison, only a pending request links to the Page Status preview comparison', async () => {
   await show();
   current.workspace = { canCompare: false };
   await tick();
-  assert(button('Review changes')?.disabled, 'unsupported action not disabled');
-  assert(!current.shadowRoot.querySelector('.review-links .hint'), 'host rollout guidance shown');
-  assert(!current.shadowRoot.querySelector('a[href*="tools.aem.live"]'), 'external fallback remains');
+  assert(!button('Review changes') && !current.shadowRoot.querySelector('.review-link'), 'review offered before submission');
+  assert(!current.shadowRoot.querySelector('.review-links .hint'), 'review hint shown before submission');
+  assert(!current.shadowRoot.querySelector('a[href*="tools.aem.live"]'), 'preview comparison offered before submission');
+  const pending = async (data, view) => {
+    await show(data);
+    await open();
+    const link = pageStatus();
+    assert(link?.textContent.includes('Review changes'), `${view} fallback link missing`);
+    assert(new URL(link.href).searchParams.get('path') === ctx.path, `${view} fallback compares the wrong page`);
+    assert(link.target === '_blank', `${view} fallback replaces the editor`);
+    assert(text().includes('Compare the preview awaiting approval with the live page.'), `${view} fallback not labelled as the preview awaiting approval`);
+    assert(!button('Review changes'), `${view} disabled native action shown`);
+  };
+  await pending({ ...base, own: [row] }, 'requester');
+  await pending({ ...base, approvable: [row] }, 'approver');
+  await pending({ ...base, steps: twoSteps, page: [row] }, 'observer');
 });
 await test('late comparison failure cannot overwrite a new page context', async () => {
   await show();
@@ -525,12 +538,12 @@ await test('a lone unlabelled step renders no stepper', async () => {
   assert(!current.shadowRoot.querySelector('.steps'), 'stepper shown for a single unlabelled step');
   assert(!/Step 1/.test(text()), 'placeholder step label shown');
   assert(button('Request publish'), 'missing request action');
-  assert(current.shadowRoot.querySelector('a[href*="diff.html"]'), 'missing review link');
 });
 await test('a lone unlabelled step keeps the decisions inline', async () => {
   await show({ ...base, steps: untitledStep, approvable: [row] });
   assert(!current.shadowRoot.querySelector('.steps'), 'stepper shown for a single unlabelled step');
   assert(button('Approve & publish') && button('Reject…'), 'decisions missing without a stepper');
+  assert(pageStatus(), 'missing review link');
   assert(text().includes(row.comment), 'author note missing');
   assert(/Pending approval/.test(text()), 'step counter shown for a single step');
 });

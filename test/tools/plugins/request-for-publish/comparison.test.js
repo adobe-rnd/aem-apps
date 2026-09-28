@@ -47,7 +47,7 @@ describe('native workspace comparison adapter', () => {
     assert.equal(called, false);
   });
 
-  it('surfaces host failures and refuses unsupported save handshakes', async () => {
+  it('surfaces host failures and refuses a comparison host without a save handshake', async () => {
     assert.equal(typeof workflow.createWorkspaceActions, 'function');
     const workspace = workflow.createWorkspaceActions({
       capabilities: { comparison: 1, saveDocument: 1 },
@@ -58,7 +58,21 @@ describe('native workspace comparison adapter', () => {
     });
     await assert.rejects(workspace.review('request'), /stale-context/);
     await assert.rejects(workspace.save(), /save-failed/);
-    await assert.rejects(workflow.createWorkspaceActions().save(), { message: 'The editor could not complete this action.' });
+    const compareOnly = workflow.createWorkspaceActions({
+      capabilities: { comparison: 1 },
+      actions: { openComparison: async () => ({ ok: true }) },
+    });
+    await assert.rejects(compareOnly.save(), { message: 'The editor could not complete this action.' });
+  });
+
+  it('skips the save handshake on hosts without native comparison or save support', async () => {
+    let called = false;
+    const workspace = workflow.createWorkspaceActions({
+      actions: { saveDocument: async () => { called = true; return { ok: true }; } },
+    });
+    await workspace.save();
+    await workflow.createWorkspaceActions().save();
+    assert.equal(called, false);
   });
 
   it('does not include host rollout guidance in the panel', async () => {
@@ -66,10 +80,11 @@ describe('native workspace comparison adapter', () => {
     assert.doesNotMatch(panel, /Native comparison is not available|updated Experience Workspace/);
   });
 
-  it('removes the external comparison URL instead of retaining a tools fallback', () => {
-    const links = workflow.pageLinks({ org: 'example', site: 'site', path: '/page' });
-    assert.equal(links.diff, undefined);
-    assert.equal(JSON.stringify(links).includes('tools.aem.live'), false);
+  it('links the Page Status preview/live comparison for the delivered page path', () => {
+    const links = workflow.pageLinks({ org: 'example', site: 'site', path: '/drafts/page.html' });
+    const diff = new URL(links.diff);
+    assert.equal(`${diff.origin}${diff.pathname}`, 'https://tools.aem.live/tools/page-status/diff.html');
+    assert.deepEqual(Object.fromEntries(diff.searchParams), { org: 'example', site: 'site', path: '/drafts/page' });
   });
 });
 
@@ -97,5 +112,17 @@ describe('save before preview sequencing', () => {
     });
     await assert.rejects(client.submit(context, 'note'), /Save not confirmed/);
     assert.equal(calls, 0);
+  });
+
+  it('previews and submits on a host that cannot save', async () => {
+    const calls = [];
+    const client = workflow.createClient({
+      base: 'https://workflow.example',
+      beforePreview: () => workflow.createWorkspaceActions().save(),
+      preview: async () => { calls.push('preview'); return new Response(''); },
+      request: async () => { calls.push('submit'); return new Response('{}'); },
+    });
+    await client.submit(context, 'note');
+    assert.deepEqual(calls, ['preview', 'submit']);
   });
 });

@@ -125,10 +125,10 @@ describe('context-derived views', () => {
     assert.equal(view.view, 'blocked');
     assert.equal(view.canApprove, false);
   });
-  it('preserves index identity and derives delivery links without an external diff', () => {
+  it('preserves index identity and derives delivery and comparison links', () => {
     const links = pageLinks({ ...context, path: '/drafts/index' });
     assert.equal(links.preview, 'https://main--website--example.aem.page/drafts/');
-    assert.equal(links.diff, undefined);
+    assert.equal(new URL(links.diff).searchParams.get('path'), '/drafts/');
     assert.equal(new URL(links.myRequests).searchParams.get('requester'), 'true');
   });
   it('opens the inbox on the plugin branch rather than the editor context ref', () => {
