@@ -147,9 +147,12 @@ export function pageLinks(context, env, moduleUrl = import.meta.url) {
   const codeHost = new URL(moduleUrl).hostname;
   const ref = codeHost.match(/^([a-z0-9-]+)--aem-apps--adobe-rnd\.aem\.(?:page|live)$/)?.[1];
   if (ref && ref !== 'main') query.set('ref', ref);
+  const diff = new URL('https://tools.aem.live/tools/page-status/diff.html');
+  diff.search = new URLSearchParams({ org, site, path: delivered }).toString();
   return {
     preview: `https://main--${site}--${org}.aem.page${delivered}`,
     live: `https://main--${site}--${org}.aem.live${delivered}`,
+    diff: diff.href,
     inbox: `${INBOX}?${query}`,
     myRequests: `${INBOX}?${query}&requester=true`,
   };
@@ -166,12 +169,14 @@ export function createWorkspaceActions({ actions = {}, capabilities = {} } = {})
     if (!result?.ok) throw new Error(`Workspace action could not complete (${result?.error || 'unavailable'}).`);
     return result;
   };
+  const canCompare = supported('comparison', 'openComparison');
   return {
-    canCompare: supported('comparison', 'openComparison'),
+    canCompare,
     review: (view) => invoke('comparison', 'openComparison', {
       candidate: view === 'approver' ? 'preview' : 'document', baseline: 'live',
     }),
-    save: () => invoke('saveDocument', 'saveDocument'),
+    save: () => (canCompare || supported('saveDocument', 'saveDocument')
+      ? invoke('saveDocument', 'saveDocument') : Promise.resolve({ ok: false })),
     close: () => (supported('comparison', 'closeComparison')
       ? invoke('comparison', 'closeComparison') : Promise.resolve({ ok: false })),
   };
