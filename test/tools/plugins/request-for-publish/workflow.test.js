@@ -307,6 +307,38 @@ describe('workflow operations', () => {
     assert.equal(plain.settings.accentColor, '');
     assert.equal(plain.settings.accentColorHover, '');
   });
+  it('reads optional submission guidance from the settings tab in item order', async () => {
+    const guided = fixture({
+      fail: (url) => url.pathname === '/api/config' && response({
+        config: {
+          'publish-workflow-settings': {
+            data: [
+              { key: 'request.guidance.title', value: 'Content Changes' },
+              { key: 'request.guidance.text', value: 'Have you been SMART?' },
+              { key: 'request.guidance.item.10', value: 'Tested all links' },
+              { key: 'request.guidance.item.10.marker', value: 'T' },
+              { key: 'request.guidance.item.2', value: 'Metadata for SEO' },
+              { key: 'request.guidance.item.1', value: 'Streamline Site Structure' },
+              { key: 'request.guidance.item.1.marker', value: 'S' },
+              { key: 'request.guidance.item.3', value: '' },
+            ],
+          },
+        },
+      }),
+    });
+    const { settings } = await guided.client.load(context);
+    assert.deepEqual(settings.guidance, {
+      title: 'Content Changes',
+      text: 'Have you been SMART?',
+      items: [
+        { marker: 'S', text: 'Streamline Site Structure' },
+        { marker: '', text: 'Metadata for SEO' },
+        { marker: 'T', text: 'Tested all links' },
+      ],
+    });
+    const plain = await fixture().client.load(context);
+    assert.equal(plain.settings.guidance, null);
+  });
   it('does not convert failed reads to an empty queue', async () => {
     const { client } = fixture({ fail: (url) => url.pathname === '/api/requests' && response({ error: 'Session expired' }, 401) });
     await assert.rejects(client.load(context), (error) => error.status === 401 && /Session expired/.test(error.message));

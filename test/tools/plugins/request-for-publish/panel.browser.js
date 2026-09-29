@@ -106,13 +106,15 @@ await test('native review keeps the note and maps the current workflow view', as
   assert(text().includes('current document'), 'pending author input label is wrong');
   assert(text().includes(row.comment), 'pending request note lost');
 });
-await test('without native comparison, only a pending request links to the Page Status preview comparison', async () => {
+await test('without native comparison, Review changes links to the Page Status preview comparison', async () => {
   await show();
   current.workspace = { canCompare: false };
   await tick();
-  assert(!button('Review changes') && !current.shadowRoot.querySelector('.review-link'), 'review offered before submission');
-  assert(!current.shadowRoot.querySelector('.review-links .hint'), 'review hint shown before submission');
-  assert(!current.shadowRoot.querySelector('a[href*="tools.aem.live"]'), 'preview comparison offered before submission');
+  const before = pageStatus();
+  assert(before?.textContent.includes('Review changes'), 'fallback link missing before submission');
+  assert(new URL(before.href).searchParams.get('path') === ctx.path, 'fallback compares the wrong page before submission');
+  assert(text().includes('Compare the latest preview with the live page.'), 'fallback before submission not labelled as the latest preview');
+  assert(!button('Review changes'), 'disabled native action shown before submission');
   const pending = async (data, view) => {
     await show(data);
     await open();
@@ -584,6 +586,39 @@ await test('local integration: approving a step someone else advanced is refused
   await tick();
   assert(!calls.some((call) => call.route === 'publish'), 'stale approval published');
   assert(/changed|no longer pending|advanced/.test(text()), 'stale approval was not reported');
+});
+await test('shows configured submission guidance only while requesting approval', async () => {
+  const guidance = {
+    title: 'Content Changes',
+    text: 'Before submitting, please proofread and review your edits.',
+    items: [{ marker: 'S', text: 'Streamline Site Structure' }, { marker: '', text: 'Tested all links' }],
+  };
+  await show({ ...base, settings: { ...base.settings, guidance } });
+  const section = current.shadowRoot.querySelector('section.guidance');
+  assert(section, 'guidance section missing');
+  assert(section.querySelector('h3')?.textContent.trim() === guidance.title, 'guidance title missing');
+  assert(section.textContent.includes(guidance.text), 'guidance text missing');
+  const items = [...section.querySelectorAll('li')];
+  assert(items.length === 2, 'guidance items missing');
+  assert(items[0].querySelector('.guidance-marker')?.textContent === 'S', 'guidance marker missing');
+  assert(items[0].querySelector('.guidance-marker')?.getAttribute('aria-hidden') === 'true', 'decorative marker is announced');
+  assert(!items[1].querySelector('.guidance-marker'), 'empty marker rendered');
+  const order = [...current.shadowRoot.querySelectorAll('section.guidance, .review-links, .request-form')].map((el) => el.className);
+  assert(order.join() === 'guidance,review-links,request-form', `guidance not before the review links and form: ${order}`);
+  await show({ ...base, own: [row], settings: { ...base.settings, guidance } });
+  assert(!current.shadowRoot.querySelector('section.guidance'), 'guidance shown on a pending request');
+  await show();
+  assert(!current.shadowRoot.querySelector('section.guidance'), 'guidance shown without configuration');
+});
+await test('the pending author sees whom to contact when the approver is away', async () => {
+  const supportContact = 'webhelp@example.edu';
+  await show({ ...base, own: [row], settings: { ...base.settings, supportContact } });
+  assert(text().includes(`If your content owner is away, contact ${supportContact} for assistance with content approvals.`), 'support note missing for the pending author');
+  const mail = [...current.shadowRoot.querySelectorAll(`a[href="mailto:${supportContact}"]`)];
+  assert(mail.length === 1, `expected exactly one support link for the pending author, got ${mail.length}`);
+  await show({ ...base, approvable: [row], settings: { ...base.settings, supportContact } });
+  assert(!text().includes('If your content owner is away'), 'author support note shown to the approver');
+  assert(current.shadowRoot.querySelector(`footer a[href="mailto:${supportContact}"]`)?.textContent.includes('Contact support'), 'footer support link missing');
 });
 
 const scenario = new URLSearchParams(window.location.search).get('view') || 'request';
