@@ -192,12 +192,29 @@ function settingsFrom(config) {
     const row = rows.find((item) => (item.key || item.Key) === key);
     return String(row?.value ?? row?.Value ?? '');
   };
+  // Optional checklist shown before a request, e.g. request.guidance.item.1 (+ .marker).
+  const items = rows
+    .map((row) => /^request\.guidance\.item\.(\d+)$/.exec(row.key || row.Key || '')?.[1])
+    .filter(Boolean)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map((index) => ({
+      marker: value(`request.guidance.item.${index}.marker`).trim(),
+      text: value(`request.guidance.item.${index}`).trim(),
+    }))
+    .filter((item) => item.text);
+  const guidance = {
+    title: value('request.guidance.title').trim(),
+    text: value('request.guidance.text').trim(),
+    items,
+  };
   return {
     commentsRequired: value('request.comments.required').toLowerCase() === 'true',
     commentsMinLength: Math.max(1, parseInt(value('request.comments.length'), 10) || 1),
     supportContact: value('request.support.contact'),
     accentColor: value('theme.accent-color'),
     accentColorHover: value('theme.accent-color-hover'),
+    guidance: guidance.title || guidance.text || items.length ? guidance : null,
   };
 }
 

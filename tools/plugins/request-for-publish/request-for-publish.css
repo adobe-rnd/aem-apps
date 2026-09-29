@@ -145,6 +145,44 @@ dd {
   overflow-wrap: anywhere;
 }
 
+.guidance {
+  margin: 0 0 20px;
+}
+
+.guidance h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.guidance-items {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guidance-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 6px 0;
+}
+
+.guidance-marker {
+  flex: none;
+  min-width: 22px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--pw-accent, var(--s2-blue-900, light-dark(#0265dc, #8cb4ff)));
+  background: var(--s2-gray-100, light-dark(#f3f3f3, #333));
+}
+
+.support-note {
+  margin: 16px 0 0;
+}
+
 .review-links {
   display: flex;
   align-items: baseline;

@@ -290,16 +290,36 @@ class RequestForPublish extends LitElement {
     const links = pageLinks(this.page, new URLSearchParams(window.location.search).get('env'));
     const { view, request } = this.state;
     const native = this.workspace?.canCompare;
-    const hint = native
-      ? `Compare the current ${view === 'approver' ? 'preview' : 'document'} with the live page.`
-      : 'Compare the preview awaiting approval with the live page.';
+    let hint = `Compare the current ${view === 'approver' ? 'preview' : 'document'} with the live page.`;
+    if (!native) {
+      hint = request
+        ? 'Compare the preview awaiting approval with the live page.'
+        : 'Compare the latest preview with the live page.';
+    }
     return html`<div class="review-links">
       ${native ? html`<button class="review-link" ?disabled=${this.disabled}
         @click=${this.reviewChanges}>${this._reviewing ? 'Opening comparison…' : 'Review changes'}</button>` : nothing}
-      ${!native && request ? html`<a class="review-link" href=${links.diff} target="_blank" rel="noopener noreferrer">Review changes <span aria-hidden="true">↗</span></a>` : nothing}
+      ${native ? nothing : html`<a class="review-link" href=${links.diff} target="_blank" rel="noopener noreferrer">Review changes <span aria-hidden="true">↗</span></a>`}
       <a href=${links.preview} target="_blank" rel="noopener noreferrer">Open preview <span aria-hidden="true">↗</span></a>
-      ${native || request ? html`<p class="hint">${hint}</p>` : nothing}
+      <p class="hint">${hint}</p>
     </div>`;
+  }
+
+  renderGuidance() {
+    const guidance = this._data?.settings?.guidance;
+    if (!guidance) return nothing;
+    return html`<section class="guidance" aria-labelledby=${guidance.title ? 'guidance-title' : nothing}>
+      ${guidance.title ? html`<h3 id="guidance-title">${guidance.title}</h3>` : nothing}
+      ${guidance.text ? html`<p>${guidance.text}</p>` : nothing}
+      ${guidance.items.length ? html`<ul class="guidance-items">${guidance.items.map((item) => html`<li class="guidance-item">
+        ${item.marker ? html`<span class="guidance-marker" aria-hidden="true">${item.marker}</span>` : nothing}<span>${item.text}</span>
+      </li>`)}</ul>` : nothing}
+    </section>`;
+  }
+
+  get authorSupport() {
+    const contact = this._data?.settings?.supportContact;
+    return contact && this.state.request && this.state.canWithdraw ? contact : '';
   }
 
   renderRequestForm() {
@@ -407,7 +427,8 @@ class RequestForPublish extends LitElement {
       ${state.bare
     ? html`${current ? this.renderStepBody(current, state, true) : nothing}`
     : html`<ol class="steps">${state.steps.map((step) => this.renderStep(step, state))}</ol>`}
-      ${requesting ? html`${this.renderLinks()}${this.renderRequestForm()}` : nothing}
+      ${this.authorSupport ? html`<p class="hint support-note">If your content owner is away, contact <a href=${`mailto:${this.authorSupport}`}>${this.authorSupport}</a> for assistance with content approvals.</p>` : nothing}
+      ${requesting ? html`${this.renderGuidance()}${this.renderLinks()}${this.renderRequestForm()}` : nothing}
     `;
   }
 
@@ -421,7 +442,7 @@ class RequestForPublish extends LitElement {
       ${this._busy ? html`<p class="progress" role="status">${this._busy}</p>` : nothing}
       ${this.renderContent()}
       ${links ? html`<footer><a href=${this.state.canWithdraw ? links.myRequests : links.inbox} target="_blank" rel="noopener noreferrer">Open inbox <span aria-hidden="true">↗</span></a>
-        ${this._data?.settings.supportContact ? html`<a href=${`mailto:${this._data.settings.supportContact}`}>Contact support</a>` : nothing}
+        ${this._data?.settings.supportContact && !this.authorSupport ? html`<a href=${`mailto:${this._data.settings.supportContact}`}>Contact support</a>` : nothing}
       </footer>` : nothing}
     </div>`;
   }

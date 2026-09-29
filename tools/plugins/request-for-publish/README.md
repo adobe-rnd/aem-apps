@@ -33,7 +33,7 @@ The worker deletes completed requests; it does not supply retained workflow hist
 
 On a host with native comparison, **Review changes** invokes the native EW center comparison while leaving this rail mounted. Authors compare the **current document versus live**, both before submission and while their request is pending. The approver view compares **preview versus live**, matching the content that approval publishes. It does not compare a frozen submission revision.
 
-Hosts without native comparison, including the current production DA SDK, link **Review changes** to the Page Status comparison on tools.aem.live in a new tab. It only compares preview with live, so it is offered only while a request is pending, when the preview is what approval publishes. Before submission the preview may lag the document, so no review is offered.
+Hosts without native comparison, including the current production DA SDK, link **Review changes** to the Page Status comparison on tools.aem.live in a new tab. It only compares preview with live: while a request is pending that is exactly what approval publishes, and before submission it is labelled as the latest preview, since unpreviewed edits are not included.
 
 The separate EW host/SDK capability is detected from the host handshake (`comparison: 1`), not just the existence of a JavaScript method. The public host action remains role-agnostic; this plugin chooses the comparison inputs from its worker-derived view.
 
@@ -48,8 +48,14 @@ At the site or org level, the worker reads these DA config tabs:
 | Tab | Columns / values |
 |---|---|
 | `publish-workflow-config` | `Pattern`, `Approvers`, `CC` (for example `/drafts/*`, `legal@example.com:1, brand@example.com:2`, `watcher@example.com:2`) |
-| `publish-workflow-settings` | `key`, `value`: `request.comments.required`, `request.comments.length`, `request.support.contact`, `approvals.cc.can-approve`, `workflow.step.N.title`, `workflow.step.N.description` |
+| `publish-workflow-settings` | `key`, `value`: `request.comments.required`, `request.comments.length`, `request.support.contact`, `request.guidance.title`, `request.guidance.text`, `request.guidance.item.N`, `request.guidance.item.N.marker`, `theme.accent-color`, `theme.accent-color-hover`, `approvals.cc.can-approve`, `workflow.step.N.title`, `workflow.step.N.description` |
 | `publish-workflow-groups-to-email` | Optional distribution-list expansion; not needed for direct reviewer addresses. |
+
+### Submission guidance
+
+Sites can show a checklist before authors request approval. Nothing is shown unless at least one `request.guidance.*` key is set. `request.guidance.title` and `request.guidance.text` are an optional heading and introduction; `request.guidance.item.N` adds checklist items in ascending `N`, and the optional `request.guidance.item.N.marker` shows a short badge such as a letter of an acronym. Empty items are ignored.
+
+`request.support.contact` is an email address. The pending author sees "If your content owner is away, contact … for assistance with content approvals."; every other view offers a **Contact support** link.
 
 ### Steps
 
