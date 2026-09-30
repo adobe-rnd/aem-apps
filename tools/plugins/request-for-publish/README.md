@@ -94,7 +94,9 @@ If the request fails to submit (network error, worker error, etc.), an error mes
 | `request-for-publish.html` | Entry HTML for fullsize-dialog mode; loads DA SDK and the plugin module |
 | `request-for-publish.js` | Main LitElement component with form, states, and event handlers; includes both dialog and panel mode initialization |
 | `request-for-publish.css` | Styles for all component states (form, pending, success, loading) |
+| `plugin.js` | Lean browse status surface (`getStatus`); no editor styles, no Lit |
 | `utils.js` | Thin REST client over `publish-requests-worker` (approvers/config fetch, submit/resend/withdraw, existing-request check) + client-side Helix preview + IMS profile fetch |
+| `ims-profile.js` | Resolves the IMS profile URL for the environment that issued the token (prod, stage, ...) |
 
 ## Configuration
 
@@ -157,6 +159,46 @@ export default async function init({ context, token }) {
   };
 }
 ```
+
+### Browse Status Surface (`plugin.js`)
+
+DA's browse list can show a page's pending publish request as a status cell in
+the item's details drawer. `plugin.js` is the module that serves it. It is a
+sibling of `request-for-publish.js` on purpose: the editor entry point loads
+the DA editor styles and the Lit component at import time, and the browse list
+must not pay for those just to ask whether a page has a pending request.
+
+Declare it with a `library` config row on the site (or org) config:
+
+| title | surface | module | label | icon | kinds |
+|---|---|---|---|---|---|
+| Request Publish | status | `/tools/plugins/request-for-publish/plugin.js` | Workflow | workflow | page |
+
+Behaviour:
+
+- The module's `init({ context, token })` returns a handle with
+  `async getStatus(item, ctx)`.
+- A page with a pending request gets `{ state: 'pending', label: 'In Review',
+  icon: 'clock' }`. A page with none returns `null`, which renders nothing.
+  `pending` is the only state the list ever sees, because approve, reject and
+  withdraw delete the row.
+- Matching is on `item.sitePath`, the site-relative extensionless form the
+  worker stores (`/tea2` for `/bpauli/frescopa/tea2`). A folder index is
+  browsed as `/de/index`, so a request recorded against the folder `/de`
+  matches it too.
+- The popover detail (requester, approver, comment, created) comes from the
+  request row itself, plus an origin-relative link to the inbox app, so a local
+  run links to the local inbox. There is no second network call.
+- Pending requests are caller-scoped, so the module lists both
+  `role=requester` and the default (no `role` param) approver-scoped queue,
+  then dedupes by path. The host caches nothing and calls `getStatus` once per
+  expand, so the listing is fetched once per `init` and shared by every item
+  in the list.
+- `ctx.token` is the raw IMS token: `daFetch` only attaches credentials for DA
+  and AEM origins, so the worker would otherwise get an unauthenticated call.
+
+The full host contract is `blocks/browse/da-list/status-registry/README.md` in
+`da-live`.
 
 ## States
 
