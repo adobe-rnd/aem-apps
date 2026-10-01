@@ -23,7 +23,6 @@ const FILES = {
   copy: 's2-icon-copy-20-n',
   delete: 's2-icon-delete-20-n',
   edit: 's2-icon-edit-20-n',
-  filter: 's2-icon-filter-20-n',
   info: 's2-icon-infocircle-20-n',
   openIn: 's2-icon-openin-20-n',
 };

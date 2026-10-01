@@ -4,11 +4,6 @@
 }
 
 .endpoint-list {
-  .filter {
-    width: calc(var(--list-pad-inline) + 32px);
-    padding-inline-end: 0;
-  }
-
   .endpoint {
     display: none;
   }
@@ -35,59 +30,6 @@
       outline-offset: 2px;
       border-radius: var(--s2-corner-radius-75);
     }
-  }
-}
-
-/* Matches da-live browse: a quiet 18px icon that is fully opaque on hover or while filtering. */
-.filter-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: inherit;
-  cursor: pointer;
-
-  svg {
-    width: 18px;
-    height: 18px;
-    opacity: 0.4;
-  }
-
-  &:hover svg,
-  &.selected svg {
-    opacity: 1;
-  }
-
-  &:focus-visible {
-    border-radius: var(--s2-corner-radius-75);
-    outline: 2px solid var(--s2-blue-900);
-  }
-}
-
-input[name="filter"] {
-  box-sizing: border-box;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--s2-gray-800);
-  font-family: inherit;
-  font-size: var(--s2-component-m-regular-font-size);
-  line-height: var(--s2-component-m-regular-line-height);
-
-  &::placeholder {
-    color: var(--s2-gray-500);
-    font-weight: var(--s2-component-m-bold-font-weight);
-    text-transform: uppercase;
-  }
-
-  &:focus {
-    outline: none;
   }
 }
 
