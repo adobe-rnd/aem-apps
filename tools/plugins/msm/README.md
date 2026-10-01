@@ -84,8 +84,8 @@ current site from its source), two modes are available:
 
 - **Merge** — runs a 3-way merge that preserves local edits in the linked site
   while pulling in changes from the source. Backed by the
-  `mergeCopy` function from [`nx/blocks/loc/project`](https://da.live/nx/blocks/loc/project/index.js),
-  loaded dynamically at runtime.
+  public merge factory at https://da.live/nx/public/utils/loc.js,
+  loaded lazily with SDK fetch; configuration comes from the destination site.
 - **Replace** — replaces the linked site's content with the source's content.
   Local edits are lost.
 
@@ -108,10 +108,31 @@ dependency wiring also differs:
 | `daFetch`          | `blocks/shared/utils.js`                        | `DA_SDK.actions.daFetch`, plumbed in via `setSdkFetch`             |
 | `DA_ORIGIN`        | `blocks/shared/constants.js`                    | `admin.da.live`, defined in the shared `core/fetch.js`             |
 | NX URL             | `getNx()` (versioned/branch-aware)              | Hardcoded `https://da.live/nx`                                     |
-| `mergeCopy`        | Dynamic import via `getNx()`                    | Dynamic import via the hardcoded NX URL                            |
+| `mergeCopy`        | Dynamic import via `getNx()`                    | Public loc copy utility; injected SDK fetch and destination config |
 | UI primitives      | `se-*` components from `${nx}/public/se/components.js`   | Own plain `<button>` elements styled in `msm.css` (no `se-*`/`sl-*` component lib); base typography via nexter (`loadStyle` / `getStyle`) |
 | Icons              | Relative paths `/blocks/edit/img/...`           | Shared `core/icons.js` — inline `<svg><use>` from SVGs in `core/img/` |
 | Edit-link origin   | `window.location.origin` (always da.live)       | Derived from `document.referrer`; falls back to `https://da.live`  |
+
+## NX dependency boundary
+
+Both MSM entrypoints inject `DA_SDK.actions.daFetch`. Shared core no longer
+imports private NX fetch/IMS or loc modules. Merge uses the public copy utility;
+the domain-wide IMS shim is removed. DA-backed sites only; no SDK or HLX6
+expansion. Deploy the da-nx utility before merging this migration.
+
+Other private dependencies remain outside this change:
+
+| Area | Private dependency |
+| --- | --- |
+| MSM app/plugin | NX runtime/style helpers and base styles |
+| DA Permissions, publish requests, inbox | `nx/utils/daFetch.js` |
+| Developer, permissions, publish requests, inbox | NX2 runtime/style bootstrap |
+| Media Library | NX runtime/fetch and `nx/blocks/media-library/media-library.js` |
+| Tool HTML entrypoints | `nx2/styles/styles.css` |
+
+These are migration touchpoints, not public API guarantees. The established
+SDK entrypoint (`nx/utils/sdk.js`) and `nx/public` assets are intentional.
+The existing SDK's auth-failure behavior is unchanged.
 
 ## Files
 
