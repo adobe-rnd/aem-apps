@@ -18,12 +18,12 @@ import { html, LitElement, nothing } from 'da-lit';
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { hashChange, loadStyle } from 'https://da.live/nx2/utils/utils.js';
 import { getColorScheme } from 'https://da.live/nx2/scripts/nx.js';
-import { loadSite } from './utils/store.js';
-import { buildHash, isSameRoute, toRoute } from './utils/route.js';
-import { messageStyle, renderMessage } from './shared/message/message.js';
+import { core } from './adapters/index.js';
+import { buildHash, isSameRoute, toRoute } from './ui/utils/route.js';
+import { messageStyle, renderLoading, renderMessage } from './ui/shared/message/message.js';
 
 import 'https://da.live/nx2/public/sl/components.js';
-import './gql-header/gql-header.js';
+import './ui/header/header.js';
 
 const EL_NAME = 'graphql-app';
 
@@ -39,16 +39,16 @@ const setHash = ({ route, replace }) => {
   else window.history.pushState(null, '', url);
 };
 
-const pageFor = (route) => (route.endpoint ? 'gql-endpoint' : 'gql-endpoints');
+const screenFor = (route) => (route.endpoint ? 'endpoint-screen' : 'endpoints-screen');
 
-const loadPage = (route) => {
-  const page = pageFor(route);
-  return import(`./${page}/${page}.js`);
+const loadScreen = (route) => {
+  const screen = screenFor(route);
+  return import(`./ui/${screen}/${screen}.js`);
 };
 
 const isSameSite = (a, b) => a?.org === b?.org && a?.site === b?.site;
 
-// Routes the hash to a page and loads the site the pages share.
+// Routes the hash to a screen and loads the site the screens share.
 class Graphql extends LitElement {
   static properties = {
     _route: { state: true },
@@ -66,7 +66,7 @@ class Graphql extends LitElement {
       if (staleHash) setHash({ route, replace: true });
       this.openRoute(route);
     });
-    const onBeforeUnload = (event) => { if (this.page?.dirty) event.preventDefault(); };
+    const onBeforeUnload = (event) => { if (this.endpointScreen?.dirty) event.preventDefault(); };
     window.addEventListener('beforeunload', onBeforeUnload);
     this._teardown = () => {
       unsubscribeHash();
@@ -79,8 +79,8 @@ class Graphql extends LitElement {
     this._teardown?.();
   }
 
-  get page() {
-    return this.shadowRoot.querySelector('gql-endpoint');
+  get endpointScreen() {
+    return this.shadowRoot.querySelector('gql-endpoint-screen');
   }
 
   async openRoute(route, { isNew, confirmed } = {}) {
@@ -89,9 +89,9 @@ class Graphql extends LitElement {
       this._isNew = isNew;
       return;
     }
-    if (!confirmed && this.page?.dirty) {
+    if (!confirmed && this.endpointScreen?.dirty) {
       setHash({ route: current, replace: true });
-      if (!await this.page.confirmLeave() || this._route !== current) return;
+      if (!await this.endpointScreen.confirmLeave() || this._route !== current) return;
       setHash({ route });
     }
     this._route = route;
@@ -101,11 +101,11 @@ class Graphql extends LitElement {
       this.handleChangeSite();
       return;
     }
-    await Promise.all([this._site ? undefined : this.loadSite(route), loadPage(route)]);
+    await Promise.all([this._site ? undefined : this.loadSite(route), loadScreen(route)]);
   }
 
   async loadSite(route) {
-    const loaded = await loadSite(route);
+    const loaded = await core.listEndpoints(route);
     if (this._route !== route) return;
     this._site = { ...loaded, org: route.org, site: route.site };
   }
@@ -117,7 +117,7 @@ class Graphql extends LitElement {
   }
 
   async handleChangeSite() {
-    await import('./shared/site-picker/site-picker.js');
+    await import('./ui/shared/site-picker/site-picker.js');
     this._changingSite = true;
   }
 
@@ -166,21 +166,21 @@ class Graphql extends LitElement {
     });
   }
 
-  renderPage() {
+  renderScreen() {
     const { endpoint } = this._route;
     if (endpoint) {
       return html`
-        <gql-endpoint .site=${this._site} name=${endpoint}
+        <gql-endpoint-screen .site=${this._site} name=${endpoint}
           ?isNew=${!!this._isNew}
           @route-change=${this.handleRouteChange}
           @endpoints-change=${this.handleEndpointsChange}
-        @change-site=${this.handleChangeSite}></gql-endpoint>`;
+          @change-site=${this.handleChangeSite}></gql-endpoint-screen>`;
     }
     return html`
-      <gql-endpoints .site=${this._site}
+      <gql-endpoints-screen .site=${this._site}
         @route-change=${this.handleRouteChange}
         @endpoints-change=${this.handleEndpointsChange}
-        @change-site=${this.handleChangeSite}></gql-endpoints>`;
+        @change-site=${this.handleChangeSite}></gql-endpoints-screen>`;
   }
 
   renderMain() {
@@ -190,14 +190,11 @@ class Graphql extends LitElement {
         @change-site=${this.handleChangeSite}></gql-header>`;
     if (!site) return html`${header}${this.renderNoSite()}`;
     if (!this._site) {
-      return html`${header}
-        <div class="loading" role="status">
-          <span class="nx-loading-spinner" aria-hidden="true"></span>Loading endpoints…
-        </div>`;
+      return html`${header}${renderLoading('Loading endpoints…')}`;
     }
     if (this._site.error) return html`${header}${this.renderSiteError()}`;
     if (!this._site.found) return html`${header}${this.renderSiteMissing()}`;
-    return this.renderPage();
+    return this.renderScreen();
   }
 
   renderSitePicker() {
