@@ -84,7 +84,7 @@ current site from its source), two modes are available:
 
 - **Merge** — runs a 3-way merge that preserves local edits in the linked site
   while pulling in changes from the source. Backed by the
-  public merge factory at https://da.live/nx/public/utils/loc.js,
+  public `mergeCopy` at https://da.live/nx/public/plugins/rollout/utils.js,
   loaded lazily with SDK fetch; configuration comes from the destination site.
 - **Replace** — replaces the linked site's content with the source's content.
   Local edits are lost.

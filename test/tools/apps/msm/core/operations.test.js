@@ -23,16 +23,13 @@ import {
 } from '../../../../../tools/apps/msm/core/operations.js';
 import { setDaFetch } from '../../../../../tools/apps/msm/core/fetch.js';
 
-const publicCopyUrl = 'https://da.live/nx/public/utils/loc.js';
+const publicCopyUrl = 'https://da.live/nx/public/plugins/rollout/utils.js';
 const mockModule = `
-  export let factoryCount = 0;
-  export const createMergeCopy = ({ fetch, daOrigin }) => {
-    factoryCount += 1;
-    return async (url, title) => {
-      const [, org, site] = url.destination.split('/');
-      await fetch(daOrigin + '/source/' + org + '/' + site + '/.da/translate.json');
-      return fetch(daOrigin + '/source' + url.destination, { method: 'POST', body: title });
-    };
+  export const mergeCopy = async ({ fetch, daOrigin, urlSource, urlTarget, msg }) => {
+    if (!urlSource) throw new Error('Missing source path');
+    const [, org, site] = urlTarget.split('/');
+    await fetch(daOrigin + '/source/' + org + '/' + site + '/.da/translate.json');
+    return fetch(daOrigin + '/source' + urlTarget, { method: 'POST', body: msg });
   };
 `;
 const hook = registerHooks({
@@ -97,14 +94,28 @@ describe('MSM public merge integration', () => {
     assert.equal(calls, 2);
   });
 
-  it('shares one lazily initialized copy instance across concurrent merges', async () => {
-    const mock = await import(publicCopyUrl);
-    const before = mock.factoryCount;
+  it('passes the direct public API arguments', async () => {
+    let args;
+    setMergeCopy(async (options) => {
+      args = options;
+      return { ok: true };
+    });
+    assert.equal((await mergeFromSource('org', 'source', 'target', '/page')).ok, true);
+    assert.equal(typeof args.fetch, 'function');
+    assert.deepEqual({ ...args, fetch: undefined }, {
+      fetch: undefined,
+      daOrigin: 'https://admin.da.live',
+      urlSource: '/org/source/page.html',
+      urlTarget: '/org/target/page.html',
+      msg: 'MSM Merge',
+    });
+  });
+
+  it('loads the public merge function for concurrent merges', async () => {
     setDaFetch(async () => ({ ok: true, json: async () => ({ config: { data: [] } }) }));
     const results = await Promise.all(Array.from({ length: 6 }, () => (
       mergeFromSource('org', 'source', 'target', '/page')
     )));
     assert.ok(results.every((result) => result.ok));
-    assert.equal(mock.factoryCount - before, 1);
   });
 });

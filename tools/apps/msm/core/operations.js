@@ -46,11 +46,8 @@ export function setMergeCopy(fn) {
 }
 async function ensureMergeCopy() {
   if (mergeCopyFn) return mergeCopyFn;
-  mergeCopyLoading ??= import(`${NX}/public/utils/loc.js`).then(({ createMergeCopy }) => {
-    mergeCopyFn ||= createMergeCopy({
-      fetch: daFetch,
-      daOrigin: DA_ORIGIN,
-    });
+  mergeCopyLoading ??= import(`${NX}/public/plugins/rollout/utils.js`).then(({ mergeCopy }) => {
+    mergeCopyFn ||= mergeCopy;
     return mergeCopyFn;
   }).catch((error) => {
     mergeCopyLoading = undefined;
@@ -107,11 +104,13 @@ export async function mergeFromSource(org, sourceSite, targetSite, pagePath, ext
   try {
     const clean = cleanPath(pagePath, ext);
     const mergeCopy = await ensureMergeCopy();
-    const url = {
-      source: `/${org}/${sourceSite}${clean}.${ext}`,
-      destination: `/${org}/${targetSite}${clean}.${ext}`,
-    };
-    const result = await mergeCopy(url, 'MSM Merge');
+    const result = await mergeCopy({
+      fetch: daFetch,
+      daOrigin: DA_ORIGIN,
+      urlSource: `/${org}/${sourceSite}${clean}.${ext}`,
+      urlTarget: `/${org}/${targetSite}${clean}.${ext}`,
+      msg: 'MSM Merge',
+    });
     if (!result?.ok) return { error: result?.error || `Merge failed (${result?.status || 'unknown'})` };
     return { ok: true, editUrl: `${editUrlOrigin}/edit#/${org}/${targetSite}${clean}` };
   } catch (e) {
