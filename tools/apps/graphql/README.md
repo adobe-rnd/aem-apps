@@ -18,7 +18,7 @@ https://da.live/app/adobe-rnd/aem-apps/tools/apps/graphql/graphql#/{org}/{site}
 | --- | --- |
 | _(none)_ or `#/{org}` | The site dialog; cancelling shows a "No site selected" message |
 | `#/{org}/{site}/endpoints` | Endpoint list |
-| `#/{org}/{site}/endpoints/{endpoint}` | The `{endpoint}` page |
+| `#/{org}/{site}/endpoints/{endpoint}` | The `{endpoint}` screen |
 
 `#/{org}/{site}` and unknown sections (`#/{org}/{site}/{other}`) are replaced
 with `#/{org}/{site}/endpoints`. The `endpoints` segment leaves room for other
@@ -26,25 +26,17 @@ per-site sections later.
 
 - The hash is the source of truth. Selecting an endpoint changes it, and
   back/forward moves between endpoints.
-- An invalid endpoint name in the hash opens the list. An endpoint that cannot
-  be loaded shows an error toast and returns to the list.
-- The list shows each endpoint's delivery path (`/graphql/{name}`) with a copy
-  button.
-- The header shows the app's own trail `GraphQL › endpoints › {endpoint}`;
-  `endpoints` links back to the list, and the list page adds a ⊕ (new
-  endpoint) after the trail. The selected `org / site` with a pencil (change
-  site) sits above it.
-- New endpoint (⊕) opens a dialog for the name, then an unsaved endpoint page
+- An invalid endpoint name in the hash opens the list. An endpoint, or site
+  schemas, that cannot be loaded shows an error toast and returns to the list.
+- The list shows each endpoint's delivery path (`/graphql/{name}`).
+- New endpoint (⊕) opens a dialog for the name, then an unsaved endpoint screen
   at `#/{org}/{site}/endpoints/{name}`. Cancel replaces the hash with
   `#/{org}/{site}/endpoints`, and so does deleting an endpoint.
-- Saving always regenerates the SDL from the current schemas, so Save stays
-  enabled without changes.
-- The schema picker's Status column shows "Invalid" or "Not found" for
-  schemas that cannot be used, and "Adding" or "Removing" for selections that
-  differ from the saved endpoint. The toolbar counts those changes next to
-  "n of m selected".
-- The schema picker links to the schema editor at
-  `https://da.live/apps/schema#/{org}/{site}`.
+- Saving writes the config and a new SDL from the current schemas together,
+  so Save stays enabled without changes and refreshes the SDL after schema
+  changes.
+- The Schemas tab marks schemas that are invalid, not found, or being added or
+  removed, and links to the schema editor.
 - Users without write permission on the site see the app as view only.
 - The app asks for confirmation before it discards unsaved changes, whether on
   a hash change or on page unload.
@@ -98,6 +90,10 @@ All paths are relative to `/{org}/{site}`.
 Both endpoint files use the schema editor's codeblock document
 (`<main><div><pre><code>…</code></pre></div></main>`).
 
+Only core's `saveEndpoint` writes them, always together, so the SDL matches
+the config it was generated from (see
+[core/README.md](core/README.md#operations)).
+
 ### config.html
 
 ```json
@@ -125,13 +121,14 @@ scalar DateTime
 …
 ```
 
-- The app only writes this file; the engine reads it.
+- The engine reads this file.
 - The app does not detect when source schemas change after a save; saving the
-  endpoint again regenerates its SDL.
+  endpoint again refreshes it
+  (see [core/README.md](core/README.md#keeping-the-sdl-up-to-date)).
 
 ## SDL generation
 
-`utils/sdl.js` converts the JSON Schema subset that Structured Content
+`core/sdl.js` converts the JSON Schema subset that Structured Content
 supports ([da-sc-sdk schema spec](https://github.com/adobe/da-sc-sdk/blob/main/docs/schema-spec.md))
 into GraphQL.
 
@@ -145,69 +142,83 @@ into GraphQL.
 - The document is checked with `buildASTSchema` and `validateSchema`; any
   failure becomes a generation error, which blocks saving.
 - Problems are reported per schema and JSON pointer.
-- `utils/sdl.js` imports only the vendored graphql-js, with no DOM or DA
-  dependency, so the engine or a CLI can import it directly.
+
+## Core
+
+`core/` holds the endpoint business logic. It has no app, DOM or DA imports
+(enforced by ESLint) and reaches DA through a store it is given, so other code
+can reuse it; the app's store and validator live in `adapters/`. See
+[core/README.md](core/README.md).
 
 ## Architecture
 
-A thin router entry lazily mounts one page per route. Each custom element has
-its own folder named after its tag, with code only it uses in `helpers/`.
-App-wide code lives in `utils/` and `shared/`. GraphQL-specific elements use
-the `gql-` prefix; the generic ones in `shared/` have no GraphQL knowledge.
+A thin router entry lazily mounts one screen per route. The app has three
+layers: `core/` holds the business logic, `adapters/` binds it to DA, and
+`ui/` holds everything the browser renders. Each custom element in `ui/` has
+its own folder named after its tag without the `gql-` prefix
+(`ui/endpoint-list/` defines `gql-endpoint-list`), with code only it uses in
+`helpers/`. `ui/shared/` holds generic components with no GraphQL knowledge,
+and `ui/utils/` holds helper modules.
 
 ```
 graphql.html                iframe page: import map, nx2 styles, DA SDK
-graphql.js                  graphql-app: hash router, site loading, lazy pages, site picker
-gql-endpoints/              page: endpoint list, new endpoint dialog, delete, read-only notice
-gql-endpoint/               page: one endpoint: load, save, discard, leave confirmation
-  helpers/draft.js          schema selection, dirty check, save state
-gql-header/                 site context, GraphQL › endpoints › name trail, page actions slot
-gql-endpoint-list/          table, name filter, row actions
-gql-endpoint-editor/        alerts and tabs
-gql-schema-picker/          search and selection table
-  helpers/options.js        picker rows: filter, sort, schema status
-gql-sdl-preview/            problems slot + lazy read-only CodeMirror
-utils/
+graphql.js                  graphql-app: hash router, site loading, lazy screens, site picker
+core/                       portable business logic, see core/README.md
+  operations.js             createGraphqlCore: the workflows over a store
   sdl.js                    JSON Schema → SDL with graphql-js
-  store.js                  DA documents via nx2 `source`: codeblock document, schema
-                            loading and SC validation (da-sc-sdk, lazy)
-  schemas.js                schema validity and readable issues
-  endpoint.js               endpoint config and SDL formats, name rules, draft, save payload
-  route.js                  hash ⇄ route
-  messages.js               user-facing wording: status labels, toasts
-shared/                     generic UI with no GraphQL knowledge
-  table/                    list-table styles, sort headers, empty rows, row-click delegation
-  site-picker/              gql-site-picker: choose / change the org and site
-  confirm/                  gql-confirm: promise-based confirmation dialog
-  inline-alert/ status-light/ message/
-  icons.js                  S2 icons from img/ as <svg><use>
-img/                        S2 icons
+  endpoint.js               endpoint config and SDL formats, name rules
+  schemas.js                schema documents, validity and readable issues
+  codeblock.js              codeblock document format
+adapters/                   the app's core instance
+  index.js                  core bound to DA
+  da-source.js              store port over nx2's `source` API
+  sc-validator.js           da-sc-sdk validator, lazy
+ui/                         custom elements, UI helpers and icons
+  endpoints-screen/         endpoint list, new endpoint dialog, delete, read-only notice
+  endpoint-screen/          one endpoint: load, save, discard, leave confirmation
+    helpers/draft.js        schema selection, dirty check, save state
+  header/                   site context, GraphQL › endpoints › name trail, screen actions slot
+  endpoint-list/            table, row actions
+  endpoint-editor/          alerts, Schemas and GraphQL SDL tabs
+  schemas-panel/            Schemas tab: search and selection table
+    helpers/options.js      schema rows: filter, sort, schema status
+  sdl-panel/                GraphQL SDL tab: problems slot + lazy read-only CodeMirror
+  shared/                   generic components with no GraphQL knowledge
+    table/                  list-table styles, sort headers, empty rows, row-click delegation
+    site-picker/            choose / change the org and site
+    confirm/                promise-based confirmation dialog
+    inline-alert/ status-light/ message/
+  utils/
+    route.js                hash ⇄ route, schema editor link
+    messages.js             user-facing wording: status labels, toasts
+    icons.js                S2 icons from ui/img/ as <svg><use>
+  img/                      S2 icons
 ```
 
 - Buttons, icon buttons and the loading spinner use nx2's `buttons.css`;
   toasts and dialogs use nx2's `toast` and `nx-dialog`; form fields use
   nx2's `form.css`.
 - The site picker, `gql-confirm`, `nx-dialog` and
-  `gql-sdl-preview` are imported when first needed.
-- Only the endpoint page imports `utils/sdl.js`, dynamically and in parallel
-  with the endpoint and schema requests, so the list page never loads
-  graphql-js. `store.js` and `endpoint.js` load up front, so neither may
-  import `sdl.js`.
-- `utils/store.js` is the only module that talks to DA. It calls nx2's
-  `source` API and returns `{ error, status }` on failure. The site root
-  listing's `permissions` decide view only.
+  `gql-sdl-panel` are imported when first needed.
+- Only the endpoint screen imports `core/sdl.js`, dynamically and in parallel
+  with the endpoint and schema requests, and `core/operations.js` imports it
+  only when generating, so the list screen never loads graphql-js. No other
+  module may import `sdl.js` statically.
+- `adapters/` is the only code that talks to DA; screens use its `core`. The
+  site root listing's `permissions` decide view only.
+- The endpoint screen previews the SDL with `buildSdl` and blocks saving on
+  generation errors; `saveEndpoint` applies the same rule.
 - The entry turns the hash into a route, loads the site once from folder
   listings (`{ org, site, endpoints, found, canWrite }`, or `{ error }`) and
-  passes it to the page for the route. Before leaving a page with unsaved
-  changes it asks `gql-endpoint.confirmLeave()`.
-- Schema documents are read and validated only by the endpoint page. A failed
-  endpoints or schemas folder listing counts as empty, because DA can report a
-  missing folder as an error.
-- Pages emit `route-change` (`{ route, replace, isNew }`) and
+  passes it to the screen for the route. Before leaving a screen with unsaved
+  changes it asks `gql-endpoint-screen.confirmLeave()`.
+- Schema documents are read and validated only by the endpoint screen.
+- Screens emit `route-change` (`{ route, replace, isNew }`) and
   `endpoints-change` (`{ endpoints }`); `gql-header` emits `endpoint-add` and
-  `change-site`. Components below the pages never call the store; they emit
-  events that don't bubble, and each parent re-dispatches what its own parent
-  needs.
+  `change-site`. Components below the screens never call the store.
+  `change-site` and `schemas-select` bubble and are composed, so they reach
+  the shell and the endpoint screen without being re-dispatched; other events
+  don't bubble.
 
 ## Dependencies
 
@@ -244,9 +255,11 @@ https://da.live/app/adobe-rnd/aem-apps/tools/apps/graphql/graphql?ref=local&da-a
 ## Tests
 
 ```sh
-node --test "test/tools/apps/graphql/*.test.js"
+node --test "test/tools/apps/graphql/**/*.test.js"
 ```
 
-The tests cover the pure modules: the converter, naming, endpoint formats,
-routes, schema issues, the draft and the picker options. The golden SDL
-fixtures live in `test/tools/apps/graphql/fixtures/`.
+`test/tools/apps/graphql/core/` covers the core: the converter, naming,
+endpoint formats, schema issues, the codeblock format and the operations
+against an in-memory store (`core/helpers/memory-store.js`). The golden SDL
+fixtures live in `core/fixtures/`. `ui/` covers routes, messages, the draft
+and the schema options.
