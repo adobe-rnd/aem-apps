@@ -18,6 +18,7 @@ import { html, LitElement, nothing } from 'da-lit';
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { hashChange, loadStyle } from 'https://da.live/nx2/utils/utils.js';
 import { getColorScheme } from 'https://da.live/nx2/scripts/nx.js';
+import { showToast, VARIANT_ERROR } from 'https://da.live/nx2/blocks/shared/toast/toast.js';
 import { core } from './adapters/index.js';
 import { buildHash, isSameRoute, toRoute } from './ui/utils/route.js';
 import { messageStyle, renderLoading, renderMessage } from './ui/shared/message/message.js';
@@ -41,9 +42,14 @@ const setHash = ({ route, replace }) => {
 
 const screenFor = (route) => (route.endpoint ? 'endpoint-screen' : 'endpoints-screen');
 
+const showLoadError = () => showToast({
+  text: 'Part of the app could not be loaded. Reload the page to try again.',
+  variant: VARIANT_ERROR,
+});
+
 const loadScreen = (route) => {
   const screen = screenFor(route);
-  return import(`./ui/${screen}/${screen}.js`);
+  return import(`./ui/${screen}/${screen}.js`).catch(showLoadError);
 };
 
 const isSameSite = (a, b) => a?.org === b?.org && a?.site === b?.site;
@@ -117,8 +123,12 @@ class Graphql extends LitElement {
   }
 
   async handleChangeSite() {
-    await import('./ui/shared/site-picker/site-picker.js');
-    this._changingSite = true;
+    try {
+      await import('./ui/shared/site-picker/site-picker.js');
+      this._changingSite = true;
+    } catch {
+      showLoadError();
+    }
   }
 
   handleEndpointsChange({ detail }) {
