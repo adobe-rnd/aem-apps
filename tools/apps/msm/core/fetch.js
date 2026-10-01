@@ -15,14 +15,6 @@
  */
 /* eslint-disable import/no-unresolved */
 
-// Shared authenticated-fetch shim for MSM core.
-//
-// Two consumers, two fetch sources:
-//   - The MSM app runs on da.live and can import da.live's `daFetch` directly.
-//     It needs no setup — the lazy default below loads it on first use.
-//   - The MSM dialog runs in a cross-origin iframe and must route requests
-//     through the host-provided `actions.daFetch`. It calls `setDaFetch` once
-//     during init to inject that function.
 let daFetchFn = null;
 
 export function setDaFetch(fn) {
@@ -31,8 +23,7 @@ export function setDaFetch(fn) {
 
 export async function daFetch(url, opts) {
   if (!daFetchFn) {
-    const { daFetch: fn } = await import('https://da.live/nx/utils/daFetch.js');
-    daFetchFn = fn;
+    throw new Error('MSM requires SDK fetch initialization');
   }
   return daFetchFn(url, opts);
 }

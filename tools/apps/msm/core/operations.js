@@ -39,13 +39,21 @@ export function setEditUrlOrigin(origin) { if (origin) editUrlOrigin = origin; }
 export function getEditUrlOrigin() { return editUrlOrigin; }
 
 let mergeCopyFn;
-export function setMergeCopy(fn) { mergeCopyFn = fn; }
+let mergeCopyLoading;
+export function setMergeCopy(fn) {
+  mergeCopyFn = fn;
+  mergeCopyLoading = undefined;
+}
 async function ensureMergeCopy() {
-  if (!mergeCopyFn) {
-    const mod = await import(`${NX}/blocks/loc/project/index.js`);
-    mergeCopyFn = mod.mergeCopy;
-  }
-  return mergeCopyFn;
+  if (mergeCopyFn) return mergeCopyFn;
+  mergeCopyLoading ??= import(`${NX}/public/plugins/rollout/utils.js`).then(({ mergeCopy }) => {
+    mergeCopyFn ||= mergeCopy;
+    return mergeCopyFn;
+  }).catch((error) => {
+    mergeCopyLoading = undefined;
+    throw error;
+  });
+  return mergeCopyLoading;
 }
 
 export async function previewPage(org, site, pagePath, ext = 'html') {
@@ -96,12 +104,14 @@ export async function mergeFromSource(org, sourceSite, targetSite, pagePath, ext
   try {
     const clean = cleanPath(pagePath, ext);
     const mergeCopy = await ensureMergeCopy();
-    const url = {
-      source: `/${org}/${sourceSite}${clean}.${ext}`,
-      destination: `/${org}/${targetSite}${clean}.${ext}`,
-    };
-    const result = await mergeCopy(url, 'MSM Merge');
-    if (!result?.ok) return { error: 'Merge failed' };
+    const result = await mergeCopy({
+      fetch: daFetch,
+      daOrigin: DA_ORIGIN,
+      urlSource: `/${org}/${sourceSite}${clean}.${ext}`,
+      urlTarget: `/${org}/${targetSite}${clean}.${ext}`,
+      msg: 'MSM Merge',
+    });
+    if (!result?.ok) return { error: result?.error || `Merge failed (${result?.status || 'unknown'})` };
     return { ok: true, editUrl: `${editUrlOrigin}/edit#/${org}/${targetSite}${clean}` };
   } catch (e) {
     return { error: e.message || 'Merge failed' };
