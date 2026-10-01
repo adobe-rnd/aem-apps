@@ -40,7 +40,6 @@ export function getSaveBlocker({ draft, preview, existing = [] }) {
     if (nameError) return nameError;
   }
   if (!draft.schemas.length) return NO_SCHEMAS_MESSAGE;
-  if (!preview) return 'The GraphQL schema has not been generated.';
   if (preview.errors.length) return 'Resolve the GraphQL schema errors before saving.';
   return undefined;
 }

@@ -20,7 +20,7 @@ import { loadStyle } from 'https://da.live/nx2/utils/utils.js';
 // Spectrum 2 status light: https://spectrum.adobe.com/page/status-light/
 export const statusLightStyle = await loadStyle(import.meta.url);
 
-// variant: positive, notice, negative or neutral.
-export function renderStatusLight({ variant = 'neutral', label, title }) {
+// variant: notice or negative.
+export function renderStatusLight({ variant, label, title }) {
   return html`<span class="status-light ${variant}" title=${title ?? nothing}>${label}</span>`;
 }

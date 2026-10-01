@@ -31,7 +31,6 @@ describe('draft', () => {
     assert.ok(getSaveBlocker({ draft: { ...draft, name: 'Bad' }, preview }).includes('lowercase'));
     assert.ok(getSaveBlocker({ draft, preview, existing: ['main'] }).includes('already exists'));
     assert.equal(getSaveBlocker({ draft: { ...draft, schemas: [] }, preview }), NO_SCHEMAS_MESSAGE);
-    assert.ok(getSaveBlocker({ draft }).includes('not been generated'));
     assert.ok(getSaveBlocker({ draft, preview: { sdl: '', errors: ['e'] } }).includes('errors'));
     assert.equal(getSaveBlocker({ draft, preview }), undefined);
     assert.equal(getSaveBlocker({ draft: { ...draft, isNew: false, name: 'Bad' }, preview }), undefined);

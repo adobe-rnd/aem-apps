@@ -39,7 +39,7 @@ export function delegateRowClick(event) {
 }
 
 // sort is { key, direction } with direction 'ascending' or 'descending'.
-export function nextSort({ sort, key }) {
+function nextSort({ sort, key }) {
   if (sort?.key !== key) return { key, direction: 'ascending' };
   return { key, direction: sort.direction === 'ascending' ? 'descending' : 'ascending' };
 }

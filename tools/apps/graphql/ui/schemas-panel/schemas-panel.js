@@ -54,7 +54,7 @@ class SchemasPanel extends LitElement {
 
   get _visible() {
     const options = filterSchemaOptions({
-      options: this.options ?? [],
+      options: this.options,
       query: this._query,
       statusLabel: (option) => SCHEMA_STATUSES[getSchemaStatus(option)]?.label,
     });
@@ -96,7 +96,7 @@ class SchemasPanel extends LitElement {
   }
 
   renderCount() {
-    const options = this.options ?? [];
+    const { options } = this;
     const selected = options.filter((option) => option.selected).length;
     const changes = unsavedSchemaChanges(countChanges(options));
     const note = changes ? html` · <span class="changes">${changes}</span>` : nothing;
@@ -105,7 +105,6 @@ class SchemasPanel extends LitElement {
   }
 
   renderEditorLink() {
-    if (!this.schemaEditorHref) return nothing;
     return html`
       <a class="nx-action-btn-icon nx-btn-sm editor-link" href=${this.schemaEditorHref} target="_blank" rel="noopener"
         title="Open in Schema Editor" aria-label="Open in Schema Editor">${icon({ name: 'openIn' })}</a>`;
@@ -175,12 +174,10 @@ class SchemasPanel extends LitElement {
   }
 
   render() {
-    if (!this.options?.length) {
-      const editor = this.schemaEditorHref
-        ? html`<a href=${this.schemaEditorHref} target="_blank" rel="noopener">Schema Editor</a>`
-        : 'Schema Editor';
+    if (!this.options.length) {
       return html`<p class="empty">This site has no Structured Content schemas yet. Create one
-        in the ${editor} first.</p>`;
+        in the <a href=${this.schemaEditorHref} target="_blank" rel="noopener">Schema Editor</a>
+        first.</p>`;
     }
     const visible = this._visible;
     return html`

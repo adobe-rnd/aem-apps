@@ -31,8 +31,6 @@ const TABS = [
   { id: 'graphql', label: 'GraphQL SDL' },
 ];
 
-const endpointKey = (draft) => (draft?.isNew ? '' : draft?.name);
-
 class EndpointEditor extends LitElement {
   static properties = {
     draft: { attribute: false },
@@ -54,17 +52,11 @@ class EndpointEditor extends LitElement {
     return this._tab ?? 'schemas';
   }
 
-  // Opening another endpoint starts at Schemas; saving a new one keeps the tab.
   willUpdate(props) {
-    if (props.has('draft')) {
-      const prev = props.get('draft');
-      const saved = prev?.isNew && this.draft?.isNew === false && prev.name === this.draft.name;
-      if (!saved && endpointKey(prev) !== endpointKey(this.draft)) this._tab = undefined;
-    }
     if (!['draft', 'schemas', 'savedSchemas'].some((prop) => props.has(prop))) return;
-    this._options = this.draft
-      ? getSchemaOptions({ draft: this.draft, schemas: this.schemas, saved: this.savedSchemas })
-      : undefined;
+    this._options = getSchemaOptions({
+      draft: this.draft, schemas: this.schemas, saved: this.savedSchemas,
+    });
   }
 
   selectTab(id) {
@@ -99,11 +91,11 @@ class EndpointEditor extends LitElement {
     return html`
       ${this.renderNoSchemas()}
       <gql-schemas-panel .options=${this._options} ?busy=${this.busy || this.readOnly}
-        schemaEditorHref=${this.schemaEditorHref ?? nothing}></gql-schemas-panel>`;
+        schemaEditorHref=${this.schemaEditorHref}></gql-schemas-panel>`;
   }
 
   renderProblems() {
-    const errors = this.preview?.errors ?? [];
+    const { errors } = this.preview;
     if (!errors.length) return nothing;
     return renderInlineAlert({
       variant: 'negative',
@@ -131,7 +123,7 @@ class EndpointEditor extends LitElement {
           Structured Content schemas selected for this endpoint. It reflects the current
           selection, including unsaved changes.</p>
       </div>
-      <gql-sdl-panel .sdl=${this.preview?.sdl}>${this.renderProblems()}</gql-sdl-panel>`;
+      <gql-sdl-panel .sdl=${this.preview.sdl}>${this.renderProblems()}</gql-sdl-panel>`;
   }
 
   renderPanel() {
@@ -140,8 +132,6 @@ class EndpointEditor extends LitElement {
   }
 
   render() {
-    const { draft } = this;
-    if (!draft) return nothing;
     return html`
       ${this.renderTabs()}
       <div class="panel ${this.tab}" id="panel" role="tabpanel" aria-labelledby="tab-${this.tab}">
