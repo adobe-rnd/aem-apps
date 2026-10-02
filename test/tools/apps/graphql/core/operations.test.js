@@ -35,9 +35,11 @@ const callsTo = (store, name) => store.calls
 const writes = (store) => callsTo(store, 'write');
 
 function setup({
-  files, permissions, fail, loadValidator,
+  files, published, permissions, fail, loadValidator,
 } = {}) {
-  const store = createMemoryStore({ files, permissions, fail });
+  const store = createMemoryStore({
+    files, published, permissions, fail,
+  });
   return { store, core: createGraphqlCore({ store, loadValidator, now: () => NOW }) };
 }
 
@@ -185,13 +187,16 @@ describe('saveEndpoint', () => {
   const files = { [`${SCHEMAS}/product.html`]: schemaDoc('Product') };
   const config = { name: 'main', schemas: ['product', 'product'], isNew: true };
 
-  it('writes the config and the generated SDL as code blocks of one document', async () => {
+  it('writes the config and the generated SDL as code blocks of one document, then publishes it', async () => {
     const { store, core } = setup({ files });
     const result = await core.saveEndpoint({ ...args, config });
     assert.deepEqual(result.config, { name: 'main', schemas: ['product'] });
     assert.deepEqual(result.warnings, []);
     assert.ok(result.sdl.includes('type Product {'));
-    assert.deepEqual(writes(store), [`${ENDPOINTS}/main/endpoint.html`]);
+    assert.deepEqual(store.calls.filter(({ method }) => ['write', 'publish'].includes(method)), [
+      { method: 'write', path: `${ENDPOINTS}/main/endpoint.html` },
+      { method: 'publish', path: `${ENDPOINTS}/main/endpoint.html` },
+    ]);
     const [json, sdl] = readBlocks(store, `${ENDPOINTS}/main/endpoint.html`);
     assert.deepEqual(JSON.parse(json), {
       name: 'main', schemas: ['product'], generatedAt: '2024-01-02T03:04:05.000Z',
@@ -212,13 +217,25 @@ describe('saveEndpoint', () => {
     assert.equal(result.error, 'The GraphQL schema could not be generated.');
     assert.ok(result.errors.length > 0);
     assert.deepEqual(writes(store), []);
+    assert.deepEqual(callsTo(store, 'publish'), []);
   });
 
-  it('reports a document that could not be written', async () => {
-    const { core } = setup({ files, fail: failOn('write', `${ENDPOINTS}/main/endpoint.html`) });
+  it('reports a document that could not be written, without publishing', async () => {
+    const { store, core } = setup({ files, fail: failOn('write', `${ENDPOINTS}/main/endpoint.html`) });
     assert.deepEqual(await core.saveEndpoint({ ...args, config }), {
       code: 'save-failed', error: 'Could not save the endpoint.', status: 500,
     });
+    assert.deepEqual(callsTo(store, 'publish'), []);
+  });
+
+  it('reports a saved document that could not be published', async () => {
+    const { store, core } = setup({ files, fail: failOn('publish', `${ENDPOINTS}/main/endpoint.html`, 403) });
+    assert.deepEqual(await core.saveEndpoint({ ...args, config }), {
+      code: 'publish-failed',
+      error: 'The endpoint was saved but could not be published. Save again to retry.',
+      status: 403,
+    });
+    assert.ok(store.docs.has(`${ENDPOINTS}/main/endpoint.html`));
   });
 });
 
@@ -262,13 +279,38 @@ describe('deleteEndpoint', () => {
   const doc = `${ENDPOINTS}/main/endpoint.html`;
   const removes = (store) => callsTo(store, 'remove');
 
-  it('removes the endpoint document, then its folder', async () => {
+  it('unpublishes the endpoint, then removes its document and folder', async () => {
     const { store, core } = setup({
       files: { [doc]: configDoc(['a']), [`${ENDPOINTS}/blog/endpoint.html`]: configDoc(['a']) },
+      published: [doc],
     });
     assert.deepEqual(await core.deleteEndpoint({ ...args, name: 'main' }), { ok: true });
-    assert.deepEqual(removes(store), [doc, `${ENDPOINTS}/main`]);
+    assert.deepEqual(store.calls.filter(({ method }) => ['unpublish', 'remove'].includes(method)), [
+      { method: 'unpublish', path: doc },
+      { method: 'remove', path: doc },
+      { method: 'remove', path: `${ENDPOINTS}/main` },
+    ]);
+    assert.deepEqual([...store.published], []);
     assert.deepEqual([...store.docs.keys()], [`${ENDPOINTS}/blog/endpoint.html`]);
+  });
+
+  it('deletes an endpoint that was never published', async () => {
+    const { store, core } = setup({ files: { [doc]: configDoc(['a']) } });
+    assert.deepEqual(await core.deleteEndpoint({ ...args, name: 'main' }), { ok: true });
+    assert.deepEqual([...store.docs.keys()], []);
+  });
+
+  it('keeps an endpoint that could not be unpublished', async () => {
+    const { store, core } = setup({
+      files: { [doc]: configDoc(['a']) },
+      published: [doc],
+      fail: failOn('unpublish', doc, 403),
+    });
+    assert.deepEqual(await core.deleteEndpoint({ ...args, name: 'main' }), {
+      code: 'unpublish-failed', error: 'Could not unpublish endpoint "main". It was not deleted.', status: 403,
+    });
+    assert.deepEqual(removes(store), []);
+    assert.ok(store.docs.has(doc));
   });
 
   it('reports failed removals and keeps the folder', async () => {

@@ -35,8 +35,13 @@ per-site sections later.
   at `#/{org}/{site}/endpoints/{name}`. Cancel replaces the hash with
   `#/{org}/{site}/endpoints`, and so do saving and deleting an endpoint.
 - Saving writes the config and a new SDL from the current schemas as one
-  document, then returns to the list. Save is enabled only for a new endpoint
-  or unsaved changes.
+  document, publishes it so the engine serves it, then returns to the list.
+  Save is enabled only for a new endpoint or unsaved changes. If publishing
+  fails, the document stays saved and the changes stay unsaved; save again to
+  retry.
+- Deleting unpublishes the endpoint, so the engine stops serving it, then
+  removes its document. If unpublishing fails, the endpoint is kept; delete
+  again to retry.
 - The Schemas tab marks schemas that are invalid, not found, or being added or
   removed, and links to the schema editor.
 - Users without write permission on the site see the app as view only.
@@ -126,6 +131,9 @@ type Article { … }
 - The second code block is generated from `schemas` and is the SDL the engine
   serves; `generatedAt` is when it was generated. Both blocks are
   HTML-escaped (`&`, `<`, `>`) like any codeblock document.
+- The engine reads the published document,
+  `/.da/graphql/endpoints/{name}/endpoint`, from the site's delivery. Saving
+  publishes it and deleting unpublishes it.
 - Only core's `saveEndpoint` writes the document, so the config and its SDL
   are always saved in one write (see
   [core/README.md](core/README.md#operations)).
@@ -184,7 +192,7 @@ core/                       portable business logic, see core/README.md
   codeblock.js              codeblock document format
 adapters/                   the app's core instance and DA config
   index.js                  core bound to DA
-  da-source.js              store port over nx2's `source` API
+  da-source.js              store port over nx2's `source` and `aem` APIs
   da-config.js              `graphql.endpoint` URL pattern from nx2's `daConfig`
   sc-validator.js           da-sc-sdk validator, lazy
 ui/                         custom elements, UI helpers and icons
@@ -242,7 +250,7 @@ ui/                         custom elements, UI helpers and icons
 | Lit | `tools/deps/lit` via the `da-lit` import map entry |
 | graphql-js | `tools/deps/graphql`, vendored (about 31 KB gzipped) |
 | DA SDK, `daFetch` | `https://da.live/nx/utils/` |
-| `source` API, `hashChange`, `loadStyle`, styles, toast, dialog, `sl` components | `https://da.live/nx2/` |
+| `source` and `aem` APIs, `hashChange`, `loadStyle`, styles, toast, dialog, `sl` components | `https://da.live/nx2/` |
 | da-sc-sdk validator, CodeMirror | `https://da.live/nx/deps/` |
 
 The nx2 modules are not part of nx2's public SDK, so changes in da-nx can

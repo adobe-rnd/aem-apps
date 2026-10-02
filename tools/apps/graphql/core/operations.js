@@ -117,9 +117,9 @@ export function createGraphqlCore({ store, loadValidator, now = () => new Date()
     return { sdl, warnings };
   }
 
-  // The only way an endpoint is written: its config and SDL are code blocks of one document.
-  // Missing or invalid schemas are skipped with warnings. If a schema can't be read or none is
-  // usable, nothing is written.
+  // The only way an endpoint is written: its config and SDL are code blocks of one document,
+  // published so the engine serves it. Missing or invalid schemas are skipped with warnings.
+  // If a schema can't be read or none is usable, nothing is written.
   async function saveEndpoint({ org, site, config: draft }) {
     const config = createConfig(draft);
     const generated = await generateSdl({ org, site, config });
@@ -131,12 +131,25 @@ export function createGraphqlCore({ store, loadValidator, now = () => new Date()
     if (result.error) {
       return { code: 'save-failed', error: 'Could not save the endpoint.', status: result.status };
     }
+    const published = await store.publish({ path });
+    if (published.error) {
+      return {
+        code: 'publish-failed',
+        error: 'The endpoint was saved but could not be published. Save again to retry.',
+        status: published.status,
+      };
+    }
     return { config, sdl, warnings };
   }
 
   // A missing endpoint counts as deleted.
   async function deleteEndpoint({ org, site, name }) {
     const path = endpointPath({ org, site, name });
+    // Unpublish first, so a failure keeps the document and a retry can still find it.
+    const unpublished = await store.unpublish({ path });
+    if (unpublished.error && unpublished.status !== 404) {
+      return { code: 'unpublish-failed', error: `Could not unpublish endpoint "${name}". It was not deleted.`, status: unpublished.status };
+    }
     const result = await store.remove({ path });
     if (result.error && result.status !== 404) {
       return { code: 'delete-failed', error: `Could not delete endpoint "${name}".`, status: result.status };

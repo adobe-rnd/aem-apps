@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 /* eslint-disable import/no-unresolved */
-import { source, asText } from 'https://da.live/nx2/utils/api.js';
+import { aem, source, asText } from 'https://da.live/nx2/utils/api.js';
 
 // The core store port over DA's source API.
 
@@ -49,3 +49,20 @@ async function send(request) {
 export const write = ({ path, text }) => send(() => source.save(path, { body: text }));
 
 export const remove = ({ path }) => send(() => source.delete(path));
+
+// AEM paths have no .html extension, and AEM only publishes what is previewed.
+const toAemPath = (path) => path.replace(/\.html$/, '');
+
+export async function publish({ path }) {
+  const aemPath = toAemPath(path);
+  const previewed = await send(() => aem.preview(aemPath));
+  return previewed.error ? previewed : send(() => aem.publish(aemPath));
+}
+
+// A document missing from live may still be previewed.
+export async function unpublish({ path }) {
+  const aemPath = toAemPath(path);
+  const unpublished = await send(() => aem.unPublish(aemPath));
+  if (unpublished.error && unpublished.status !== 404) return unpublished;
+  return send(() => aem.unPreview(aemPath));
+}

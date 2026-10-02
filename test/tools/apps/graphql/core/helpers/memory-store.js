@@ -13,7 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// An in-memory store port; `fail({ method, path })` returns a status to fail a call with.
+// An in-memory store port; `published` seeds published paths, and
+// `fail({ method, path })` returns a status to fail a call with.
 
 const failure = (status) => ({ error: 'Request failed.', status });
 
@@ -25,8 +26,11 @@ const toItem = ({ path, folder }) => {
 };
 
 // eslint-disable-next-line import/prefer-default-export
-export function createMemoryStore({ files = {}, permissions, fail } = {}) {
+export function createMemoryStore({
+  files = {}, published: live = [], permissions, fail,
+} = {}) {
   const docs = new Map(Object.entries(files));
+  const published = new Set(live);
   const calls = [];
   const attempt = (method, path, run) => {
     calls.push({ method, path });
@@ -46,6 +50,7 @@ export function createMemoryStore({ files = {}, permissions, fail } = {}) {
   };
   return {
     docs,
+    published,
     calls,
     list: ({ path }) => attempt('list', path, () => ({ items: children(path), permissions })),
     read: ({ path }) => attempt('read', path, () => (docs.has(path) ? { text: docs.get(path) } : failure(404))),
@@ -54,5 +59,11 @@ export function createMemoryStore({ files = {}, permissions, fail } = {}) {
       return { ok: true };
     }),
     remove: ({ path }) => attempt('remove', path, () => (docs.delete(path) ? { ok: true } : failure(404))),
+    publish: ({ path }) => attempt('publish', path, () => {
+      if (!docs.has(path)) return failure(404);
+      published.add(path);
+      return { ok: true };
+    }),
+    unpublish: ({ path }) => attempt('unpublish', path, () => (published.delete(path) ? { ok: true } : failure(404))),
   };
 }

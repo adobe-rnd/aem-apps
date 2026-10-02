@@ -53,7 +53,7 @@ the store, so it always works on what is stored.
 
 ## Store
 
-A store is the one thing a new caller has to write. It has four methods,
+A store is the one thing a new caller has to write. It has six methods,
 which take an absolute DA `path` such as `/{org}/{site}/.da/forms/schemas`:
 
 | Method | Success |
@@ -62,6 +62,8 @@ which take an absolute DA `path` such as `/{org}/{site}/.da/forms/schemas`:
 | `read({ path })` | `{ text }` |
 | `write({ path, text })` | `{ ok: true }` |
 | `remove({ path })` | `{ ok: true }` |
+| `publish({ path })` | `{ ok: true }` |
+| `unpublish({ path })` | `{ ok: true }` |
 
 - Methods resolve and never throw. A failure is `{ error, status }`, with the
   HTTP status when there is one.
@@ -72,6 +74,10 @@ which take an absolute DA `path` such as `/{org}/{site}/.da/forms/schemas`:
   tells a missing endpoint from an unreadable one.
 - `write` creates or replaces the HTML document, creating its folders.
   `remove` of a missing document may fail with `404`; the core ignores it.
+- `publish` previews, then publishes, the document on the site's AEM
+  delivery. A missing document fails with `404`.
+- `unpublish` removes the document from live, then from preview. A document
+  in neither fails with `404`.
 - `permissions` are the actions allowed on the site folder, such as `read`
   and `write`. Without them the site counts as writable.
 
@@ -87,6 +93,7 @@ covers DA sites only; hlx6 sites use a different API.
 
 ```js
 const ADMIN = 'https://admin.da.live';
+const HLX = 'https://admin.hlx.page';
 
 export function createDaAdminStore({ token }) {
   const request = (url, { headers, ...opts } = {}) => fetch(url, {
@@ -119,9 +126,25 @@ export function createDaAdminStore({ token }) {
 
   const remove = ({ path }) => request(`${ADMIN}/source${path}`, { method: 'DELETE' }).then(done);
 
+  const aem = (api, path, method) => {
+    const [, org, site, ...rest] = path.replace(/\.html$/, '').split('/');
+    return request(`${HLX}/${api}/${org}/${site}/main/${rest.join('/')}`, { method }).then(done);
+  };
+
+  async function publish({ path }) {
+    const previewed = await aem('preview', path, 'POST');
+    return previewed.error ? previewed : aem('live', path, 'POST');
+  }
+
+  async function unpublish({ path }) {
+    const unpublished = await aem('live', path, 'DELETE');
+    if (unpublished.error && unpublished.status !== 404) return unpublished;
+    return aem('preview', path, 'DELETE');
+  }
+
   const list = ({ path }) => listAll({ path });
 
-  return { list, read, write, remove };
+  return { list, read, write, remove, publish, unpublish };
 }
 ```
 
@@ -144,11 +167,16 @@ export function createDaAdminStore({ token }) {
   comes from the store's `permissions`.
 - `saveEndpoint` is the only writer, so an endpoint's config and SDL always
   match. It creates or replaces the endpoint: it validates the config,
-  generates the SDL, then writes both as code blocks of one document.
-  Nothing is written if generation fails. To avoid replacing an endpoint,
-  check `listEndpoints` first.
-- `deleteEndpoint` removes the endpoint document, then its folder, ignoring
-  a failure to remove the folder; a missing endpoint counts as deleted.
+  generates the SDL, writes both as code blocks of one document, then
+  publishes it so the engine serves it. Nothing is written if generation
+  fails. If publishing fails, the document stays written and `saveEndpoint`
+  returns `publish-failed`; saving again retries. To avoid replacing an
+  endpoint, check `listEndpoints` first.
+- `deleteEndpoint` unpublishes the endpoint so the engine stops serving it,
+  then removes its document; a missing or unpublished endpoint counts as
+  deleted. If unpublishing fails, nothing is removed and it returns
+  `unpublish-failed`; deleting again retries. It then removes the endpoint
+  folder, ignoring any failure.
 - A missing endpoints or schemas folder counts as empty; any other listing
   failure returns `load-failed`.
 
@@ -169,6 +197,8 @@ is the store's HTTP status, when there is one.
 | `load-failed` | The store couldn't list or read a document. |
 | `save-failed` | The store couldn't write a document. |
 | `delete-failed` | The store couldn't remove a document. |
+| `publish-failed` | The endpoint was written, but the store couldn't publish it. |
+| `unpublish-failed` | The store couldn't unpublish the endpoint; nothing was removed. |
 
 `generation-failed` adds `errors` and `warnings`, each
 `{ schemaId, pointer, message }`.
