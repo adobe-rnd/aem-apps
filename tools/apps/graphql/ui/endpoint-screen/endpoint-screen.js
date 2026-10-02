@@ -130,7 +130,7 @@ class EndpointScreen extends LitElement {
     const draft = this._draft;
     if (this._busy || !canWrite || this.blocker) return;
     this._busy = true;
-    // The schemas are reloaded with the save, so the preview matches the saved SDL.
+    // The schemas are reloaded with the save, so a failed save previews the current schemas.
     const [result, loaded] = await Promise.all([
       core.saveEndpoint({ org, site, config: draft }),
       core.loadSchemas({ org, site }),
@@ -145,11 +145,11 @@ class EndpointScreen extends LitElement {
     if (draft.isNew) {
       const endpoints = [...this.site.endpoints, config.name].sort();
       this.dispatchEvent(new CustomEvent('endpoints-change', { detail: { endpoints } }));
-      this.navigate({ org, site, endpoint: config.name });
     }
     this._config = config;
     this._draft = createDraft({ config });
     showToast({ text: endpointSaved(config.name) });
+    this.navigate({ org, site });
   }
 
   renderActions() {

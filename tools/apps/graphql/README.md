@@ -33,9 +33,10 @@ per-site sections later.
   [`graphql.endpoint` config](#configuration).
 - New endpoint (⊕) opens a dialog for the name, then an unsaved endpoint screen
   at `#/{org}/{site}/endpoints/{name}`. Cancel replaces the hash with
-  `#/{org}/{site}/endpoints`, and so does deleting an endpoint.
+  `#/{org}/{site}/endpoints`, and so do saving and deleting an endpoint.
 - Saving writes the config and a new SDL from the current schemas as one
-  document. Save is enabled only for a new endpoint or unsaved changes.
+  document, then returns to the list. Save is enabled only for a new endpoint
+  or unsaved changes.
 - The Schemas tab marks schemas that are invalid, not found, or being added or
   removed, and links to the schema editor.
 - Users without write permission on the site see the app as view only.
