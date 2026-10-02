@@ -133,12 +133,12 @@ into GraphQL.
 
 - Each schema gets a type plus `{type}List` and `{type}ByPath` queries, tagged
   with `@schema(id: …)`.
-- An item mirrors the Structured Content document JSON, `{ metadata, data }`.
-  `metadata` holds the document's `schemaName` and `title` plus its DA
-  `path`; `data` is typed from the schema.
+- An item is `{ path, schemaName, title, data }`: the document's DA `path`,
+  its `schemaName` and `title` from the document metadata, and `data` typed
+  from the schema.
 - The SDL is built as a graphql-js syntax tree and printed with `print`, so
   escaping and formatting come from graphql-js. The fixed definitions
-  (scalars, directives, `PageInfo`, `Metadata`) are one parsed SDL string;
+  (scalars, directives, `PageInfo`) are one parsed SDL string;
   unused scalars are dropped after a `visit` of the generated types.
   `printSchema` is not used because it drops applied directives (`@schema`,
   `@source`).

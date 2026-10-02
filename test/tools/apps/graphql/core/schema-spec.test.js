@@ -49,7 +49,7 @@ const str = (title, extra = {}) => ({ type: 'string', title, ...extra });
 const doc = (properties, extra = {}) => ({
   type: 'object', title: 'Doc', properties, ...extra,
 });
-const ENVELOPE = ['Metadata', 'PageInfo', 'Query'];
+const ENVELOPE = ['PageInfo', 'Query'];
 
 describe('schema spec §2: types', () => {
   it('maps every primitive type', () => {
@@ -160,7 +160,7 @@ describe('schema spec R11: root', () => {
   const contact = { type: 'object', title: 'Contact', properties: { name: str('Name') } };
 
   it('maps an object root to the data type', () => {
-    assert.deepEqual(fieldsOf(clean(doc({ name: str('Name') })), 'DocItem'), { metadata: 'Metadata!', data: 'Doc' });
+    assert.equal(fieldsOf(clean(doc({ name: str('Name') })), 'DocItem').data, 'Doc');
   });
 
   it('maps an array root of primitives, objects, arrays and $refs', () => {
@@ -524,12 +524,13 @@ describe('non-conformant input', () => {
 });
 
 describe('document envelope', () => {
-  it('shapes items like the document JSON: metadata and data', () => {
+  it('shapes items as path, schemaName, title and data', () => {
     const sdl = clean(doc({ title: str('Title') }));
     assert.deepEqual(fieldsOf(sdl, 'Query'), { docList: 'DocConnection!', docByPath: 'DocItem' });
     assert.deepEqual(fieldsOf(sdl, 'DocConnection'), { items: '[DocItem!]!', pageInfo: 'PageInfo!' });
-    assert.deepEqual(fieldsOf(sdl, 'DocItem'), { metadata: 'Metadata!', data: 'Doc' });
-    assert.deepEqual(fieldsOf(sdl, 'Metadata'), { path: 'String!', schemaName: 'String!', title: 'String' });
+    assert.deepEqual(fieldsOf(sdl, 'DocItem'), {
+      path: 'String!', schemaName: 'String!', title: 'String', data: 'Doc',
+    });
     assert.deepEqual(fieldsOf(sdl, 'PageInfo'), { endCursor: 'String', hasNextPage: 'Boolean!', total: 'Int' });
     assert.deepEqual(fieldsOf(sdl, 'Doc'), { title: 'String' });
   });

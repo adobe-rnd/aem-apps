@@ -15,16 +15,6 @@ type PageInfo {
   total: Int
 }
 
-"""Structured Content document metadata."""
-type Metadata {
-  """DA path of the document."""
-  path: String!
-  """Schema id of the document."""
-  schemaName: String!
-  """Document title."""
-  title: String
-}
-
 type Query {
   """List Menu documents."""
   menuList(first: Int = 20, after: String): MenuConnection! @schema(id: "menu")
@@ -57,8 +47,12 @@ type MenuNode {
 
 """A Menu document."""
 type MenuItem {
-  """Document metadata."""
-  metadata: Metadata!
+  """DA path of the document."""
+  path: String!
+  """Schema id of the document."""
+  schemaName: String!
+  """Document title."""
+  title: String
   """Structured content of the document."""
   data: [MenuEntry]
 }

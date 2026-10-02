@@ -22,7 +22,7 @@ import {
 const RESERVED_TYPE_NAMES = new Set([
   'Query', 'Mutation', 'Subscription',
   'String', 'Int', 'Float', 'Boolean', 'ID',
-  'JSON', 'Date', 'Time', 'DateTime', 'PageInfo', 'Metadata',
+  'JSON', 'Date', 'Time', 'DateTime', 'PageInfo',
 ]);
 
 const words = (value) => String(value ?? '')
@@ -92,16 +92,6 @@ type PageInfo {
   endCursor: String
   hasNextPage: Boolean!
   total: Int
-}
-
-"""Structured Content document metadata."""
-type Metadata {
-  """DA path of the document."""
-  path: String!
-  """Schema id of the document."""
-  schemaName: String!
-  """Document title."""
-  title: String
 }
 `, { noLocation: true }).definitions;
 
@@ -206,7 +196,9 @@ function envelope({ root, title, dataType }) {
       name: `${root}Item`,
       description: `A ${label} document.`,
       fields: [
-        fieldDef({ name: 'metadata', type: nonNull(named('Metadata')), description: 'Document metadata.' }),
+        fieldDef({ name: 'path', type: nonNull(named('String')), description: 'DA path of the document.' }),
+        fieldDef({ name: 'schemaName', type: nonNull(named('String')), description: 'Schema id of the document.' }),
+        fieldDef({ name: 'title', type: named('String'), description: 'Document title.' }),
         fieldDef({ name: 'data', type: dataType, description: 'Structured content of the document.' }),
       ],
     }),
