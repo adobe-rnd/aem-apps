@@ -263,6 +263,8 @@ node --test "test/tools/apps/graphql/**/*.test.js"
 
 `test/tools/apps/graphql/core/` covers the core: the converter, naming,
 endpoint formats, schema issues, the codeblock format and the operations
-against an in-memory store (`core/helpers/memory-store.js`). The golden SDL
-fixtures live in `core/fixtures/`. `ui/` covers routes, messages, the draft
-and the schema options.
+against an in-memory store (`core/helpers/memory-store.js`).
+`schema-spec.test.js` checks the SDL for every construct of the
+[schema spec](https://github.com/adobe/da-sc-sdk/blob/main/docs/schema-spec.md).
+The golden SDL fixtures live in `core/fixtures/`. `ui/` covers routes,
+messages, the draft and the schema options.

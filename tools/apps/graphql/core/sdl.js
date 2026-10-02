@@ -64,7 +64,7 @@ export function toFieldName(key) {
 // SC JSON Schema → graphql-js document → SDL; unsupported content becomes JSON with a warning.
 
 const RESERVED_KEYS = new Set(['metadata', 'section-metadata']);
-const FORMAT_SCALARS = { date: 'Date', time: 'Time', 'date-time': 'DateTime' };
+const FORMAT_SCALARS = new Map([['date', 'Date'], ['time', 'Time'], ['date-time', 'DateTime']]);
 
 // Definitions shared by every endpoint; unused scalars are dropped.
 const PRELUDE = parse(`
@@ -155,10 +155,12 @@ const byId = (a, b) => {
 const escapePointer = (key) => String(key).replace(/~/g, '~0').replace(/\//g, '~1');
 const unescapePointer = (seg) => seg.replace(/~1/g, '/').replace(/~0/g, '~');
 
+const hasEnum = (node) => Array.isArray(node.enum) && node.enum.length > 0;
+
 function fieldDescription(node) {
   if (!isPlainObject(node)) return '';
   const parts = [node.title, node.description !== node.title && node.description];
-  if (node.type === 'string' && Array.isArray(node.enum) && node.enum.length) {
+  if (node.type === 'string' && hasEnum(node)) {
     parts.push(`Allowed values: ${node.enum.map((value) => JSON.stringify(value)).join(', ')}`);
   }
   return parts.filter(Boolean).join('\n\n');
@@ -272,7 +274,7 @@ function buildSchemaTypes({ entry, taken, warn }) {
       .reduce((node, seg) => (isPlainObject(node) ? node[seg] : undefined), schema);
   };
 
-  const stringType = (node) => named((!node.enum?.length && FORMAT_SCALARS[node.format]) || 'String');
+  const stringType = (node) => named((!hasEnum(node) && FORMAT_SCALARS.get(node.format)) || 'String');
 
   // Assigned below: the object, reference and array types recurse through it.
   let typeExpr;
@@ -305,8 +307,12 @@ function buildSchemaTypes({ entry, taken, warn }) {
     return objectDef({ name, description: node.title, fields });
   };
 
+  // Cached by pointer, so an inline object and a $ref to it share one type.
   const namedObject = (node, base, pointer) => {
+    const key = `#${pointer}`;
+    if (refCache.has(key)) return refCache.get(key);
     const name = reserve(base, pointer);
+    refCache.set(key, named(name));
     defs.set(name, objectType(node, name, pointer));
     return named(name);
   };
@@ -325,10 +331,7 @@ function buildSchemaTypes({ entry, taken, warn }) {
     const base = `${root}${pascal(ref.split('/').pop())}`;
     const targetPointer = ref.slice(1);
     if (target.type === 'object' && usableProperties(target).length) {
-      const name = reserve(base, targetPointer);
-      refCache.set(ref, named(name));
-      defs.set(name, objectType(target, name, targetPointer));
-      return named(name);
+      return namedObject(target, base, targetPointer);
     }
     resolving.add(ref);
     const expr = typeExpr(target, base, targetPointer);

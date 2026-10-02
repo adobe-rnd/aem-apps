@@ -143,11 +143,6 @@ describe('generateSdl', () => {
     assert.ok(messages(warnings)[0].includes('Recursive $ref'));
   });
 
-  it('maps an array without items to [JSON]', () => {
-    const { sdl } = generateSdl({ schemas: [{ id: 'list', schema: obj({ tags: { type: 'array', title: 'Tags' } }) }] });
-    assert.ok(sdl.includes('tags: [JSON]'));
-  });
-
   it('escapes triple quotes in descriptions', () => {
     const { sdl } = generateSdl({ schemas: [{ id: 'q', schema: obj({ x: { type: 'string', title: 'Say """hi"""' } }) }] });
     assert.ok(sdl.includes('Say \\"""hi\\"""'));
