@@ -117,7 +117,6 @@ the config it was generated from (see
 # endpoint: marketing
 # generatedAt: 2026-01-01T00:00:00.000Z
 
-scalar DateTime
 …
 ```
 
@@ -134,11 +133,15 @@ into GraphQL.
 
 - Each schema gets a type plus `{type}List` and `{type}ByPath` queries, tagged
   with `@schema(id: …)`.
+- An item mirrors the Structured Content document JSON, `{ metadata, data }`.
+  `metadata` holds the document's `schemaName` and `title` plus its DA
+  `path`; `data` is typed from the schema.
 - The SDL is built as a graphql-js syntax tree and printed with `print`, so
   escaping and formatting come from graphql-js. The fixed definitions
-  (scalars, directives, `PageInfo`) are one parsed SDL string; unused scalars
-  are dropped after a `visit` of the generated types. `printSchema` is not
-  used because it drops applied directives (`@schema`, `@source`).
+  (scalars, directives, `PageInfo`, `Metadata`) are one parsed SDL string;
+  unused scalars are dropped after a `visit` of the generated types.
+  `printSchema` is not used because it drops applied directives (`@schema`,
+  `@source`).
 - The document is checked with `buildASTSchema` and `validateSchema`; any
   failure becomes a generation error, which blocks saving.
 - Problems are reported per schema and JSON pointer.

@@ -22,7 +22,7 @@ import {
 const RESERVED_TYPE_NAMES = new Set([
   'Query', 'Mutation', 'Subscription',
   'String', 'Int', 'Float', 'Boolean', 'ID',
-  'JSON', 'Date', 'Time', 'DateTime', 'PageInfo',
+  'JSON', 'Date', 'Time', 'DateTime', 'PageInfo', 'Metadata',
 ]);
 
 const words = (value) => String(value ?? '')
@@ -92,6 +92,16 @@ type PageInfo {
   endCursor: String
   hasNextPage: Boolean!
   total: Int
+}
+
+"""Structured Content document metadata."""
+type Metadata {
+  """DA path of the document."""
+  path: String!
+  """Schema id of the document."""
+  schemaName: String!
+  """Document title."""
+  title: String
 }
 `, { noLocation: true }).definitions;
 
@@ -194,15 +204,8 @@ function envelope({ root, title, dataType }) {
       name: `${root}Item`,
       description: `A ${label} document.`,
       fields: [
-        fieldDef({ name: 'path', type: nonNull(named('String')), description: 'DA path of the document.' }),
-        fieldDef({ name: 'title', type: named('String'), description: 'Document title.' }),
-        fieldDef({
-          name: 'lastModified', type: named('DateTime'), description: 'Last modification time of the document.',
-        }),
+        fieldDef({ name: 'metadata', type: nonNull(named('Metadata')), description: 'Document metadata.' }),
         fieldDef({ name: 'data', type: dataType, description: 'Structured content of the document.' }),
-        fieldDef({
-          name: 'error', type: named('String'), description: 'Set when the document could not be read or parsed.',
-        }),
       ],
     }),
     objectDef({

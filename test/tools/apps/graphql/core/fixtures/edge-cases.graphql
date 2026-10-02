@@ -1,9 +1,6 @@
 """Arbitrary JSON value."""
 scalar JSON
 
-"""Absolute instant in UTC: YYYY-MM-DDTHH:MM:00Z."""
-scalar DateTime
-
 """Original JSON key when it differs from the GraphQL field name."""
 directive @source(key: String!) on FIELD_DEFINITION
 
@@ -16,6 +13,16 @@ type PageInfo {
   endCursor: String
   hasNextPage: Boolean!
   total: Int
+}
+
+"""Structured Content document metadata."""
+type Metadata {
+  """DA path of the document."""
+  path: String!
+  """Schema id of the document."""
+  schemaName: String!
+  """Document title."""
+  title: String
 }
 
 type Query {
@@ -50,16 +57,10 @@ type MenuNode {
 
 """A Menu document."""
 type MenuItem {
-  """DA path of the document."""
-  path: String!
-  """Document title."""
-  title: String
-  """Last modification time of the document."""
-  lastModified: DateTime
+  """Document metadata."""
+  metadata: Metadata!
   """Structured content of the document."""
   data: [MenuEntry]
-  """Set when the document could not be read or parsed."""
-  error: String
 }
 
 """A page of Menu documents."""

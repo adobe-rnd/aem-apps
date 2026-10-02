@@ -21,6 +21,16 @@ type PageInfo {
   total: Int
 }
 
+"""Structured Content document metadata."""
+type Metadata {
+  """DA path of the document."""
+  path: String!
+  """Schema id of the document."""
+  schemaName: String!
+  """Document title."""
+  title: String
+}
+
 type Query {
   """List Project documents."""
   projectList(first: Int = 20, after: String): ProjectConnection! @schema(id: "project")
@@ -112,16 +122,10 @@ type ProjectLink {
 
 """A Project document."""
 type ProjectItem {
-  """DA path of the document."""
-  path: String!
-  """Document title."""
-  title: String
-  """Last modification time of the document."""
-  lastModified: DateTime
+  """Document metadata."""
+  metadata: Metadata!
   """Structured content of the document."""
   data: Project
-  """Set when the document could not be read or parsed."""
-  error: String
 }
 
 """A page of Project documents."""

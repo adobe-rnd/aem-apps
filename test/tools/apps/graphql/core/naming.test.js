@@ -46,6 +46,7 @@ describe('graphql naming', () => {
   it('suffixes reserved type names', () => {
     assert.equal(toTypeName('query'), 'QueryType');
     assert.equal(toTypeName('date'), 'DateType');
+    assert.equal(toTypeName('metadata'), 'MetadataType');
     assert.equal(toTypeName('article'), 'Article');
   });
 

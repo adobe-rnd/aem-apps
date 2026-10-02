@@ -73,8 +73,8 @@ describe('generateSdl', () => {
     });
     assert.ok(sdl.includes('day: Date'));
     assert.ok(sdl.includes('status: String'));
-    assert.ok(sdl.includes('scalar Date'));
-    assert.ok(sdl.includes('scalar DateTime'));
+    assert.ok(sdl.includes('scalar Date\n'));
+    assert.ok(!sdl.includes('scalar DateTime'));
     assert.ok(!sdl.includes('scalar Time'));
     assert.ok(!sdl.includes('scalar JSON'));
   });
