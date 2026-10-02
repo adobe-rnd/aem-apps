@@ -59,12 +59,13 @@ export function getSchemaStatus({
   return saved ? 'added' : undefined;
 }
 
+// Keeps rows where any whitespace-separated keyword is in the id, title or status label.
 // `statusLabel(option)` lets the view make its status wording searchable too.
 export function filterSchemaOptions({ options = [], query = '', statusLabel }) {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return options;
+  const keywords = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!keywords.length) return options;
   return options.filter((option) => [option.id, option.title, statusLabel?.(option)]
-    .some((value) => value?.toLowerCase().includes(needle)));
+    .some((value) => keywords.some((keyword) => value?.toLowerCase().includes(keyword))));
 }
 
 export function countChanges(options = []) {

@@ -69,6 +69,11 @@ class SchemasPanel extends LitElement {
     this._query = target.value;
   }
 
+  clearSearch() {
+    this._query = '';
+    this.shadowRoot.querySelector('.search input')?.focus();
+  }
+
   select({ ids, selected }) {
     const detail = { ids, selected };
     this.dispatchEvent(new CustomEvent('schemas-select', { detail, bubbles: true, composed: true }));
@@ -173,6 +178,20 @@ class SchemasPanel extends LitElement {
       </div>`;
   }
 
+  renderSearch() {
+    const clear = this._query
+      ? html`<button type="button" class="search-clear" aria-label="Clear search"
+          @click=${this.clearSearch}>${icon({ name: 'close' })}</button>`
+      : nothing;
+    return html`
+      <div class="search">
+        ${icon({ name: 'search', className: 'search-icon' })}
+        <input type="search" placeholder="Search schemas" aria-label="Search schemas"
+          .value=${this._query ?? ''} @input=${this.handleSearch} />
+        ${clear}
+      </div>`;
+  }
+
   render() {
     if (!this.options.length) {
       return html`<p class="empty">This site has no Structured Content schemas yet. Create one
@@ -182,8 +201,7 @@ class SchemasPanel extends LitElement {
     const visible = this._visible;
     return html`
       <div class="picker-toolbar">
-        <input class="search" type="search" placeholder="Search schemas"
-          aria-label="Search schemas" .value=${this._query ?? ''} @input=${this.handleSearch} />
+        ${this.renderSearch()}
         ${this.renderCount()}
       </div>
       ${this.renderList(visible)}

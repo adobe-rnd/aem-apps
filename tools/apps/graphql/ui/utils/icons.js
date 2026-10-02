@@ -20,11 +20,13 @@ const FILES = {
   addCircle: 's2-icon-addcircle-20-n',
   alert: 's2-icon-alerttriangle-20-n',
   arrowUp: 's2-icon-arrowupsend-20-n',
+  close: 's2-icon-close-20-n',
   copy: 's2-icon-copy-20-n',
   delete: 's2-icon-delete-20-n',
   edit: 's2-icon-edit-20-n',
   info: 's2-icon-infocircle-20-n',
   openIn: 's2-icon-openin-20-n',
+  search: 's2-icon-search-20-n',
 };
 
 const iconHref = (name) => `${new URL(`../img/${FILES[name]}.svg`, import.meta.url).href}#icon`;

@@ -100,6 +100,22 @@ describe('schema options', () => {
     assert.deepEqual(ids('zzz'), []);
   });
 
+  it('keeps schema options matching any of several keywords', () => {
+    const options = [
+      { id: 'product', title: 'Catalog Product' },
+      { id: 'article', title: 'Blog Article' },
+      { id: 'gone' },
+    ];
+    const labels = { article: 'Adding' };
+    const ids = (query) => filterSchemaOptions({
+      options, query, statusLabel: ({ id }) => labels[id],
+    }).map(({ id }) => id);
+    assert.deepEqual(ids('product gone'), ['product', 'gone']);
+    assert.deepEqual(ids('  catalog\tadding  '), ['product', 'article']);
+    assert.deepEqual(ids('product zzz'), ['product']);
+    assert.deepEqual(ids('zzz yyy'), []);
+  });
+
   it('filters schema options by their status label', () => {
     const options = [
       { id: 'product', title: 'Product' },

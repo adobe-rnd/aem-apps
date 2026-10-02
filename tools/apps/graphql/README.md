@@ -44,7 +44,8 @@ per-site sections later.
   again to retry.
 - The Schemas tab marks schemas that are added to the saved endpoint,
   invalid, not found, or being added or removed, and links to the schema
-  editor. The search matches these statuses too.
+  editor. The search matches titles, IDs and these statuses; with several
+  space-separated keywords, it lists schemas matching any of them.
 - Users without write permission on the site see the app as view only.
 - The app asks for confirmation before it discards unsaved changes, whether on
   a hash change or on page unload.
