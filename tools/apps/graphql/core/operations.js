@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 import {
-  buildSdlDocument, createConfig, isValidEndpointName, parseConfig, serializeConfig,
-  validateConfig,
+  createConfig, isValidEndpointName, parseConfig, serializeEndpoint, validateConfig,
 } from './endpoint.js';
 import { annotateSchemas, parseSchemaDocument } from './schemas.js';
 import { unwrapCodeblock, wrapCodeblock } from './codeblock.js';
@@ -23,15 +22,13 @@ import { unwrapCodeblock, wrapCodeblock } from './codeblock.js';
 const sitePath = ({ org, site }) => `/${org}/${site}`;
 const schemasPath = (args) => `${sitePath(args)}/.da/forms/schemas`;
 const endpointsPath = (args) => `${sitePath(args)}/.da/graphql/endpoints`;
-const endpointPath = (args) => `${endpointsPath(args)}/${args.name}`;
-const configPath = (args) => `${endpointPath(args)}/config.html`;
-const sdlPath = (args) => `${endpointPath(args)}/schema.html`;
+const endpointPath = (args) => `${endpointsPath(args)}/${args.name}.html`;
 
 // Loaded on demand so listing endpoints never loads graphql-js.
 const loadSdl = () => import('./sdl.js');
 
 const endpointNames = (items) => items
-  .filter((item) => !item.ext && isValidEndpointName(item.name))
+  .filter((item) => item.ext === 'html' && isValidEndpointName(item.name))
   .map((item) => item.name)
   .sort();
 
@@ -94,7 +91,7 @@ export function createGraphqlCore({ store, loadValidator, now = () => new Date()
   }
 
   async function loadEndpoint({ org, site, name }) {
-    const result = await store.read({ path: configPath({ org, site, name }) });
+    const result = await store.read({ path: endpointPath({ org, site, name }) });
     if (result.status === 404) {
       return { code: 'not-found', error: `Endpoint "${name}" was not found.`, status: 404 };
     }
@@ -105,8 +102,8 @@ export function createGraphqlCore({ store, loadValidator, now = () => new Date()
     return parsed.error ? { code: 'invalid-config', ...parsed } : parsed;
   }
 
-  // The stored SDL document for a config, from the site's current schemas.
-  async function generateSdlDocument({ org, site, config }) {
+  // The SDL for a config, from the site's current schemas.
+  async function generateSdl({ org, site, config }) {
     const invalid = validateConfig(config);
     if (invalid) return { code: 'invalid-config', error: invalid };
     const [loaded, { buildSdl }] = await Promise.all([loadSchemas({ org, site }), loadSdl()]);
@@ -118,53 +115,32 @@ export function createGraphqlCore({ store, loadValidator, now = () => new Date()
         code: 'generation-failed', error: 'The GraphQL schema could not be generated.', errors, warnings,
       };
     }
-    const generatedAt = now().toISOString();
-    const sdlDocument = buildSdlDocument({ endpoint: config.name, sdl, generatedAt });
-    return { sdl, warnings, sdlDocument };
+    return { sdl, warnings };
   }
 
-  // The only way an endpoint is written: its config and SDL are always saved together.
+  // The only way an endpoint is written: its config and SDL are one document.
   // Missing or invalid schemas are skipped with warnings. If a schema can't be read or none is
   // usable, nothing is written.
   async function saveEndpoint({ org, site, config: draft }) {
     const config = createConfig(draft);
-    const generated = await generateSdlDocument({ org, site, config });
+    const generated = await generateSdl({ org, site, config });
     if (generated.error) return generated;
-    const paths = { org, site, name: config.name };
-    const configResult = await writeDocument({
-      path: configPath(paths), text: serializeConfig(config),
-    });
-    if (configResult.error) {
-      return {
-        code: 'save-failed', error: 'Could not save the endpoint configuration.', status: configResult.status,
-      };
+    const { sdl, warnings } = generated;
+    const text = serializeEndpoint({ config, generatedAt: now().toISOString(), sdl });
+    const path = endpointPath({ org, site, name: config.name });
+    const result = await writeDocument({ path, text });
+    if (result.error) {
+      return { code: 'save-failed', error: 'Could not save the endpoint.', status: result.status };
     }
-    const sdlResult = await writeDocument({
-      path: sdlPath(paths), text: generated.sdlDocument,
-    });
-    if (sdlResult.error) {
-      return {
-        code: 'save-failed',
-        error: 'The configuration was saved, but the GraphQL schema could not be saved.',
-        status: sdlResult.status,
-      };
-    }
-    return { config, sdl: generated.sdl, warnings: generated.warnings };
+    return { config, sdl, warnings };
   }
 
-  const removeFailed = (result) => result.error && result.status !== 404;
-
-  // The SDL goes first, so a failure leaves a listed endpoint rather than an orphaned SDL.
+  // A missing endpoint counts as deleted.
   async function deleteEndpoint({ org, site, name }) {
-    const failure = ({ status }) => ({
-      code: 'delete-failed', error: `Could not delete endpoint "${name}".`, status,
-    });
-    const sdl = await store.remove({ path: sdlPath({ org, site, name }) });
-    if (removeFailed(sdl)) return failure(sdl);
-    const config = await store.remove({ path: configPath({ org, site, name }) });
-    if (removeFailed(config)) return failure(config);
-    // Best effort: drop the now empty endpoint folder.
-    await store.remove({ path: endpointPath({ org, site, name }) });
+    const result = await store.remove({ path: endpointPath({ org, site, name }) });
+    if (result.error && result.status !== 404) {
+      return { code: 'delete-failed', error: `Could not delete endpoint "${name}".`, status: result.status };
+    }
     return { ok: true };
   }
 

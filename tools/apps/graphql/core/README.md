@@ -12,7 +12,7 @@ GraphQL engine or a script could do the same.
 | --- | --- | --- |
 | `operations.js` | `createGraphqlCore`: list, load, save and delete endpoints | a store |
 | `sdl.js` | `buildSdl`, `generateSdl`: JSON Schemas → SDL | graphql-js |
-| `endpoint.js` | endpoint names and URLs, the config and SDL document formats | nothing |
+| `endpoint.js` | endpoint names and URLs, the endpoint document format | nothing |
 | `schemas.js` | parsing schema documents, validity and readable issues | nothing |
 | `codeblock.js` | reading and writing DA codeblock documents | nothing |
 
@@ -71,8 +71,7 @@ which take an absolute DA `path` such as `/{org}/{site}/.da/forms/schemas`:
 - `read` of a missing document fails with status `404`; that is how the core
   tells a missing endpoint from an unreadable one.
 - `write` creates or replaces the HTML document. `remove` of a missing
-  document may fail with `404`; the core ignores it. `deleteEndpoint` also
-  removes the emptied endpoint folder, ignoring any failure.
+  document may fail with `404`; the core ignores it.
 - `permissions` are the actions allowed on the site folder, such as `read`
   and `write`. Without them the site counts as writable.
 
@@ -145,12 +144,11 @@ export function createDaAdminStore({ token }) {
   comes from the store's `permissions`.
 - `saveEndpoint` is the only writer, so an endpoint's config and SDL always
   match. It creates or replaces the endpoint: it validates the config,
-  generates the SDL, then writes the config and the SDL. Nothing is written
-  if generation fails. If the SDL write fails after the config was written,
-  it returns `save-failed` and the two differ until the endpoint is saved
-  again. To avoid replacing an endpoint, check `listEndpoints` first.
-- `deleteEndpoint` removes the SDL, then the config. If the SDL can't be
-  removed, the endpoint stays listed, so no SDL is left without a config.
+  generates the SDL, then writes both as one document. Nothing is written
+  if generation fails. To avoid replacing an endpoint, check `listEndpoints`
+  first.
+- `deleteEndpoint` removes the endpoint document; a missing one counts as
+  deleted.
 - A missing endpoints or schemas folder counts as empty; any other listing
   failure returns `load-failed`.
 
