@@ -20,6 +20,7 @@ import { hashChange, loadStyle } from 'https://da.live/nx2/utils/utils.js';
 import { getColorScheme } from 'https://da.live/nx2/scripts/nx.js';
 import { showToast, VARIANT_ERROR } from 'https://da.live/nx2/blocks/shared/toast/toast.js';
 import { core } from './adapters/index.js';
+import { loadEndpointPattern } from './adapters/da-config.js';
 import { buildHash, isSameRoute, toRoute } from './ui/utils/route.js';
 import { messageStyle, renderLoading, renderMessage } from './ui/shared/message/message.js';
 
@@ -111,9 +112,14 @@ class Graphql extends LitElement {
   }
 
   async loadSite(route) {
-    const loaded = await core.listEndpoints(route);
+    const [loaded, endpointPattern] = await Promise.all([
+      core.listEndpoints(route),
+      loadEndpointPattern(route),
+    ]);
     if (this._route !== route) return;
-    this._site = { ...loaded, org: route.org, site: route.site };
+    this._site = {
+      ...loaded, org: route.org, site: route.site, endpointPattern,
+    };
   }
 
   handleRouteChange({ detail }) {

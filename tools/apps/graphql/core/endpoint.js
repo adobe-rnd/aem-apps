@@ -22,8 +22,18 @@ export function createConfig({ name, schemas = [] }) {
   return { name, schemas: [...new Set(ids)].sort() };
 }
 
-// Where the delivery API serves an endpoint, relative to the engine's host.
-export const getDeliveryPath = ({ name }) => `/graphql/${name}`;
+export const getEndpointPath = (name) => `/graphql/${name}`;
+
+const URL_PLACEHOLDER = /\$\{(endpoint|org|site)\}/g;
+
+// The endpoint's URL from a pattern with ${endpoint}, ${org} and ${site}, else its engine path.
+export function getEndpointHref({
+  pattern, name, org, site,
+}) {
+  if (!pattern) return getEndpointPath(name);
+  const values = { endpoint: name, org, site };
+  return pattern.replace(URL_PLACEHOLDER, (_, key) => encodeURIComponent(values[key]));
+}
 
 export function validateEndpointName({ name, existing = [] }) {
   if (!name) return 'An endpoint name is required.';

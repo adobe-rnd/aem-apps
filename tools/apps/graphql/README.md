@@ -28,7 +28,9 @@ per-site sections later.
   back/forward moves between endpoints.
 - An invalid endpoint name in the hash opens the list. An endpoint, or site
   schemas, that cannot be loaded shows an error toast and returns to the list.
-- The list shows each endpoint's delivery path (`/graphql/{name}`).
+- The list shows each endpoint's path (`/graphql/{name}`), a copy button for its
+  full URL and a GraphiQL link, from the
+  [`graphql.endpoint` config](#configuration).
 - New endpoint (⊕) opens a dialog for the name, then an unsaved endpoint screen
   at `#/{org}/{site}/endpoints/{name}`. Cancel replaces the hash with
   `#/{org}/{site}/endpoints`, and so does deleting an endpoint.
@@ -76,6 +78,20 @@ https://da.live/app/adobe-rnd/aem-apps/tools/apps/graphql/graphql?da-admin=prod#
 The shell forwards the parameter to the iframe, which remembers it in its
 `localStorage`, so it is needed once per iframe host. `da-admin=reset`
 clears it.
+
+## Configuration
+
+The `graphql.endpoint` key of the DA site config, else of the org config, is
+the URL pattern of the GraphQL engine's endpoints. The app replaces
+`${endpoint}`, `${org}` and `${site}`:
+
+| key | value |
+| --- | --- |
+| `graphql.endpoint` | `https://content-ai-graphql-demo.corp.ethos09-prod-va7.ethos.adobe.net/graphql/${endpoint}?org=${org}&site=${site}` |
+
+The engine serves GraphiQL on a GET of the endpoint URL, so the list's
+GraphiQL link opens that URL. Without the key, copying gives only the engine
+path `/graphql/{name}` and the list has no GraphiQL column.
 
 ## Storage contract
 
@@ -169,19 +185,20 @@ graphql.js                  graphql-app: hash router, site loading, lazy screens
 core/                       portable business logic, see core/README.md
   operations.js             createGraphqlCore: the workflows over a store
   sdl.js                    JSON Schema → SDL with graphql-js
-  endpoint.js               endpoint config and SDL formats, name rules
+  endpoint.js               endpoint config, SDL and URL formats, name rules
   schemas.js                schema documents, validity and readable issues
   codeblock.js              codeblock document format
-adapters/                   the app's core instance
+adapters/                   the app's core instance and DA config
   index.js                  core bound to DA
   da-source.js              store port over nx2's `source` API
+  da-config.js              `graphql.endpoint` URL pattern from nx2's `daConfig`
   sc-validator.js           da-sc-sdk validator, lazy
 ui/                         custom elements, UI helpers and icons
   endpoints-screen/         endpoint list, new endpoint dialog, delete, read-only notice
   endpoint-screen/          one endpoint: load, save, discard, leave confirmation
     helpers/draft.js        schema selection, dirty check, save state
   header/                   site context, GraphQL › endpoints › name trail, screen actions slot
-  endpoint-list/            table, row actions
+  endpoint-list/            table, endpoint URLs, GraphiQL links, row actions
   endpoint-editor/          alerts, Schemas and GraphQL SDL tabs
   schemas-panel/            Schemas tab: search and selection table
     helpers/options.js      schema rows: filter, sort, schema status
@@ -212,7 +229,8 @@ ui/                         custom elements, UI helpers and icons
 - The endpoint screen previews the SDL with `buildSdl` and blocks saving on
   generation errors; `saveEndpoint` applies the same rule.
 - The entry turns the hash into a route, loads the site once from folder
-  listings (`{ org, site, endpoints, found, canWrite }`, or `{ error }`) and
+  listings and the DA config (`{ org, site, endpoints, found, canWrite,
+  endpointPattern }`, or `{ error }`) and
   passes it to the screen for the route. Before leaving a screen with unsaved
   changes it asks `gql-endpoint-screen.confirmLeave()`.
 - Schema documents are read and validated only by the endpoint screen.

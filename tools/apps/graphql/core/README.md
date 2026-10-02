@@ -12,7 +12,7 @@ GraphQL engine or a script could do the same.
 | --- | --- | --- |
 | `operations.js` | `createGraphqlCore`: list, load, save and delete endpoints | a store |
 | `sdl.js` | `buildSdl`, `generateSdl`: JSON Schemas → SDL | graphql-js |
-| `endpoint.js` | endpoint names, the config and SDL document formats | nothing |
+| `endpoint.js` | endpoint names and URLs, the config and SDL document formats | nothing |
 | `schemas.js` | parsing schema documents, validity and readable issues | nothing |
 | `codeblock.js` | reading and writing DA codeblock documents | nothing |
 

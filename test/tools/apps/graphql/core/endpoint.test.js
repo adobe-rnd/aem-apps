@@ -16,8 +16,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildSdlDocument, createConfig, isValidEndpointName, NO_SCHEMAS_MESSAGE, parseConfig,
-  serializeConfig, validateConfig, validateEndpointName,
+  buildSdlDocument, createConfig, getEndpointHref, getEndpointPath, isValidEndpointName,
+  NO_SCHEMAS_MESSAGE, parseConfig, serializeConfig, validateConfig, validateEndpointName,
 } from '../../../../../tools/apps/graphql/core/endpoint.js';
 
 describe('config', () => {
@@ -61,6 +61,27 @@ describe('config', () => {
     assert.equal(validateConfig({ name: 'main', schemas: ['a'] }), undefined);
     assert.equal(validateConfig({ name: 'main', schemas: [] }), NO_SCHEMAS_MESSAGE);
     assert.ok(validateConfig({ name: 'Bad', schemas: ['a'] }).includes('lowercase'));
+  });
+});
+
+describe('endpoint URL', () => {
+  const args = { name: 'shop', org: 'acme', site: 'web' };
+
+  it('fills the pattern placeholders', () => {
+    // eslint-disable-next-line no-template-curly-in-string
+    const pattern = 'https://gql.example/graphql/${endpoint}?org=${org}&site=${site}';
+    assert.equal(getEndpointHref({ pattern, ...args }), 'https://gql.example/graphql/shop?org=acme&site=web');
+  });
+
+  it('fills repeated placeholders and encodes values', () => {
+    // eslint-disable-next-line no-template-curly-in-string
+    const pattern = 'https://gql.example/${org}/${org}/${site}';
+    assert.equal(getEndpointHref({ pattern, ...args, org: 'a&b' }), 'https://gql.example/a%26b/a%26b/web');
+  });
+
+  it('falls back to the engine path without a pattern', () => {
+    assert.equal(getEndpointPath('shop'), '/graphql/shop');
+    assert.equal(getEndpointHref(args), '/graphql/shop');
   });
 });
 

@@ -8,6 +8,10 @@
     display: none;
   }
 
+  .graphiql {
+    width: 96px;
+  }
+
   .row-actions {
     width: calc(var(--list-pad-inline) + 48px);
   }

@@ -19,7 +19,7 @@ import { loadStyle } from 'https://da.live/nx2/utils/utils.js';
 import { showToast, VARIANT_ERROR } from 'https://da.live/nx2/blocks/shared/toast/toast.js';
 import { endpointDeleted } from '../utils/messages.js';
 import {
-  ENDPOINT_NAME_MAX_LENGTH, ENDPOINT_NAME_MIN_LENGTH, getDeliveryPath, validateEndpointName,
+  ENDPOINT_NAME_MAX_LENGTH, ENDPOINT_NAME_MIN_LENGTH, validateEndpointName,
 } from '../../core/endpoint.js';
 import { core } from '../../adapters/index.js';
 import { inlineAlertStyle, renderReadOnlyAlert } from '../shared/inline-alert/inline-alert.js';
@@ -36,7 +36,7 @@ const EL_NAME = 'gql-endpoints-screen';
 const NAME_HINT = `Use ${ENDPOINT_NAME_MIN_LENGTH}–${ENDPOINT_NAME_MAX_LENGTH} lowercase letters, `
   + 'numbers, or hyphens, starting with a letter.';
 
-// The endpoint list screen. `site` is { org, site, endpoints, canWrite }.
+// The endpoint list screen. `site` is { org, site, endpoints, canWrite, endpointPattern? }.
 class EndpointsScreen extends LitElement {
   static properties = {
     site: { attribute: false },
@@ -56,9 +56,8 @@ class EndpointsScreen extends LitElement {
     const confirmed = await this.shadowRoot.querySelector('gql-confirm').ask({
       title: 'Delete endpoint?',
       body: html`<p>The <strong>${name}</strong> endpoint and its GraphQL schema will be
-        permanently deleted. Client applications that query
-        <strong>${getDeliveryPath({ name })}</strong> will no longer be able to retrieve
-        content.</p>`,
+        permanently deleted. Client applications that query it will no longer be able to
+        retrieve content.</p>`,
       confirmLabel: 'Delete',
       negative: true,
     });
@@ -131,7 +130,7 @@ class EndpointsScreen extends LitElement {
 
   render() {
     const {
-      org, site, endpoints, canWrite,
+      org, site, endpoints, canWrite, endpointPattern,
     } = this.site;
     const busy = !!this._busy;
     return html`
@@ -143,6 +142,7 @@ class EndpointsScreen extends LitElement {
         org=${org}
         site=${site}
         .endpoints=${endpoints}
+        .endpointPattern=${endpointPattern}
         ?busy=${busy}
         ?readOnly=${!canWrite}
         @endpoint-delete=${({ detail }) => this.handleDelete(detail.endpoint)}>

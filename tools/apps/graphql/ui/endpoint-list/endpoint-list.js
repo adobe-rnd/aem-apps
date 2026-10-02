@@ -17,7 +17,7 @@
 import { html, LitElement, nothing } from 'da-lit';
 import { loadStyle } from 'https://da.live/nx2/utils/utils.js';
 import { showToast, VARIANT_ERROR } from 'https://da.live/nx2/blocks/shared/toast/toast.js';
-import { getDeliveryPath } from '../../core/endpoint.js';
+import { getEndpointHref, getEndpointPath } from '../../core/endpoint.js';
 import { buildHash } from '../utils/route.js';
 import { icon } from '../utils/icons.js';
 import { delegateRowClick, tableStyle } from '../shared/table/table.js';
@@ -29,12 +29,12 @@ const [buttonStyle, style] = await Promise.all([
 
 const EL_NAME = 'gql-endpoint-list';
 
-async function copyPath(path) {
+async function copyEndpoint(href) {
   try {
-    await navigator.clipboard.writeText(path);
-    showToast({ text: 'Endpoint path copied.' });
+    await navigator.clipboard.writeText(href);
+    showToast({ text: 'Endpoint copied.' });
   } catch {
-    showToast({ text: 'The endpoint path could not be copied.', variant: VARIANT_ERROR });
+    showToast({ text: 'The endpoint could not be copied.', variant: VARIANT_ERROR });
   }
 }
 
@@ -43,6 +43,7 @@ class EndpointList extends LitElement {
     org: { type: String },
     site: { type: String },
     endpoints: { attribute: false },
+    endpointPattern: { attribute: false },
     busy: { type: Boolean },
     readOnly: { type: Boolean },
   };
@@ -52,14 +53,23 @@ class EndpointList extends LitElement {
     this.shadowRoot.adoptedStyleSheets = [buttonStyle, tableStyle, style];
   }
 
-  renderPath(name) {
-    const path = getDeliveryPath({ name });
+  renderEndpoint({ name, href }) {
     return html`
       <div class="endpoint-cell">
-        <code title=${path}>${path}</code>
-        <button type="button" class="nx-action-btn-icon nx-btn-sm copy" title="Copy endpoint" aria-label="Copy endpoint ${path}"
-          @click=${() => copyPath(path)}>${icon({ name: 'copy' })}</button>
+        <code title=${href}>${getEndpointPath(name)}</code>
+        <button type="button" class="nx-action-btn-icon nx-btn-sm copy" title="Copy endpoint" aria-label="Copy endpoint ${href}"
+          @click=${() => copyEndpoint(href)}>${icon({ name: 'copy' })}</button>
       </div>`;
+  }
+
+  // The engine serves GraphiQL on a GET of the endpoint URL.
+  renderGraphiql({ name, href }) {
+    if (!this.endpointPattern) return nothing;
+    return html`
+      <td class="graphiql">
+        <a class="nx-action-btn-icon nx-btn-sm" href=${href} target="_blank" rel="noopener"
+          title="Open in GraphiQL" aria-label="Open ${name} in GraphiQL">${icon({ name: 'openIn' })}</a>
+      </td>`;
   }
 
   emitDelete(endpoint) {
@@ -77,13 +87,18 @@ class EndpointList extends LitElement {
   }
 
   renderRow(name) {
+    const { org, site, endpointPattern: pattern } = this;
+    const href = getEndpointHref({
+      pattern, name, org, site,
+    });
     return html`
       <tr class="endpoint-row clickable" @click=${delegateRowClick}>
         <td class="name">
-          <a class="row-control" href=${buildHash({ org: this.org, site: this.site, endpoint: name })}>${name}</a>
-          <div class="stacked-path">${this.renderPath(name)}</div>
+          <a class="row-control" href=${buildHash({ org, site, endpoint: name })}>${name}</a>
+          <div class="stacked-path">${this.renderEndpoint({ name, href })}</div>
         </td>
-        <td class="endpoint">${this.renderPath(name)}</td>
+        <td class="endpoint">${this.renderEndpoint({ name, href })}</td>
+        ${this.renderGraphiql({ name, href })}
         <td class="row-actions">${this.renderRowActions(name)}</td>
       </tr>`;
   }
@@ -99,6 +114,7 @@ class EndpointList extends LitElement {
           <tr>
             <th class="name" scope="col">Name</th>
             <th class="endpoint" scope="col">Endpoint</th>
+            ${this.endpointPattern ? html`<th class="graphiql" scope="col">GraphiQL</th>` : nothing}
             <th class="row-actions" scope="col" aria-label="Actions"></th>
           </tr>
         </thead>
