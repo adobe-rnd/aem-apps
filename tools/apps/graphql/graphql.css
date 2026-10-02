@@ -1,0 +1,16 @@
+:host {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2-spacing-400);
+  box-sizing: border-box;
+  width: 100%;
+
+  /* Top: a 64px band for the site context, plus 20px; sides: keep content at the grid width. */
+  padding: 84px max(0px, (100% - var(--se-grid-container-width)) / 2) 20px;
+
+  @media (width >= 900px) {
+    height: 100vh;
+    min-height: 640px;
+  }
+}
