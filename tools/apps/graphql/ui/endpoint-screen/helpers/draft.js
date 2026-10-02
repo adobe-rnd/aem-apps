@@ -44,15 +44,14 @@ export function getSaveBlocker({ draft, preview, existing = [] }) {
   return undefined;
 }
 
-// An unchanged endpoint can still be saved, to regenerate its SDL from the current schemas.
 export function getSaveState({
   draft, blocker, dirty, busy,
 }) {
-  const pending = draft.isNew || dirty;
+  const pending = draft.isNew || !!dirty;
   // The Schemas tab explains an empty selection, so it isn't repeated next to Save.
   const showHint = blocker && pending && blocker !== NO_SCHEMAS_MESSAGE;
   return {
-    canSave: !blocker && !busy,
+    canSave: pending && !blocker && !busy,
     hint: showHint ? blocker : undefined,
   };
 }

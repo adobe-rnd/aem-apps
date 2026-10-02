@@ -53,8 +53,9 @@ describe('draft', () => {
     const saved = { name: 'main', isNew: false };
     const fresh = { name: '', isNew: true };
     const enabled = { canSave: true, hint: undefined };
-    assert.deepEqual(getSaveState({ draft: saved }), enabled);
+    assert.deepEqual(getSaveState({ draft: saved }), { canSave: false, hint: undefined });
     assert.deepEqual(getSaveState({ draft: saved, dirty: true }), enabled);
+    assert.deepEqual(getSaveState({ draft: { ...fresh, name: 'main' } }), enabled);
     assert.equal(getSaveState({ draft: saved, dirty: true, busy: true }).canSave, false);
     assert.deepEqual(getSaveState({ draft: saved, dirty: true, blocker: 'Fix it.' }), { canSave: false, hint: 'Fix it.' });
     assert.deepEqual(getSaveState({ draft: saved, blocker: 'Fix it.' }), { canSave: false, hint: undefined });
