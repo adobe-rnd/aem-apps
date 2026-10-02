@@ -100,26 +100,32 @@ All paths are relative to `/{org}/{site}`.
 | Path | Content |
 | --- | --- |
 | `/.da/forms/schemas/{id}.html` | Source JSON Schemas (read only here) |
-| `/.da/graphql/endpoints/{name}.html` | Endpoint config and generated SDL |
+| `/.da/graphql/endpoints/{name}/endpoint.html` | Endpoint config and generated SDL |
 
-The endpoint document uses the schema editor's codeblock document
-(`<main><div><pre><code>…</code></pre></div></main>`) holding one JSON object:
+Each endpoint has its own folder. Its `endpoint.html` uses the schema
+editor's codeblock document with two code blocks: the config as JSON, then
+the generated SDL as is, so the SDL needs no JSON escaping:
 
-```json
-{
+```html
+<main><div>
+<pre><code>{
   "name": "marketing",
   "schemas": ["article", "product"],
-  "generatedAt": "2026-01-01T00:00:00.000Z",
-  "sdl": "…"
-}
+  "generatedAt": "2026-01-01T00:00:00.000Z"
+}</code></pre>
+<pre><code>"""Article."""
+type Article { … }
+…</code></pre>
+</div></main>
 ```
 
 - Endpoint names are 3–32 characters matching `^[a-z][a-z0-9-]*$`
-  (`validateEndpointName`) and cannot be changed after creation. Documents
-  with other names are not listed.
+  (`validateEndpointName`) and cannot be changed after creation. Folders
+  with other names, and other files in `endpoints/`, are not listed.
 - `schemas` are schema ids, i.e. the file names without `.html`.
-- `sdl` is generated from `schemas` and is what the engine serves;
-  `generatedAt` is when it was generated.
+- The second code block is generated from `schemas` and is the SDL the engine
+  serves; `generatedAt` is when it was generated. Both blocks are
+  HTML-escaped (`&`, `<`, `>`) like any codeblock document.
 - Only core's `saveEndpoint` writes the document, so the config and its SDL
   are always saved in one write (see
   [core/README.md](core/README.md#operations)).

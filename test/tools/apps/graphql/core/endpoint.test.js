@@ -27,7 +27,7 @@ describe('config', () => {
   });
 
   it('round-trips through serialize and parse, taking the name from the path', () => {
-    const text = serializeEndpoint({ config: { name: 'x', schemas: ['s'] }, generatedAt: 'now', sdl: 'x' });
+    const [text] = serializeEndpoint({ config: { name: 'x', schemas: ['s'] }, generatedAt: 'now', sdl: 'x' });
     assert.deepEqual(parseConfig({ text, name: 'y' }).config, { name: 'y', schemas: ['s'] });
   });
 
@@ -86,11 +86,12 @@ describe('endpoint URL', () => {
 });
 
 describe('endpoint document', () => {
-  it('stores the normalised config with the generated SDL', () => {
+  it('stores the normalised config, then the generated SDL as is', () => {
     const config = { name: 'e', schemas: ['b', 'a', 'b'], isNew: true };
-    const text = serializeEndpoint({ config, generatedAt: 'now', sdl: 'type Query { a: String }' });
-    assert.equal(text, JSON.stringify({
-      name: 'e', schemas: ['a', 'b'], generatedAt: 'now', sdl: 'type Query { a: String }',
-    }, null, 2));
+    const sdl = '"""A "quoted" description."""\ntype Query { a: String }';
+    assert.deepEqual(serializeEndpoint({ config, generatedAt: 'now', sdl }), [
+      JSON.stringify({ name: 'e', schemas: ['a', 'b'], generatedAt: 'now' }, null, 2),
+      sdl,
+    ]);
   });
 });

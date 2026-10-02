@@ -14,7 +14,7 @@ GraphQL engine or a script could do the same.
 | `sdl.js` | `buildSdl`, `generateSdl`: JSON Schemas → SDL | graphql-js |
 | `endpoint.js` | endpoint names and URLs, the endpoint document format | nothing |
 | `schemas.js` | parsing schema documents, validity and readable issues | nothing |
-| `codeblock.js` | reading and writing DA codeblock documents | nothing |
+| `codeblock.js` | reading and writing the code blocks of DA documents | nothing |
 
 Everything except `createGraphqlCore` is a pure function. `sdl.js` imports
 graphql-js from `tools/deps/graphql/`; `operations.js` loads it only when it
@@ -70,8 +70,8 @@ which take an absolute DA `path` such as `/{org}/{site}/.da/forms/schemas`:
   lists as empty or fails with `404`.
 - `read` of a missing document fails with status `404`; that is how the core
   tells a missing endpoint from an unreadable one.
-- `write` creates or replaces the HTML document. `remove` of a missing
-  document may fail with `404`; the core ignores it.
+- `write` creates or replaces the HTML document, creating its folders.
+  `remove` of a missing document may fail with `404`; the core ignores it.
 - `permissions` are the actions allowed on the site folder, such as `read`
   and `write`. Without them the site counts as writable.
 
@@ -144,11 +144,11 @@ export function createDaAdminStore({ token }) {
   comes from the store's `permissions`.
 - `saveEndpoint` is the only writer, so an endpoint's config and SDL always
   match. It creates or replaces the endpoint: it validates the config,
-  generates the SDL, then writes both as one document. Nothing is written
-  if generation fails. To avoid replacing an endpoint, check `listEndpoints`
-  first.
-- `deleteEndpoint` removes the endpoint document; a missing one counts as
-  deleted.
+  generates the SDL, then writes both as code blocks of one document.
+  Nothing is written if generation fails. To avoid replacing an endpoint,
+  check `listEndpoints` first.
+- `deleteEndpoint` removes the endpoint document, then its folder, ignoring
+  a failure to remove the folder; a missing endpoint counts as deleted.
 - A missing endpoints or schemas folder counts as empty; any other listing
   failure returns `load-failed`.
 
@@ -232,7 +232,7 @@ positions, because `sdl.js` imports `../../../deps/graphql/dist/index.js`.
 
 ## Limitations
 
-- `unwrapCodeblock` uses regular expressions rather than a DOM. It decodes
+- `unwrapCodeblocks` uses regular expressions rather than a DOM. It decodes
   numeric entities and `&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;` and
   `&nbsp;` only.
 - nx2's `source.list` doesn't return the status of a failed listing, so

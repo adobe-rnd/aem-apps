@@ -16,7 +16,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGraphqlCore } from '../../../../../tools/apps/graphql/core/operations.js';
-import { unwrapCodeblock, wrapCodeblock } from '../../../../../tools/apps/graphql/core/codeblock.js';
+import { unwrapCodeblocks, wrapCodeblocks } from '../../../../../tools/apps/graphql/core/codeblock.js';
 import { NO_SCHEMAS_MESSAGE } from '../../../../../tools/apps/graphql/core/endpoint.js';
 import { createMemoryStore } from './helpers/memory-store.js';
 
@@ -27,10 +27,12 @@ const NOW = new Date('2024-01-02T03:04:05Z');
 const args = { org: 'acme', site: 'web' };
 
 const schemaJson = (title) => ({ type: 'object', title, properties: { title: { type: 'string' } } });
-const schemaDoc = (title) => wrapCodeblock(JSON.stringify(schemaJson(title)));
-const configDoc = (schemas) => wrapCodeblock(JSON.stringify({ schemas }));
-const readDoc = (store, path) => unwrapCodeblock(store.docs.get(path));
-const writes = (store) => store.calls.filter(({ method }) => method === 'write').map(({ path }) => path);
+const schemaDoc = (title) => wrapCodeblocks([JSON.stringify(schemaJson(title))]);
+const configDoc = (schemas) => wrapCodeblocks([JSON.stringify({ schemas }), 'type Query']);
+const readBlocks = (store, path) => unwrapCodeblocks(store.docs.get(path));
+const callsTo = (store, name) => store.calls
+  .filter(({ method }) => method === name).map(({ path }) => path);
+const writes = (store) => callsTo(store, 'write');
 
 function setup({
   files, permissions, fail, loadValidator,
@@ -47,11 +49,11 @@ describe('listEndpoints', () => {
     const { core } = setup({
       files: {
         [`${SITE}/index.html`]: 'x',
-        [`${ENDPOINTS}/main.html`]: configDoc(['product']),
-        [`${ENDPOINTS}/Bad.html`]: configDoc(['product']),
-        [`${ENDPOINTS}/blog.html`]: configDoc(['product']),
+        [`${ENDPOINTS}/main/endpoint.html`]: configDoc(['product']),
+        [`${ENDPOINTS}/Bad/endpoint.html`]: configDoc(['product']),
+        [`${ENDPOINTS}/blog/endpoint.html`]: configDoc(['product']),
         [`${ENDPOINTS}/notes.txt`]: 'x',
-        [`${ENDPOINTS}/legacy/config.html`]: configDoc(['product']),
+        [`${ENDPOINTS}/single.html`]: configDoc(['product']),
       },
     });
     assert.deepEqual(await core.listEndpoints(args), { endpoints: ['blog', 'main'], found: true, canWrite: true });
@@ -157,7 +159,7 @@ describe('loadSchemas', () => {
 
 describe('loadEndpoint', () => {
   it('reads and normalises a stored config', async () => {
-    const { core } = setup({ files: { [`${ENDPOINTS}/main.html`]: configDoc(['b', 'a']) } });
+    const { core } = setup({ files: { [`${ENDPOINTS}/main/endpoint.html`]: configDoc(['b', 'a']) } });
     assert.deepEqual(await core.loadEndpoint({ ...args, name: 'main' }), { config: { name: 'main', schemas: ['a', 'b'] } });
   });
 
@@ -165,14 +167,14 @@ describe('loadEndpoint', () => {
     assert.deepEqual(await setup().core.loadEndpoint({ ...args, name: 'main' }), {
       code: 'not-found', error: 'Endpoint "main" was not found.', status: 404,
     });
-    const { core } = setup({ fail: failOn('read', `${ENDPOINTS}/main.html`) });
+    const { core } = setup({ fail: failOn('read', `${ENDPOINTS}/main/endpoint.html`) });
     assert.deepEqual(await core.loadEndpoint({ ...args, name: 'main' }), {
       code: 'load-failed', error: 'Could not load endpoint "main".', status: 500,
     });
   });
 
   it('reports a stored config that is not valid JSON', async () => {
-    const { core } = setup({ files: { [`${ENDPOINTS}/main.html`]: wrapCodeblock('{') } });
+    const { core } = setup({ files: { [`${ENDPOINTS}/main/endpoint.html`]: wrapCodeblocks(['{']) } });
     assert.deepEqual(await core.loadEndpoint({ ...args, name: 'main' }), {
       code: 'invalid-config', error: 'The endpoint configuration is not valid JSON.',
     });
@@ -183,16 +185,18 @@ describe('saveEndpoint', () => {
   const files = { [`${SCHEMAS}/product.html`]: schemaDoc('Product') };
   const config = { name: 'main', schemas: ['product', 'product'], isNew: true };
 
-  it('writes the config and the generated SDL as one document', async () => {
+  it('writes the config and the generated SDL as code blocks of one document', async () => {
     const { store, core } = setup({ files });
     const result = await core.saveEndpoint({ ...args, config });
     assert.deepEqual(result.config, { name: 'main', schemas: ['product'] });
     assert.deepEqual(result.warnings, []);
     assert.ok(result.sdl.includes('type Product {'));
-    assert.deepEqual(writes(store), [`${ENDPOINTS}/main.html`]);
-    assert.deepEqual(JSON.parse(readDoc(store, `${ENDPOINTS}/main.html`)), {
-      name: 'main', schemas: ['product'], generatedAt: '2024-01-02T03:04:05.000Z', sdl: result.sdl,
+    assert.deepEqual(writes(store), [`${ENDPOINTS}/main/endpoint.html`]);
+    const [json, sdl] = readBlocks(store, `${ENDPOINTS}/main/endpoint.html`);
+    assert.deepEqual(JSON.parse(json), {
+      name: 'main', schemas: ['product'], generatedAt: '2024-01-02T03:04:05.000Z',
     });
+    assert.equal(sdl, result.sdl);
   });
 
   it('refuses invalid configs and SDL errors without writing', async () => {
@@ -211,7 +215,7 @@ describe('saveEndpoint', () => {
   });
 
   it('reports a document that could not be written', async () => {
-    const { core } = setup({ files, fail: failOn('write', `${ENDPOINTS}/main.html`) });
+    const { core } = setup({ files, fail: failOn('write', `${ENDPOINTS}/main/endpoint.html`) });
     assert.deepEqual(await core.saveEndpoint({ ...args, config }), {
       code: 'save-failed', error: 'Could not save the endpoint.', status: 500,
     });
@@ -219,7 +223,7 @@ describe('saveEndpoint', () => {
 });
 
 describe('saveEndpoint over a stored endpoint', () => {
-  const endpointPath = `${ENDPOINTS}/main.html`;
+  const endpointPath = `${ENDPOINTS}/main/endpoint.html`;
   const files = (schemas) => ({
     [`${SCHEMAS}/product.html`]: schemaDoc('Product'),
     [endpointPath]: configDoc(schemas),
@@ -230,7 +234,7 @@ describe('saveEndpoint over a stored endpoint', () => {
     const { store, core } = setup({ files: files(['product']) });
     const result = await save(core, ['product']);
     assert.deepEqual(writes(store), [endpointPath]);
-    assert.equal(JSON.parse(readDoc(store, endpointPath)).sdl, result.sdl);
+    assert.equal(readBlocks(store, endpointPath)[1], result.sdl);
   });
 
   it('keeps and skips selected schemas that no longer exist', async () => {
@@ -239,7 +243,7 @@ describe('saveEndpoint over a stored endpoint', () => {
     assert.deepEqual(warnings, [
       { schemaId: 'gone', pointer: '', message: 'The schema no longer exists and was skipped.' },
     ]);
-    assert.deepEqual(JSON.parse(readDoc(store, endpointPath)).schemas, ['gone', 'product']);
+    assert.deepEqual(JSON.parse(readBlocks(store, endpointPath)[0]).schemas, ['gone', 'product']);
   });
 
   it('keeps the stored endpoint when a selected schema cannot be read', async () => {
@@ -255,22 +259,35 @@ describe('saveEndpoint over a stored endpoint', () => {
 });
 
 describe('deleteEndpoint', () => {
-  it('removes the endpoint document', async () => {
+  const doc = `${ENDPOINTS}/main/endpoint.html`;
+  const removes = (store) => callsTo(store, 'remove');
+
+  it('removes the endpoint document, then its folder', async () => {
     const { store, core } = setup({
-      files: { [`${ENDPOINTS}/main.html`]: configDoc(['a']), [`${ENDPOINTS}/blog.html`]: configDoc(['a']) },
+      files: { [doc]: configDoc(['a']), [`${ENDPOINTS}/blog/endpoint.html`]: configDoc(['a']) },
     });
     assert.deepEqual(await core.deleteEndpoint({ ...args, name: 'main' }), { ok: true });
-    assert.deepEqual([...store.docs.keys()], [`${ENDPOINTS}/blog.html`]);
+    assert.deepEqual(removes(store), [doc, `${ENDPOINTS}/main`]);
+    assert.deepEqual([...store.docs.keys()], [`${ENDPOINTS}/blog/endpoint.html`]);
   });
 
-  it('reports failed removals', async () => {
-    const { core } = setup({
-      files: { [`${ENDPOINTS}/main.html`]: configDoc(['a']) },
-      fail: failOn('remove', `${ENDPOINTS}/main.html`),
+  it('reports failed removals and keeps the folder', async () => {
+    const { store, core } = setup({
+      files: { [`${ENDPOINTS}/main/endpoint.html`]: configDoc(['a']) },
+      fail: failOn('remove', `${ENDPOINTS}/main/endpoint.html`),
     });
     assert.deepEqual(await core.deleteEndpoint({ ...args, name: 'main' }), {
       code: 'delete-failed', error: 'Could not delete endpoint "main".', status: 500,
     });
+    assert.deepEqual(removes(store), [`${ENDPOINTS}/main/endpoint.html`]);
+  });
+
+  it('ignores a folder that cannot be removed', async () => {
+    const { core } = setup({
+      files: { [`${ENDPOINTS}/main/endpoint.html`]: configDoc(['a']) },
+      fail: failOn('remove', `${ENDPOINTS}/main`),
+    });
+    assert.deepEqual(await core.deleteEndpoint({ ...args, name: 'main' }), { ok: true });
   });
 
   it('treats a missing endpoint as deleted', async () => {

@@ -15,14 +15,28 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { unwrapCodeblock, wrapCodeblock } from '../../../../../tools/apps/graphql/core/codeblock.js';
+import {
+  unwrapCodeblock, unwrapCodeblocks, wrapCodeblocks,
+} from '../../../../../tools/apps/graphql/core/codeblock.js';
 
 describe('codeblock', () => {
   it('round-trips text through a codeblock document', () => {
     const text = '{"a":"<b> & </code> \\"c\\""}';
-    const html = wrapCodeblock(text);
+    const html = wrapCodeblocks([text]);
     assert.ok(html.startsWith('<body><header></header><main><div><pre><code>{"a":"&lt;b&gt; &amp; &lt;/code&gt;'));
     assert.equal(unwrapCodeblock(html), text);
+  });
+
+  it('round-trips several code blocks in order', () => {
+    const texts = ['{"a":1}', '"""Doc"""\ntype A { b: [String!]! }', ''];
+    const html = wrapCodeblocks(texts);
+    assert.equal(
+      html,
+      '<body><header></header><main><div><pre><code>{"a":1}</code></pre>'
+        + '<pre><code>"""Doc"""\ntype A { b: [String!]! }</code></pre><pre><code></code></pre>'
+        + '</div></main><footer></footer></body>',
+    );
+    assert.deepEqual(unwrapCodeblocks(html), texts);
   });
 
   it('reads documents written by the schema editor and by DA', () => {
@@ -40,8 +54,15 @@ describe('codeblock', () => {
     assert.equal(unwrapCodeblock('<code>&unknown; &#x110000;</code>'), '&unknown; &#x110000;');
   });
 
+  it('reads every code block, the first one by default', () => {
+    const html = '<code><!-- x -->1</code><p>t</p><code class="language-graphql">2 &amp; <b>3</b></code>';
+    assert.deepEqual(unwrapCodeblocks(html), ['1', '2 & 3']);
+    assert.equal(unwrapCodeblock(html), '1');
+  });
+
   it('is undefined without a code block', () => {
     assert.equal(unwrapCodeblock('<main><pre>{}</pre></main>'), undefined);
     assert.equal(unwrapCodeblock(undefined), undefined);
+    assert.deepEqual(unwrapCodeblocks(undefined), []);
   });
 });

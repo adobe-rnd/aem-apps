@@ -17,18 +17,19 @@ import {
   createConfig, isValidEndpointName, parseConfig, serializeEndpoint, validateConfig,
 } from './endpoint.js';
 import { annotateSchemas, parseSchemaDocument } from './schemas.js';
-import { unwrapCodeblock, wrapCodeblock } from './codeblock.js';
+import { unwrapCodeblock, wrapCodeblocks } from './codeblock.js';
 
 const sitePath = ({ org, site }) => `/${org}/${site}`;
 const schemasPath = (args) => `${sitePath(args)}/.da/forms/schemas`;
 const endpointsPath = (args) => `${sitePath(args)}/.da/graphql/endpoints`;
-const endpointPath = (args) => `${endpointsPath(args)}/${args.name}.html`;
+const endpointFolder = (args) => `${endpointsPath(args)}/${args.name}`;
+const endpointPath = (args) => `${endpointFolder(args)}/endpoint.html`;
 
 // Loaded on demand so listing endpoints never loads graphql-js.
 const loadSdl = () => import('./sdl.js');
 
 const endpointNames = (items) => items
-  .filter((item) => item.ext === 'html' && isValidEndpointName(item.name))
+  .filter((item) => !item.ext && isValidEndpointName(item.name))
   .map((item) => item.name)
   .sort();
 
@@ -40,8 +41,6 @@ export function createGraphqlCore({ store, loadValidator, now = () => new Date()
     const result = await store.list({ path });
     return result.status === 404 ? { items: [] } : result;
   }
-
-  const writeDocument = ({ path, text }) => store.write({ path, text: wrapCodeblock(text) });
 
   async function listSchemaFiles(args) {
     const result = await listFolder(schemasPath(args));
@@ -118,7 +117,7 @@ export function createGraphqlCore({ store, loadValidator, now = () => new Date()
     return { sdl, warnings };
   }
 
-  // The only way an endpoint is written: its config and SDL are one document.
+  // The only way an endpoint is written: its config and SDL are code blocks of one document.
   // Missing or invalid schemas are skipped with warnings. If a schema can't be read or none is
   // usable, nothing is written.
   async function saveEndpoint({ org, site, config: draft }) {
@@ -126,9 +125,9 @@ export function createGraphqlCore({ store, loadValidator, now = () => new Date()
     const generated = await generateSdl({ org, site, config });
     if (generated.error) return generated;
     const { sdl, warnings } = generated;
-    const text = serializeEndpoint({ config, generatedAt: now().toISOString(), sdl });
+    const blocks = serializeEndpoint({ config, generatedAt: now().toISOString(), sdl });
     const path = endpointPath({ org, site, name: config.name });
-    const result = await writeDocument({ path, text });
+    const result = await store.write({ path, text: wrapCodeblocks(blocks) });
     if (result.error) {
       return { code: 'save-failed', error: 'Could not save the endpoint.', status: result.status };
     }
@@ -137,10 +136,13 @@ export function createGraphqlCore({ store, loadValidator, now = () => new Date()
 
   // A missing endpoint counts as deleted.
   async function deleteEndpoint({ org, site, name }) {
-    const result = await store.remove({ path: endpointPath({ org, site, name }) });
+    const path = endpointPath({ org, site, name });
+    const result = await store.remove({ path });
     if (result.error && result.status !== 404) {
       return { code: 'delete-failed', error: `Could not delete endpoint "${name}".`, status: result.status };
     }
+    // Best effort: drop the now empty endpoint folder.
+    await store.remove({ path: endpointFolder({ org, site, name }) });
     return { ok: true };
   }
 

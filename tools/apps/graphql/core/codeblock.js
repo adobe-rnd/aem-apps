@@ -13,15 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// DA codeblock documents: the text of a single <pre><code> block, as the schema editor writes it.
+// DA codeblock documents: the texts of <pre><code> blocks, as the schema editor writes them.
 
 const escapeHtml = (text) => text
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
   .replace(/>/g, '&gt;');
 
-export const wrapCodeblock = (text) => `<body><header></header><main><div><pre><code>${
-  escapeHtml(text)}</code></pre></div></main><footer></footer></body>`;
+export const wrapCodeblocks = (texts) => `<body><header></header><main><div>${
+  texts.map((text) => `<pre><code>${escapeHtml(text)}</code></pre>`).join('')
+}</div></main><footer></footer></body>`;
 
 const ENTITIES = {
   amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0',
@@ -36,12 +37,14 @@ const decodeEntity = (match, entity) => {
   return ENTITIES[entity] ?? match;
 };
 
-// Matches the browser's `querySelector('code').textContent` without needing a DOM.
-export function unwrapCodeblock(html) {
-  const [, content] = /<code\b[^>]*>([\s\S]*?)<\/code\s*>/i.exec(html ?? '') ?? [];
-  if (content === undefined) return undefined;
-  return content
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<\/?[a-z][^>]*>/gi, '')
-    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, decodeEntity);
-}
+const toText = (content) => content
+  .replace(/<!--[\s\S]*?-->/g, '')
+  .replace(/<\/?[a-z][^>]*>/gi, '')
+  .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, decodeEntity);
+
+// Matches the browser's `querySelectorAll('code')` texts without needing a DOM.
+export const unwrapCodeblocks = (html) => [
+  ...(html ?? '').matchAll(/<code\b[^>]*>([\s\S]*?)<\/code\s*>/gi),
+].map(([, content]) => toText(content));
+
+export const unwrapCodeblock = (html) => unwrapCodeblocks(html)[0];
