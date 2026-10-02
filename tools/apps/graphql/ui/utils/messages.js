@@ -37,6 +37,11 @@ export const SCHEMA_STATUSES = {
     label: 'Removing',
     title: 'Removed from the endpoint when you save.',
   },
+  added: {
+    variant: 'positive',
+    label: 'Added',
+    title: 'Part of the saved endpoint.',
+  },
 };
 
 export const unsavedSchemaChanges = ({ adding, removing }) => [

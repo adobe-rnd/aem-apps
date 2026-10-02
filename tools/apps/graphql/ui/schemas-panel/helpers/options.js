@@ -20,13 +20,15 @@ const getChange = ({ selected, wasSelected, saved }) => {
 };
 
 // Site schemas plus missing ids that are selected or saved, so they can be deselected.
+// Rows in the saved selection are `saved`.
 export function getSchemaOptions({ draft, schemas = [], saved }) {
   const selected = new Set(draft.schemas);
   const savedIds = new Set(saved);
   const known = new Set(schemas.map(({ id }) => id));
   const withChange = (row) => {
-    const change = getChange({ selected: row.selected, wasSelected: savedIds.has(row.id), saved });
-    return change ? { ...row, change } : row;
+    const wasSelected = savedIds.has(row.id);
+    const change = getChange({ selected: row.selected, wasSelected, saved });
+    return { ...row, ...(wasSelected && { saved: true }), ...(change && { change }) };
   };
   const rows = schemas.map((entry) => withChange({
     id: entry.id,
@@ -46,21 +48,23 @@ export function getSchemaOptions({ draft, schemas = [], saved }) {
   return [...rows, ...missing];
 }
 
+// In Status sort order; a new endpoint's selection has no status, as nothing is saved yet.
+const SCHEMA_STATUSES = ['invalid', 'missing', 'adding', 'removing', 'added'];
+
+export function getSchemaStatus({
+  usable, missing, change, saved,
+}) {
+  if (change) return change;
+  if (!usable) return missing ? 'missing' : 'invalid';
+  return saved ? 'added' : undefined;
+}
+
 // `statusLabel(option)` lets the view make its status wording searchable too.
 export function filterSchemaOptions({ options = [], query = '', statusLabel }) {
   const needle = query.trim().toLowerCase();
   if (!needle) return options;
   return options.filter((option) => [option.id, option.title, statusLabel?.(option)]
     .some((value) => value?.toLowerCase().includes(needle)));
-}
-
-// In Status sort order; a plain selection has no status, as the checkbox shows it.
-const SCHEMA_STATUSES = ['invalid', 'missing', 'adding', 'removing'];
-
-export function getSchemaStatus({ usable, missing, change }) {
-  if (change) return change;
-  if (usable) return undefined;
-  return missing ? 'missing' : 'invalid';
 }
 
 export function countChanges(options = []) {

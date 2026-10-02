@@ -65,6 +65,25 @@ describe('schema options', () => {
     assert.deepEqual(countChanges(getSchemaOptions({ draft, schemas, saved: ['product', 'page', 'gone'] })), { adding: 1, removing: 2 });
   });
 
+  it('marks schemas in the saved selection as added', () => {
+    const draft = { ...createDraft(), schemas: ['article', 'product', 'gone'] };
+    const schemas = [loaded('article'), loaded('product'), loaded('page')];
+    const statuses = (saved) => getSchemaOptions({ draft, schemas, saved })
+      .map((option) => [option.id, option.saved, getSchemaStatus(option)]);
+    assert.deepEqual(statuses(['product', 'page', 'gone']), [
+      ['article', undefined, 'adding'],
+      ['product', true, 'added'],
+      ['page', true, 'removing'],
+      ['gone', true, 'missing'],
+    ]);
+    assert.deepEqual(statuses(undefined), [
+      ['article', undefined, undefined],
+      ['product', undefined, undefined],
+      ['page', undefined, undefined],
+      ['gone', undefined, 'missing'],
+    ]);
+  });
+
   it('filters schema options by id or title', () => {
     const options = [
       { id: 'product', title: 'Catalog Product' },
@@ -87,11 +106,12 @@ describe('schema options', () => {
       { id: 'article', title: 'Article' },
       { id: 'gone' },
     ];
-    const labels = { product: 'Invalid', gone: 'Not found' };
+    const labels = { product: 'Invalid', article: 'Added', gone: 'Not found' };
     const ids = (query) => filterSchemaOptions({
       options, query, statusLabel: ({ id }) => labels[id],
     }).map(({ id }) => id);
     assert.deepEqual(ids('inval'), ['product']);
+    assert.deepEqual(ids('added'), ['article']);
     assert.deepEqual(ids('NOT FOUND'), ['gone']);
     assert.deepEqual(ids('art'), ['article']);
   });
@@ -122,6 +142,23 @@ describe('schema options', () => {
     assert.equal(options[0].id, 'page');
   });
 
+  it('sorts added schemas after changes and before rows without a status', () => {
+    const options = [
+      { id: 'plain', usable: true },
+      {
+        id: 'kept', selected: true, usable: true, saved: true,
+      },
+      {
+        id: 'new', selected: true, usable: true, change: 'adding',
+      },
+      { id: 'bad', usable: false },
+    ];
+    const ids = (direction) => sortSchemaOptions({ options, key: 'status', direction })
+      .map(({ id }) => id);
+    assert.deepEqual(ids(), ['bad', 'new', 'kept', 'plain']);
+    assert.deepEqual(ids('descending'), ['kept', 'new', 'bad', 'plain']);
+  });
+
   it('derives the status of a schema row', () => {
     assert.equal(getSchemaStatus({ selected: true, usable: true }), undefined);
     assert.equal(getSchemaStatus({ selected: false, usable: true }), undefined);
@@ -130,5 +167,13 @@ describe('schema options', () => {
     assert.equal(getSchemaStatus({ selected: true, usable: false, missing: true }), 'missing');
     assert.equal(getSchemaStatus({ selected: true, usable: true, change: 'adding' }), 'adding');
     assert.equal(getSchemaStatus({ usable: false, missing: true, change: 'removing' }), 'removing');
+    assert.equal(getSchemaStatus({ selected: true, usable: true, saved: true }), 'added');
+    assert.equal(getSchemaStatus({ selected: true, usable: false, saved: true }), 'invalid');
+    assert.equal(getSchemaStatus({
+      selected: true, usable: false, missing: true, saved: true,
+    }), 'missing');
+    assert.equal(getSchemaStatus({
+      selected: false, usable: true, saved: true, change: 'removing',
+    }), 'removing');
   });
 });

@@ -19,6 +19,10 @@
     content: '';
   }
 
+  &.positive::before {
+    background: var(--s2-green-800);
+  }
+
   &.notice::before {
     background: var(--s2-yellow-400);
   }

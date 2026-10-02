@@ -42,8 +42,9 @@ per-site sections later.
 - Deleting unpublishes the endpoint, so the engine stops serving it, then
   removes its document. If unpublishing fails, the endpoint is kept; delete
   again to retry.
-- The Schemas tab marks schemas that are invalid, not found, or being added or
-  removed, and links to the schema editor.
+- The Schemas tab marks schemas that are added to the saved endpoint,
+  invalid, not found, or being added or removed, and links to the schema
+  editor. The search matches these statuses too.
 - Users without write permission on the site see the app as view only.
 - The app asks for confirmation before it discards unsaved changes, whether on
   a hash change or on page unload.
