@@ -19,16 +19,18 @@ import { readFile } from 'node:fs/promises';
 import * as workflow from '../../../../tools/plugins/request-for-publish/workflow.js';
 
 describe('native workspace comparison adapter', () => {
-  it('selects document/live for authors before and after submission, preview/live for approvers', async () => {
-    assert.equal(typeof workflow.createWorkspaceActions, 'function');
+  it('dispatches synchronous undefined review actions without capability declarations', async () => {
     const calls = [];
     const workspace = workflow.createWorkspaceActions({
-      capabilities: { comparison: 1 },
-      actions: { openComparison: async (options) => { calls.push(options); return { ok: true }; } },
+      actions: {
+        openComparison: (options) => { calls.push(options); },
+        saveDocument: () => { throw new Error('Read-only review must not save'); },
+      },
     });
-    await workspace.review('request');
-    await workspace.review('approver');
-    await workspace.review('requester');
+    assert.equal(workspace.canCompare, true);
+    assert.equal(await workspace.review('request'), undefined);
+    assert.equal(await workspace.review('approver'), undefined);
+    assert.equal(await workspace.review('requester'), undefined);
     assert.deepEqual(calls, [
       { candidate: 'document', baseline: 'live' },
       { candidate: 'preview', baseline: 'live' },
@@ -36,73 +38,139 @@ describe('native workspace comparison adapter', () => {
     ]);
   });
 
-  it('does not confuse SDK method presence with host support', async () => {
-    assert.equal(typeof workflow.createWorkspaceActions, 'function');
-    let called = false;
+  it('does not wait for or validate a comparison reply', async () => {
     const workspace = workflow.createWorkspaceActions({
-      actions: { openComparison: async () => { called = true; } },
+      actions: { openComparison: () => new Promise(() => {}) },
     });
-    assert.equal(workspace.canCompare, false);
-    await assert.rejects(workspace.review('request'), { message: 'The editor could not complete this action.' });
-    assert.equal(called, false);
+    assert.equal(await workspace.review('request'), undefined);
   });
 
-  it('surfaces host failures and refuses a comparison host without a save handshake', async () => {
-    assert.equal(typeof workflow.createWorkspaceActions, 'function');
+  it('detects only missing SDK methods, without claiming host support', async () => {
+    const workspace = workflow.createWorkspaceActions();
+    assert.equal(workspace.canCompare, false);
+    await assert.rejects(workspace.review('request'), /editor could not complete/i);
+    assert.equal(await workspace.close(), undefined);
+    const present = workflow.createWorkspaceActions({ actions: { openComparison: () => {} } });
+    assert.equal(present.canCompare, true);
+  });
+
+  it('dispatches synchronous undefined close actions with safe catch callers', async () => {
+    let closed = 0;
     const workspace = workflow.createWorkspaceActions({
-      capabilities: { comparison: 1, saveDocument: 1 },
+      actions: { closeComparison: () => { closed += 1; } },
+    });
+    const result = workspace.close();
+    assert.equal(typeof result.catch, 'function');
+    assert.equal(await result, undefined);
+    assert.equal(closed, 1);
+  });
+
+  it('reports synchronous dispatch errors through the async adapter', async () => {
+    const workspace = workflow.createWorkspaceActions({
       actions: {
-        openComparison: async () => ({ ok: false, error: 'stale-context' }),
-        saveDocument: async () => ({ ok: false, error: 'save-failed' }),
+        openComparison: () => { throw new Error('Open dispatch failed'); },
+        closeComparison: () => { throw new Error('Close dispatch failed'); },
       },
     });
-    await assert.rejects(workspace.review('request'), /stale-context/);
-    await assert.rejects(workspace.save(), /save-failed/);
-    const compareOnly = workflow.createWorkspaceActions({
-      capabilities: { comparison: 1 },
-      actions: { openComparison: async () => ({ ok: true }) },
-    });
-    await assert.rejects(compareOnly.save(), { message: 'The editor could not complete this action.' });
+    await assert.rejects(workspace.review('request'), /Open dispatch failed/);
+    await assert.rejects(workspace.close(), /Close dispatch failed/);
   });
 
-  it('skips the save handshake on hosts without native comparison or save support', async () => {
-    let called = false;
+  it('requires a confirmed save independently of comparison method presence', async () => {
+    let saved = 0;
     const workspace = workflow.createWorkspaceActions({
-      actions: { saveDocument: async () => { called = true; return { ok: true }; } },
+      actions: { saveDocument: async () => { saved += 1; return { ok: true }; } },
     });
-    await workspace.save();
-    await workflow.createWorkspaceActions().save();
-    assert.equal(called, false);
+    assert.deepEqual(await workspace.save(), { ok: true });
+    assert.equal(saved, 1);
+    await assert.rejects(workflow.createWorkspaceActions().save(), /editor could not complete/i);
+    const compareOnly = workflow.createWorkspaceActions({ actions: { openComparison: () => {} } });
+    await assert.rejects(compareOnly.save(), /editor could not complete/i);
   });
 
-  it('does not include host rollout guidance in the panel', async () => {
-    const panel = await readFile(new URL('../../../../tools/plugins/request-for-publish/panel.js', import.meta.url), 'utf8');
-    assert.doesNotMatch(panel, /Native comparison is not available|updated Experience Workspace/);
+  it('rejects failed, missing and invalid save replies', async () => {
+    const failed = workflow.createWorkspaceActions({
+      actions: { saveDocument: async () => ({ ok: false, error: 'save-failed' }) },
+    });
+    await assert.rejects(failed.save(), /save-failed/);
+    await Promise.all([undefined, null, {}, { ok: 'true' }, { ok: 1 }].map(async (reply) => {
+      const workspace = workflow.createWorkspaceActions({
+        actions: { saveDocument: async () => reply },
+      });
+      await assert.rejects(workspace.save(), /unavailable/);
+    }));
   });
 
-  it('links the Page Status preview/live comparison for the delivered page path', () => {
-    const links = workflow.pageLinks({ org: 'example', site: 'site', path: '/drafts/page.html' });
-    const diff = new URL(links.diff);
-    assert.equal(`${diff.origin}${diff.pathname}`, 'https://tools.aem.live/tools/page-status/diff.html');
-    assert.deepEqual(Object.fromEntries(diff.searchParams), { org: 'example', site: 'site', path: '/drafts/page' });
+  it('does not retain capability declarations or an external comparator fallback', async () => {
+    const paths = ['request-for-publish.js', 'workflow.js', 'panel.js'];
+    const sources = await Promise.all(paths.map((path) => readFile(new URL(`../../../../tools/plugins/request-for-publish/${path}`, import.meta.url), 'utf8')));
+    sources.forEach((source) => {
+      assert.doesNotMatch(source, /capabilities|tools\.aem\.live|links\.diff/);
+    });
+    assert.equal(Object.hasOwn(workflow.pageLinks({ org: 'example', site: 'site', path: '/page' }), 'diff'), false);
   });
 });
 
 describe('save before preview sequencing', () => {
   const context = { org: 'example', site: 'site', path: '/page' };
-  it('waits for the editor save, then previews, then submits', async () => {
+  it('waits for editor confirmation before preview and request even without review', async () => {
     const calls = [];
+    let confirmSave;
+    const workspace = workflow.createWorkspaceActions({
+      actions: {
+        saveDocument: () => {
+          calls.push('save');
+          return new Promise((resolve) => { confirmSave = resolve; });
+        },
+        openComparison: () => { throw new Error('Submission must not open review'); },
+      },
+    });
+    const phases = [];
     const client = workflow.createClient({
       base: 'https://workflow.example',
-      beforePreview: async () => { calls.push('save'); },
+      beforePreview: () => workspace.save(),
       preview: async () => { calls.push('preview'); return new Response(''); },
       request: async () => { calls.push('submit'); return new Response('{}'); },
     });
-    await client.submit(context, 'note');
+    const submitting = client.submit(context, 'note', (phase) => phases.push(phase));
+    await Promise.resolve();
+    assert.deepEqual(calls, ['save']);
+    confirmSave({ ok: true });
+    await submitting;
     assert.deepEqual(calls, ['save', 'preview', 'submit']);
+    assert.deepEqual(phases, ['Saving current edits…', 'Updating preview…', 'Sending request…']);
   });
 
-  it('does not preview or submit when save confirmation fails', async () => {
+  it('blocks preview and submission when the SDK save method is missing', async () => {
+    let calls = 0;
+    const client = workflow.createClient({
+      base: 'https://workflow.example',
+      beforePreview: () => workflow.createWorkspaceActions().save(),
+      preview: async () => { calls += 1; return new Response(''); },
+      request: async () => { calls += 1; return new Response('{}'); },
+    });
+    await assert.rejects(client.submit(context, 'note'), /editor could not complete/i);
+    assert.equal(calls, 0);
+  });
+
+  it('blocks preview and submission for failed or invalid save confirmations', async () => {
+    await Promise.all([undefined, null, {}, { ok: false, error: 'save-failed' }].map(async (reply) => {
+      let calls = 0;
+      const workspace = workflow.createWorkspaceActions({
+        actions: { saveDocument: async () => reply },
+      });
+      const client = workflow.createClient({
+        base: 'https://workflow.example',
+        beforePreview: () => workspace.save(),
+        preview: async () => { calls += 1; return new Response(''); },
+        request: async () => { calls += 1; return new Response('{}'); },
+      });
+      await assert.rejects(client.submit(context, 'note'));
+      assert.equal(calls, 0);
+    }));
+  });
+
+  it('blocks preview and submission after a rejected save', async () => {
     let calls = 0;
     const client = workflow.createClient({
       base: 'https://workflow.example',
@@ -114,15 +182,40 @@ describe('save before preview sequencing', () => {
     assert.equal(calls, 0);
   });
 
-  it('previews and submits on a host that cannot save', async () => {
-    const calls = [];
-    const client = workflow.createClient({
-      base: 'https://workflow.example',
-      beforePreview: () => workflow.createWorkspaceActions().save(),
-      preview: async () => { calls.push('preview'); return new Response(''); },
-      request: async () => { calls.push('submit'); return new Response('{}'); },
-    });
-    await client.submit(context, 'note');
-    assert.deepEqual(calls, ['preview', 'submit']);
+  it('fails closed when the client is missing a save gate or its confirmation', async () => {
+    await Promise.all([undefined, async () => undefined].map(async (beforePreview) => {
+      let calls = 0;
+      const client = workflow.createClient({
+        base: 'https://workflow.example',
+        beforePreview,
+        preview: async () => { calls += 1; return new Response(''); },
+        request: async () => { calls += 1; return new Response('{}'); },
+      });
+      await assert.rejects(client.submit(context, 'note'), /sav/i);
+      assert.equal(calls, 0);
+    }));
+  });
+
+  it('approves without saving or previewing for both intermediate and final steps', async () => {
+    const pending = { path: context.path, status: 'pending', requester: 'author@example.com' };
+    await Promise.all([false, true].map(async (final) => {
+      const calls = [];
+      const client = workflow.createClient({
+        base: 'https://workflow.example',
+        beforePreview: async () => { throw new Error('Approval must not save'); },
+        preview: async () => { throw new Error('Approval must not preview'); },
+        publish: async () => { calls.push('publish'); return new Response(''); },
+        request: async (href) => {
+          const route = new URL(href).pathname;
+          calls.push(route);
+          return new Response(JSON.stringify(route.endsWith('/approve')
+            ? { approved: [context.path] } : { requests: [pending] }));
+        },
+      });
+      await client.approve(context, pending, { step: 1, final });
+      assert.deepEqual(calls, final
+        ? ['/api/requests', 'publish', '/api/requests/approve']
+        : ['/api/requests', '/api/requests/approve']);
+    }));
   });
 });

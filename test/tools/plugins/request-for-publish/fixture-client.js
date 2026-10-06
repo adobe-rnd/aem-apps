@@ -44,7 +44,7 @@ export default function fixture(options = {}) {
     if (state.hold === phase) await new Promise((resolve) => { state.release = resolve; });
   };
   const client = createClient({
-    beforePreview: options.beforePreview,
+    beforePreview: options.beforePreview || (async () => ({ ok: true })),
     base: 'https://workflow.example',
     request: async (href, opts = {}) => {
       const url = new URL(href);

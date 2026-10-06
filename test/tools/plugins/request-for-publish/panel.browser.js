@@ -16,6 +16,7 @@
 /* eslint-disable no-await-in-loop */
 import '../../../../tools/plugins/request-for-publish/panel.js';
 import fixture, { singleStep } from './fixture-client.js';
+import { createWorkspaceActions } from '../../../../tools/plugins/request-for-publish/workflow.js';
 
 const ctx = { org: 'example', site: 'website', path: '/drafts/page' };
 const row = {
@@ -43,7 +44,7 @@ const tick = async () => {
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 const text = () => current.shadowRoot.textContent;
 const button = (label) => [...current.shadowRoot.querySelectorAll('button')].find((item) => item.textContent.trim() === label);
-const pageStatus = () => current.shadowRoot.querySelector('a.review-link[href^="https://tools.aem.live/tools/page-status/diff.html"]');
+const noExternalComparison = () => !current.shadowRoot.querySelector('a[href*="tools.aem.live"]');
 const stepClass = (index) => current.shadowRoot.querySelectorAll('.step')[index - 1]?.className;
 // Step bodies are collapsed by default; expand before asserting on their contents.
 const open = async (index = 1) => { current.toggle(index); await tick(); };
@@ -77,8 +78,14 @@ await test('moving focus between the comparison and rail does not restart workfl
 });
 await test('native review keeps the note and maps the current workflow view', async () => {
   await show();
-  const views = [];
-  current.workspace = { canCompare: true, review: async (view) => { views.push(view); } };
+  const selections = [];
+  const workspace = createWorkspaceActions({
+    actions: {
+      openComparison: (selection) => { selections.push(selection); },
+      saveDocument: () => { throw new Error('Review must not save'); },
+    },
+  });
+  current.workspace = workspace;
   await tick();
   const note = current.shadowRoot.querySelector('#comment');
   note.value = 'Keep this review note';
@@ -86,48 +93,40 @@ await test('native review keeps the note and maps the current workflow view', as
   assert(button('Review changes'), 'native review button missing');
   button('Review changes').click();
   await tick();
-  assert(views[0] === 'request', 'wrong author comparison view');
+  assert(selections[0].candidate === 'document' && selections[0].baseline === 'live', 'wrong author comparison selection');
+  assert(!current.shadowRoot.querySelector('.notice.error'), 'undefined dispatch result treated as failure');
   assert(current.shadowRoot.querySelector('#comment').value === 'Keep this review note', 'note lost');
   assert(text().includes('current document'), 'author input label is wrong');
   await show({ ...base, approvable: [row] });
-  current.workspace = { canCompare: true, review: async (view) => { views.push(view); } };
+  current.workspace = workspace;
   await open();
   assert(!current.shadowRoot.querySelector('a[href*="tools.aem.live"]'), 'external comparison shown alongside native review');
   button('Review changes').click();
   await tick();
-  assert(views[1] === 'approver', 'wrong approver comparison view');
+  assert(selections[1].candidate === 'preview' && selections[1].baseline === 'live', 'wrong approver comparison selection');
   assert(text().includes('current preview'), 'approver input label is wrong');
   await show({ ...base, own: [row] });
-  current.workspace = { canCompare: true, review: async (view) => { views.push(view); } };
+  current.workspace = workspace;
   await open();
   button('Review changes').click();
   await tick();
-  assert(views[2] === 'requester', 'wrong pending author comparison view');
+  assert(selections[2].candidate === 'document' && selections[2].baseline === 'live', 'wrong pending author comparison selection');
   assert(text().includes('current document'), 'pending author input label is wrong');
   assert(text().includes(row.comment), 'pending request note lost');
 });
-await test('without native comparison, Review changes links to the Page Status preview comparison', async () => {
-  await show();
-  current.workspace = { canCompare: false };
-  await tick();
-  const before = pageStatus();
-  assert(before?.textContent.includes('Review changes'), 'fallback link missing before submission');
-  assert(new URL(before.href).searchParams.get('path') === ctx.path, 'fallback compares the wrong page before submission');
-  assert(text().includes('Compare the latest preview with the live page.'), 'fallback before submission not labelled as the latest preview');
-  assert(!button('Review changes'), 'disabled native action shown before submission');
-  const pending = async (data, view) => {
+await test('missing comparison method disables review without an external fallback', async () => {
+  const check = async (data, pending = false) => {
     await show(data);
-    await open();
-    const link = pageStatus();
-    assert(link?.textContent.includes('Review changes'), `${view} fallback link missing`);
-    assert(new URL(link.href).searchParams.get('path') === ctx.path, `${view} fallback compares the wrong page`);
-    assert(link.target === '_blank', `${view} fallback replaces the editor`);
-    assert(text().includes('Compare the preview awaiting approval with the live page.'), `${view} fallback not labelled as the preview awaiting approval`);
-    assert(!button('Review changes'), `${view} disabled native action shown`);
+    current.workspace = createWorkspaceActions();
+    if (pending) await open();
+    else await tick();
+    assert(button('Review changes')?.disabled, 'missing comparator did not disable review');
+    assert(noExternalComparison(), 'external comparison fallback remains');
   };
-  await pending({ ...base, own: [row] }, 'requester');
-  await pending({ ...base, approvable: [row] }, 'approver');
-  await pending({ ...base, steps: twoSteps, page: [row] }, 'observer');
+  await check(base);
+  await check({ ...base, own: [row] }, true);
+  await check({ ...base, approvable: [row] }, true);
+  await check({ ...base, steps: twoSteps, page: [row] }, true);
 });
 await test('late comparison failure cannot overwrite a new page context', async () => {
   await show();
@@ -349,6 +348,78 @@ const enter = (selector, value) => {
 };
 const mutations = (calls) => calls.filter((call) => call.body || ['preview', 'publish'].includes(call.route));
 
+await test('local integration: save gates preview and submission without opening review', async () => {
+  let saved;
+  let saves = 0;
+  let closes = 0;
+  const workspace = createWorkspaceActions({
+    actions: {
+      saveDocument: () => {
+        saves += 1;
+        return new Promise((resolve) => { saved = resolve; });
+      },
+      openComparison: () => { throw new Error('Submission must not open comparison'); },
+      closeComparison: () => { closes += 1; },
+    },
+  });
+  const { client, calls } = fixture({ beforePreview: () => workspace.save() });
+  await show(base, client);
+  current.workspace = workspace;
+  await tick();
+  button('Request publish').click();
+  await tick();
+  assert(saves === 1 && mutations(calls).length === 0, 'save did not gate content operations');
+  assert(text().includes('Saving current edits…'), 'save progress missing');
+  saved({ ok: true });
+  await tick();
+  assert(mutations(calls).map((call) => call.route).join(',') === 'preview,/api/requests', 'wrong submit order');
+  assert(text().includes('Request sent.') && closes === 1, 'undefined close result broke success');
+});
+await test('local integration: missing, failed or invalid save blocks preview and request', async () => {
+  const workspaces = [
+    createWorkspaceActions(),
+    createWorkspaceActions({ actions: { saveDocument: async () => undefined } }),
+    createWorkspaceActions({ actions: { saveDocument: async () => ({ ok: false, error: 'save-failed' }) } }),
+  ];
+  for (let index = 0; index < workspaces.length; index += 1) {
+    const workspace = workspaces[index];
+    const { client, calls } = fixture({ beforePreview: () => workspace.save() });
+    await show(base, client);
+    current.workspace = workspace;
+    await tick();
+    enter('#comment', 'Keep the unsent note.');
+    button('Request publish').click();
+    await tick();
+    assert(mutations(calls).length === 0, 'save failure allowed content operations');
+    assert(current.shadowRoot.querySelector('.notice.error'), 'save failure not reported');
+    assert(current.shadowRoot.querySelector('#comment').value === 'Keep the unsent note.', 'save failure lost note');
+  }
+});
+await test('local integration: read-only review and approval never save or preview', async () => {
+  let saves = 0;
+  let reviews = 0;
+  const workspace = createWorkspaceActions({
+    actions: {
+      saveDocument: async () => { saves += 1; return { ok: true }; },
+      openComparison: (selection) => {
+        assert(selection.candidate === 'preview' && selection.baseline === 'live', 'wrong approval comparison');
+        reviews += 1;
+      },
+      closeComparison: () => {},
+    },
+  });
+  const { client, calls } = fixture({ role: 'approver', rows: [row], beforePreview: () => workspace.save() });
+  await show(base, client);
+  current.workspace = workspace;
+  await open();
+  button('Review changes').click();
+  await tick();
+  button('Approve & publish').click();
+  await tick();
+  assert(reviews === 1 && saves === 0, 'review or approval saved the document');
+  assert(!calls.some((call) => call.route === 'preview'), 'approval updated preview');
+  assert(text().includes('Published. The publish request is complete.'), 'approval failed');
+});
 await test('local integration: request, approver review and successful publication', async () => {
   const { client, calls, state } = fixture();
   await show(base, client);
@@ -545,7 +616,7 @@ await test('a lone unlabelled step keeps the decisions inline', async () => {
   await show({ ...base, steps: untitledStep, approvable: [row] });
   assert(!current.shadowRoot.querySelector('.steps'), 'stepper shown for a single unlabelled step');
   assert(button('Approve & publish') && button('Reject…'), 'decisions missing without a stepper');
-  assert(pageStatus(), 'missing review link');
+  assert(button('Review changes')?.disabled && noExternalComparison(), 'missing native review control or external fallback remains');
   assert(text().includes(row.comment), 'author note missing');
   assert(/Pending approval/.test(text()), 'step counter shown for a single step');
 });
