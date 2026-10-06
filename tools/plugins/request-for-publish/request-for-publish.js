@@ -19,9 +19,7 @@ import { daFetch, setImsDetails } from 'https://da.live/nx/utils/daFetch.js';
 import { createClient, workerOrigin, createWorkspaceActions } from './workflow.js';
 import './panel.js';
 
-function makePanel({
-  context, token, actions, capabilities,
-}) {
+function makePanel({ context, token, actions }) {
   if (token) setImsDetails(token);
   const request = actions?.daFetch || daFetch;
   const content = (operation) => (page) => {
@@ -31,7 +29,7 @@ function makePanel({
   };
   const panel = document.createElement('request-for-publish');
   panel.context = context;
-  panel.workspace = createWorkspaceActions({ actions, capabilities });
+  panel.workspace = createWorkspaceActions({ actions });
   panel.client = createClient({
     base: workerOrigin(window.location),
     request,

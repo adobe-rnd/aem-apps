@@ -147,38 +147,36 @@ export function pageLinks(context, env, moduleUrl = import.meta.url) {
   const codeHost = new URL(moduleUrl).hostname;
   const ref = codeHost.match(/^([a-z0-9-]+)--aem-apps--adobe-rnd\.aem\.(?:page|live)$/)?.[1];
   if (ref && ref !== 'main') query.set('ref', ref);
-  const diff = new URL('https://tools.aem.live/tools/page-status/diff.html');
-  diff.search = new URLSearchParams({ org, site, path: delivered }).toString();
   return {
     preview: `https://main--${site}--${org}.aem.page${delivered}`,
     live: `https://main--${site}--${org}.aem.live${delivered}`,
-    diff: diff.href,
     inbox: `${INBOX}?${query}`,
     myRequests: `${INBOX}?${query}&requester=true`,
   };
 }
 
-export function createWorkspaceActions({ actions = {}, capabilities = {} } = {}) {
-  const supported = (capability, action) => capabilities[capability] === 1
-    && typeof actions[action] === 'function';
-  const invoke = async (capability, action, details) => {
-    if (!supported(capability, action)) {
-      throw new Error('The editor could not complete this action.');
-    }
-    const result = await actions[action](details);
-    if (!result?.ok) throw new Error(`Workspace action could not complete (${result?.error || 'unavailable'}).`);
-    return result;
+export function createWorkspaceActions({ actions = {} } = {}) {
+  const available = (action) => typeof actions[action] === 'function';
+  const requireAction = (action) => {
+    if (!available(action)) throw new Error('The editor could not complete this action.');
   };
-  const canCompare = supported('comparison', 'openComparison');
   return {
-    canCompare,
-    review: (view) => invoke('comparison', 'openComparison', {
-      candidate: view === 'approver' ? 'preview' : 'document', baseline: 'live',
-    }),
-    save: () => (canCompare || supported('saveDocument', 'saveDocument')
-      ? invoke('saveDocument', 'saveDocument') : Promise.resolve({ ok: false })),
-    close: () => (supported('comparison', 'closeComparison')
-      ? invoke('comparison', 'closeComparison') : Promise.resolve({ ok: false })),
+    canCompare: available('openComparison'),
+    async review(view) {
+      requireAction('openComparison');
+      actions.openComparison({
+        candidate: view === 'approver' ? 'preview' : 'document', baseline: 'live',
+      });
+    },
+    async save() {
+      requireAction('saveDocument');
+      const result = await actions.saveDocument();
+      if (result?.ok !== true) throw new Error(`Workspace action could not complete (${result?.error || 'unavailable'}).`);
+      return result;
+    },
+    async close() {
+      if (available('closeComparison')) actions.closeComparison();
+    },
   };
 }
 
@@ -310,10 +308,10 @@ export function createClient({
       };
     },
     async submit(context, comment, onPhase = () => {}) {
-      if (beforePreview) {
-        onPhase('Saving current edits…');
-        await beforePreview(context);
-      }
+      if (typeof beforePreview !== 'function') throw failure('The editor could not confirm current edits were saved.');
+      onPhase('Saving current edits…');
+      const saved = await beforePreview(context);
+      if (saved?.ok !== true) throw failure('The editor could not confirm current edits were saved.');
       onPhase('Updating preview…');
       await contentAction(preview, context, 'Preview');
       onPhase('Sending request…');

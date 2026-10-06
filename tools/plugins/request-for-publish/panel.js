@@ -288,18 +288,12 @@ class RequestForPublish extends LitElement {
 
   renderLinks() {
     const links = pageLinks(this.page, new URLSearchParams(window.location.search).get('env'));
-    const { view, request } = this.state;
+    const { view } = this.state;
     const native = this.workspace?.canCompare;
-    let hint = `Compare the current ${view === 'approver' ? 'preview' : 'document'} with the live page.`;
-    if (!native) {
-      hint = request
-        ? 'Compare the preview awaiting approval with the live page.'
-        : 'Compare the latest preview with the live page.';
-    }
+    const hint = `Compare the current ${view === 'approver' ? 'preview' : 'document'} with the live page.`;
     return html`<div class="review-links">
-      ${native ? html`<button class="review-link" ?disabled=${this.disabled}
-        @click=${this.reviewChanges}>${this._reviewing ? 'Opening comparison…' : 'Review changes'}</button>` : nothing}
-      ${native ? nothing : html`<a class="review-link" href=${links.diff} target="_blank" rel="noopener noreferrer">Review changes <span aria-hidden="true">↗</span></a>`}
+      <button class="review-link" ?disabled=${this.disabled || !native}
+        @click=${this.reviewChanges}>${this._reviewing ? 'Opening comparison…' : 'Review changes'}</button>
       <a href=${links.preview} target="_blank" rel="noopener noreferrer">Open preview <span aria-hidden="true">↗</span></a>
       <p class="hint">${hint}</p>
     </div>`;
