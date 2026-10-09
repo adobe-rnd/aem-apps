@@ -7,7 +7,7 @@ A collection of Adobe owned apps & plugins for Experience Workspace & Document A
 |-----------|------|-------------|-------------|-------------|
 | **DA Permissions** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/da-permissions/da-permissions | `tools/apps/da-permissions` | Manage DA Permissions and configuration access  | App |
 | **MSM** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/msm/msm | `tools/apps/msm` `tools/plugins/msm` | Manage multi-site manager for your org/site  | App & Plugin |
-| **Request Publish** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-request-inbox | `tools/apps/publish-reqquest-inbox` `tools/plugins/publish-reqquest-inbox` | Manage request publish approvals, etc  | App & Plugin |
+| **Request Publish** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox | `tools/apps/publish-requests-inbox/publish-requests-inbox` `tools/plugins/publish-requests-inbox/publish-requests-inbox` | Manage request publish approvals, etc  | App & Plugin |
 | **Anchor Links** |https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/anchor-links/anchor-links.html | `tools/plugins/anchor-links` | Lightweight plugin to create anchor links  | Plugin |
 | **Fragment Picker** |https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/fragments/fragments.html | `tools/plugins/fragments` | Browse and insert fragments with live preview  | Plugin |
 | **Developer** |https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/developer/developer.html | `tools/plugins/developer` | Switch the preview branch (`?ref=`) for the current page  | Plugin |
