@@ -65,6 +65,44 @@ function toDaItem(org, repo, folderPath, item) {
   return { path, name: name.substring(0, dot), ext: name.substring(dot + 1) };
 }
 
+// api.aem.live rate-limits bursts (429, then x-retry-after: 60) and its 429
+// carries no CORS headers, so in the browser it surfaces as a network error.
+const HLX6_CONCURRENCY = 4;
+const RETRY_DELAYS_MS = [1000, 2000, 4000];
+
+const defaultSleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+function createLimiter(max) {
+  let active = 0;
+  const waiting = [];
+  return async (task) => {
+    if (active >= max) await new Promise((resolve) => { waiting.push(resolve); });
+    active += 1;
+    try {
+      return await task();
+    } finally {
+      active -= 1;
+      waiting.shift()?.();
+    }
+  };
+}
+
+async function fetchWithRetry(fetchFn, url, opts, sleep) {
+  for (let attempt = 0; ; attempt += 1) {
+    let resp;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      resp = await fetchFn(url, opts);
+    } catch (e) {
+      resp = null;
+    }
+    const retryable = !resp || resp.status === 429 || resp.status === 503;
+    if (!retryable || attempt >= RETRY_DELAYS_MS.length) return resp;
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(RETRY_DELAYS_MS[attempt]);
+  }
+}
+
 /**
  * Creates a folder lister for the site.
  * @param {object} opts
@@ -73,20 +111,26 @@ function toDaItem(org, repo, folderPath, item) {
  * @param {string} opts.token IMS token from the DA SDK
  * @param {boolean} opts.hlx6 list from the source bus instead of admin.da.live
  * @param {Function} [opts.fetchFn]
+ * @param {number} [opts.concurrency] max parallel source bus requests
+ * @param {Function} [opts.sleep] delay function used between retries
  * @returns {(path: string) => Promise<{ok: boolean, items: object[]}>} lists a
  *   site-relative folder path ('' for the root, '/fragments', ...)
  */
 export function createLister({
   org, repo, token, hlx6, fetchFn = fetch,
+  concurrency = HLX6_CONCURRENCY, sleep = defaultSleep,
 }) {
   const headers = { Authorization: `Bearer ${token}` };
+  const limit = createLimiter(concurrency);
   return async (path) => {
     const folderPath = (path || '').replace(/\/$/, '');
     const url = hlx6
       ? `${AEM_API}/${org}/sites/${repo}/source${folderPath}/`
       : `${DA_ADMIN}/list/${org}/${repo}${folderPath}`;
-    const resp = await fetchFn(url, { headers });
-    if (!resp.ok) return { ok: false, items: [] };
+    const resp = hlx6
+      ? await limit(() => fetchWithRetry(fetchFn, url, { headers }, sleep))
+      : await fetchFn(url, { headers });
+    if (!resp?.ok) return { ok: false, items: [] };
     const body = await resp.json();
     if (!Array.isArray(body)) return { ok: true, items: [] };
     if (!hlx6) return { ok: true, items: body };

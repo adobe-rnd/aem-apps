@@ -110,6 +110,71 @@ describe('createLister (hlx6)', () => {
   });
 });
 
+describe('createLister (hlx6 rate limit)', () => {
+  const noSleep = async () => {};
+
+  it('keeps at most `concurrency` requests in flight', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const fetchFn = async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => { setTimeout(resolve, 5); });
+      inFlight -= 1;
+      return fakeResponse({ body: [] });
+    };
+    const list = createLister({
+      org: 'acme', repo: 'web', token: 't', hlx6: true, fetchFn, concurrency: 3, sleep: noSleep,
+    });
+
+    await Promise.all(Array.from({ length: 12 }, (_, i) => list(`/f${i}`)));
+
+    assert.equal(maxInFlight, 3);
+  });
+
+  it('retries a 429 and returns the later result', async () => {
+    let calls = 0;
+    const fetchFn = async () => {
+      calls += 1;
+      return calls < 3
+        ? fakeResponse({ status: 429 })
+        : fakeResponse({ body: [{ name: 'a.html', 'content-type': 'text/html' }] });
+    };
+    const list = createLister({
+      org: 'acme', repo: 'web', token: 't', hlx6: true, fetchFn, sleep: noSleep,
+    });
+
+    const { ok, items } = await list('/fragments');
+
+    assert.equal(ok, true);
+    assert.equal(items.length, 1);
+    assert.equal(calls, 3);
+  });
+
+  it('retries a network error (a 429 without CORS headers looks like one)', async () => {
+    let calls = 0;
+    const fetchFn = async () => {
+      calls += 1;
+      if (calls === 1) throw new TypeError('Failed to fetch');
+      return fakeResponse({ body: [] });
+    };
+    const list = createLister({
+      org: 'acme', repo: 'web', token: 't', hlx6: true, fetchFn, sleep: noSleep,
+    });
+
+    assert.deepEqual(await list('/fragments'), { ok: true, items: [] });
+  });
+
+  it('gives up as not ok instead of throwing', async () => {
+    const fetchFn = async () => { throw new TypeError('Failed to fetch'); };
+    const list = createLister({
+      org: 'acme', repo: 'web', token: 't', hlx6: true, fetchFn, sleep: noSleep,
+    });
+
+    assert.deepEqual(await list('/fragments'), { ok: false, items: [] });
+  });
+});
+
 describe('createLister (legacy DA)', () => {
   it('passes admin.da.live list items through unchanged', async () => {
     const daItems = [{ path: '/acme/web/fragments/a.html', name: 'a', ext: 'html' }];
