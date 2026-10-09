@@ -124,12 +124,28 @@ describe('createLister (hlx6 rate limit)', () => {
       return fakeResponse({ body: [] });
     };
     const list = createLister({
-      org: 'acme', repo: 'web', token: 't', hlx6: true, fetchFn, concurrency: 3, sleep: noSleep,
+      org: 'acme', repo: 'web', token: 't', hlx6: true, fetchFn, concurrency: 3, minIntervalMs: 0, sleep: noSleep,
     });
 
     await Promise.all(Array.from({ length: 12 }, (_, i) => list(`/f${i}`)));
 
     assert.equal(maxInFlight, 3);
+  });
+
+  it('spaces request starts to stay under the per-project rate limit', async () => {
+    const starts = [];
+    const fetchFn = async () => {
+      starts.push(Date.now());
+      return fakeResponse({ body: [] });
+    };
+    const list = createLister({
+      org: 'acme', repo: 'web', token: 't', hlx6: true, fetchFn, minIntervalMs: 20, sleep: noSleep,
+    });
+
+    await Promise.all(Array.from({ length: 5 }, (_, i) => list(`/f${i}`)));
+
+    const gaps = starts.slice(1).map((t, i) => t - starts[i]);
+    assert.ok(gaps.every((gap) => gap >= 18), `gaps ${gaps}`);
   });
 
   it('retries a 429 and returns the later result', async () => {

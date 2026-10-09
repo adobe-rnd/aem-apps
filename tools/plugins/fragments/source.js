@@ -65,19 +65,26 @@ function toDaItem(org, repo, folderPath, item) {
   return { path, name: name.substring(0, dot), ext: name.substring(dot + 1) };
 }
 
-// api.aem.live rate-limits bursts (429, then x-retry-after: 60) and its 429
-// carries no CORS headers, so in the browser it surfaces as a network error.
+// The admin API (api.aem.live, incl. source listing) is limited to 10 requests
+// per second per project (https://www.aem.live/docs/limits). Its 429 carries no
+// CORS headers, so in the browser it surfaces as a network error.
 const HLX6_CONCURRENCY = 4;
+const HLX6_MIN_INTERVAL_MS = 125; // at most 8 request starts per second
 const RETRY_DELAYS_MS = [1000, 2000, 4000];
 
 const defaultSleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
-function createLimiter(max) {
+function createLimiter(max, minIntervalMs) {
   let active = 0;
+  let nextStart = 0;
   const waiting = [];
   return async (task) => {
     if (active >= max) await new Promise((resolve) => { waiting.push(resolve); });
     active += 1;
+    const now = Date.now();
+    const wait = Math.max(0, nextStart - now);
+    nextStart = Math.max(now, nextStart) + minIntervalMs;
+    if (wait) await defaultSleep(wait);
     try {
       return await task();
     } finally {
@@ -112,16 +119,17 @@ async function fetchWithRetry(fetchFn, url, opts, sleep) {
  * @param {boolean} opts.hlx6 list from the source bus instead of admin.da.live
  * @param {Function} [opts.fetchFn]
  * @param {number} [opts.concurrency] max parallel source bus requests
+ * @param {number} [opts.minIntervalMs] min time between source bus request starts
  * @param {Function} [opts.sleep] delay function used between retries
  * @returns {(path: string) => Promise<{ok: boolean, items: object[]}>} lists a
  *   site-relative folder path ('' for the root, '/fragments', ...)
  */
 export function createLister({
   org, repo, token, hlx6, fetchFn = fetch,
-  concurrency = HLX6_CONCURRENCY, sleep = defaultSleep,
+  concurrency = HLX6_CONCURRENCY, minIntervalMs = HLX6_MIN_INTERVAL_MS, sleep = defaultSleep,
 }) {
   const headers = { Authorization: `Bearer ${token}` };
-  const limit = createLimiter(concurrency);
+  const limit = createLimiter(concurrency, minIntervalMs);
   return async (path) => {
     const folderPath = (path || '').replace(/\/$/, '');
     const url = hlx6
