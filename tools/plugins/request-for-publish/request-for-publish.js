@@ -60,6 +60,13 @@ function sampleRUM(checkpoint, data = {}) {
   } catch { /* noop */ }
 }
 
+function getContextOrgSite(context = {}) {
+  return {
+    org: context.org || '',
+    site: context.site || context.repo || '',
+  };
+}
+
 class RequestForPublishPlugin extends LitElement {
   static properties = {
     context: { attribute: false },
@@ -115,7 +122,7 @@ class RequestForPublishPlugin extends LitElement {
 
   get previewUrl() {
     // Build AEM preview URL: https://main--<site>--<org>.aem.page/<path>
-    const { org, repo: site } = this.context;
+    const { org, site } = getContextOrgSite(this.context);
     const path = this.contentPath?.replace(/\/index$/, '') || '';
     return `https://main--${site}--${org}.aem.page${path}`;
   }
@@ -123,7 +130,7 @@ class RequestForPublishPlugin extends LitElement {
   get diffUrl() {
     // Use the Page Status diff tool with embed mode for clean iframe display
     // https://tools.aem.live/tools/page-status/diff.html?org={org}&site={site}&path={path}&embed=true
-    const { org, repo: site } = this.context;
+    const { org, site } = getContextOrgSite(this.context);
     return `https://tools.aem.live/tools/page-status/diff.html?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}&path=${encodeURIComponent(this.contentPath)}`;
   }
 
@@ -134,7 +141,7 @@ class RequestForPublishPlugin extends LitElement {
   }
 
   get requesterPendingRequestsUrl() {
-    const { org, repo: site } = this.context;
+    const { org, site } = getContextOrgSite(this.context);
     return `https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}&requester=true`;
   }
 
@@ -145,7 +152,7 @@ class RequestForPublishPlugin extends LitElement {
     this._userEmail = await getUserEmail(this.token);
 
     // Detect approvers for this content path
-    const { org, repo: site } = this.context;
+    const { org, site } = getContextOrgSite(this.context);
     const result = await resolveWorkflowConfig(this.contentPath, org, site, this.token);
     this._approvers = result.approvers || [];
     this._cc = result.cc || [];
@@ -203,7 +210,7 @@ class RequestForPublishPlugin extends LitElement {
       return;
     }
 
-    const { org, repo: site } = this.context;
+    const { org, site } = getContextOrgSite(this.context);
 
     // Preview content first so .aem.page is up to date for approvers
     this._submitPhase = 'previewing';
@@ -240,7 +247,7 @@ class RequestForPublishPlugin extends LitElement {
     this._isResending = true;
     this._message = null;
 
-    const { org, repo: site } = this.context;
+    const { org, site } = getContextOrgSite(this.context);
 
     const result = await resendPublishRequest(
       {
@@ -269,7 +276,7 @@ class RequestForPublishPlugin extends LitElement {
     this._isWithdrawing = true;
     this._message = null;
 
-    const { org, repo: site } = this.context;
+    const { org, site } = getContextOrgSite(this.context);
 
     const result = await withdrawPublishRequest(
       org, site, this.contentPath, this._userEmail, this.token,
@@ -522,7 +529,8 @@ customElements.define('request-for-publish', RequestForPublishPlugin);
     const { context, token } = await DA_SDK;
     console.log('[Request Publish Plugin] Got SDK context:', context);
 
-    const { org, repo: site, path } = context;
+    const { org, site } = getContextOrgSite(context);
+    const { path } = context;
 
     // Create and append the component
     const cmp = document.createElement('request-for-publish');
@@ -548,7 +556,8 @@ export default async function init({ context, token }) {
     searchEnabled: false,
     panel: {
       render: (container) => {
-        const { org, repo: site, path } = context;
+        const { org, site } = getContextOrgSite(context);
+        const { path } = context;
         const cmp = document.createElement('request-for-publish');
         cmp.context = context;
         cmp.path = `/${org}/${site}${path}`;

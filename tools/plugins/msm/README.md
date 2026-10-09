@@ -58,7 +58,7 @@ plugin into your own repo:
 
 | title              | path                                                                                    | icon                                                                  | experience |
 | ------------------ | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------- |
-| Multi-site Manager | `https://main--da-blog-tools--aemsites.aem.live/tools/plugins/msm/msm.html`              | `https://da.live/blocks/edit/img/S2_Icon_GlobeGrid_20_N.svg#S2_Icon_GlobeGrid` | dialog     |
+| Multi-site Manager | `https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/msm/msm.html`              | `https://da.live/blocks/edit/img/S2_Icon_GlobeGrid_20_N.svg#S2_Icon_GlobeGrid` | dialog     |
 
 **Option B: vendored copy in your repo**
 

@@ -38,7 +38,9 @@ The repository provides the basic structure, blocks, and configuration needed to
 ├── scripts/         # JavaScript libraries and utilities
     ├── aem.js           # Core AEM Library for Edge Delivery page decoration logic (NEVER MODIFY THIS FILE)
     ├── scripts.js       # Global JavaScript utilities, main entry point for page decoration
-    └── delayed.js       # Delayed functionality such as martech loading
+    ├── delayed.js       # Delayed functionality such as martech loading
+    ├── utils.js         # RESERVED: da-nx's nx2 IMS resolution contract, not general-purpose utilities — see in-file comment before editing
+    └── nx-shim/         # RESERVED: shim loaded via utils.js's getNx() — see scripts/utils.js and scripts/nx-shim/utils/ims.js comments
 ├── fonts/           # Web fonts
 ├── icons/           # SVG icons
 ├── head.html        # Global HTML head content

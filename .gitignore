@@ -8,6 +8,7 @@ helix-importer-ui
 *.bak
 .idea
 .claude/
+.github/copilot/settings.local.json
 docs/
 
 # Ensure these files are tracked
