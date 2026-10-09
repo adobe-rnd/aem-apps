@@ -1,0 +1,35 @@
+<!--
+ Copyright 2026 Adobe Systems Incorporated
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Publish request panel fixture</title>
+  <script type="importmap">{"imports":{"da-lit":"/tools/deps/lit/dist/index.js"}}</script>
+  <link rel="stylesheet" href="https://da.live/nx2/styles/styles.css">
+  <style>
+    body { margin: 0; padding: 24px; background: light-dark(#eee, #171717); }
+    #mount { width: 400px; max-width: 100%; min-height: 480px; background: light-dark(white, #222); border-radius: 12px; }
+    #results { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <main id="mount"></main>
+  <pre id="results" role="status">Running…</pre>
+  <script type="module" src="/test/tools/plugins/request-for-publish/panel.browser.js"></script>
+</body>
+</html>
