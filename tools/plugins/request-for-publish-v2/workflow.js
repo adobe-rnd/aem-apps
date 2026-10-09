@@ -18,7 +18,9 @@ const WORKERS = {
   ci: 'https://publish-requests-ci.aem-poc-lab.workers.dev',
   local: 'http://localhost:8787',
 };
-const INBOX = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox';
+const INBOX = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox-v2/publish-requests-inbox';
+// Multi-step approvals are served by the worker's v2 API only.
+const API = '/api/v2';
 
 export function workerOrigin(location) {
   const local = ['localhost', '127.0.0.1'].includes(location.hostname);
@@ -62,9 +64,11 @@ export function parseStepLog(value) {
 /**
  * Merges the worker's step definitions with a request's approval log into the
  * render model. `state` is approved | skipped | current | upcoming; a step with
- * no approvers is skipped, and `complete` means every step is done.
+ * no approvers is skipped, and `complete` means every step is done. A pending
+ * request's position comes from the worker's `stepInfo`; it is only derived
+ * here when there is none (before submission).
  */
-export function buildStepModel(definitions = [], logValue = '') {
+export function buildStepModel(definitions = [], logValue = '', stepInfo = null) {
   const log = parseStepLog(logValue);
   const steps = definitions.map((definition, position) => {
     const index = definition.index || position + 1;
@@ -81,12 +85,15 @@ export function buildStepModel(definitions = [], logValue = '') {
     };
   });
 
-  // Highest approved step + 1, skipping approver-less and already-logged steps.
-  let current = log.reduce((max, entry) => Math.max(max, entry.step), 0) + 1;
-  while (current <= steps.length) {
-    const step = steps[current - 1];
-    if (step.approvers.length > 0 && !step.approvedBy) break;
-    current += 1;
+  let current = Number.isInteger(stepInfo?.current) && stepInfo.current > 0 ? stepInfo.current : 0;
+  if (!current) {
+    // Highest approved step + 1, skipping approver-less and already-logged steps.
+    current = log.reduce((max, entry) => Math.max(max, entry.step), 0) + 1;
+    while (current <= steps.length) {
+      const step = steps[current - 1];
+      if (step.approvers.length > 0 && !step.approvedBy) break;
+      current += 1;
+    }
   }
 
   steps.forEach((step) => {
@@ -131,7 +138,7 @@ export function deriveView(context, data) {
   // Approver eligibility stays worker-authoritative; an older worker omits the flag.
   const canApprove = !!approvable.length && approvable[0].canApproveNow !== false;
   return {
-    ...buildStepModel(data.steps, request?.step),
+    ...buildStepModel(data.steps, request?.step, request?.stepInfo),
     view,
     request,
     canApprove,
@@ -241,7 +248,7 @@ export function createClient({
   }
 
   async function list(context, extra = {}) {
-    const result = await json('/api/requests', context, null, extra);
+    const result = await json(`${API}/requests`, context, null, extra);
     if (!Array.isArray(result.requests)) throw failure('The workflow service returned an invalid request list.');
     return result.requests;
   }
@@ -267,7 +274,7 @@ export function createClient({
   }
 
   async function record(context, step) {
-    const result = await json('/api/requests/approve', context, { paths: [context.path], step });
+    const result = await json(`${API}/requests/approve`, context, { paths: [context.path], step });
     if (result.stale?.includes(context.path)) {
       throw failure('This request was advanced by someone else. Refresh before taking action.');
     }
@@ -281,8 +288,8 @@ export function createClient({
   return {
     async load(context) {
       const [configResult, people, own, approvable, page] = await Promise.all([
-        json('/api/config', context),
-        json('/api/approvers', context, null, { path: context.path }),
+        json(`${API}/config`, context),
+        json(`${API}/approvers`, context, null, { path: context.path }),
         list(context, { role: 'requester' }),
         list(context),
         list(context, { role: 'page', path: context.path }),
@@ -315,22 +322,22 @@ export function createClient({
       onPhase('Updating preview…');
       await contentAction(preview, context, 'Preview');
       onPhase('Sending request…');
-      return json('/api/requests', context, { path: context.path, comment });
+      return json(`${API}/requests`, context, { path: context.path, comment });
     },
     async resend(context, expected) {
       await revalidate(context, expected, 'requester');
-      return json('/api/requests', context, { path: context.path, comment: expected.comment || '', resend: true });
+      return json(`${API}/requests`, context, { path: context.path, comment: expected.comment || '', resend: true });
     },
     async withdraw(context, expected) {
       await revalidate(context, expected, 'requester');
-      const result = await json('/api/requests/withdraw', context, { path: context.path });
+      const result = await json(`${API}/requests/withdraw`, context, { path: context.path });
       if (result.success !== true) throw failure('This request is no longer pending. Refresh to check its status.');
       return result;
     },
     async reject(context, expected, reason) {
       if (!reason.trim()) throw failure('Enter a reason for rejection.');
       await revalidate(context, expected);
-      const result = await json('/api/requests/reject', context, { path: context.path, reason: reason.trim() });
+      const result = await json(`${API}/requests/reject`, context, { path: context.path, reason: reason.trim() });
       if (result.success !== true) throw failure('This request is no longer pending. Refresh to check its status.');
       return result;
     },

@@ -65,7 +65,7 @@ function getOpts(token, method = 'GET', body = null) {
 /**
  * Extract a setting value from the publish-workflow-settings tab. Display-only;
  * the worker enforces the authoritative rules.
- * @param {Object} config - The workflow config returned by GET /api/config
+ * @param {Object} config - The workflow config returned by GET /api/v2/config
  * @param {string} key - The setting key to look up
  * @returns {string|null} The setting value or null if not found
  */
@@ -125,7 +125,7 @@ export function getLiveHostFromConfig(org, site, config) {
  */
 export async function fetchAccentSettings(org, site, token) {
   try {
-    const url = `${getWorkerUrl()}/api/config?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
+    const url = `${getWorkerUrl()}/api/v2/config?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
     const resp = await fetch(url, getOpts(token, 'GET'));
     if (!resp.ok) return { accentColor: null, accentColorHover: null };
     const { config } = await resp.json();
@@ -280,7 +280,7 @@ export async function pollJobStatus(jobSelfUrl, maxWaitMs = 60000, intervalMs = 
  * @returns {Promise<string[]>} Deduplicated authorized emails (empty if none).
  */
 export async function getApproversForPath(org, site, path, token) {
-  const url = `${getWorkerUrl()}/api/approvers?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}&path=${encodeURIComponent(path)}`;
+  const url = `${getWorkerUrl()}/api/v2/approvers?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}&path=${encodeURIComponent(path)}`;
   const resp = await fetch(url, getOpts(token, 'GET'));
   if (!resp.ok) return [];
   const { approvers = [], cc = [] } = await resp.json();
@@ -292,7 +292,7 @@ export async function getApproversForPath(org, site, path, token) {
  * @param {string} userEmail - Unused; the worker derives identity from the token.
  */
 export async function getAllPendingRequestsForUser(org, site, userEmail, token) {
-  const url = `${getWorkerUrl()}/api/requests?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
+  const url = `${getWorkerUrl()}/api/v2/requests?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
   const resp = await fetch(url, getOpts(token, 'GET'));
   if (!resp.ok) return [];
   const { requests = [] } = await resp.json();
@@ -304,7 +304,7 @@ export async function getAllPendingRequestsForUser(org, site, userEmail, token) 
  * @param {string} userEmail - Unused; the worker scopes by the token identity.
  */
 export async function getAllPendingRequestsByRequester(org, site, userEmail, token) {
-  const url = `${getWorkerUrl()}/api/requests?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}&role=requester`;
+  const url = `${getWorkerUrl()}/api/v2/requests?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}&role=requester`;
   const resp = await fetch(url, getOpts(token, 'GET'));
   if (!resp.ok) return [];
   const { requests = [] } = await resp.json();
@@ -326,16 +326,37 @@ export async function checkPublishRequest(org, site, path, token) {
 }
 
 /**
- * Record approval for already-published paths (sheet removal + author email).
- * The publish itself is done client-side via publishContent/bulkPublishContent.
- * @param {string[]} paths - Paths that were successfully published.
- * @returns {Promise<Object>} { success, approved, notFound, unauthorized }
+ * True when approving `request` completes the workflow and so must publish
+ * first. Intermediate approvals only advance the step log.
  */
-export async function approveRequests(org, site, paths, token) {
+export function isFinalStep(request) {
+  const info = request?.stepInfo;
+  // An older worker sends no step info: treat every request as single-step.
+  if (!info) return true;
+  if (!info.lastStaffed) return false;
+  return info.current >= info.lastStaffed;
+}
+
+/**
+ * Record approval of the step `paths` are waiting on. For the final step the
+ * caller must publish first; intermediate steps publish nothing.
+ * @param {number} [step] - The step the caller believes is current.
+ * @returns {Promise<Object>} { success, approved, notFound, unauthorized, stale, completed }
+ */
+export async function approveRequests(org, site, paths, token, step) {
   try {
-    const resp = await fetch(`${getWorkerUrl()}/api/requests/approve`, getOpts(token, 'POST', { org, site, paths }));
+    const body = { org, site, paths };
+    if (step !== undefined) body.step = step;
+    const resp = await fetch(`${getWorkerUrl()}/api/v2/requests/approve`, getOpts(token, 'POST', body));
     const result = await resp.json();
     if (!resp.ok) return { success: false, error: result.error || 'Failed to record approval' };
+    if (result.stale?.length) {
+      return {
+        success: false,
+        error: 'This request was advanced by someone else. Refresh to see its current step.',
+        ...result,
+      };
+    }
     return { success: true, ...result };
   } catch (error) {
     console.error('Error recording approval:', error);
@@ -349,7 +370,7 @@ export async function approveRequests(org, site, paths, token) {
  */
 export async function rejectRequest(org, site, path, reason, token) {
   try {
-    const resp = await fetch(`${getWorkerUrl()}/api/requests/reject`, getOpts(token, 'POST', {
+    const resp = await fetch(`${getWorkerUrl()}/api/v2/requests/reject`, getOpts(token, 'POST', {
       org, site, path, reason,
     }));
     const result = await resp.json();
@@ -367,7 +388,7 @@ export async function rejectRequest(org, site, path, reason, token) {
  */
 export async function withdrawRequest(org, site, path, token) {
   try {
-    const resp = await fetch(`${getWorkerUrl()}/api/requests/withdraw`, getOpts(token, 'POST', { org, site, path }));
+    const resp = await fetch(`${getWorkerUrl()}/api/v2/requests/withdraw`, getOpts(token, 'POST', { org, site, path }));
     const result = await resp.json();
     if (!resp.ok) return { success: false, error: result.error || 'Failed to withdraw request' };
     return { success: true };
@@ -384,7 +405,7 @@ export async function withdrawRequest(org, site, path, token) {
  */
 export async function resendPublishRequest(org, site, path, requesterEmail, token) {
   try {
-    const resp = await fetch(`${getWorkerUrl()}/api/requests`, getOpts(token, 'POST', {
+    const resp = await fetch(`${getWorkerUrl()}/api/v2/requests`, getOpts(token, 'POST', {
       org, site, path, resend: true,
     }));
     const result = await resp.json();

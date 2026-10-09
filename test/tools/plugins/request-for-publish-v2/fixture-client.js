@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { createClient, buildStepModel } from '../../../../tools/plugins/request-for-publish/workflow.js';
+import { createClient, buildStepModel } from '../../../../tools/plugins/request-for-publish-v2/workflow.js';
 
 export const context = { org: 'example', site: 'website', path: '/drafts/page' };
 export const pending = {
@@ -54,7 +54,7 @@ export default function fixture(options = {}) {
       if (!body) {
         await wait('load');
         if (state.loadError) return response({ error: 'Request lookup failed.' }, state.loadError);
-        if (route === '/api/config') {
+        if (route === '/api/v2/config') {
           return response({
             config: {
               'publish-workflow-settings': {
@@ -66,14 +66,14 @@ export default function fixture(options = {}) {
             },
           });
         }
-        if (route === '/api/approvers') {
+        if (route === '/api/v2/approvers') {
           return response({
             approvers: state.noApprovers ? [] : ['reviewer@example.com'],
             cc: [],
             steps: state.noApprovers ? [] : state.steps,
           });
         }
-        if (route === '/api/requests') {
+        if (route === '/api/v2/requests') {
           const role = url.searchParams.get('role');
           if (role === 'page') return response({ requests: structuredClone(state.rows) });
           const own = role === 'requester';
@@ -81,13 +81,13 @@ export default function fixture(options = {}) {
           return response({ requests: allowed ? structuredClone(state.rows) : [] });
         }
       }
-      if (route === '/api/requests') {
+      if (route === '/api/v2/requests') {
         await wait('request');
         if (state.failRequest) return response({ error: 'Request notification failed.' }, 503);
         if (!body.resend) state.rows = [{ ...pending, path: page.path, comment: body.comment }];
         return response({ success: true });
       }
-      if (route === '/api/requests/approve') {
+      if (route === '/api/v2/requests/approve') {
         await wait('record');
         if (state.failRecord) {
           if (state.removeOnFailure) state.rows = [];
@@ -114,7 +114,7 @@ export default function fixture(options = {}) {
           completed: completed ? [page.path] : [],
         });
       }
-      if (['/api/requests/reject', '/api/requests/withdraw'].includes(route)) {
+      if (['/api/v2/requests/reject', '/api/v2/requests/withdraw'].includes(route)) {
         if (state.failDecision) return response({ error: 'Request update failed.' }, 503);
         state.rows = [];
         return response({ success: true });

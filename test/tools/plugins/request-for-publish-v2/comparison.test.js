@@ -16,7 +16,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import * as workflow from '../../../../tools/plugins/request-for-publish/workflow.js';
+import * as workflow from '../../../../tools/plugins/request-for-publish-v2/workflow.js';
 
 describe('native workspace comparison adapter', () => {
   it('dispatches synchronous undefined review actions without capability declarations', async () => {
@@ -103,7 +103,7 @@ describe('native workspace comparison adapter', () => {
 
   it('does not retain capability declarations or an external comparator fallback', async () => {
     const paths = ['request-for-publish.js', 'workflow.js', 'panel.js'];
-    const sources = await Promise.all(paths.map((path) => readFile(new URL(`../../../../tools/plugins/request-for-publish/${path}`, import.meta.url), 'utf8')));
+    const sources = await Promise.all(paths.map((path) => readFile(new URL(`../../../../tools/plugins/request-for-publish-v2/${path}`, import.meta.url), 'utf8')));
     sources.forEach((source) => {
       assert.doesNotMatch(source, /capabilities|tools\.aem\.live|links\.diff/);
     });
@@ -214,8 +214,8 @@ describe('save before preview sequencing', () => {
       });
       await client.approve(context, pending, { step: 1, final });
       assert.deepEqual(calls, final
-        ? ['/api/requests', 'publish', '/api/requests/approve']
-        : ['/api/requests', '/api/requests/approve']);
+        ? ['/api/v2/requests', 'publish', '/api/v2/requests/approve']
+        : ['/api/v2/requests', '/api/v2/requests/approve']);
     }));
   });
 });

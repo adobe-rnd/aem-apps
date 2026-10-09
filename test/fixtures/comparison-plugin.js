@@ -15,9 +15,9 @@
  */
 // eslint-disable-next-line import/no-unresolved, import/no-absolute-path
 import SDK from '/nx/utils/sdk.js';
-import '../../tools/plugins/request-for-publish/panel.js';
-import { createWorkspaceActions, normalizeContext } from '../../tools/plugins/request-for-publish/workflow.js';
-import fixture, { pending } from '../tools/plugins/request-for-publish/fixture-client.js';
+import '../../tools/plugins/request-for-publish-v2/panel.js';
+import { createWorkspaceActions, normalizeContext } from '../../tools/plugins/request-for-publish-v2/workflow.js';
+import fixture, { pending } from '../tools/plugins/request-for-publish-v2/fixture-client.js';
 
 const sdk = await SDK;
 const context = normalizeContext(sdk.context);

@@ -17,7 +17,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizeContext, deriveView, pageLinks, workerOrigin, createClient, buildStepModel,
-} from '../../../../tools/plugins/request-for-publish/workflow.js';
+} from '../../../../tools/plugins/request-for-publish-v2/workflow.js';
 
 const context = { org: 'example', site: 'website', path: '/drafts/page' };
 const pending = {
@@ -66,9 +66,9 @@ function fixture({
         const failed = fail(url, opts);
         if (failed) return failed;
       }
-      if (url.pathname === '/api/config') return response({ config: { 'publish-workflow-settings': { data: [] } } });
-      if (url.pathname === '/api/approvers') return response({ approvers: ['reviewer@example.com'], cc: [], steps: oneStep });
-      if (url.pathname === '/api/requests' && !opts.method) {
+      if (url.pathname === '/api/v2/config') return response({ config: { 'publish-workflow-settings': { data: [] } } });
+      if (url.pathname === '/api/v2/approvers') return response({ approvers: ['reviewer@example.com'], cc: [], steps: oneStep });
+      if (url.pathname === '/api/v2/requests' && !opts.method) {
         const role = url.searchParams.get('role');
         if (role === 'page') return response({ requests: page });
         return response({ requests: role === 'requester' ? own : approvable });
@@ -134,21 +134,21 @@ describe('context-derived views', () => {
     assert.equal(new URL(links.myRequests).searchParams.get('requester'), 'true');
   });
   it('opens the inbox on the plugin branch rather than the editor context ref', () => {
-    const moduleUrl = 'https://ewws0926--aem-apps--adobe-rnd.aem.page/tools/plugins/request-for-publish/workflow.js';
+    const moduleUrl = 'https://ewws0926--aem-apps--adobe-rnd.aem.page/tools/plugins/request-for-publish-v2/workflow.js';
     const links = pageLinks({
       org: 'scdemos', site: 'benp5', path: '/guided-journey.html', ref: 'main',
     }, undefined, moduleUrl);
     assert.equal(
       links.inbox,
-      'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox?org=scdemos&site=benp5&ref=ewws0926',
+      'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox-v2/publish-requests-inbox?org=scdemos&site=benp5&ref=ewws0926',
     );
     assert.equal(links.myRequests, `${links.inbox}&requester=true`);
     assert.equal(new URL(pageLinks(context, 'ci', moduleUrl).inbox).searchParams.get('env'), 'ci');
   });
   it('omits the inbox ref for main and non-AEM plugin origins', () => {
     [
-      'https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/request-for-publish/workflow.js',
-      'http://localhost:3000/tools/plugins/request-for-publish/workflow.js',
+      'https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/request-for-publish-v2/workflow.js',
+      'http://localhost:3000/tools/plugins/request-for-publish-v2/workflow.js',
     ].forEach((moduleUrl) => {
       const links = pageLinks({ ...context, ref: 'other-branch' }, undefined, moduleUrl);
       assert.equal(new URL(links.inbox).searchParams.has('ref'), false);
@@ -240,6 +240,15 @@ describe('approval steps', () => {
     const view = deriveView(context, data({ steps: twoSteps, approvable: [{ ...pending, step: 'legal@example.com:1:T' }], own: [pending] }));
     assert.equal(view.view, 'blocked');
   });
+  it('takes the current step from the worker stepInfo when present', () => {
+    // The worker is authoritative: its position wins over a client-side derivation of the log.
+    const model = buildStepModel(twoSteps, '', { current: 2 });
+    assert.equal(model.current, 2);
+    assert.deepEqual(model.steps.map((step) => step.state), ['upcoming', 'current']);
+    const row = { ...pending, step: '', stepInfo: { current: 3, count: 2, complete: true } };
+    assert.equal(deriveView(context, data({ steps: twoSteps, page: [row] })).complete, true);
+    assert.equal(buildStepModel(twoSteps, 'legal@example.com:1:T', { current: 0 }).current, 2);
+  });
 });
 
 describe('uninvolved viewers', () => {
@@ -287,11 +296,13 @@ describe('workflow operations', () => {
     assert.equal(loaded.own[0].requester, pending.requester);
     assert.deepEqual(loaded.approvers, ['reviewer@example.com']);
     // requester, approver and page-scoped reads
-    assert.equal(calls.filter((call) => call.path === '/api/requests').length, 3);
+    assert.equal(calls.filter((call) => call.path === '/api/v2/requests').length, 3);
+    // Every worker call goes to the v2 API; v1 routes stay for existing clients.
+    assert.equal(calls.every((call) => call.path.startsWith('/api/v2/')), true);
   });
   it('reads the site theme from the settings tab and leaves it empty when unset', async () => {
     const themed = fixture({
-      fail: (url) => url.pathname === '/api/config' && response({
+      fail: (url) => url.pathname === '/api/v2/config' && response({
         config: {
           'publish-workflow-settings': {
             data: [
@@ -311,7 +322,7 @@ describe('workflow operations', () => {
   });
   it('reads optional submission guidance from the settings tab in item order', async () => {
     const guided = fixture({
-      fail: (url) => url.pathname === '/api/config' && response({
+      fail: (url) => url.pathname === '/api/v2/config' && response({
         config: {
           'publish-workflow-settings': {
             data: [
@@ -342,11 +353,11 @@ describe('workflow operations', () => {
     assert.equal(plain.settings.guidance, null);
   });
   it('does not convert failed reads to an empty queue', async () => {
-    const { client } = fixture({ fail: (url) => url.pathname === '/api/requests' && response({ error: 'Session expired' }, 401) });
+    const { client } = fixture({ fail: (url) => url.pathname === '/api/v2/requests' && response({ error: 'Session expired' }, 401) });
     await assert.rejects(client.load(context), (error) => error.status === 401 && /Session expired/.test(error.message));
   });
   it('rejects a malformed successful queue response', async () => {
-    const { client } = fixture({ fail: (url) => url.pathname === '/api/requests' && response({}) });
+    const { client } = fixture({ fail: (url) => url.pathname === '/api/v2/requests' && response({}) });
     await assert.rejects(client.load(context), /request list/i);
   });
   it('does not submit if preview fails', async () => {
@@ -357,13 +368,13 @@ describe('workflow operations', () => {
   it('previews before submission and sends no client-selected identity or approvers', async () => {
     const { client, calls } = fixture();
     await client.submit(context, 'A note');
-    assert.deepEqual(calls.map((call) => call.path), ['preview', '/api/requests']);
+    assert.deepEqual(calls.map((call) => call.path), ['preview', '/api/v2/requests']);
     assert.deepEqual(calls[1].body, { ...context, comment: 'A note' });
   });
   it('revalidates before publishing and records only after success', async () => {
     const { client, calls } = fixture({ approvable: [pending] });
     await client.approve(context, pending, last);
-    assert.deepEqual(calls.map((call) => call.path), ['/api/requests', 'publish', '/api/requests/approve']);
+    assert.deepEqual(calls.map((call) => call.path), ['/api/v2/requests', 'publish', '/api/v2/requests/approve']);
     assert.equal(calls[2].body.step, 1);
   });
   it('does not publish a replaced or missing request', async () => {
@@ -394,7 +405,7 @@ describe('workflow operations', () => {
   it('approves an intermediate step without publishing', async () => {
     const { client, calls } = fixture({ approvable: [pending] });
     await client.approve(context, pending, { step: 1, final: false });
-    assert.deepEqual(calls.map((call) => call.path), ['/api/requests', '/api/requests/approve']);
+    assert.deepEqual(calls.map((call) => call.path), ['/api/v2/requests', '/api/v2/requests/approve']);
     assert.equal(calls[1].body.step, 1);
   });
   it('does not claim publication when an intermediate step fails to record', async () => {
@@ -413,7 +424,7 @@ describe('workflow operations', () => {
   it('retries completion without publishing a second time', async () => {
     const { client, calls } = fixture({ approvable: [pending] });
     await client.complete(context, pending, { step: 1 });
-    assert.deepEqual(calls.map((call) => call.path), ['/api/requests', '/api/requests/approve']);
+    assert.deepEqual(calls.map((call) => call.path), ['/api/v2/requests', '/api/v2/requests/approve']);
   });
   it('rejects empty reasons without a network request', async () => {
     const { client, calls } = fixture({ approvable: [pending] });
