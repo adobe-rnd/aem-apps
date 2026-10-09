@@ -854,12 +854,12 @@ class TaggerApp extends LitElement {
       return html`
         <div class="miller-item is-editing">
           <div class="miller-item-edit-row">
-            <sl-input class="tax-name-input" .value=${draft.name} @keydown=${(e) => this.handleEditKeydown(e)}
+            <sl-input type="text" class="tax-name-input" .value=${draft.name} @keydown=${(e) => this.handleEditKeydown(e)}
               @input=${(e) => this.updateDraft('name', e.target.value)}></sl-input>
             <button class="icon-btn" aria-label="Save changes" @click=${() => this.commitEditing()}>${icon('S2_Icon_Checkmark_20_N')}</button>
             <button class="icon-btn" aria-label="Cancel" @click=${() => this.cancelEditing()}>${icon('S2_Icon_Close_20_N')}</button>
           </div>
-          <sl-input class="tax-desc-input" placeholder="Description" .value=${draft.description}
+          <sl-input type="text" class="tax-desc-input" placeholder="Description" .value=${draft.description}
             @keydown=${(e) => this.handleEditKeydown(e)}
             @input=${(e) => this.updateDraft('description', e.target.value)}></sl-input>
         </div>
@@ -909,7 +909,8 @@ class TaggerApp extends LitElement {
             ${hasChildren ? html`<p class="modal-warning">This deletes everything under it.</p>` : nothing}
             <label class="search-field">
               <span>Type "${name}" to confirm</span>
-              <input type="text" .value=${typed} @input=${(e) => this.updateDeleteTyped(e.target.value)} />
+              <sl-input type="text" .value=${typed}
+                @input=${(e) => this.updateDeleteTyped(e.target.value)}></sl-input>
             </label>
             <div class="modal-actions">
               <sl-button class="pw-quiet-secondary" @click=${() => this.closeDeleteConfirm()}>Cancel</sl-button>
@@ -935,8 +936,8 @@ class TaggerApp extends LitElement {
           <div class="modal-body">
             <label class="search-field">
               <span>Path Filter <em>(recommended for large sites)</em></span>
-              <input type="text" placeholder="/news/2026" .value=${this._searchSubfolder}
-                @change=${(e) => { this._searchSubfolder = e.target.value; }} />
+              <sl-input type="text" placeholder="/news/2026" .value=${this._searchSubfolder}
+                @change=${(e) => { this._searchSubfolder = e.target.value; }}></sl-input>
             </label>
             <sl-button class="pw-fill-accent" @click=${() => this.handleSearch()}
               ?disabled=${this._searching}>
@@ -1016,12 +1017,12 @@ class TaggerApp extends LitElement {
             ` : nothing}
             <label class="search-field">
               <span>Namespace name</span>
-              <sl-input .value=${namespaceName}
+              <sl-input type="text" .value=${namespaceName}
                 @input=${(e) => this.updateConvertField('namespaceName', e.target.value)}></sl-input>
             </label>
             <label class="search-field">
               <span>Save new taxonomy to</span>
-              <sl-input .value=${targetPath}
+              <sl-input type="text" .value=${targetPath}
                 @input=${(e) => this.updateConvertField('targetPath', e.target.value)}></sl-input>
             </label>
             <div class="modal-actions">
