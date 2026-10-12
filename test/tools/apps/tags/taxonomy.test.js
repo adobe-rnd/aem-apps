@@ -252,3 +252,73 @@ describe('buildTaxonomySheet', () => {
     assert.deepEqual(sheet.data, [{ Namespace: 'NS' }]);
   });
 });
+
+describe('extra columns', () => {
+  // A site-specific `label`/`url` pair alongside the core four, the way a
+  // site might map each tag to a display label and a landing page.
+  const extraRows = [
+    {
+      Namespace: 'topic', Category: '', Tag: '', Description: 'Article topics', label: '', url: '',
+    },
+    {
+      Namespace: '', Category: '', Tag: 'savings', Description: '', label: 'Savings', url: 'https://example.com/savings/',
+    },
+    {
+      Namespace: '', Category: 'savings', Tag: 'accounts', Description: '', label: 'Savings Accounts', url: 'https://example.com/accounts/',
+    },
+  ];
+
+  it('keeps extra cells on each node and lists the extra columns on the tree', () => {
+    const tree = parseTaxonomyTree(extraRows);
+    assert.deepEqual(tree.extraColumns, ['label', 'url']);
+    const [savings] = tree.namespaces[0].children;
+    assert.deepEqual(savings.extra, { label: 'Savings', url: 'https://example.com/savings/' });
+    assert.deepEqual(savings.children[0].extra, { label: 'Savings Accounts', url: 'https://example.com/accounts/' });
+  });
+
+  it('does not add extra fields to sheets that have only the core columns', () => {
+    const tree = parseTaxonomyTree(rows);
+    assert.equal(tree.extraColumns, undefined);
+    assert.equal(tree.namespaces[0].extra, undefined);
+  });
+
+  it('round-trips extra columns unchanged', () => {
+    assert.deepEqual(serializeTaxonomyTree(parseTaxonomyTree(extraRows)), extraRows);
+  });
+
+  it('keeps extra cells through a rename and a move', () => {
+    const tree = parseTaxonomyTree(extraRows);
+    const [savings] = tree.namespaces[0].children;
+    const accounts = savings.children.pop();
+    accounts.name = 'savings-accounts';
+    tree.namespaces[0].children.push(accounts);
+
+    const row = serializeTaxonomyTree(tree).find((r) => r.Tag === 'savings-accounts');
+    assert.deepEqual(row, {
+      Namespace: '', Category: '', Tag: 'savings-accounts', Description: '', label: 'Savings Accounts', url: 'https://example.com/accounts/',
+    });
+  });
+
+  it('writes empty extra cells for nodes added in the app', () => {
+    const tree = parseTaxonomyTree(extraRows);
+    tree.namespaces[0].children.push({ name: 'new-tag', description: '', children: [] });
+    const row = serializeTaxonomyTree(tree).at(-1);
+    assert.deepEqual(row, {
+      Namespace: '', Category: '', Tag: 'new-tag', Description: '', label: '', url: '',
+    });
+  });
+
+  it('keeps extra cells from a Category-only row on that category', () => {
+    const tree = parseTaxonomyTree([
+      { Namespace: 'NS' },
+      { Category: 'Cat', url: 'https://example.com/cat/' },
+      { Category: 'Cat', Tag: 'Leaf' },
+    ]);
+    assert.deepEqual(tree.namespaces[0].children[0].extra, { url: 'https://example.com/cat/' });
+  });
+
+  it('lists extra columns after the core columns in the sheet envelope', () => {
+    const sheet = buildTaxonomySheet(serializeTaxonomyTree(parseTaxonomyTree(extraRows)));
+    assert.deepEqual(sheet.columns, ['Namespace', 'Category', 'Tag', 'Description', 'label', 'url']);
+  });
+});

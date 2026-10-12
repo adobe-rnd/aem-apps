@@ -47,6 +47,11 @@ here opens correctly in the plugin unmodified. Each `Tag` row carries its own
 namespace) rather than inheriting one from a preceding header row, so direct
 and categorized tags can be mixed in any order under a namespace.
 
+A site can add its own columns after these four, for example a `url` for each
+tag's landing page. The editor doesn't show or edit them, but saving keeps
+them: each value stays with its tag through renames and moves, and tags added
+in the app get empty cells. Fill those in by editing the sheet in DA.
+
 ## Bulk search assumption
 
 Matches tags found in a page's metadata block — a `Tags` row (case

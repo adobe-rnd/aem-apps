@@ -33,6 +33,12 @@
  * matching a real spreadsheet's rectangular shape, since AEM/DA's column
  * detection doesn't reliably pick up a column that's simply absent from a
  * row's keys.
+ *
+ * Sites may add their own columns (e.g. a per-tag `url` or a translated
+ * label). This app doesn't edit them, but keeps them: `parseTaxonomyTree`
+ * stores a row's extra cells on its node as `extra`, which travels with the
+ * node through renames and moves, and `serializeTaxonomyTree` writes them
+ * back after the four core columns, in the order they first appeared.
  */
 
 export const DA_ORIGIN = 'https://admin.da.live';
@@ -110,6 +116,16 @@ export async function fetchTaxonomySheet(daFetchFn, sourceUrl) {
 const TAXONOMY_COLUMNS = ['Namespace', 'Category', 'Tag', 'Description'];
 
 /**
+ * A row's cells outside the four core columns, or `null` if it has none.
+ * @param {Object} row Raw sheet row
+ * @returns {Object|null}
+ */
+function extraCells(row) {
+  const entries = Object.entries(row).filter(([key]) => !TAXONOMY_COLUMNS.includes(key));
+  return entries.length ? Object.fromEntries(entries) : null;
+}
+
+/**
  * True if `sheet` looks like taxonomy.json's schema — an empty sheet always
  * passes (nothing to contradict), otherwise its first row must carry one of
  * the expected columns. Catches sheets that exist but use an unrelated
@@ -158,8 +174,10 @@ export function convertLegacyTagList(rows, namespaceName) {
   return { namespaces: [{ name: namespaceName, description: '', children }] };
 }
 
-function createNode(name, description = '') {
-  return { name, description, children: [] };
+function createNode(name, description = '', extra = null) {
+  const node = { name, description, children: [] };
+  if (extra) node.extra = extra;
+  return node;
 }
 
 /**
@@ -170,10 +188,10 @@ function createNode(name, description = '') {
  * @param {string} description
  * @returns {Object} The namespace node
  */
-function ensureNamespace(namespaces, byName, name, description) {
+function ensureNamespace(namespaces, byName, name, description, extra) {
   let ns = byName.get(name);
   if (!ns) {
-    ns = createNode(name, description);
+    ns = createNode(name, description, extra);
     byName.set(name, ns);
     namespaces.push(ns);
   }
@@ -186,9 +204,10 @@ function ensureNamespace(namespaces, byName, name, description) {
  * @param {Object} namespace Namespace node to walk/create nodes under
  * @param {string} categoryPath e.g. `catlev1/catlev2`
  * @param {string} description Applied to the deepest (last) node in the path
+ * @param {Object|null} [extra] Extra cells, applied to the deepest node
  * @returns {Object} The deepest node in the path
  */
-function ensureCategoryPath(namespace, categoryPath, description) {
+function ensureCategoryPath(namespace, categoryPath, description, extra = null) {
   const parts = categoryPath.split('/').map((part) => part.trim()).filter(Boolean);
   let siblings = namespace.children;
   let node = null;
@@ -202,6 +221,7 @@ function ensureCategoryPath(namespace, categoryPath, description) {
     if (!siblings.includes(node)) siblings.push(node);
     siblings = node.children;
   });
+  if (node && extra) node.extra = { ...node.extra, ...extra };
   return node;
 }
 
@@ -213,17 +233,25 @@ function ensureCategoryPath(namespace, categoryPath, description) {
  * `Category` path it names (or directly under the namespace if omitted), and
  * a `Category`-only row just declares/describes that path, creating any
  * missing ancestors along the way.
+ *
+ * Cells outside the four core columns are kept on the row's node as `extra`,
+ * and their column names are listed on the tree as `extraColumns` (only
+ * when the sheet has any), so `serializeTaxonomyTree` can write them back.
  * @param {Object[]} rows Raw `taxonomy.json` `data` rows
- * @returns {{ namespaces: Object[] }} The parsed tree
+ * @returns {{ namespaces: Object[], extraColumns?: string[] }} The parsed tree
  */
 export function parseTaxonomyTree(rows = []) {
   const namespaces = [];
   const byName = new Map();
+  const extraColumns = new Set();
   let currentNamespace = null;
 
   rows.forEach((row) => {
+    const extra = extraCells(row);
+    if (extra) Object.keys(extra).forEach((key) => extraColumns.add(key));
+
     if (row.Namespace) {
-      currentNamespace = ensureNamespace(namespaces, byName, row.Namespace, row.Description || '');
+      currentNamespace = ensureNamespace(namespaces, byName, row.Namespace, row.Description || '', extra);
       return;
     }
     if (!currentNamespace) return;
@@ -232,15 +260,17 @@ export function parseTaxonomyTree(rows = []) {
       const target = row.Category
         ? ensureCategoryPath(currentNamespace, row.Category, '')
         : currentNamespace;
-      target.children.push(createNode(row.Tag, row.Description || ''));
+      target.children.push(createNode(row.Tag, row.Description || '', extra));
       return;
     }
     if (row.Category) {
-      ensureCategoryPath(currentNamespace, row.Category, row.Description || '');
+      ensureCategoryPath(currentNamespace, row.Category, row.Description || '', extra);
     }
   });
 
-  return { namespaces };
+  const tree = { namespaces };
+  if (extraColumns.size) tree.extraColumns = [...extraColumns];
+  return tree;
 }
 
 /**
@@ -251,16 +281,37 @@ export function parseTaxonomyTree(rows = []) {
  * reliably pick up a column (e.g. `Category`/`Tag`) that's simply absent
  * from enough rows' keys, even when it's declared in the sheet's `columns`
  * list. `parseTaxonomyTree` already treats an empty string the same as a
- * missing key (both are falsy), so this doesn't change parsing.
- * @param {{ namespace, category, tag, description }} parts
+ * missing key (both are falsy), so this doesn't change parsing. The same
+ * goes for extra columns: every row gets every one, empty where the node
+ * has no value.
+ * @param {{ namespace, category, tag, description, extra }} parts
+ * @param {string[]} extraColumns Site-specific columns, written after the core four
  * @returns {Object} A fully-keyed row
  */
 function makeRow({
-  namespace = '', category = '', tag = '', description = '',
-}) {
-  return {
+  namespace = '', category = '', tag = '', description = '', extra = null,
+}, extraColumns = []) {
+  const row = {
     Namespace: namespace, Category: category, Tag: tag, Description: description,
   };
+  extraColumns.forEach((column) => { row[column] = extra?.[column] ?? ''; });
+  return row;
+}
+
+/**
+ * Every extra column to write: the tree's `extraColumns` (sheet order), then
+ * any other key found on a node's `extra`.
+ * @param {{ namespaces: Object[], extraColumns?: string[] }} tree
+ * @returns {string[]}
+ */
+function collectExtraColumns(tree) {
+  const columns = new Set(tree?.extraColumns || []);
+  const walk = (node) => {
+    Object.keys(node.extra || {}).forEach((key) => columns.add(key));
+    node.children.forEach(walk);
+  };
+  (tree?.namespaces || []).forEach(walk);
+  return [...columns].filter((column) => !TAXONOMY_COLUMNS.includes(column));
 }
 
 /**
@@ -270,18 +321,23 @@ function makeRow({
  * directly under the namespace), rather than relying on a preceding header
  * row. A category's row looks exactly like a tag's, then its children (if
  * any) follow as their own rows — a category is only a tag with children,
- * not a different row shape.
- * @param {{ namespaces: Object[] }} tree
+ * not a different row shape. Each node's `extra` cells are written back in
+ * the tree's extra columns.
+ * @param {{ namespaces: Object[], extraColumns?: string[] }} tree
  * @returns {Object[]} Flat sheet rows
  */
 export function serializeTaxonomyTree(tree) {
   const rows = [];
+  const extraColumns = collectExtraColumns(tree);
 
   const serializeChildren = (children, ancestorPath) => {
     children.forEach((child) => {
       rows.push(makeRow({
-        category: ancestorPath.join('/'), tag: child.name, description: child.description,
-      }));
+        category: ancestorPath.join('/'),
+        tag: child.name,
+        description: child.description,
+        extra: child.extra,
+      }, extraColumns));
       if (child.children.length > 0) {
         serializeChildren(child.children, [...ancestorPath, child.name]);
       }
@@ -289,7 +345,9 @@ export function serializeTaxonomyTree(tree) {
   };
 
   (tree?.namespaces || []).forEach((namespace) => {
-    rows.push(makeRow({ namespace: namespace.name, description: namespace.description }));
+    rows.push(makeRow({
+      namespace: namespace.name, description: namespace.description, extra: namespace.extra,
+    }, extraColumns));
     serializeChildren(namespace.children, []);
   });
 
@@ -337,17 +395,20 @@ export function flattenTaxonomyTags(tree) {
  * Wraps flat rows in AEM's single-sheet JSON envelope
  * (https://www.aem.live/developer/spreadsheets#single-sheet-format).
  * `:type: 'sheet'` is required — without it, admin rejects the sheet on
- * preview/publish with "invalid sheet; unknown type".
+ * preview/publish with "invalid sheet; unknown type". `columns` lists the
+ * four core columns, then any extra column the rows carry.
  * @param {Object[]} rows
  * @returns {Object}
  */
 export function buildTaxonomySheet(rows) {
+  const columns = new Set(TAXONOMY_COLUMNS);
+  rows.forEach((row) => Object.keys(row).forEach((key) => columns.add(key)));
   return {
     total: rows.length,
     limit: rows.length,
     offset: 0,
     data: rows,
-    columns: ['Namespace', 'Category', 'Tag', 'Description'],
+    columns: [...columns],
     ':type': 'sheet',
   };
 }
