@@ -680,20 +680,24 @@ class TaggerApp extends LitElement {
 
   // Hidden until the sheet exists. While there are unsaved changes the link
   // is disabled, so edits made in the sheet aren't overwritten by the Save
-  // still to come; the hint says so in visible text, not just a tooltip.
+  // still to come. The tooltip shows on hover and on keyboard focus.
   renderSheetLink() {
     const url = this.sheetUrl();
     if (!url || !this._sheetExists) return nothing;
     const link = this._dirty
-      ? html`<span class="sheet-link is-disabled" aria-disabled="true">Open sheet</span>`
-      : html`<a class="sheet-link" href=${url} target="_blank" rel="noopener">Open sheet</a>`;
-    const hint = this._dirty
+      ? html`<span class="sheet-link is-disabled" aria-disabled="true"
+          aria-describedby="sheet-link-tip">Open sheet</span>`
+      : html`<a class="sheet-link" href=${url} target="_blank" rel="noopener"
+          aria-describedby="sheet-link-tip">Open sheet</a>`;
+    const tip = this._dirty
       ? 'Save before editing the sheet.'
-      : 'For columns not shown here. Load again after editing it.';
+      : 'Edit extra columns in the sheet. Reload this app before saving again.';
     return html`
       <span class="sheet-link-group">
         ${link}
-        <span class="sheet-link-hint">${hint}</span>
+        <button type="button" class="sheet-link-info" aria-label="About Open sheet"
+          aria-describedby="sheet-link-tip">i</button>
+        <span class="sheet-link-tip" id="sheet-link-tip" role="tooltip">${tip}</span>
       </span>
     `;
   }
