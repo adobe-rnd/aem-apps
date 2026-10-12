@@ -141,7 +141,7 @@ export function deriveView(context, data) {
 
 export function pluginRef(moduleUrl) {
   const { hostname } = new URL(moduleUrl);
-  const ref = hostname.match(/^([a-z0-9-]+)--aem-apps--adobe-rnd\.aem\.(?:page|live)$/)?.[1];
+  const ref = hostname.match(/^([a-z0-9-]+)--aem-apps--adobe-rnd\.(?:aem\.(?:page|live)|preview\.da\.live)$/)?.[1];
   return ref && ref !== 'main' ? ref : null;
 }
 
