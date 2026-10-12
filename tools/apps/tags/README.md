@@ -50,7 +50,10 @@ and categorized tags can be mixed in any order under a namespace.
 A site can add its own columns after these four, for example a `url` for each
 tag's landing page. The editor doesn't show or edit them, but saving keeps
 them: each value stays with its tag through renames and moves, and tags added
-in the app get empty cells. Fill those in by editing the sheet in DA.
+in the app get empty cells. Fill those in by editing the sheet in DA. **Open
+sheet**, next to Save and Publish, opens it in DA's sheet editor. Save in the
+app before switching to the sheet, then **Load** again afterward, so a later
+Save here doesn't overwrite the sheet edits.
 
 ## Bulk search assumption
 

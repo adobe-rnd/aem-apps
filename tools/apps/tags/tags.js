@@ -652,6 +652,13 @@ class TaggerApp extends LitElement {
     return `https://da.live/edit#/${this._org}/${this._site}${clean}`;
   }
 
+  // DA's sheet editor for the loaded taxonomy, for columns this app doesn't
+  // edit. Uses `_taxonomyLocation`, which may be a sheet shared from another site.
+  sheetUrl() {
+    const { org, repo, path } = this._taxonomyLocation;
+    return `https://da.live/sheet#/${org}/${repo}${path.replace(/\.json$/, '')}`;
+  }
+
   previewUrl(path) {
     const clean = path.replace(/\.html$/, '').replace(/\/index$/, '') || '/';
     return `https://main--${this._site}--${this._org}.aem.page${clean}`;
@@ -731,6 +738,10 @@ class TaggerApp extends LitElement {
           </sl-button>
           ${this._dirty ? html`<span class="dirty-hint">Unsaved changes (dots mark what changed) — publish is disabled until you save.</span>` : nothing}
           ${this.renderMessage()}
+          <a class="sheet-link" href=${this.sheetUrl()} target="_blank" rel="noopener"
+            title="Edit columns this app doesn't show. Save here first, and Load again after editing the sheet.">
+            Open sheet
+          </a>
         </div>
         <div class="miller-panel">
           ${this.renderItemToolbar()}
