@@ -143,6 +143,15 @@ describe('context-derived views', () => {
     assert.equal(links.myRequests, `${links.inbox}&requester=true`);
     assert.equal(new URL(pageLinks(context, 'ci', moduleUrl).inbox).searchParams.get('env'), 'ci');
   });
+  it('keeps the plugin branch when the module is served from the DA code preview', () => {
+    // Cross-origin hosts (the browse status list) import the module from preview.da.live,
+    // the code host that sends CORS headers for da.live editors.
+    const moduleUrl = 'https://ewdemo--aem-apps--adobe-rnd.preview.da.live/tools/plugins/request-for-publish/plugin.js?env=ci';
+    const inbox = new URL(pageLinks(context, 'ci', moduleUrl).inbox);
+    assert.equal(inbox.origin, 'https://ewdemo--da-live--adobe.aem.live');
+    assert.equal(inbox.searchParams.get('ref'), 'ewdemo');
+    assert.equal(inbox.searchParams.get('nx'), 'ewdemo');
+  });
   it('omits the inbox ref for main and non-AEM plugin origins', () => {
     [
       'https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/request-for-publish/workflow.js',
