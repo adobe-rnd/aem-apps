@@ -16,6 +16,7 @@ import {
   hasTaxonomySchema,
   isLegacyTagList,
   convertLegacyTagList,
+  parseDaSourceUrl,
 } from './taxonomy.js';
 import { icon } from './icons.js';
 
@@ -77,6 +78,10 @@ class TaggerApp extends LitElement {
     _org: { state: true },
     _site: { state: true },
     _taxonomyLocation: { state: true },
+    // True once the sheet exists in DA source (loaded, or saved here) — the
+    // Open sheet link stays hidden until then, since anything entered in a
+    // brand-new sheet would be overwritten by the app's first Save.
+    _sheetExists: { state: true },
     _tree: { state: true },
     _dirty: { state: true },
     _saving: { state: true },
@@ -127,6 +132,7 @@ class TaggerApp extends LitElement {
     this._org = '';
     this._site = '';
     this._taxonomyLocation = null;
+    this._sheetExists = false;
     this._tree = { namespaces: [] };
     this._dirty = false;
     this._saving = false;
@@ -214,6 +220,7 @@ class TaggerApp extends LitElement {
 
     const location = resolveTaxonomyLocation(org, site, taxonomyPath);
     this._taxonomyLocation = location;
+    this._sheetExists = false;
     this._org = org;
     this._site = site;
     this._orgValue = org;
@@ -240,6 +247,7 @@ class TaggerApp extends LitElement {
     }
 
     this._tree = parseTaxonomyTree(Array.isArray(sheet?.data) ? sheet.data : []);
+    this._sheetExists = ok;
     this._state = 'loaded';
     if (!ok) {
       this._message = {
@@ -272,6 +280,7 @@ class TaggerApp extends LitElement {
 
     this._saving = false;
     if (result.success) {
+      this._sheetExists = true;
       this._dirty = false;
       this._dirtyNodes = new Set();
       this._message = { type: 'success', text: 'Saved.' };
@@ -281,7 +290,7 @@ class TaggerApp extends LitElement {
   }
 
   async handlePublish() {
-    if (this._publishing || this._dirty) return;
+    if (this._publishing || this._dirty || !this.canPublish()) return;
     this._publishing = true;
     this._message = null;
 
@@ -298,6 +307,12 @@ class TaggerApp extends LitElement {
     this._message = live.success
       ? { type: 'success', text: 'Published.' }
       : { type: 'error', text: `Publish failed (${live.status || live.error}).` };
+  }
+
+  // Preview/publish need a site to run on, which a taxonomy URL outside DA
+  // source doesn't have (see `resolveTaxonomyLocation`).
+  canPublish() {
+    return !!this._taxonomyLocation?.org;
   }
 
   // ---- Tree editing ----
@@ -632,6 +647,7 @@ class TaggerApp extends LitElement {
 
     const { rows } = this._legacyConvert;
     this._taxonomyLocation = location;
+    this._sheetExists = false;
     this._taxonomyPathValue = location.path;
     this._tree = convertLegacyTagList(rows, name);
     this._dirty = true;
@@ -653,10 +669,33 @@ class TaggerApp extends LitElement {
   }
 
   // DA's sheet editor for the loaded taxonomy, for columns this app doesn't
-  // edit. Uses `_taxonomyLocation`, which may be a sheet shared from another site.
+  // edit. Built from the URL the app loads and saves, which may be a sheet
+  // shared from another site; `null` when that isn't a DA source URL.
   sheetUrl() {
-    const { org, repo, path } = this._taxonomyLocation;
+    const source = parseDaSourceUrl(this._taxonomyLocation?.sourceUrl);
+    if (!source) return null;
+    const { org, repo, path } = source;
     return `https://da.live/sheet#/${org}/${repo}${path.replace(/\.json$/, '')}`;
+  }
+
+  // Hidden until the sheet exists. While there are unsaved changes the link
+  // is disabled, so edits made in the sheet aren't overwritten by the Save
+  // still to come; the hint says so in visible text, not just a tooltip.
+  renderSheetLink() {
+    const url = this.sheetUrl();
+    if (!url || !this._sheetExists) return nothing;
+    const link = this._dirty
+      ? html`<span class="sheet-link is-disabled" aria-disabled="true">Open sheet</span>`
+      : html`<a class="sheet-link" href=${url} target="_blank" rel="noopener">Open sheet</a>`;
+    const hint = this._dirty
+      ? 'Save before editing the sheet.'
+      : 'For columns not shown here. Load again after editing it.';
+    return html`
+      <span class="sheet-link-group">
+        ${link}
+        <span class="sheet-link-hint">${hint}</span>
+      </span>
+    `;
   }
 
   previewUrl(path) {
@@ -733,15 +772,13 @@ class TaggerApp extends LitElement {
             ${this._saving ? 'Saving…' : 'Save'}
           </sl-button>
           <sl-button class="pw-quiet-secondary" @click=${() => this.handlePublish()}
-            ?disabled=${this._publishing || this._dirty}>
+            ?disabled=${this._publishing || this._dirty || !this.canPublish()}>
             ${this._publishing ? 'Publishing…' : 'Publish'}
           </sl-button>
           ${this._dirty ? html`<span class="dirty-hint">Unsaved changes (dots mark what changed) — publish is disabled until you save.</span>` : nothing}
+          ${this.canPublish() ? nothing : html`<span class="dirty-hint">Publish is only available for taxonomies in DA source.</span>`}
           ${this.renderMessage()}
-          <a class="sheet-link" href=${this.sheetUrl()} target="_blank" rel="noopener"
-            title="Edit columns this app doesn't show. Save here first, and Load again after editing the sheet.">
-            Open sheet
-          </a>
+          ${this.renderSheetLink()}
         </div>
         <div class="miller-panel">
           ${this.renderItemToolbar()}

@@ -5,6 +5,8 @@ import {
   serializeTaxonomyTree,
   flattenTaxonomyTags,
   buildTaxonomySheet,
+  parseDaSourceUrl,
+  resolveTaxonomyLocation,
 } from '../../../../tools/apps/tags/taxonomy.js';
 
 // Sparse rows (only the keys relevant to that row) — parsing must tolerate
@@ -317,8 +319,80 @@ describe('extra columns', () => {
     assert.deepEqual(tree.namespaces[0].children[0].extra, { url: 'https://example.com/cat/' });
   });
 
+  it('does not let blank cells on a Category-only row overwrite existing values', () => {
+    // DA rows carry every column, so a Category-only row after the category's
+    // own Tag row has empty cells for anything it doesn't set.
+    const tree = parseTaxonomyTree([
+      {
+        Namespace: 'NS', Category: '', Tag: '', Description: '', url: '',
+      },
+      {
+        Namespace: '', Category: '', Tag: 'cat', Description: '', url: 'https://example.com/cat/',
+      },
+      {
+        Namespace: '', Category: 'cat', Tag: '', Description: 'cat desc', url: '',
+      },
+    ]);
+    const [cat] = tree.namespaces[0].children;
+    assert.equal(cat.description, 'cat desc');
+    assert.deepEqual(cat.extra, { url: 'https://example.com/cat/' });
+  });
+
   it('lists extra columns after the core columns in the sheet envelope', () => {
     const sheet = buildTaxonomySheet(serializeTaxonomyTree(parseTaxonomyTree(extraRows)));
     assert.deepEqual(sheet.columns, ['Namespace', 'Category', 'Tag', 'Description', 'label', 'url']);
+  });
+});
+
+describe('parseDaSourceUrl', () => {
+  it('splits a DA source URL into org, repo and path', () => {
+    assert.deepEqual(
+      parseDaSourceUrl('https://admin.da.live/source/org/site/shared/taxonomy.json'),
+      { org: 'org', repo: 'site', path: '/shared/taxonomy.json' },
+    );
+  });
+
+  it('ignores a query string and hash', () => {
+    assert.deepEqual(
+      parseDaSourceUrl('https://admin.da.live/source/org/site/taxonomy.json?x=1#y'),
+      { org: 'org', repo: 'site', path: '/taxonomy.json' },
+    );
+  });
+
+  it('returns null for URLs that are not DA source URLs, or not URLs', () => {
+    assert.equal(parseDaSourceUrl('https://example.com/taxonomy.json'), null);
+    assert.equal(parseDaSourceUrl('https://admin.da.live/source/org/site'), null);
+    assert.equal(parseDaSourceUrl('/taxonomy.json'), null);
+    assert.equal(parseDaSourceUrl(undefined), null);
+  });
+});
+
+describe('resolveTaxonomyLocation', () => {
+  it('defaults to /taxonomy.json on the current site', () => {
+    assert.deepEqual(resolveTaxonomyLocation('org', 'site', ''), {
+      org: 'org', repo: 'site', path: '/taxonomy.json', sourceUrl: 'https://admin.da.live/source/org/site/taxonomy.json',
+    });
+  });
+
+  it('resolves a bare path on the current site', () => {
+    assert.deepEqual(resolveTaxonomyLocation('org', 'site', 'docs/taxonomy.json'), {
+      org: 'org', repo: 'site', path: '/docs/taxonomy.json', sourceUrl: 'https://admin.da.live/source/org/site/docs/taxonomy.json',
+    });
+  });
+
+  it('targets the site named in a DA source URL, without its query string', () => {
+    const url = 'https://admin.da.live/source/other/shared/taxonomy.json?x=1';
+    assert.deepEqual(resolveTaxonomyLocation('org', 'site', url), {
+      org: 'other', repo: 'shared', path: '/taxonomy.json', sourceUrl: url,
+    });
+  });
+
+  it('does not fall back to the current site for a URL outside DA source', () => {
+    // Regression: preview/publish used to target the current site's
+    // /taxonomy.json while load/save used the given URL.
+    const url = 'https://example.com/taxonomy.json';
+    assert.deepEqual(resolveTaxonomyLocation('org', 'site', url), {
+      org: null, repo: null, path: url, sourceUrl: url,
+    });
   });
 });

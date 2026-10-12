@@ -46,16 +46,40 @@ export const DA_ORIGIN = 'https://admin.da.live';
 const DEFAULT_TAXONOMY_PATH = '/taxonomy.json';
 
 /**
+ * Splits a DA source URL (`…/source/{org}/{repo}/{path}`) into its parts,
+ * ignoring any query string or hash.
+ * @param {string} url
+ * @returns {{ org: string, repo: string, path: string }|null} `null` if `url`
+ *   isn't a DA source URL
+ */
+export function parseDaSourceUrl(url) {
+  let pathname;
+  try {
+    ({ pathname } = new URL(url));
+  } catch {
+    return null;
+  }
+  const match = pathname.match(/^\/source\/([^/]+)\/([^/]+)(\/.+)$/);
+  if (!match) return null;
+  const [, org, repo, path] = match;
+  return { org, repo, path };
+}
+
+/**
  * Resolves where a site's taxonomy sheet lives: defaults to `taxonomy.json`
  * at the site's DA source root, but `customPath` can point elsewhere —
  * either a path within this org/repo, or a full DA source URL (to manage a
  * taxonomy shared across sites/orgs). Also returns `org`/`repo`/`path`
  * separately (not just the fetch URL), so save/preview/publish can target
  * the right site even when a full cross-site URL was given.
+ *
+ * A full URL that isn't a DA source URL is still fetched and saved as
+ * given, but has no site to preview or publish on: `org` and `repo` are
+ * `null`, and `path` is the URL itself, for display.
  * @param {string} org Current org (used when no override, or a bare path)
  * @param {string} repo Current repo (used when no override, or a bare path)
  * @param {string} customPath Optional override: bare path or full DA source URL
- * @returns {{ org: string, repo: string, path: string, sourceUrl: string }}
+ * @returns {{ org: string|null, repo: string|null, path: string, sourceUrl: string }}
  */
 export function resolveTaxonomyLocation(org, repo, customPath) {
   const trimmed = (customPath || '').trim();
@@ -70,15 +94,10 @@ export function resolveTaxonomyLocation(org, repo, customPath) {
   }
 
   if (/^https?:\/\//i.test(trimmed)) {
-    const match = trimmed.match(/\/source\/([^/]+)\/([^/]+)(\/.*)$/);
-    if (match) {
-      const [, matchedOrg, matchedRepo, path] = match;
-      return {
-        org: matchedOrg, repo: matchedRepo, path, sourceUrl: trimmed,
-      };
-    }
+    const source = parseDaSourceUrl(trimmed);
+    if (source) return { ...source, sourceUrl: trimmed };
     return {
-      org, repo, path: DEFAULT_TAXONOMY_PATH, sourceUrl: trimmed,
+      org: null, repo: null, path: trimmed, sourceUrl: trimmed,
     };
   }
 
@@ -204,7 +223,8 @@ function ensureNamespace(namespaces, byName, name, description, extra) {
  * @param {Object} namespace Namespace node to walk/create nodes under
  * @param {string} categoryPath e.g. `catlev1/catlev2`
  * @param {string} description Applied to the deepest (last) node in the path
- * @param {Object|null} [extra] Extra cells, applied to the deepest node
+ * @param {Object|null} [extra] Extra cells; non-empty ones are merged onto the deepest node,
+ *   matching how `description` only overwrites when non-empty
  * @returns {Object} The deepest node in the path
  */
 function ensureCategoryPath(namespace, categoryPath, description, extra = null) {
@@ -221,7 +241,10 @@ function ensureCategoryPath(namespace, categoryPath, description, extra = null) 
     if (!siblings.includes(node)) siblings.push(node);
     siblings = node.children;
   });
-  if (node && extra) node.extra = { ...node.extra, ...extra };
+  if (node && extra) {
+    const filled = Object.entries(extra).filter(([, value]) => value !== '' && value != null);
+    node.extra = { ...node.extra, ...Object.fromEntries(filled) };
+  }
   return node;
 }
 

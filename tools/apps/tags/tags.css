@@ -205,12 +205,28 @@ sl-button.pw-quiet-danger::part(base):hover:not(:disabled) {
   color: var(--s2-orange-900);
 }
 
-.sheet-link {
+.sheet-link-group {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2-spacing-100);
   margin-left: auto;
+}
+
+.sheet-link {
   color: var(--pw-accent);
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.sheet-link.is-disabled {
+  color: var(--s2-gray-500);
+  cursor: not-allowed;
+}
+
+.sheet-link-hint {
+  font-size: 13px;
+  color: var(--s2-gray-700);
 }
 
 .pw-action-sm::part(base) {
