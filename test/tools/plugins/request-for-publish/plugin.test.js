@@ -20,7 +20,9 @@ import {
   findPendingRequest,
   mergePendingRequests,
   requestPathsFor,
+  statusWorkerUrl,
   toSitePath,
+  toStatus,
 } from '../../../../tools/plugins/request-for-publish/plugin.js';
 
 const CONTEXT = { org: 'bpauli', site: 'frescopa', path: '/bpauli/frescopa' };
@@ -226,5 +228,23 @@ describe('getStatus', () => {
 
     await handle.getStatus(item('/tea2'), {});
     assert.deepEqual(spy.params, { org: 'bpauli', site: 'frescopa', token: 'init-token' });
+  });
+});
+
+describe('branch builds', () => {
+  const BRANCH_MODULE = 'https://ewdemo--aem-apps--adobe-rnd.aem.page/tools/plugins/request-for-publish/plugin.js?env=ci';
+
+  it('links the status to the inbox on the same branch and worker', () => {
+    const status = toStatus(pending('/tea2'), CTX, BRANCH_MODULE);
+    assert.equal(
+      status.href,
+      '/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox?org=bpauli&site=frescopa&env=ci&ref=ewdemo&nx=ewdemo',
+    );
+  });
+
+  it('reads requests from the worker named on the module URL', () => {
+    assert.equal(statusWorkerUrl(BRANCH_MODULE, () => 'fallback'), 'https://publish-requests-ci.aem-poc-lab.workers.dev');
+    const plain = 'https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/request-for-publish/plugin.js';
+    assert.equal(statusWorkerUrl(plain, () => 'fallback'), 'fallback');
   });
 });

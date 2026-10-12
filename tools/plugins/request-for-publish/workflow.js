@@ -18,7 +18,7 @@ const WORKERS = {
   ci: 'https://publish-requests-ci.aem-poc-lab.workers.dev',
   local: 'http://localhost:8787',
 };
-const INBOX = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox';
+const INBOX_PATH = '/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox';
 
 export function workerOrigin(location) {
   const local = ['localhost', '127.0.0.1'].includes(location.hostname);
@@ -139,19 +139,28 @@ export function deriveView(context, data) {
   };
 }
 
+export function pluginRef(moduleUrl) {
+  const { hostname } = new URL(moduleUrl);
+  const ref = hostname.match(/^([a-z0-9-]+)--aem-apps--adobe-rnd\.aem\.(?:page|live)$/)?.[1];
+  return ref && ref !== 'main' ? ref : null;
+}
+
 export function pageLinks(context, env, moduleUrl = import.meta.url) {
   const { org, site, path } = context;
   const delivered = path.replace(/\.html$/, '').replace(/\/index$/, '/');
   const query = new URLSearchParams({ org, site });
   if (env === 'ci') query.set('env', env);
-  const codeHost = new URL(moduleUrl).hostname;
-  const ref = codeHost.match(/^([a-z0-9-]+)--aem-apps--adobe-rnd\.aem\.(?:page|live)$/)?.[1];
-  if (ref && ref !== 'main') query.set('ref', ref);
+  const ref = pluginRef(moduleUrl);
+  if (ref) {
+    query.set('ref', ref);
+    query.set('nx', ref);
+  }
+  const inbox = `https://${ref ? `${ref}--da-live--adobe.aem.live` : 'da.live'}${INBOX_PATH}`;
   return {
     preview: `https://main--${site}--${org}.aem.page${delivered}`,
     live: `https://main--${site}--${org}.aem.live${delivered}`,
-    inbox: `${INBOX}?${query}`,
-    myRequests: `${INBOX}?${query}&requester=true`,
+    inbox: `${inbox}?${query}`,
+    myRequests: `${inbox}?${query}&requester=true`,
   };
 }
 

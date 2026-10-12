@@ -131,14 +131,14 @@ describe('context-derived views', () => {
     assert.equal(links.diff, undefined);
     assert.equal(new URL(links.myRequests).searchParams.get('requester'), 'true');
   });
-  it('opens the inbox on the plugin branch rather than the editor context ref', () => {
+  it('opens the inbox on the plugin branch of the editor, app and SDK', () => {
     const moduleUrl = 'https://ewws0926--aem-apps--adobe-rnd.aem.page/tools/plugins/request-for-publish/workflow.js';
     const links = pageLinks({
       org: 'scdemos', site: 'benp5', path: '/guided-journey.html', ref: 'main',
     }, undefined, moduleUrl);
     assert.equal(
       links.inbox,
-      'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox?org=scdemos&site=benp5&ref=ewws0926',
+      'https://ewws0926--da-live--adobe.aem.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox?org=scdemos&site=benp5&ref=ewws0926&nx=ewws0926',
     );
     assert.equal(links.myRequests, `${links.inbox}&requester=true`);
     assert.equal(new URL(pageLinks(context, 'ci', moduleUrl).inbox).searchParams.get('env'), 'ci');
@@ -151,6 +151,8 @@ describe('context-derived views', () => {
       const links = pageLinks({ ...context, ref: 'other-branch' }, undefined, moduleUrl);
       assert.equal(new URL(links.inbox).searchParams.has('ref'), false);
       assert.equal(new URL(links.myRequests).searchParams.has('ref'), false);
+      assert.equal(new URL(links.inbox).searchParams.has('nx'), false);
+      assert.equal(new URL(links.inbox).origin, 'https://da.live');
     });
   });
   it('uses only explicit known worker environments', () => {

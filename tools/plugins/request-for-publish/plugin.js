@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { pluginRef, workerOrigin } from './workflow.js';
+
 /**
  * Browse status surface for the request-for-publish plugin.
  *
@@ -126,7 +128,7 @@ function formatCreated(created) {
  * @param {Object} ctx - { org, site }
  * @returns {Object} Status object for the browse drawer
  */
-export function toStatus(row, { org, site } = {}) {
+export function toStatus(row, { org, site } = {}, moduleUrl = import.meta.url) {
   const detail = [
     ['Requested by', row.requester],
     ['Approver', row.approver],
@@ -136,9 +138,14 @@ export function toStatus(row, { org, site } = {}) {
     .filter(([, value]) => value)
     .map(([label, value]) => ({ label, value }));
 
-  const href = org && site
-    ? `${INBOX_URL}?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`
-    : INBOX_URL;
+  const query = new URLSearchParams({ org, site });
+  if (new URL(moduleUrl).searchParams.get('env') === 'ci') query.set('env', 'ci');
+  const ref = pluginRef(moduleUrl);
+  if (ref) {
+    query.set('ref', ref);
+    query.set('nx', ref);
+  }
+  const href = org && site ? `${INBOX_URL}?${query}` : INBOX_URL;
 
   return {
     state: PENDING,
@@ -147,6 +154,18 @@ export function toStatus(row, { org, site } = {}) {
     detail,
     href,
   };
+}
+
+/**
+ * The worker named by `?env=` on this module's URL, so a status row can pin
+ * the browse list to the same worker as the panel; otherwise the page decides.
+ * @param {string} moduleUrl - URL this module was loaded from
+ * @param {Function} fallback - page-based worker lookup
+ * @returns {string} Worker base URL
+ */
+export function statusWorkerUrl(moduleUrl, fallback) {
+  const url = new URL(moduleUrl);
+  return url.searchParams.has('env') ? workerOrigin(url) : fallback();
 }
 
 /**
@@ -162,7 +181,7 @@ async function fetchPendingRequests({ org, site, token }) {
     // utils.js imports daFetch from da.live at module scope; only the browser
     // needs it, so it is pulled in here rather than at the top of this module.
     const { getWorkerUrl, getOpts } = await import('./utils.js');
-    const base = getWorkerUrl();
+    const base = statusWorkerUrl(import.meta.url, getWorkerUrl);
     const query = `org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
     const lists = await Promise.all(ROLES.map(async (role) => {
       try {
