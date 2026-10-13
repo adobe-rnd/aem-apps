@@ -10,7 +10,7 @@ When an author submits a publish request (via the [Request for Publish Plugin](.
 
 ### Architecture
 
-The app is a **thin REST client of [`publish-requests-worker`](https://github.com/adobe-rnd/publish-requests-worker)** for all workflow bookkeeping. It still publishes content client-side via Helix (under the approver's session); approver resolution, sheet I/O, and email are the worker's job.
+The app is a **thin REST client of [`publish-requests-worker`](https://github.com/cloudadoption/publish-requests-worker)** for all workflow bookkeeping. It still publishes content client-side via Helix (under the approver's session); approver resolution, sheet I/O, and email are the worker's job.
 
 - **Web Component**: LitElement custom element (`<publish-requests-inbox>`).
 - **DA SDK**: authentication and context.
