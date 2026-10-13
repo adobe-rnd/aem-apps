@@ -13,8 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// User-facing wording, kept apart from the logic and the markup.
-
 // Status light props per schemas-panel/helpers/options.js getSchemaStatus.
 export const SCHEMA_STATUSES = {
   invalid: {
@@ -58,7 +56,6 @@ export const endpointSaved = (name) => `Endpoint "${name}" saved.`;
 
 export const endpointDeleted = (name) => `Endpoint "${name}" deleted.`;
 
-// SDL problems are { schemaId, pointer, message }.
 export function describeProblem({ schemaId, pointer, message }) {
   if (!schemaId) return message;
   return `${schemaId}${pointer ? ` #${pointer}` : ''}: ${message}`;

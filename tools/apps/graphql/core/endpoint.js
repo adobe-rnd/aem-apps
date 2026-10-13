@@ -50,7 +50,6 @@ export function validateEndpointName({ name, existing = [] }) {
 export const isValidEndpointName = (name) => typeof name === 'string'
   && !validateEndpointName({ name });
 
-// The stored endpoint's code blocks: its config JSON, then the SDL generated from it.
 export const serializeEndpoint = ({ config, generatedAt, sdl }) => [
   JSON.stringify({ ...createConfig(config), generatedAt }, null, 2),
   sdl,

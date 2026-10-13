@@ -101,7 +101,6 @@ export function createGraphqlCore({ store, loadValidator, now = () => new Date()
     return parsed.error ? { code: 'invalid-config', ...parsed } : parsed;
   }
 
-  // The SDL for a config, from the site's current schemas.
   async function generateSdl({ org, site, config }) {
     const invalid = validateConfig(config);
     if (invalid) return { code: 'invalid-config', error: invalid };

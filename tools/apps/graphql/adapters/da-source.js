@@ -16,8 +16,6 @@
 /* eslint-disable import/no-unresolved */
 import { aem, source, asText } from 'https://da.live/nx2/utils/api.js';
 
-// The core store port over DA's source API.
-
 const failure = (status) => ({ error: 'Request failed.', status });
 
 async function listAll({ path, continuationToken, items = [] }) {

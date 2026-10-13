@@ -17,8 +17,6 @@ import {
   Kind, parse, print, visit, buildASTSchema, validateSchema,
 } from '../../../deps/graphql/dist/index.js';
 
-// Type and field names.
-
 const RESERVED_TYPE_NAMES = new Set([
   'Query', 'Mutation', 'Subscription',
   'String', 'Int', 'Float', 'Boolean', 'ID',
@@ -160,7 +158,6 @@ const usableProperties = (node) => (isPlainObject(node?.properties)
   ? Object.keys(node.properties).filter((key) => !RESERVED_KEYS.has(key))
   : []);
 
-// The first `make(i)`, from i = 2, that is not taken.
 const firstFree = ({ isTaken, make, i = 2 }) => (isTaken(make(i))
   ? firstFree({ isTaken, make, i: i + 1 })
   : make(i));
