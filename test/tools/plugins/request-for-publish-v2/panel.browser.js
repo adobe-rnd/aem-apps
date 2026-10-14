@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 /* eslint-disable no-await-in-loop */
-import '../../../../tools/plugins/request-for-publish/panel.js';
+import '../../../../tools/plugins/request-for-publish-v2/panel.js';
 import fixture, { singleStep } from './fixture-client.js';
-import { createWorkspaceActions } from '../../../../tools/plugins/request-for-publish/workflow.js';
+import { createWorkspaceActions } from '../../../../tools/plugins/request-for-publish-v2/workflow.js';
 
 const ctx = { org: 'example', site: 'website', path: '/drafts/page' };
 const row = {
@@ -372,7 +372,7 @@ await test('local integration: save gates preview and submission without opening
   assert(text().includes('Saving current edits…'), 'save progress missing');
   saved({ ok: true });
   await tick();
-  assert(mutations(calls).map((call) => call.route).join(',') === 'preview,/api/requests', 'wrong submit order');
+  assert(mutations(calls).map((call) => call.route).join(',') === 'preview,/api/v2/requests', 'wrong submit order');
   assert(text().includes('Request sent.') && closes === 1, 'undefined close result broke success');
 });
 await test('local integration: missing, failed or invalid save blocks preview and request', async () => {
@@ -438,7 +438,7 @@ await test('local integration: request, approver review and successful publicati
   assert(text().includes('Published. The publish request is complete.'), 'approval completion missing');
   assert(state.rows.length === 0, 'approved request remains pending');
   assert(mutations(calls).map((call) => call.route).join(',')
-    === 'preview,/api/requests,publish,/api/requests/approve', 'incorrect approval sequence');
+    === 'preview,/api/v2/requests,publish,/api/v2/requests/approve', 'incorrect approval sequence');
   const { body } = mutations(calls)[1];
   assert(Object.keys(body).sort().join(',') === 'comment,org,path,site', 'client supplied identity or recipients');
 });
@@ -482,7 +482,7 @@ await test('local integration: resend then withdraw without another preview or p
   button('Withdraw request').click();
   await tick();
   assert(text().includes('Request withdrawn.') && state.rows.length === 0, 'withdrawal incomplete');
-  assert(mutations(calls).map((call) => call.route).join(',') === '/api/requests,/api/requests/withdraw', 'unexpected content mutation');
+  assert(mutations(calls).map((call) => call.route).join(',') === '/api/v2/requests,/api/v2/requests/withdraw', 'unexpected content mutation');
 });
 await test('local integration: required note blocks preview and submission', async () => {
   const { client, calls } = fixture({ required: true });
@@ -646,7 +646,7 @@ await test('local integration: a two-step request publishes only on the last app
   await tick();
   assert(calls.filter((call) => call.route === 'publish').length === 1, 'final approval did not publish');
   assert(state.rows.length === 0, 'completed request remains pending');
-  assert(calls.filter((call) => call.route === '/api/requests/approve')
+  assert(calls.filter((call) => call.route === '/api/v2/requests/approve')
     .map((call) => call.body.step).join(',') === '1,2', 'client did not send the step it acted on');
 });
 await test('local integration: approving a step someone else advanced is refused', async () => {

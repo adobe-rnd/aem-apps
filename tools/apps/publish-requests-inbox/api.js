@@ -326,37 +326,16 @@ export async function checkPublishRequest(org, site, path, token) {
 }
 
 /**
- * True when approving `request` completes the workflow and so must publish
- * first. Intermediate approvals only advance the step log.
+ * Record approval for already-published paths (sheet removal + author email).
+ * The publish itself is done client-side via publishContent/bulkPublishContent.
+ * @param {string[]} paths - Paths that were successfully published.
+ * @returns {Promise<Object>} { success, approved, notFound, unauthorized }
  */
-export function isFinalStep(request) {
-  const info = request?.stepInfo;
-  // An older worker sends no step info: treat every request as single-step.
-  if (!info) return true;
-  if (!info.lastStaffed) return false;
-  return info.current >= info.lastStaffed;
-}
-
-/**
- * Record approval of the step `paths` are waiting on. For the final step the
- * caller must publish first; intermediate steps publish nothing.
- * @param {number} [step] - The step the caller believes is current.
- * @returns {Promise<Object>} { success, approved, notFound, unauthorized, stale, completed }
- */
-export async function approveRequests(org, site, paths, token, step) {
+export async function approveRequests(org, site, paths, token) {
   try {
-    const body = { org, site, paths };
-    if (step !== undefined) body.step = step;
-    const resp = await fetch(`${getWorkerUrl()}/api/requests/approve`, getOpts(token, 'POST', body));
+    const resp = await fetch(`${getWorkerUrl()}/api/requests/approve`, getOpts(token, 'POST', { org, site, paths }));
     const result = await resp.json();
     if (!resp.ok) return { success: false, error: result.error || 'Failed to record approval' };
-    if (result.stale?.length) {
-      return {
-        success: false,
-        error: 'This request was advanced by someone else. Refresh to see its current step.',
-        ...result,
-      };
-    }
     return { success: true, ...result };
   } catch (error) {
     console.error('Error recording approval:', error);
