@@ -1,0 +1,279 @@
+/*
+ * Copyright 2026 Adobe Systems Incorporated
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+body.cug {
+  margin: 0;
+  background: var(--s2-gray-25, #fff);
+  color: var(--s2-gray-800, #292929);
+  font-family: var(--s2-font-family, arial, sans-serif);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.cug * {
+  box-sizing: border-box;
+}
+
+.cug main {
+  max-width: var(--se-grid-container-width, 1200px);
+  margin: var(--s2-spacing-800, 48px) auto;
+  padding: 0 24px;
+}
+
+.cug h1 {
+  margin: 0 0 32px;
+  color: var(--s2-gray-900, #1d1d1d);
+  font-size: var(--s2-heading-size-xl, 32px);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.cug .cug-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.cug .cug-site-field {
+  flex: 1 1 220px;
+}
+
+.cug label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.cug input,
+.cug button {
+  font: inherit;
+}
+
+.cug input {
+  width: 100%;
+  min-height: 36px;
+  margin: 0;
+  padding: 7px 12px;
+  border: 1px solid var(--s2-gray-300, #c6c6c6);
+  border-radius: 8px;
+  background: var(--s2-gray-25, #fff);
+  color: inherit;
+}
+
+.cug button {
+  cursor: pointer;
+}
+
+.cug .cug-primary {
+  min-height: 36px;
+  padding: 7px 20px;
+  border: 1px solid var(--s2-blue-900, #0265dc);
+  border-radius: 20px;
+  background: var(--s2-blue-900, #0265dc);
+  color: #fff;
+  font-weight: 700;
+}
+
+.cug :is(input, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--s2-blue-900, #0265dc);
+  outline-offset: 3px;
+}
+
+.cug .cug-table-scroll {
+  position: relative;
+  overflow-x: auto;
+  border: 1px solid var(--s2-gray-200, #e1e1e1);
+  border-radius: 12px;
+}
+
+.cug table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+}
+
+.cug th {
+  padding: 14px 12px;
+  background: var(--s2-gray-75, #f8f8f8);
+  color: var(--s2-gray-700, #4b4b4b);
+  font-weight: 600;
+  text-align: left;
+}
+
+.cug td {
+  padding: 16px 12px;
+  border-top: 1px solid var(--s2-gray-200, #e1e1e1);
+}
+
+.cug .cug-rules :is(th, td):is(:first-child, :last-child) {
+  width: 56px;
+  text-align: center;
+}
+
+.cug .cug-rules th:nth-child(2) {
+  width: 40%;
+}
+
+.cug .cug-rules th:nth-child(3) {
+  width: 160px;
+}
+
+.cug .cug-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--s2-gray-600, #6e6e6e);
+}
+
+.cug .cug-icon:hover {
+  background: var(--s2-gray-100, #f0f0f0);
+}
+
+.cug .cug-drag {
+  cursor: grab;
+}
+
+.cug .cug-delete:hover {
+  color: var(--s2-red-800, #c9252d);
+}
+
+.cug svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.7;
+}
+
+.cug .cug-groups {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cug .cug-group-chip,
+.cug .cug-auth-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 8px 4px 12px;
+  border: 1px solid var(--s2-gray-300, #c6c6c6);
+  border-radius: 16px;
+  background: var(--s2-gray-75, #f8f8f8);
+  color: inherit;
+}
+
+.cug .cug-group-chip:hover,
+.cug .cug-auth-chip:hover {
+  background: var(--s2-gray-100, #f0f0f0);
+}
+
+.cug .cug-group-chip svg,
+.cug .cug-auth-chip svg {
+  width: 16px;
+  height: 16px;
+}
+
+.cug .cug-group-add,
+.cug .cug-auth-add {
+  flex-shrink: 0;
+  border: 1px solid var(--s2-gray-300, #c6c6c6);
+  border-radius: 50%;
+}
+
+.cug .cug-actions {
+  display: inline-flex;
+  margin-top: 24px;
+}
+
+.cug .cug-lookup {
+  margin-top: 48px;
+}
+
+.cug .cug-lookup h2 {
+  margin: 0 0 24px;
+  color: var(--s2-gray-900, #1d1d1d);
+  font-size: 22px;
+  line-height: 1.3;
+}
+
+.cug .cug-access-card {
+  padding: 24px;
+  border: 1px solid var(--s2-gray-200, #e1e1e1);
+  border-radius: 12px;
+  background: var(--s2-gray-75, #f8f8f8);
+}
+
+.cug .cug-access-details {
+  display: grid;
+  gap: 24px;
+  margin: 0;
+}
+
+.cug .cug-access-details dt {
+  margin-bottom: 8px;
+  color: var(--s2-gray-700, #4b4b4b);
+  font-weight: 600;
+}
+
+.cug .cug-access-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cug .cug-access-badge {
+  display: inline-block;
+  padding: 5px 12px;
+  border: 1px solid var(--s2-gray-200, #e1e1e1);
+  border-radius: 16px;
+  background: var(--s2-gray-25, #fff);
+}
+
+.cug .cug-primary:hover {
+  background: var(--s2-blue-1000, #0054b6);
+}
+
+.cug .cug-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (width >= 600px) {
+  .cug .cug-access-details {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (width >= 900px) {
+  .cug main {
+    padding: 0 32px;
+  }
+}

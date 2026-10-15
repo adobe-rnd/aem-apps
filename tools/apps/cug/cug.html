@@ -1,0 +1,174 @@
+<!--
+ Copyright 2026 Adobe Systems Incorporated
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Closed User Groups</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="https://da.live/nx2/styles/styles.css">
+    <link rel="stylesheet" href="./cug.css">
+  </head>
+  <body class="cug">
+    <main>
+      <h1>Closed User Groups</h1>
+      <div class="cug-toolbar">
+        <div class="cug-site-field">
+          <label for="cug-site">Org/site</label>
+          <input id="cug-site" type="text" placeholder="org/site" autocomplete="off" spellcheck="false">
+        </div>
+        <button class="cug-primary" type="button">Get CUG</button>
+      </div>
+
+      <div class="cug-table-scroll" role="region" aria-label="Closed user group rules" tabindex="0">
+        <table class="cug-rules">
+          <caption class="cug-sr-only">Editable closed user group rules</caption>
+          <thead>
+            <tr>
+              <th scope="col"><span class="cug-sr-only">Reorder</span></th>
+              <th scope="col">Path</th>
+              <th scope="col">Authentication</th>
+              <th scope="col">Groups</th>
+              <th scope="col"><span class="cug-sr-only">Delete</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <button class="cug-icon cug-drag" type="button" aria-label="Move rule 1">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" stroke-width="3" stroke-linecap="round"/></svg>
+                </button>
+              </td>
+              <td><input type="text" value="/members/**" aria-label="Path for rule 1" spellcheck="false"></td>
+              <td>
+                <button class="cug-auth-chip" type="button" aria-label="Remove required authentication from rule 1">
+                  <span>Required</span>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" stroke-linecap="round"/></svg>
+                </button>
+              </td>
+              <td>
+                <div class="cug-groups" role="group" aria-label="Groups for rule 1">
+                  <button class="cug-icon cug-group-add" type="button" aria-label="Add group to rule 1">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+                  </button>
+                </div>
+              </td>
+              <td>
+                <button class="cug-icon cug-delete" type="button" aria-label="Delete rule 1">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <button class="cug-icon cug-drag" type="button" aria-label="Move rule 2">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" stroke-width="3" stroke-linecap="round"/></svg>
+                </button>
+              </td>
+              <td><input type="text" value="/partners/**" aria-label="Path for rule 2" spellcheck="false"></td>
+              <td>
+                <button class="cug-auth-chip" type="button" aria-label="Remove required authentication from rule 2">
+                  <span>Required</span>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" stroke-linecap="round"/></svg>
+                </button>
+              </td>
+              <td>
+                <div class="cug-groups" role="group" aria-label="Groups for rule 2">
+                  <button class="cug-group-chip" type="button" aria-label="Remove gold group from rule 2">
+                    <span>gold</span>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" stroke-linecap="round"/></svg>
+                  </button>
+                  <button class="cug-group-chip" type="button" aria-label="Remove silver group from rule 2">
+                    <span>silver</span>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" stroke-linecap="round"/></svg>
+                  </button>
+                  <button class="cug-icon cug-group-add" type="button" aria-label="Add group to rule 2">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+                  </button>
+                </div>
+              </td>
+              <td>
+                <button class="cug-icon cug-delete" type="button" aria-label="Delete rule 2">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <button class="cug-icon cug-drag" type="button" aria-label="Move rule 3">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" stroke-width="3" stroke-linecap="round"/></svg>
+                </button>
+              </td>
+              <td><input type="text" aria-label="Path for rule 3" spellcheck="false"></td>
+              <td>
+                <button class="cug-icon cug-auth-add" type="button" aria-label="Require authentication for rule 3">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+                </button>
+              </td>
+              <td>
+                <div class="cug-groups" role="group" aria-label="Groups for rule 3">
+                  <button class="cug-icon cug-group-add" type="button" aria-label="Add group to rule 3">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+                  </button>
+                </div>
+              </td>
+              <td>
+                <button class="cug-icon cug-delete" type="button" aria-label="Delete rule 3">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="cug-actions">
+        <button class="cug-primary" type="button">Apply CUG</button>
+      </div>
+
+      <section class="cug-lookup" aria-labelledby="cug-lookup-title">
+        <h2 id="cug-lookup-title">Check CUG for a path</h2>
+        <div class="cug-toolbar">
+          <div class="cug-site-field">
+            <label for="cug-path">Path</label>
+            <input id="cug-path" type="text" value="/partners/google" autocomplete="off" spellcheck="false">
+          </div>
+          <button class="cug-primary" type="button">Check CUG</button>
+        </div>
+        <div class="cug-access-card">
+          <dl class="cug-access-details">
+            <div>
+              <dt>Access for</dt>
+              <dd><strong>/partners/google</strong></dd>
+            </div>
+            <div>
+              <dt>Authentication</dt>
+              <dd><span class="cug-access-badge">Required</span></dd>
+            </div>
+            <div>
+              <dt>Allowed groups</dt>
+              <dd class="cug-groups">
+                <span class="cug-access-badge">gold</span>
+                <span class="cug-access-badge">silver</span>
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
