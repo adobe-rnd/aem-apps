@@ -236,7 +236,8 @@ class RequestForPublish extends LitElement {
       this._confirmation = undefined;
     } catch (error) {
       if (epoch !== this._epoch) return;
-      if (error.published) this._receipt = expected;
+      if (error.clearReceipt) this._receipt = undefined;
+      else if (error.published) this._receipt = expected;
       if (error.publishUnknown) this._unknown = expected;
       if (error.published || error.publishUnknown) this.workspace?.close?.().catch(() => {});
       this._notice = { type: 'error', text: error.message };

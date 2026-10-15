@@ -458,7 +458,11 @@ describe('workflow operations', () => {
     const stale = {
       approved: [], notFound: [], unauthorized: [], stale: [context.path],
     };
-    const { client } = fixture({ approvable: [pending], fail: (url) => url.pathname.endsWith('/approve') && response(stale) });
+    const { client } = fixture({
+      approvable: [pending],
+      page: [pending],
+      fail: (url) => url.pathname.endsWith('/approve') && response(stale),
+    });
     await assert.rejects(client.approve(context, pending, last), /advanced|refresh/i);
   });
 
@@ -474,6 +478,36 @@ describe('workflow operations', () => {
       assert.doesNotMatch(error.message, /published/i);
       return error.published === false;
     });
+  });
+
+  it('recognizes a final publication already completed by another reviewer', async () => {
+    const { client } = fixture({
+      approvable: [pending],
+      page: [],
+      fail: (url) => url.pathname.endsWith('/approve') && response({ notFound: [context.path] }),
+    });
+    const result = await client.approve(context, pending, last);
+    assert.equal(result.alreadyCompleted, true);
+    assert.deepEqual(result.completed, [context.path]);
+  });
+
+  it('clears stale publication receipts when the request has changed', async () => {
+    const { client } = fixture({
+      approvable: [pending],
+      page: [pending],
+      fail: (url) => url.pathname.endsWith('/approve') && response({ stale: [context.path] }),
+    });
+    await assert.rejects(client.approve(context, pending, last), (error) => {
+      assert.match(error.message, /published|live/i);
+      return error.published && error.clearReceipt;
+    });
+  });
+
+  it('finishes a receipt without publishing again when the request is gone', async () => {
+    const { client, calls } = fixture();
+    const result = await client.complete(context, pending, last);
+    assert.equal(result.alreadyCompleted, true);
+    assert.equal(calls.some((call) => call.path === 'publish'), false);
   });
 
   it('retries completion without publishing a second time', async () => {

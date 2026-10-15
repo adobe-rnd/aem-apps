@@ -274,6 +274,14 @@ export function createClient({
     }
   }
 
+  async function reconcilePublished(context) {
+    const rows = await list(context, { role: 'page', path: context.path });
+    if (!forPage(rows, context.path).length) {
+      return { approved: [context.path], completed: [context.path], alreadyCompleted: true };
+    }
+    throw failure('The page was published, but this request was advanced or changed. Refresh and review its current status.', { clearReceipt: true });
+  }
+
   async function record(context, step, final) {
     let result;
     try {
@@ -283,9 +291,13 @@ export function createClient({
     } catch (error) {
       if (error.status === 409) {
         await list(context, { role: 'approver', path: context.path }).catch(() => {});
-        throw failure('Approval conflict. The request changed; refresh and review its current status.', { status: 409 });
+        throw failure('Approval conflict. The request changed; refresh and review its current status.', { status: 409, clearReceipt: final });
       }
       throw error;
+    }
+    if (final && !result.unauthorized?.includes(context.path)
+      && (result.stale?.includes(context.path) || result.notFound?.includes(context.path))) {
+      return reconcilePublished(context);
     }
     if (result.stale?.includes(context.path)) {
       throw failure('This request was advanced by someone else. Refresh before taking action.');
@@ -373,7 +385,11 @@ export function createClient({
       }
       onPhase('Updating request…');
       try { return await record(context, step, fresh.isFinal); } catch (error) {
-        throw failure(error.message, { status: error.status, published: !!final });
+        const message = final && error.clearReceipt
+          ? `The page is live. ${error.message}` : error.message;
+        throw failure(message, {
+          status: error.status, published: !!final, clearReceipt: error.clearReceipt,
+        });
       }
     },
     async complete(context, expected, { step } = {}) {
@@ -381,7 +397,10 @@ export function createClient({
         await revalidate(context, expected);
         return await record(context, step, true);
       } catch (error) {
-        throw failure(error.message, { status: error.status, published: true });
+        if (error.stale) return reconcilePublished(context);
+        throw failure(error.message, {
+          status: error.status, published: true, clearReceipt: error.clearReceipt,
+        });
       }
     },
   };
