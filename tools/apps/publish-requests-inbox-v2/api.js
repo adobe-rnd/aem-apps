@@ -22,7 +22,10 @@ const LOCAL_WORKER_URL = 'http://localhost:8787';
 const CORS_PROXY = 'https://da-etc.adobeaem.workers.dev/cors';
 
 // daFetch ensures a fresh IMS token is used on every request (handles token expiry)
-const { daFetch } = await import('https://da.live/nx/utils/daFetch.js');
+async function daFetch(...args) {
+  const sdk = await import('https://da.live/nx/utils/daFetch.js');
+  return sdk.daFetch(...args);
+}
 
 /**
  * Get the Worker URL. Falls back to localhost:8787 for local development;
