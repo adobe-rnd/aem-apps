@@ -82,6 +82,21 @@ describe('inbox v2 approval handlers', () => {
     stepInfo: { current: 1, lastStaffed: 1 },
   };
 
+  it('replaces spoofed review metadata with worker data and a canonical preview', async () => {
+    const app = fixture({
+      checkPublishRequest: async () => ({
+        ...finalRow, requester: 'author@example.com', comment: 'Actual request note',
+      }),
+    });
+    app._authorEmail = 'ceo@attacker.example';
+    app._comment = 'Approved by legal';
+    app._previewUrl = ['javascript', 'alert(1)'].join(':');
+    await app.initReview();
+    assert.equal(app._authorEmail, 'author@example.com');
+    assert.equal(app._comment, 'Actual request note');
+    assert.equal(app._previewUrl, 'https://main--website--example.aem.page/page');
+  });
+
   it('revalidates a final request before publishing', async () => {
     const calls = [];
     const app = fixture({

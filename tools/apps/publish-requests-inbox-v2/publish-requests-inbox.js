@@ -223,9 +223,9 @@ class PublishRequestsApp extends LitElement {
     this._org = urlParams.get('org') || '';
     this._site = urlParams.get('site') || '';
     this._path = urlParams.get('path') || '';
-    this._authorEmail = urlParams.get('author') || '';
-    this._previewUrl = urlParams.get('preview') || '';
-    this._comment = urlParams.get('comment') || '';
+    this._authorEmail = '';
+    this._previewUrl = '';
+    this._comment = '';
     this._requester = urlParams.get('requester') || false;
 
     if (this._org && this._site) {
@@ -319,15 +319,16 @@ class PublishRequestsApp extends LitElement {
     }
     this._reviewRequest = pendingRequest;
 
-    // Use requester from sheet if author not in URL params
-    if (!this._authorEmail && pendingRequest.requester) {
-      this._authorEmail = pendingRequest.requester;
+    this._authorEmail = pendingRequest.requester || '';
+    this._comment = pendingRequest.comment || '';
+    if (![this._org, this._site].every((value) => /^[a-z0-9-]+$/.test(value))) {
+      this._state = 'error';
+      this._message = { type: 'error', text: 'Invalid organization or site.' };
+      return;
     }
-
-    // Use comment from sheet if not provided via URL params
-    if (!this._comment && pendingRequest.comment) {
-      this._comment = pendingRequest.comment;
-    }
+    const preview = new URL(`https://main--${this._site}--${this._org}.aem.page`);
+    preview.pathname = this._path.replace(/\.html$/, '').replace(/\/index$/, '/');
+    this._previewUrl = preview.href;
 
     // Check if the current user is an authorized approver for this content path
     if (this._userEmail) {
@@ -411,8 +412,6 @@ class PublishRequestsApp extends LitElement {
     this._path = request.path;
     this._authorEmail = request.requester || request.authorEmail || '';
     this._comment = request.comment || '';
-    const path = request.path?.replace(/\/index$/, '') || '';
-    this._previewUrl = `https://main--${this._site}--${this._org}.aem.page${path}`;
     this._message = null;
     this._state = 'loading';
 
@@ -420,9 +419,7 @@ class PublishRequestsApp extends LitElement {
       org: this._org,
       site: this._site,
       path: request.path,
-      preview: this._previewUrl,
     };
-    if (request.requester) urlParams.author = request.requester;
     this.updateUrl(urlParams);
 
     await this.initReview();
