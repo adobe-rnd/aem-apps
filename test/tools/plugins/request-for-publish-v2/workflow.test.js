@@ -50,6 +50,7 @@ const pending = {
   path: context.path,
   isFinal: true,
   canApproveNow: true,
+  stepInfo: { current: 1, lastStaffed: 1 },
   status: 'pending',
   requester: 'author@example.com',
   created: '2026-01-01T10:00:00Z',
@@ -78,6 +79,30 @@ const data = (overrides = {}) => ({
 });
 const last = { step: 1, final: true };
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status });
+
+describe('worker-authoritative view', () => {
+  it('requires explicit eligibility, finality, and a valid worker current step to approve', () => {
+    const authorized = { ...pending, stepInfo: { current: 1 } };
+    assert.equal(deriveView(context, data({ approvable: [authorized] })).canApprove, true);
+    [
+      { canApproveNow: undefined }, { canApproveNow: false }, { canApproveNow: 'true' },
+      { isFinal: undefined }, { isFinal: 'false' }, { stepInfo: undefined },
+      { stepInfo: { current: 0 } }, { stepInfo: { current: '1' } },
+    ].forEach((patch) => {
+      const state = deriveView(context, data({ approvable: [{ ...authorized, ...patch }] }));
+      assert.equal(state.canApprove, false);
+    });
+  });
+
+  it('does not reconstruct an observer approval log from local definitions', () => {
+    const state = deriveView(context, data({ page: [{ path: context.path, status: 'pending' }] }));
+    assert.equal(state.view, 'observer');
+    assert.equal(state.canApprove, false);
+    assert.equal(state.canWithdraw, false);
+    assert.equal(state.current, null);
+    assert.deepEqual(state.steps, []);
+  });
+});
 
 function fixture({
   own = [], approvable = [], page = [], fail, publishFail = false,
@@ -266,7 +291,7 @@ describe('approval steps', () => {
     assert.equal(buildStepModel(untitled, '').bare, true);
   });
   it('derives the current step for the view and defers approver eligibility to the worker', () => {
-    const advanced = { ...pending, step: 'legal@example.com:1:T' };
+    const advanced = { ...pending, step: 'legal@example.com:1:T', stepInfo: { current: 2 } };
     const view = deriveView(context, data({ steps: twoSteps, approvable: [advanced] }));
     assert.equal(view.current, 2);
     assert.equal(view.count, 2);
@@ -285,24 +310,24 @@ describe('approval steps', () => {
     assert.equal(model.current, 2);
     assert.deepEqual(model.steps.map((step) => step.state), ['upcoming', 'current']);
     const row = { ...pending, step: '', stepInfo: { current: 3, count: 2, complete: true } };
-    assert.equal(deriveView(context, data({ steps: twoSteps, page: [row] })).complete, true);
+    assert.equal(deriveView(context, data({ steps: twoSteps, own: [row] })).complete, true);
     assert.equal(buildStepModel(twoSteps, 'legal@example.com:1:T', { current: 0 }).current, 2);
   });
 });
 
 describe('uninvolved viewers', () => {
-  it('shows a read-only stepper instead of an initiation form', () => {
+  it('shows a read-only pending state instead of an initiation form', () => {
     const view = deriveView(context, data({ page: [pending] }));
     assert.equal(view.view, 'observer');
     assert.equal(view.canApprove, false);
     assert.equal(view.canWithdraw, false);
     assert.deepEqual(view.request, pending);
   });
-  it('still derives the current step for an uninvolved viewer', () => {
+  it('withholds private progress for an uninvolved viewer', () => {
     const advanced = { ...pending, step: 'legal@example.com:1:T' };
     const view = deriveView(context, data({ steps: twoSteps, page: [advanced] }));
-    assert.equal(view.current, 2);
-    assert.deepEqual(view.steps.map((step) => step.state), ['approved', 'current']);
+    assert.equal(view.current, null);
+    assert.deepEqual(view.steps, []);
   });
   it('prefers the role queues so participants keep their actions', () => {
     const asOwner = deriveView(context, data({ own: [pending], page: [pending] }));

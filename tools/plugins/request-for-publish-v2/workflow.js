@@ -136,10 +136,15 @@ export function deriveView(context, data) {
   if (approvable.length) view = 'approver';
   else if (own.length) view = 'requester';
   else if (onPage.length) view = 'observer';
-  // Approver eligibility stays worker-authoritative; an older worker omits the flag.
-  const canApprove = !!approvable.length && approvable[0].canApproveNow !== false;
+  const canApprove = !!approvable.length && request.canApproveNow === true
+    && typeof request.isFinal === 'boolean'
+    && Number.isInteger(request.stepInfo?.current) && request.stepInfo.current > 0;
   return {
-    ...buildStepModel(data.steps, request?.step, request?.stepInfo),
+    ...(view === 'observer'
+      ? {
+        steps: [], current: null, count: 0, bare: true,
+      }
+      : buildStepModel(data.steps, request?.step, request?.stepInfo)),
     view,
     request,
     canApprove,

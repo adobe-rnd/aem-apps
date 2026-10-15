@@ -36,6 +36,41 @@ async function panelFixture() {
 }
 
 describe('review step controls', () => {
+  it('uses worker finality for the approval label even when local steps disagree', async () => {
+    const panel = await panelFixture();
+    panel.renderLinks = () => '';
+    const step = {
+      index: 1, state: 'current', approvers: [], cc: [],
+    };
+    [true, false].forEach((isFinal) => {
+      const markup = panel.renderStepBody(step, {
+        canApprove: true,
+        current: isFinal ? 1 : 2,
+        lastStaffed: isFinal ? 2 : 1,
+        request: { isFinal },
+      });
+      assert.equal(markup.includes('Approve & publish'), isFinal);
+    });
+  });
+
+  it('renders a redacted observer without inventing progress or mutation controls', async () => {
+    const panel = await panelFixture();
+    panel.context = { org: 'example', site: 'website', path: '/page' };
+    Object.assign(panel, {
+      _data: {
+        own: [],
+        approvable: [],
+        page: [{ path: '/page', status: 'pending', created: '2026-01-01' }],
+        approvers: ['reviewer@example.com'],
+        steps: [{ index: 1, approvers: ['reviewer@example.com'] }],
+        settings: {},
+      },
+    });
+    const markup = panel.renderContent();
+    assert.match(markup, /Awaiting approval/);
+    assert.doesNotMatch(markup, /Step 1 of|Approved by|Approve<|Approve & publish|Withdraw|Resend notification/);
+  });
+
   it('does not offer approval outside the expanded review body', async () => {
     const panel = await panelFixture();
     const step = {

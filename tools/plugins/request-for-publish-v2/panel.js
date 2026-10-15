@@ -357,7 +357,7 @@ class RequestForPublish extends LitElement {
       ${state.request.comment ? html`<div class="detail"><span class="label">Request note</span><p class="note">${state.request.comment}</p></div>` : nothing}
       ${this.renderLinks()}
       ${actionable ? html`<div class="decision-actions">
-        ${approveInline ? html`<button class="primary" ?disabled=${this.disabled} @click=${() => this.act('approve')}>${state.current >= state.lastStaffed ? 'Approve & publish' : 'Approve'}</button>` : nothing}
+        ${approveInline ? html`<button class="primary" ?disabled=${this.disabled} @click=${() => this.act('approve')}>${state.request?.isFinal === true ? 'Approve & publish' : 'Approve'}</button>` : nothing}
         ${state.canApprove ? html`<button class="quiet" data-action="reject" ?disabled=${this.disabled} @click=${() => this.confirm('reject')}>Reject…</button>` : nothing}
         ${state.canWithdraw ? html`<button class="quiet" ?disabled=${this.disabled} @click=${() => this.act('resend')}>Resend notification</button>
           <button class="quiet" data-action="withdraw" ?disabled=${this.disabled} @click=${() => this.confirm('withdraw')}>Withdraw…</button>` : nothing}
