@@ -329,7 +329,7 @@ class RequestForPublish extends LitElement {
     </div>`;
   }
 
-  renderStepBody(step, state, inline = false) {
+  renderStepBody(step, state) {
     if (step.state === 'approved') {
       const when = step.approvedAt && new Date(step.approvedAt);
       return html`<dl class="metadata">
@@ -345,7 +345,7 @@ class RequestForPublish extends LitElement {
         ${peopleList('Also notified', step.cc)}`;
     }
     if (this._confirmation) return this.renderConfirmation();
-    const approveInline = inline && state.canApprove;
+    const approveInline = state.canApprove;
     const actionable = approveInline || state.canApprove || state.canWithdraw;
     return html`
       ${peopleList('Approvers', step.approvers)}
@@ -363,8 +363,7 @@ class RequestForPublish extends LitElement {
   renderStep(step, state) {
     const expanded = this._expanded.has(step.index);
     const current = step.state === 'current';
-    const actionable = current && state.canApprove && state.request && !this._confirmation;
-    return html`<li class="step ${step.state}">
+    return html`<li class="step ${step.state}" aria-current=${current ? 'step' : nothing}>
       <div class="step-head">
         <button class="step-toggle" aria-expanded=${expanded ? 'true' : 'false'} @click=${() => this.toggle(step.index)}>
           <span class="marker" aria-hidden="true"></span>
@@ -375,7 +374,6 @@ class RequestForPublish extends LitElement {
             ${step.state === 'skipped' ? html`<span class="step-meta">Skipped — no approvers</span>` : nothing}
           </span>
         </button>
-        ${actionable ? html`<button class="primary step-action" ?disabled=${this.disabled} @click=${() => this.act('approve')}>${state.current >= state.lastStaffed ? 'Approve & publish' : 'Approve'}</button>` : nothing}
       </div>
       ${expanded ? html`<div class="step-body">${this.renderStepBody(step, state)}</div>` : nothing}
     </li>`;
@@ -419,7 +417,7 @@ class RequestForPublish extends LitElement {
         ${created && !Number.isNaN(created.getTime()) ? html`<div><dt>Submitted</dt><dd><time datetime=${request.created}>${created.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</time></dd></div>` : nothing}
       </dl>` : nothing}
       ${state.bare
-    ? html`${current ? this.renderStepBody(current, state, true) : nothing}`
+    ? html`${current ? this.renderStepBody(current, state) : nothing}`
     : html`<ol class="steps">${state.steps.map((step) => this.renderStep(step, state))}</ol>`}
       ${this.authorSupport ? html`<p class="hint support-note">If your content owner is away, contact <a href=${`mailto:${this.authorSupport}`}>${this.authorSupport}</a> for assistance with content approvals.</p>` : nothing}
       ${requesting ? html`${this.renderGuidance()}${this.renderLinks()}${this.renderRequestForm()}` : nothing}

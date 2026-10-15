@@ -16,7 +16,34 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import vm from 'node:vm';
 import * as workflow from '../../../../tools/plugins/request-for-publish-v2/workflow.js';
+
+describe('review step controls', () => {
+  it('does not offer approval outside the expanded review body', async () => {
+    const source = await readFile(new URL('../../../../tools/plugins/request-for-publish-v2/panel.js', import.meta.url), 'utf8');
+    const start = source.indexOf('class RequestForPublish');
+    const end = source.indexOf("customElements.define('request-for-publish'");
+    const App = vm.runInNewContext(`${source.slice(start, end)}; RequestForPublish`, {
+      LitElement: class {},
+      html: (strings, ...values) => strings.reduce((text, part, index) => `${text}${part}${values[index] ?? ''}`, ''),
+      nothing: '',
+      peopleList: () => '',
+    });
+    const panel = new App();
+    const step = {
+      index: 1, state: 'current', title: 'Legal', approvers: [], cc: [],
+    };
+    const state = { canApprove: true, request: { comment: 'Review this note' } };
+    panel.renderLinks = () => 'View preview';
+    const collapsed = panel.renderStep(step, state);
+    assert.doesNotMatch(collapsed, /Approve|step-action/);
+    panel.toggle(1);
+    const expanded = panel.renderStep(step, state);
+    assert.match(expanded, /aria-current=step/);
+    assert.match(expanded, /step-body[\s\S]*Review this note[\s\S]*View preview[\s\S]*Approve/);
+  });
+});
 
 describe('native workspace comparison adapter', () => {
   it('dispatches synchronous undefined review actions without capability declarations', async () => {
