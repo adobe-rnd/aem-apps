@@ -13,6 +13,7 @@ function fixture(overrides = {}) {
     LitElement: class { requestUpdate() { return this; } },
     URL,
     URLSearchParams,
+    window: { location: { search: '', pathname: '/inbox' } },
     console,
     html: (strings, ...values) => strings.reduce((text, part, index) => `${text}${part}${values[index] ?? ''}`, ''),
     nothing: '',
@@ -95,6 +96,29 @@ describe('inbox v2 approval handlers', () => {
     assert.equal(app._authorEmail, 'author@example.com');
     assert.equal(app._comment, 'Actual request note');
     assert.equal(app._previewUrl, 'https://main--website--example.aem.page/page');
+  });
+
+  it('preserves env and ref across links and inline navigation', () => {
+    const browser = {
+      location: { search: '?env=ci&ref=rpfix&path=/old', pathname: '/inbox' },
+      history: {
+        replaceState: (_data, _unused, href) => {
+          browser.location.search = new URL(href, 'https://example.com').search;
+        },
+      },
+    };
+    const app = fixture({ window: browser });
+    app.context = { org: 'adobe-rnd', repo: 'aem-apps' };
+    [app.getReviewUrl({ path: '/page' }), app.getInboxUrl()].forEach((href) => {
+      const url = new URL(href);
+      assert.equal(url.searchParams.get('env'), 'ci');
+      assert.equal(url.searchParams.get('ref'), 'rpfix');
+    });
+    app.updateUrl({ org: 'other', site: 'another' });
+    const params = new URLSearchParams(browser.location.search);
+    assert.equal(params.get('env'), 'ci');
+    assert.equal(params.get('ref'), 'rpfix');
+    assert.equal(params.has('path'), false);
   });
 
   it('revalidates a final request before publishing', async () => {

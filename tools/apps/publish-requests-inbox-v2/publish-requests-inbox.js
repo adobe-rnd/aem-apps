@@ -171,23 +171,22 @@ class PublishRequestsApp extends LitElement {
   }
 
   getReviewUrl(request) {
-    const params = new URLSearchParams();
-    params.set('org', this._org);
-    params.set('site', this._site);
-    params.set('path', request.path);
-    if (request.requester) params.set('author', request.requester);
-    // Build preview URL for the request path
-    const path = request.path?.replace(/\/index$/, '') || '';
-    const previewUrl = `https://main--${this._site}--${this._org}.aem.page${path}`;
-    params.set('preview', previewUrl);
+    const params = this.navigationParams({ org: this._org, site: this._site, path: request.path });
     return `${this.appBaseUrl}?${params.toString()}`;
   }
 
   getInboxUrl() {
-    const params = new URLSearchParams();
-    params.set('org', this._org);
-    params.set('site', this._site);
+    const params = this.navigationParams({ org: this._org, site: this._site });
     return `${this.appBaseUrl}?${params.toString()}`;
+  }
+
+  navigationParams(values) {
+    const current = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(values);
+    ['env', 'ref'].forEach((key) => {
+      if (current.has(key)) params.set(key, current.get(key));
+    });
+    return params;
   }
 
   async loadSiteSettings(org, site) {
@@ -210,7 +209,7 @@ class PublishRequestsApp extends LitElement {
 
   updateUrl(params) {
     try {
-      const qs = new URLSearchParams(params).toString();
+      const qs = this.navigationParams(params).toString();
       window.history.replaceState(null, '', `${window.location.pathname}?${qs}`);
     } catch { /* cross-origin iframe — ignore */ }
   }
