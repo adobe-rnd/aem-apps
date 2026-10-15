@@ -19,18 +19,25 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import * as workflow from '../../../../tools/plugins/request-for-publish-v2/workflow.js';
 
+async function panelFixture() {
+  const source = await readFile(new URL('../../../../tools/plugins/request-for-publish-v2/panel.js', import.meta.url), 'utf8');
+  const start = source.indexOf('class RequestForPublish');
+  const end = source.indexOf("customElements.define('request-for-publish'");
+  const App = vm.runInNewContext(`${source.slice(start, end)}; RequestForPublish`, {
+    ...workflow,
+    URLSearchParams,
+    window: { location: { search: '' } },
+    LitElement: class {},
+    html: (strings, ...values) => strings.reduce((text, part, index) => `${text}${part}${values[index] ?? ''}`, ''),
+    nothing: '',
+    peopleList: () => '',
+  });
+  return new App();
+}
+
 describe('review step controls', () => {
   it('does not offer approval outside the expanded review body', async () => {
-    const source = await readFile(new URL('../../../../tools/plugins/request-for-publish-v2/panel.js', import.meta.url), 'utf8');
-    const start = source.indexOf('class RequestForPublish');
-    const end = source.indexOf("customElements.define('request-for-publish'");
-    const App = vm.runInNewContext(`${source.slice(start, end)}; RequestForPublish`, {
-      LitElement: class {},
-      html: (strings, ...values) => strings.reduce((text, part, index) => `${text}${part}${values[index] ?? ''}`, ''),
-      nothing: '',
-      peopleList: () => '',
-    });
-    const panel = new App();
+    const panel = await panelFixture();
     const step = {
       index: 1, state: 'current', title: 'Legal', approvers: [], cc: [],
     };
@@ -42,6 +49,15 @@ describe('review step controls', () => {
     const expanded = panel.renderStep(step, state);
     assert.match(expanded, /aria-current=step/);
     assert.match(expanded, /step-body[\s\S]*Review this note[\s\S]*View preview[\s\S]*Approve/);
+  });
+
+  it('offers manual page links when native comparison is unavailable', async () => {
+    const panel = await panelFixture();
+    panel.context = { org: 'example', site: 'website', path: '/page' };
+    const markup = panel.renderLinks();
+    assert.match(markup, /Comparison is not available in this editor/);
+    assert.match(markup, /Open live page/);
+    assert.doesNotMatch(markup, /Review changes<|Compare the current/);
   });
 });
 
