@@ -102,6 +102,7 @@ class PublishRequestsApp extends LitElement {
     _requester: { state: true },
     // Single-review mode: the pending row, kept for its step position
     _reviewRequest: { state: true },
+    _nextStep: { state: true },
     // Inbox mode
     _pendingRequests: { state: true },
     _processingPaths: { state: true },
@@ -519,7 +520,8 @@ published,
     try {
       const result = await this.approveOne(this._reviewRequest);
       if (result.success) {
-        this._state = 'approved';
+        this._nextStep = result.advanced?.find((entry) => entry.path === this._path);
+        this._state = result.completed?.includes(this._path) ? 'approved' : 'advanced';
         this._message = { type: 'success', text: result.published ? 'Published.' : 'Step approved. The next reviewers have been notified.' };
       } else {
         this._message = { type: 'error', text: result.error };
@@ -805,6 +807,8 @@ published,
         return this.renderMyRequests();
       case 'approved':
         return this.renderApproved();
+      case 'advanced':
+        return this.renderAdvanced();
       case 'rejected':
         return this.renderRejected();
       case 'review':
@@ -1120,6 +1124,20 @@ published,
           This page requires URL parameters to identify the content to review.
           Please access this page via the link in your approval email.
         </p>
+      </div>
+    `;
+  }
+
+  renderAdvanced() {
+    return html`
+      <div class="status-page">
+        <h2 class="status-heading status-heading--success">Step approved</h2>
+        <p class="status-body">Waiting on step ${this._nextStep?.step}
+          ${this._nextStep?.title || ''}.</p>
+        <p><code>${this._path}</code></p>
+        <a href="${this.getInboxUrl()}" class="back-link" @click=${(event) => this.backToInbox(event)}>
+          Back to inbox
+        </a>
       </div>
     `;
   }

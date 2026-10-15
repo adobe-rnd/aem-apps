@@ -149,5 +149,8 @@ describe('inbox v2 approval handlers', () => {
     app._reviewRequest = row;
     await app.handleApprove();
     assert.deepEqual(calls, []);
+    assert.equal(app._state, 'advanced');
+    assert.match(app.renderContent(), /Step approved|Waiting.*step 2/i);
+    assert.doesNotMatch(app.renderContent(), /Published!|View Published|aem.live/);
   });
 });
