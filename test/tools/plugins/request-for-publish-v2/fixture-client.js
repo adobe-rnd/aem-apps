@@ -122,7 +122,7 @@ export default function fixture(options = {}) {
           unauthorized: [],
           stale: [],
           completed: completed ? [page.path] : [],
-          advanced: completed ? [] : [{ path: page.path, step: model.current + 1 }],
+          advanced: completed ? [] : [page.path],
         });
       }
       if (['/api/v2/requests/reject', '/api/v2/requests/withdraw'].includes(route)) {

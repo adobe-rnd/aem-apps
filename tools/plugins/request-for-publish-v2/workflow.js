@@ -317,7 +317,7 @@ export function createClient({
         : 'Approval was not recorded. Refresh to check access and request status.');
     }
     if (final ? !result.completed?.includes(context.path)
-      : !result.advanced?.some((entry) => entry.path === context.path)) {
+      : !result.advanced?.includes(context.path)) {
       throw failure(final
         ? 'Published, but workflow was not completed. Refresh to check the request.'
         : 'Approval did not advance the workflow. Refresh; if it completed, publish the page manually.');

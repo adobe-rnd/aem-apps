@@ -376,7 +376,7 @@ export async function approveRequests(org, site, paths, token, step, final = fal
       };
     }
     const accepted = final ? result.completed || []
-      : (result.advanced || []).map((entry) => entry.path);
+      : result.advanced || [];
     const denied = [
       ...(result.stale || []), ...(result.unauthorized || []), ...(result.notFound || []),
     ];

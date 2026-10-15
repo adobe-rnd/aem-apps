@@ -32,7 +32,7 @@ describe('panel workflow fixture', () => {
     assert.equal(view.canWithdraw, true);
     assert.equal(view.canApprove, true);
     const result = await client.approve(prepareContext, view.request, { step: 1, final: false });
-    assert.deepEqual(result.advanced, [{ path: context.path, step: 2 }]);
+    assert.deepEqual(result.advanced, [context.path]);
     assert.equal(calls.some((call) => call.route === 'publish'), false);
     assert.deepEqual(
       calls.find((call) => call.route.endsWith('/approve')).body.paths,
@@ -59,7 +59,7 @@ describe('panel workflow fixture', () => {
     assert.equal(first.isFinal, false);
     assert.equal(first.stepInfo.current, 1);
     const advanced = await client.approve(context, first, { step: 1, final: false });
-    assert.deepEqual(advanced.advanced, [{ path: context.path, step: 2 }]);
+    assert.deepEqual(advanced.advanced, [context.path]);
     assert.deepEqual(advanced.completed, []);
     assert.equal(calls.some((call) => call.route === 'publish'), false);
 

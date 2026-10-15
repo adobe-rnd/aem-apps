@@ -480,7 +480,7 @@ class PublishRequestsApp extends LitElement {
         return { success: false, published, error: 'Approval conflict. The request changed; refresh and review its current status.' };
       }
       const accepted = fresh.isFinal ? result.completed?.includes(fresh.path)
-        : result.advanced?.some((entry) => entry.path === fresh.path);
+        : result.advanced?.includes(fresh.path);
       if (!result.success || !accepted || result.unauthorized?.includes(fresh.path)
         || result.notFound?.includes(fresh.path)) {
         return {
@@ -490,7 +490,12 @@ published,
             : result.error || 'Approval was not recorded. Refresh to check access and request status.',
         };
       }
-      return { ...result, success: true, published };
+      const nextRequest = fresh.isFinal ? null : await checkPublishRequest(
+        this._org, this._site, fresh.path, this.token,
+      ).catch(() => null);
+      return {
+ ...result, success: true, published, nextStep: nextRequest?.stepInfo,
+};
     } catch (error) {
       return { success: false, published, error: error.message };
     }
@@ -510,7 +515,7 @@ published,
     try {
       const result = await this.approveOne(this._reviewRequest);
       if (result.success) {
-        this._nextStep = result.advanced?.find((entry) => entry.path === this._path);
+        this._nextStep = result.nextStep;
         this._state = result.completed?.includes(this._path) ? 'approved' : 'advanced';
         this._message = this.mutationNotice(result, result.published ? 'Published.' : 'Step approved.');
       } else {
@@ -601,7 +606,7 @@ published,
       await previous;
       const result = await approveRequests(this._org, this._site, paths, this.token, step, final);
       const accepted = final ? result.completed || []
-        : (result.advanced || []).map((entry) => entry.path);
+        : result.advanced || [];
       const denied = new Set([
         ...(result.stale || []), ...(result.unauthorized || []), ...(result.notFound || []),
       ]);
@@ -1134,8 +1139,8 @@ published,
     return html`
       <div class="status-page">
         <h2 class="status-heading status-heading--success">Step approved</h2>
-        <p class="status-body">Waiting on step ${this._nextStep?.step}
-          ${this._nextStep?.title || ''}.</p>
+        <p class="status-body">${this._nextStep?.current
+          ? `Waiting on step ${this._nextStep.current}.` : 'Waiting on the next reviewers.'}</p>
         <p><code>${this._path}</code></p>
         <a href="${this.getInboxUrl()}" class="back-link" @click=${(event) => this.backToInbox(event)}>
           Back to inbox

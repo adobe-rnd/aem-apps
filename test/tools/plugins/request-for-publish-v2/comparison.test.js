@@ -371,7 +371,7 @@ describe('save before preview sequencing', () => {
             ? {
               approved: [context.path],
               completed: final ? [context.path] : [],
-              advanced: final ? [] : [{ path: context.path, step: 2 }],
+              advanced: final ? [] : [context.path],
             }
             : {
               requests: [{

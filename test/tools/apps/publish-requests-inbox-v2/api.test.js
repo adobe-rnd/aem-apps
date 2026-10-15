@@ -59,7 +59,7 @@ describe('inbox v2 API', () => {
     test.mock.method(global, 'fetch', async () => Response.json({
       approved: ['/page'],
       completed: [],
-      advanced: [{ path: '/page', step: 2 }],
+      advanced: ['/page'],
       stale: ['/stale'],
       unauthorized: ['/denied'],
       notFound: ['/gone'],
@@ -69,7 +69,7 @@ describe('inbox v2 API', () => {
     const result = await api.approveRequests('example', 'website', ['/page', '/stale'], 'token', 1);
     assert.deepEqual(result.approved, ['/page']);
     assert.deepEqual(result.stale, ['/stale']);
-    assert.deepEqual(result.advanced, [{ path: '/page', step: 2 }]);
+    assert.deepEqual(result.advanced, ['/page']);
     assert.deepEqual(result.unauthorized, ['/denied']);
     assert.deepEqual(result.notFound, ['/gone']);
   });
@@ -147,10 +147,11 @@ describe('inbox v2 API', () => {
       const body = JSON.parse(opts.body);
       bodies.push(body);
       return Response.json(body.final ? { completed: ['/page'] }
-        : { advanced: [{ path: '/page', step: 2 }] });
+        : { advanced: ['/page'] });
     });
     await api.approveRequests('org', 'site', ['/page'], 'token', 1, true);
-    await api.approveRequests('org', 'site', ['/page'], 'token', 1, false);
+    const intermediate = await api.approveRequests('org', 'site', ['/page'], 'token', 1, false);
+    assert.equal(intermediate.success, true);
     assert.equal(bodies[0].final, true);
     assert.equal(Object.hasOwn(bodies[1], 'final'), false);
     assert.equal(bodies[0].step, 1);
@@ -304,7 +305,7 @@ describe('inbox v2 approval handlers', () => {
     const app = fixture({
       approveRequests: async (...args) => {
         calls.push(args);
-        return { success: true, approved: args[2], advanced: args[2].map((path) => ({ path })) };
+        return { success: true, approved: args[2], advanced: args[2] };
       },
     });
     const result = await app.approveGrouped([
@@ -320,7 +321,7 @@ describe('inbox v2 approval handlers', () => {
       approveRequests: async () => ({
         success: false,
         approved: ['/one', '/denied'],
-        advanced: [{ path: '/one' }, { path: '/denied' }],
+        advanced: ['/one', '/denied'],
         stale: ['/stale'],
         unauthorized: ['/denied'],
         notFound: ['/gone'],
@@ -342,7 +343,7 @@ describe('inbox v2 approval handlers', () => {
       approveRequests: async (...args) => {
         calls.push(args);
         return args[5] ? { completed: args[2] }
-          : { advanced: args[2].map((path) => ({ path })) };
+          : { advanced: args[2] };
       },
     });
     const result = await app.approveGrouped([
@@ -364,7 +365,7 @@ describe('inbox v2 approval handlers', () => {
       },
       approveRequests: async (_org, _site, paths) => {
         calls.push(...paths);
-        return { advanced: paths.map((path) => ({ path })) };
+        return { advanced: paths };
       },
     });
     app._pendingRequests = rows;
@@ -400,19 +401,25 @@ describe('inbox v2 approval handlers', () => {
 
   it('never publishes an intermediate approval', async () => {
     const calls = [];
+    let advanced = false;
     const row = {
       path: '/page', isFinal: false, canApproveNow: true, stepInfo: { current: 1, lastStaffed: 2 },
     };
     const app = fixture({
-      checkPublishRequest: async () => row,
+      checkPublishRequest: async () => (advanced ? {
+        ...row, isFinal: true, stepInfo: { current: 2, lastStaffed: 2 },
+      } : row),
       publishContent: async () => { calls.push('publish'); return { success: true }; },
-      approveRequests: async () => ({ success: true, advanced: [{ path: '/page', step: 2 }] }),
+      approveRequests: async () => {
+        advanced = true;
+        return { success: true, advanced: ['/page'] };
+      },
     });
     app._reviewRequest = row;
     await app.handleApprove();
     assert.deepEqual(calls, []);
     assert.equal(app._state, 'advanced');
-    assert.match(app.renderContent(), /Step approved|Waiting.*step 2/i);
+    assert.match(app.renderContent(), /Waiting on step 2/i);
     assert.doesNotMatch(app.renderContent(), /Published!|View Published|aem.live/);
   });
 });

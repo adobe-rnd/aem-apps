@@ -140,7 +140,7 @@ function fixture({
           notFound: [],
           unauthorized: [],
           completed: body.final ? [context.path] : [],
-          advanced: body.final ? [] : [{ path: context.path, step: 2 }],
+          advanced: body.final ? [] : [context.path],
         });
       }
       return response({ success: true, notifiedApprovers: ['reviewer@example.com'] });
@@ -538,6 +538,18 @@ describe('workflow operations', () => {
     await client.approve(context, row, { step: 1, final: false });
     assert.deepEqual(calls.map((call) => call.path), ['/api/v2/requests', '/api/v2/requests/approve']);
     assert.equal(calls[1].body.step, 1);
+  });
+  it('accepts the worker path-array advanced result without a false warning', async () => {
+    const row = { ...pending, isFinal: false };
+    const { client, calls } = fixture({
+      approvable: [row],
+      fail: (url) => url.pathname.endsWith('/approve') && response({
+        approved: [context.path], completed: [], advanced: [context.path],
+      }),
+    });
+    const result = await client.approve(context, row, { step: 1, final: false });
+    assert.deepEqual(result.advanced, [context.path]);
+    assert.equal(calls.some((call) => call.path === 'publish'), false);
   });
   it('does not claim publication when an intermediate step fails to record', async () => {
     const row = { ...pending, isFinal: false };
