@@ -346,13 +346,18 @@ export function isFinalStep(request) {
  * @param {number} [step] - The step the caller believes is current.
  * @returns {Promise<Object>} { success, approved, notFound, unauthorized, stale, completed }
  */
-export async function approveRequests(org, site, paths, token, step) {
+export async function approveRequests(org, site, paths, token, step, final = false) {
   try {
     const body = { org, site, paths };
     if (step !== undefined) body.step = step;
+    if (final) body.final = true;
     const resp = await fetch(`${getWorkerUrl()}/api/v2/requests/approve`, getOpts(token, 'POST', body));
     const result = await resp.json();
-    if (!resp.ok) return { success: false, error: result.error || 'Failed to record approval' };
+    if (!resp.ok) {
+      return {
+        ...result, success: false, status: resp.status, error: result.error || 'Failed to record approval',
+      };
+    }
     if (result.stale?.length) {
       return {
         success: false,

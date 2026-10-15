@@ -460,6 +460,51 @@ class PublishRequestsApp extends LitElement {
 
   // ======== Single-request action handlers ========
 
+  async prepareApproval(request) {
+    const fresh = await checkPublishRequest(this._org, this._site, request.path, this.token);
+    if (!fresh || fresh.canApproveNow !== true || typeof fresh.isFinal !== 'boolean'
+      || !Number.isInteger(fresh.stepInfo?.current)
+      || fresh.stepInfo.current !== request.stepInfo?.current
+      || fresh.isFinal !== request.isFinal || fresh.created !== request.created
+      || fresh.requester !== request.requester) {
+      throw new Error('This request changed or cannot be approved. Refresh and review its current step.');
+    }
+    return fresh;
+  }
+
+  async approveOne(request) {
+    let published = false;
+    try {
+      const fresh = await this.prepareApproval(request);
+      if (fresh.isFinal) {
+        const publication = await publishContent(this._org, this._site, fresh.path);
+        if (!publication.success) return publication;
+        published = true;
+      }
+      const result = await approveRequests(
+        this._org, this._site, [fresh.path], this.token, fresh.stepInfo.current, fresh.isFinal,
+      );
+      if (result.status === 409 || result.stale?.includes(fresh.path)) {
+        await checkPublishRequest(this._org, this._site, fresh.path, this.token).catch(() => {});
+        return { success: false, published, error: 'Approval conflict. The request changed; refresh and review its current status.' };
+      }
+      const accepted = fresh.isFinal ? result.completed?.includes(fresh.path)
+        : result.advanced?.some((entry) => entry.path === fresh.path);
+      if (!result.success || !accepted || result.unauthorized?.includes(fresh.path)
+        || result.notFound?.includes(fresh.path)) {
+        return {
+          success: false,
+published,
+          error: published ? `Published, but workflow was not completed. ${result.error || 'Refresh to check the request.'}`
+            : result.error || 'Approval was not recorded. Refresh to check access and request status.',
+        };
+      }
+      return { ...result, success: true, published };
+    } catch (error) {
+      return { success: false, published, error: error.message };
+    }
+  }
+
   async handleApprove() {
     // guard against re-entry before Lit re-render disables the button
     if (this._isProcessing) return;
@@ -472,32 +517,10 @@ class PublishRequestsApp extends LitElement {
     this._message = null;
 
     try {
-      const request = this._reviewRequest;
-      const step = request?.stepInfo?.current;
-      // Intermediate steps must not publish: later reviewers have yet to approve.
-      if (!isFinalStep(request)) {
-        const advance = await approveRequests(
-          this._org, this._site, [this._path], this.token, step,
-        );
-        this._message = advance.success
-          ? { type: 'success', text: 'Step approved. The next reviewers have been notified.' }
-          : { type: 'error', text: advance.error };
-        if (advance.success) this._state = 'approved';
-        return;
-      }
-
-      // Publish the content via Helix Admin API (under the user's session)
-      const result = await publishContent(this._org, this._site, this._path);
-
+      const result = await this.approveOne(this._reviewRequest);
       if (result.success) {
         this._state = 'approved';
-        // Record the approval server-side: removes the pending row + emails the author.
-        const bookkeep = await approveRequests(
-          this._org, this._site, [this._path], this.token, step,
-        );
-        if (!bookkeep.success) {
-          this._message = { type: 'info', text: `Published, but recording the approval failed: ${bookkeep.error}` };
-        }
+        this._message = { type: 'success', text: result.published ? 'Published.' : 'Step approved. The next reviewers have been notified.' };
       } else {
         this._message = { type: 'error', text: result.error };
       }
@@ -543,41 +566,19 @@ class PublishRequestsApp extends LitElement {
     this._processingPaths = new Set([...this._processingPaths, request.path]);
     this.requestUpdate();
 
-    const step = request.stepInfo?.current;
-    if (!isFinalStep(request)) {
-      // Intermediate step: advance the workflow without publishing.
-      const advance = await approveRequests(
-        this._org, this._site, [request.path], this.token, step,
-      );
-      if (advance.success) {
-        this._pendingRequests = this._pendingRequests.filter((r) => r.path !== request.path);
-        this._message = {
-          type: 'success',
-          text: `Step approved for ${request.path}. The next reviewers have been notified.`,
-        };
-      } else {
-        this._message = { type: 'error', text: `Failed to approve ${request.path}: ${advance.error}` };
-      }
-    } else {
-      const result = await publishContent(this._org, this._site, request.path);
-
+    try {
+      const result = await this.approveOne(request);
       if (result.success) {
         this._pendingRequests = this._pendingRequests.filter((r) => r.path !== request.path);
-        // Record approval server-side (sheet removal + author email).
-        const bookkeep = await approveRequests(
-          this._org, this._site, [request.path], this.token, step,
-        );
-        this._message = bookkeep.success
-          ? { type: 'success', text: `Published: ${request.path}` }
-          : { type: 'info', text: `Published: ${request.path}. Recording approval failed: ${bookkeep.error}` };
+        this._message = { type: 'success', text: result.published ? `Published: ${request.path}` : `Step approved: ${request.path}` };
       } else {
-        this._message = { type: 'error', text: `Failed to publish ${request.path}: ${result.error}` };
+        this._message = { type: 'error', text: result.error };
       }
+    } finally {
+      const updated = new Set(this._processingPaths);
+      updated.delete(request.path);
+      this._processingPaths = updated;
     }
-
-    const updated = new Set(this._processingPaths);
-    updated.delete(request.path);
-    this._processingPaths = updated;
   }
 
   /**
@@ -589,17 +590,18 @@ class PublishRequestsApp extends LitElement {
     const byStep = new Map();
     requests.forEach((request) => {
       const step = request.stepInfo?.current;
-      const key = step ?? 'none';
-      if (!byStep.has(key)) byStep.set(key, { step, paths: [] });
+      const final = request.isFinal === true;
+      const key = `${step}:${final}`;
+      if (!byStep.has(key)) byStep.set(key, { step, final, paths: [] });
       byStep.get(key).paths.push(request.path);
     });
 
     const approved = [];
     const errors = [];
     const groups = [...byStep.values()];
-    await groups.reduce(async (previous, { step, paths }) => {
+    await groups.reduce(async (previous, { step, final, paths }) => {
       await previous;
-      const result = await approveRequests(this._org, this._site, paths, this.token, step);
+      const result = await approveRequests(this._org, this._site, paths, this.token, step, final);
       if (result.success) approved.push(...paths);
       else errors.push(result.error);
     }, Promise.resolve());
@@ -608,12 +610,20 @@ class PublishRequestsApp extends LitElement {
   }
 
   async handleApproveAll() {
-    const actionable = this._pendingRequests.filter((r) => r.canApproveNow !== false);
+    const actionable = this._pendingRequests.filter((r) => r.canApproveNow === true);
     const waiting = this._pendingRequests.length - actionable.length;
     if (actionable.length === 0) return;
 
     this._approveAllProcessing = true;
     this._message = null;
+
+    try {
+      await Promise.all(actionable.map((request) => this.prepareApproval(request)));
+    } catch (error) {
+      this._approveAllProcessing = false;
+      this._message = { type: 'error', text: error.message };
+      return;
+    }
 
     const finals = actionable.filter((r) => isFinalStep(r));
     const intermediates = actionable.filter((r) => !isFinalStep(r));

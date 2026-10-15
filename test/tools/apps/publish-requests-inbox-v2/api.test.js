@@ -61,6 +61,51 @@ describe('inbox v2 API', () => {
 });
 
 describe('inbox v2 approval handlers', () => {
+  const finalRow = {
+    path: '/page',
+    isFinal: true,
+    canApproveNow: true,
+    stepInfo: { current: 1, lastStaffed: 1 },
+  };
+
+  it('revalidates a final request before publishing', async () => {
+    const calls = [];
+    const app = fixture({
+      checkPublishRequest: async () => { calls.push('read'); return null; },
+      publishContent: async () => { calls.push('publish'); return { success: true }; },
+      approveRequests: async () => ({ success: true, completed: ['/page'] }),
+    });
+    app._reviewRequest = finalRow;
+    await app.handleApprove();
+    assert.deepEqual(calls, ['read']);
+    assert.match(app._message.text, /changed|refresh/i);
+  });
+
+  it('keeps a published request visible when the worker did not complete it', async () => {
+    const app = fixture({
+      checkPublishRequest: async () => finalRow,
+      publishContent: async () => ({ success: true }),
+      approveRequests: async () => ({ success: true, completed: [], advanced: [{ path: '/page' }] }),
+    });
+    app._pendingRequests = [finalRow];
+    await app.handleInboxApprove(finalRow);
+    assert.equal(app._pendingRequests.length, 1);
+    assert.match(app._message.text, /published.*workflow.*not completed/i);
+  });
+
+  it('re-reads a conflicting approval and releases its processing guard', async () => {
+    let reads = 0;
+    const app = fixture({
+      checkPublishRequest: async () => { reads += 1; return finalRow; },
+      publishContent: async () => ({ success: true }),
+      approveRequests: async () => ({ success: false, status: 409, error: 'Finality changed' }),
+    });
+    await app.handleInboxApprove(finalRow);
+    assert.equal(reads, 2);
+    assert.match(app._message.text, /conflict.*refresh/i);
+    assert.equal(app._processingPaths.size, 0);
+  });
+
   it('groups approvals by the current step', async () => {
     const calls = [];
     const app = fixture({
@@ -79,8 +124,11 @@ describe('inbox v2 approval handlers', () => {
 
   it('never publishes an intermediate approval', async () => {
     const calls = [];
-    const row = { path: '/page', canApproveNow: true, stepInfo: { current: 1, lastStaffed: 2 } };
+    const row = {
+      path: '/page', isFinal: false, canApproveNow: true, stepInfo: { current: 1, lastStaffed: 2 },
+    };
     const app = fixture({
+      checkPublishRequest: async () => row,
       publishContent: async () => { calls.push('publish'); return { success: true }; },
       approveRequests: async () => ({ success: true, advanced: [{ path: '/page', step: 2 }] }),
     });
