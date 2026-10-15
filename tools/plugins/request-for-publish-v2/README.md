@@ -8,6 +8,16 @@ Every view renders the same stepper. Steps already approved show a check mark an
 
 There is no role selector. When the caller is both the requester and an approver of the current step, the current step offers both sets of actions. A user with no stake in a pending request — including an approver of a later step — gets the same stepper read-only, so they can see the request's progress without being offered the submission form. Approver eligibility comes from the worker, not a client-side comparison of email addresses. The v2 inbox (`tools/apps/publish-requests-inbox-v2/`) remains available for queue and bulk work.
 
+## Opting in
+
+V2 is opt-in: deploy a worker supporting the `/api/v2/` contract, register the
+site and its requests-sheet access, then point the inline library entry to
+`/tools/plugins/request-for-publish-v2/request-for-publish.html`. Use
+`/tools/apps/publish-requests-inbox-v2/publish-requests-inbox` for the inbox and
+v2 email links. See the [v2 inbox setup](../../apps/publish-requests-inbox-v2/README.md#opting-in).
+The separate v1 plugin and inbox remain unchanged; deploying v2 code alone does
+not migrate existing site entries. Do not mix v1 clients with the v2 workflow.
+
 ## Integration
 
 Use `request-for-publish.html` as an **inline** library extension. The same entrypoint works in a fullsize dialog. The default JS export retains the panel `init({ context, token, actions })` contract.
@@ -23,9 +33,13 @@ The panel uses the worker's v2 API:
 - `GET /api/v2/config` and `GET /api/v2/approvers` (the latter also returns the matched `workflow` and its ordered `steps`)
 - `GET /api/v2/requests`, `GET /api/v2/requests?role=requester` and `GET /api/v2/requests?role=page&path=` (the page-scoped read, which ignores the caller's role so an uninvolved user sees that a request already exists)
 - `POST /api/v2/requests` (including `resend: true`)
-- `POST /api/v2/requests/withdraw`, `/reject` and `/approve`
+- `POST /api/v2/requests/withdraw`, `POST /api/v2/requests/reject` and `POST /api/v2/requests/approve`
 
-`POST /api/v2/requests/approve` carries the step the client believes is current. The worker re-derives it from the stored log and returns the path under `stale` when they disagree, so an out-of-date panel cannot approve a step twice or skip ahead. Every pending row carries `canApproveNow` (false when the caller approves some later step but not the current one) and `stepInfo`; the panel takes the current step from `stepInfo` and only derives it from the log when the worker omits it.
+`POST /api/v2/requests/approve` carries `{ paths, step }` for intermediate approvals and `{ paths, step, final: true }` for final approvals after confirmed publication. The worker's `isFinal` is authoritative; never infer finality from step counts or a local log. Every pending row carries `canApproveNow` and `stepInfo`; missing approval metadata must fail closed. **Awaiting other reviewers** means the caller cannot approve the current step, even if they review a later one.
+
+The worker re-derives the current step from the stored log. A `409` requires a refresh and a new decision, not an automatic retry. Inspect per-path `stale`, `unauthorized` and `notFound` outcomes as well as successes. `advanced` means another staffed step remains and must not show a published outcome; only `completed` means the workflow finished. The `approved` list alone does not prove completion.
+
+`emailErrors` on a successful mutation are success warnings: the sheet was saved but email delivery failed. Surface the warning and refresh without repeating the mutation. `401` is an authentication failure; `403` is an authorization or registration denial. `500` and `502` are configuration/backend failures, not empty queues. A `role=page` observer sees progress with the `comment` and `step` log redacted; that read does not grant permission to approve.
 
 Preview and publication still happen client-side under the user's session. Submission waits for a confirmed editor save, then previews, then sends the request. A failed save or preview stops submission. Approving an intermediate step only writes the log and notifies the next step's approvers — no content operation, so only the final approval can leave the page published with the request unrecorded. That case still offers **Retry request update**, which does not republish. Withdraw and reject require an inline confirmation; rejection also requires a reason and ends the request outright, discarding the step log with the row. An ambiguous publish response blocks another publication attempt in the panel and directs the user to check the live page. Mutations are not automatically retried.
 
@@ -49,7 +63,7 @@ At the site or org level (site config wins when it has a `publish-workflow-confi
 
 | Tab | Columns / values |
 |---|---|
-| `publish-workflow-config` | `Path` (v1 `Pattern` also accepted), `Workflow`, `Approvers`, `CC` |
+| `publish-workflow-config` | Canonical `Pattern`, `Workflow`, `Approvers`, `CC` |
 | `publish-workflow-steps` | `Workflow`, `Title`, `Description`, `Approvers`, `CC`, `CC can approve` — one row per step |
 | `publish-workflow-settings` | `key`, `value`: `request.comments.required`, `request.comments.length`, `request.support.contact`, `request.guidance.title`, `request.guidance.text`, `request.guidance.item.N`, `request.guidance.item.N.marker`, `theme.accent-color`, `theme.accent-color-hover`, `approvals.cc.can-approve` (inline rules only) |
 | `publish-workflow-groups-to-email` | Optional distribution-list expansion; not needed for direct reviewer addresses. |
@@ -62,9 +76,9 @@ Sites can show a checklist before authors request approval. Nothing is shown unl
 
 ### Steps
 
-Each `publish-workflow-config` row maps a `Path` (exact path, `/a/*` or `/*`) either to a named `Workflow` or to inline `Approvers`/`CC`:
+Each `publish-workflow-config` row maps a `Pattern` (exact path, `/a/*` or `/*`) either to a named `Workflow` or to inline `Approvers`/`CC`. `Path` is a v2 fallback only when `Pattern` is empty; use `Pattern` for both v1 and v2:
 
-| Path | Workflow | Approvers | CC |
+| Pattern | Workflow | Approvers | CC |
 |---|---|---|---|
 | `/*` | | `web-team@example.com` | |
 | `/products/*` | `legal-then-brand` | | |
