@@ -462,6 +462,20 @@ describe('workflow operations', () => {
     await assert.rejects(client.approve(context, pending, last), /advanced|refresh/i);
   });
 
+  it('does not claim publication when an intermediate approval is denied', async () => {
+    const row = { ...pending, isFinal: false };
+    const { client } = fixture({
+      approvable: [row],
+      fail: (url) => url.pathname.endsWith('/approve') && response({
+        approved: [], unauthorized: [context.path],
+      }),
+    });
+    await assert.rejects(client.approve(context, row, { step: 1, final: false }), (error) => {
+      assert.doesNotMatch(error.message, /published/i);
+      return error.published === false;
+    });
+  });
+
   it('retries completion without publishing a second time', async () => {
     const { client, calls } = fixture({ approvable: [pending] });
     await client.complete(context, pending, { step: 1 });

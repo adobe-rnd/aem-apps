@@ -292,7 +292,9 @@ export function createClient({
     }
     if (!result.approved?.includes(context.path) || result.unauthorized?.includes(context.path)
       || result.notFound?.includes(context.path)) {
-      throw failure('The page was published, but approval was not recorded. Refresh to check access and request status.');
+      throw failure(final
+        ? 'The page was published, but approval was not recorded. Refresh to check access and request status.'
+        : 'Approval was not recorded. Refresh to check access and request status.');
     }
     if (final ? !result.completed?.includes(context.path)
       : !result.advanced?.some((entry) => entry.path === context.path)) {
