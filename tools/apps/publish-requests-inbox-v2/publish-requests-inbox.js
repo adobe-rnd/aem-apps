@@ -641,6 +641,7 @@ published,
 
     const finals = actionable.filter((r) => isFinalStep(r));
     const intermediates = actionable.filter((r) => !isFinalStep(r));
+    const intermediateResult = await this.approveGrouped(intermediates);
 
     let publishedPaths = [];
     let publishError = null;
@@ -651,43 +652,33 @@ published,
       this._message = { type: 'info', text: `Starting bulk publish of ${paths.length} pages...` };
       this.requestUpdate();
 
-      const bulkResult = await bulkPublishContent(this._org, this._site, paths);
-      if (!bulkResult.success) {
-        this._approveAllProcessing = false;
-        this._message = { type: 'error', text: `Bulk publish failed: ${bulkResult.error}` };
-        return;
-      }
-
-      const jobSelfUrl = bulkResult.links?.self;
-      if (jobSelfUrl) {
-        this._message = { type: 'info', text: 'Bulk publish job started. Waiting for completion...' };
-        this.requestUpdate();
-
-        const jobResult = await pollJobStatus(jobSelfUrl);
-        if (!jobResult.success) {
-          this._approveAllProcessing = false;
-          this._message = {
-            type: 'error',
-            text: `Bulk publish job did not complete in time. Some pages may still be publishing. ${jobResult.error || ''}`,
-          };
-          return;
+      try {
+        const bulkResult = await bulkPublishContent(this._org, this._site, paths);
+        if (!bulkResult.success) {
+          publishError = `Bulk publish failed: ${bulkResult.error}`;
+        } else if (bulkResult.links?.self) {
+          const jobResult = await pollJobStatus(bulkResult.links.self);
+          const confirmed = new Set((jobResult.job?.data?.resources || [])
+            .filter((resource) => resource.status === 200 || resource.status === 304)
+            .map((resource) => resource.path));
+          publishedPaths = paths.filter((path) => confirmed.has(path));
+          const unconfirmed = paths.filter((path) => !confirmed.has(path));
+          if (!jobResult.success || unconfirmed.length) {
+            publishError = `Publication not confirmed for: ${unconfirmed.join(', ') || 'remaining job resources'}. ${jobResult.error || ''} Check the live pages before retrying.`;
+          }
+        } else {
+          publishedPaths = paths;
         }
-
-        // 200 = published, 304 = already up-to-date — both are success
-        const failedPaths = (jobResult.job?.data?.resources || [])
-          .filter((r) => r.status !== 200 && r.status !== 304).map((r) => r.path);
-        publishedPaths = paths.filter((p) => !failedPaths.includes(p));
-        if (failedPaths.length > 0) publishError = `Failed to publish: ${failedPaths.join(', ')}.`;
-      } else {
-        publishedPaths = paths;
+      } catch (error) {
+        publishError = `Bulk publish could not be confirmed. ${error.message}`;
       }
     }
 
     const publishedSet = new Set(publishedPaths);
-    const { approved, error, warning } = await this.approveGrouped([
-      ...intermediates,
-      ...finals.filter((r) => publishedSet.has(r.path)),
-    ]);
+    const finalResult = await this.approveGrouped(finals.filter((r) => publishedSet.has(r.path)));
+    const approved = [...intermediateResult.approved, ...finalResult.approved];
+    const error = [intermediateResult.error, finalResult.error].filter(Boolean).join(' ');
+    const warning = [intermediateResult.warning, finalResult.warning].filter(Boolean).join(' ');
 
     const approvedSet = new Set(approved);
     this._pendingRequests = this._pendingRequests.filter((r) => !approvedSet.has(r.path));

@@ -243,6 +243,7 @@ export async function bulkPublishContent(org, site, paths) {
 export async function pollJobStatus(jobSelfUrl, maxWaitMs = 60000, intervalMs = 2000) {
   const jobUrl = `${CORS_PROXY}?url=${encodeURIComponent(jobSelfUrl)}/details`;
   const startTime = Date.now();
+  let lastJob;
 
   while (Date.now() - startTime < maxWaitMs) {
     try {
@@ -254,6 +255,7 @@ export async function pollJobStatus(jobSelfUrl, maxWaitMs = 60000, intervalMs = 
       }
 
       const job = await resp.json();
+      lastJob = job;
       const { state } = job;
 
       // Terminal states
@@ -269,7 +271,7 @@ export async function pollJobStatus(jobSelfUrl, maxWaitMs = 60000, intervalMs = 
     }
   }
 
-  return { success: false, error: 'Job polling timed out or encountered an error' };
+  return { success: false, job: lastJob, error: 'Job polling timed out or encountered an error' };
 }
 
 // ===========================================================================

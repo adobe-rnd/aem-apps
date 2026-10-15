@@ -213,6 +213,51 @@ describe('inbox v2 approval handlers', () => {
     assert.deepEqual(Array.from(result.approved), ['/final', '/next']);
   });
 
+  it('advances intermediate requests even when bulk publishing fails', async () => {
+    const calls = [];
+    const rows = [finalRow, { ...finalRow, path: '/next', isFinal: false }];
+    const app = fixture({
+      checkPublishRequest: async (_org, _site, path) => rows.find((row) => row.path === path),
+      bulkPublishContent: async () => {
+        calls.push('bulk');
+        return { success: false, error: 'Backend failed' };
+      },
+      approveRequests: async (_org, _site, paths) => {
+        calls.push(...paths);
+        return { advanced: paths.map((path) => ({ path })) };
+      },
+    });
+    app._pendingRequests = rows;
+    await app.handleApproveAll();
+    assert.deepEqual(calls, ['/next', 'bulk']);
+    assert.deepEqual(Array.from(app._pendingRequests, (row) => row.path), ['/page']);
+    assert.match(app._message.text, /1 advanced/);
+    assert.equal(app._approveAllProcessing, false);
+  });
+
+  it('records only confirmed published resources when a bulk job times out', async () => {
+    const rows = [finalRow, { ...finalRow, path: '/unknown' }];
+    const calls = [];
+    const app = fixture({
+      checkPublishRequest: async (_org, _site, path) => rows.find((row) => row.path === path),
+      bulkPublishContent: async () => ({ success: true, links: { self: 'https://admin.example/job' } }),
+      pollJobStatus: async () => ({
+        success: false,
+        error: 'Timed out',
+        job: { data: { resources: [{ path: '/page', status: 200 }] } },
+      }),
+      approveRequests: async (_org, _site, paths) => {
+        calls.push(...paths);
+        return { completed: paths };
+      },
+    });
+    app._pendingRequests = rows;
+    await app.handleApproveAll();
+    assert.deepEqual(calls, ['/page']);
+    assert.deepEqual(Array.from(app._pendingRequests, (row) => row.path), ['/unknown']);
+    assert.match(app._message.text, /1 published/);
+  });
+
   it('never publishes an intermediate approval', async () => {
     const calls = [];
     const row = {
