@@ -27,7 +27,6 @@ import {
   isFinalStep,
   rejectRequest,
   withdrawRequest,
-  getApproversForPath,
   getAllPendingRequestsForUser,
   getAllPendingRequestsByRequester,
   resendPublishRequest,
@@ -338,28 +337,6 @@ class PublishRequestsApp extends LitElement {
     preview.pathname = this._path.replace(/\.html$/, '').replace(/\/index$/, '/');
     this._previewUrl = preview.href;
 
-    // Check if the current user is an authorized approver for this content path
-    if (this._userEmail) {
-      try {
-        const approvers = await getApproversForPath(this._org, this._site, this._path, this.token);
-        const normalizedUser = this._userEmail.toLowerCase();
-        const isApprover = approvers.some((a) => a.toLowerCase() === normalizedUser);
-        if (!isApprover) {
-          this._state = 'unauthorized';
-          this._message = {
-            type: 'error',
-            text: `You (${this._userEmail}) are not authorized to approve or reject this request. Please contact your administrator.`,
-          };
-          return;
-        }
-      } catch (error) {
-        console.error('Error checking approvers:', error);
-        this._state = 'error';
-        this._message = { type: 'error', text: error.message };
-        return;
-      }
-    }
-
     this._state = 'review';
   }
 
@@ -545,6 +522,10 @@ published,
   }
 
   async handleReject() {
+    if (this._reviewRequest?.canApproveNow !== true) {
+      this._message = { type: 'error', text: 'This step is awaiting another reviewer. Refresh to check access.' };
+      return;
+    }
     if (this._needsEmail) {
       this._rejectError = 'Unable to determine your email. Please log in again.';
       return;
@@ -1311,7 +1292,7 @@ published,
               class="pw-fill-accent"
               @click=${this.handleApprove}
               ?disabled=${this._isProcessing || this._needsEmail
-                || this._reviewRequest?.canApproveNow === false}
+                || this._reviewRequest?.canApproveNow !== true}
             >
               ${this.approveLabel(this._reviewRequest || {}, this._isProcessing)}
             </sl-button>

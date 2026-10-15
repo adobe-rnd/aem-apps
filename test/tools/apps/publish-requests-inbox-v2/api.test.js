@@ -102,6 +102,18 @@ describe('inbox v2 API', () => {
     const result = await api.rejectRequest('org', 'site', '/page', 'Reason', 'token');
     assert.deepEqual(result.emailErrors, emailErrors);
   });
+
+  it('looks up one page with an explicit page role', async (test) => {
+    global.window = { location: { hostname: 'localhost', search: '' } };
+    test.after(() => { delete global.window; });
+    test.mock.method(global, 'fetch', async (href) => {
+      const url = new URL(href);
+      assert.equal(url.searchParams.get('role'), 'page');
+      assert.equal(url.searchParams.get('path'), '/page');
+      return Response.json({ requests: [{ path: '/page', status: 'pending' }] });
+    });
+    assert.equal((await api.checkPublishRequest('org', 'site', '/page', 'token')).path, '/page');
+  });
 });
 
 describe('inbox v2 approval handlers', () => {
@@ -183,6 +195,29 @@ describe('inbox v2 approval handlers', () => {
     assert.equal(app._state, 'approved');
     assert.equal(app._message.type, 'info');
     assert.match(app._message.text, /notification.*failed|emails.*not.*sent/i);
+  });
+
+  it('uses worker eligibility without fetching a flat approver list', async () => {
+    const app = fixture({
+      checkPublishRequest: async () => finalRow,
+      getApproversForPath: async () => { throw new Error('Unnecessary approver lookup'); },
+    });
+    app._userEmail = 'reviewer@example.com';
+    await app.initReview();
+    assert.equal(app._state, 'review');
+  });
+
+  it('handles observer rows without comment or step', async () => {
+    const app = fixture({
+      checkPublishRequest: async () => ({ ...finalRow, canApproveNow: false }),
+      getApproversForPath: async () => { throw new Error('Unnecessary approver lookup'); },
+    });
+    app._userEmail = 'observer@example.com';
+    app._comment = 'Old note';
+    await app.initReview();
+    assert.equal(app._comment, '');
+    assert.equal(app._state, 'review');
+    assert.equal(app._reviewRequest.canApproveNow, false);
   });
 
   it('revalidates a final request before publishing', async () => {

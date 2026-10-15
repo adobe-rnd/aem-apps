@@ -335,7 +335,12 @@ export async function getAllPendingRequestsByRequester(org, site, userEmail, tok
  * @returns {Promise<Object|null>}
  */
 export async function checkPublishRequest(org, site, path, token) {
-  const pending = await getAllPendingRequestsForUser(org, site, null, token);
+  const params = new URLSearchParams({
+    org, site, role: 'page', path,
+  });
+  const resp = await fetch(`${getWorkerUrl()}/api/v2/requests?${params}`, getOpts(token));
+  const { requests: pending } = await readWorkerResponse(resp);
+  if (!Array.isArray(pending)) throw new Error('The workflow service returned an invalid request list.');
   return pending.find((r) => r.path === path && r.status === 'pending') || null;
 }
 
