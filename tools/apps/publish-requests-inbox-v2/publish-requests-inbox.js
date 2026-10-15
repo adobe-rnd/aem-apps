@@ -600,15 +600,31 @@ published,
 
     const approved = [];
     const errors = [];
+    const warnings = [];
     const groups = [...byStep.values()];
     await groups.reduce(async (previous, { step, final, paths }) => {
       await previous;
       const result = await approveRequests(this._org, this._site, paths, this.token, step, final);
-      if (result.success) approved.push(...paths);
-      else errors.push(result.error);
+      const accepted = final ? result.completed || []
+        : (result.advanced || []).map((entry) => entry.path);
+      const denied = new Set([
+        ...(result.stale || []), ...(result.unauthorized || []), ...(result.notFound || []),
+      ]);
+      const successes = paths.filter((path) => accepted.includes(path) && !denied.has(path));
+      approved.push(...successes);
+      const failed = paths.filter((path) => !successes.includes(path));
+      if (failed.length) {
+        errors.push(`Not approved: ${failed.join(', ')}. ${result.error || 'Refresh to check conflicts, authorization, or requests not found.'}`);
+      }
+      if (result.status === 409 || result.stale?.length) {
+        await Promise.all(paths.map((path) => checkPublishRequest(
+          this._org, this._site, path, this.token,
+        ).catch(() => {})));
+      }
+      if (result.emailErrors?.length) warnings.push('Approval recorded, but some notification emails could not be sent.');
     }, Promise.resolve());
 
-    return { approved, error: errors.join(' ') || null };
+    return { approved, error: errors.join(' ') || null, warning: warnings.join(' ') || null };
   }
 
   async handleApproveAll() {
@@ -672,7 +688,7 @@ published,
     }
 
     const publishedSet = new Set(publishedPaths);
-    const { approved, error } = await this.approveGrouped([
+    const { approved, error, warning } = await this.approveGrouped([
       ...intermediates,
       ...finals.filter((r) => publishedSet.has(r.path)),
     ]);
@@ -691,7 +707,7 @@ published,
 
     this._message = publishError || error
       ? { type: 'error', text: `${summary} ${publishError || ''} ${error || ''}`.trim() }
-      : { type: 'success', text: summary };
+      : { type: warning ? 'info' : 'success', text: `${summary} ${warning || ''}`.trim() };
   }
 
   // ======== My-requests action handlers ========

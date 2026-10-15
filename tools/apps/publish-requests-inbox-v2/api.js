@@ -356,14 +356,17 @@ export async function approveRequests(org, site, paths, token, step, final = fal
         ...result, success: false, status: resp.status, error: result.error || 'Failed to record approval',
       };
     }
-    if (result.stale?.length) {
-      return {
-        success: false,
-        error: 'This request was advanced by someone else. Refresh to see its current step.',
-        ...result,
-      };
-    }
-    return { success: true, ...result };
+    const accepted = final ? result.completed || []
+      : (result.advanced || []).map((entry) => entry.path);
+    const denied = [
+      ...(result.stale || []), ...(result.unauthorized || []), ...(result.notFound || []),
+    ];
+    const success = paths.every((path) => accepted.includes(path) && !denied.includes(path));
+    return {
+      ...result,
+      success,
+      error: success ? null : 'Some approvals were not recorded. Refresh to check conflicts, access, and request status.',
+    };
   } catch (error) {
     console.error('Error recording approval:', error);
     return { success: false, error: error.message || 'An error occurred' };

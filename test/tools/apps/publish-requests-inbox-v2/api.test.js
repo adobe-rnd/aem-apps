@@ -125,7 +125,7 @@ describe('inbox v2 approval handlers', () => {
     const app = fixture({
       approveRequests: async (...args) => {
         calls.push(args);
-        return { success: true, approved: args[2] };
+        return { success: true, approved: args[2], advanced: args[2].map((path) => ({ path })) };
       },
     });
     const result = await app.approveGrouped([
@@ -134,6 +134,44 @@ describe('inbox v2 approval handlers', () => {
     ]);
     assert.deepEqual(calls.map((args) => args[4]), [1, 2]);
     assert.deepEqual(Array.from(result.approved), ['/one', '/two']);
+  });
+
+  it('retains successful paths in a group with stale and unauthorized requests', async () => {
+    const app = fixture({
+      approveRequests: async () => ({
+        success: false,
+        approved: ['/one', '/denied'],
+        advanced: [{ path: '/one' }, { path: '/denied' }],
+        stale: ['/stale'],
+        unauthorized: ['/denied'],
+        notFound: ['/gone'],
+      }),
+    });
+    const rows = ['/one', '/stale', '/denied', '/gone'].map((path) => ({
+      path, isFinal: false, stepInfo: { current: 1 },
+    }));
+    const result = await app.approveGrouped(rows);
+    assert.deepEqual(Array.from(result.approved), ['/one']);
+    assert.match(result.error, /stale|conflict/i);
+    assert.match(result.error, /denied|authoriz/i);
+    assert.match(result.error, /gone|not found/i);
+  });
+
+  it('separates final and intermediate requests on the same step', async () => {
+    const calls = [];
+    const app = fixture({
+      approveRequests: async (...args) => {
+        calls.push(args);
+        return args[5] ? { completed: args[2] }
+          : { advanced: args[2].map((path) => ({ path })) };
+      },
+    });
+    const result = await app.approveGrouped([
+      { path: '/final', isFinal: true, stepInfo: { current: 1 } },
+      { path: '/next', isFinal: false, stepInfo: { current: 1 } },
+    ]);
+    assert.deepEqual(calls.map((args) => args[5]), [true, false]);
+    assert.deepEqual(Array.from(result.approved), ['/final', '/next']);
   });
 
   it('never publishes an intermediate approval', async () => {
