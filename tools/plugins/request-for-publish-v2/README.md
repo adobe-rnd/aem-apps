@@ -1,6 +1,6 @@
 # Publish request (v2)
 
-This is the **v2** plugin. It lives at `tools/plugins/request-for-publish-v2/` beside the unchanged v1 plugin (`tools/plugins/request-for-publish/`), and talks only to the worker's `/api/v2/*` routes. Sites opt in by pointing their library entry at `/tools/plugins/request-for-publish-v2/request-for-publish.html`; sites still on v1 are unaffected.
+This is the **v2** plugin. It lives at `tools/plugins/request-for-publish-v2/` beside the unchanged v1 plugin (`tools/plugins/request-for-publish/`), and talks only to the worker's `/api/v2/*` routes. Sites opt in by pointing their library entry at `/tools/plugins/request-for-publish-v2/request-for-publish-v2.html`; sites still on v1 are unaffected.
 
 One page-scoped DA/EW plugin showing a page's approval flow as an ordered list of steps. A request advances one step at a time; the page is published only when the last step is approved.
 
@@ -12,19 +12,19 @@ There is no role selector. When the caller is both the requester and an approver
 
 V2 is opt-in: deploy a worker supporting the `/api/v2/` contract, register the
 site and its requests-sheet access, then point the inline library entry to
-`/tools/plugins/request-for-publish-v2/request-for-publish.html`. Use
-`/tools/apps/publish-requests-inbox-v2/publish-requests-inbox` for the inbox and
+`/tools/plugins/request-for-publish-v2/request-for-publish-v2.html`. Use
+`/tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2` for the inbox and
 v2 email links. See the [v2 inbox setup](../../apps/publish-requests-inbox-v2/README.md#opting-in).
 The separate v1 plugin and inbox remain unchanged; deploying v2 code alone does
 not migrate existing site entries. Do not mix v1 clients with the v2 workflow.
 
 ## Integration
 
-Use `request-for-publish.html` as an **inline** library extension. The same entrypoint works in a fullsize dialog. The default JS export retains the panel `init({ context, token, actions })` contract.
+Use `request-for-publish-v2.html` as an **inline** library extension. The same entrypoint works in a fullsize dialog. The default JS export retains the panel `init({ context, token, actions })` contract.
 
 Context accepts `org`, `site` (or legacy `repo`), and a site-relative page `path`. Missing or unsupported context blocks actions. The component reacts to new context properties and ignores superseded reads/actions. The EW iframe host must remount or provide new context on page navigation: the existing SDK only supplies an initial context snapshot.
 
-`request-for-publish.js` bootstraps the SDK and authenticated transport. `panel.js` contains the Lit view. `workflow.js` contains the testable view derivation, client and operation sequencing. Native semantic controls use Spectrum-compatible tokens; no additional UI dependency is required.
+`request-for-publish-v2.js` bootstraps the SDK and authenticated transport. `panel.js` contains the Lit view. `workflow.js` contains the testable view derivation, client and operation sequencing. Native semantic controls use Spectrum-compatible tokens; no additional UI dependency is required.
 
 ## Worker contract
 
@@ -108,7 +108,7 @@ The worker requires site registration and the caller's DA access to the requests
 
 ## Local verification
 
-Run `npm test` and `npm run lint`. Also run `npx stylelint tools/plugins/request-for-publish-v2/request-for-publish.css`; the repository's default CSS lint glob does not cover tools.
+Run `npm test` and `npm run lint`. Also run `npx stylelint tools/plugins/request-for-publish-v2/request-for-publish-v2.css`; the repository's default CSS lint glob does not cover tools.
 
 Serve the repository over HTTP and open `/test/fixtures/request-for-publish.html`. The fixture runs browser assertions against the real component with a fake client and displays the results. Add `?view=requester` or `?view=approver` to inspect the other views. No workflow, email or content operation is sent by this fixture.
 

@@ -11,13 +11,13 @@ the inbox publishes content under the approver's Helix session.
 V2 is opt-in and requires all three pieces:
 
 1. Deploy a worker with the `/api/v2/` contract described below and register the site with access to its requests sheet.
-2. Point the site's inline library entry to `/tools/plugins/request-for-publish-v2/request-for-publish.html`. See the [v2 plugin setup](../../plugins/request-for-publish-v2/README.md#opting-in).
-3. Use `/tools/apps/publish-requests-inbox-v2/publish-requests-inbox` for inbox links. Worker v2 emails must link to this inbox, not v1.
+2. Point the site's inline library entry to `/tools/plugins/request-for-publish-v2/request-for-publish-v2.html`. See the [v2 plugin setup](../../plugins/request-for-publish-v2/README.md#opting-in).
+3. Use `/tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2` for inbox links. Worker v2 emails must link to this inbox, not v1.
 
 For the hosted app, open:
 
 ```text
-https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox-v2/publish-requests-inbox?org=my-org&site=my-site
+https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2?org=my-org&site=my-site
 ```
 
 The v1 [inbox](../publish-requests-inbox/README.md) and
@@ -41,8 +41,8 @@ comments and approval data come from the authenticated worker response; preview
 links are constructed from the site and validated path.
 
 ```text
-/tools/apps/publish-requests-inbox-v2/publish-requests-inbox?org=my-org&site=my-site&path=/drafts/my-page&env=ci&ref=rpfix
-/tools/apps/publish-requests-inbox-v2/publish-requests-inbox?org=my-org&site=my-site&requester=true
+/tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2?org=my-org&site=my-site&path=/drafts/my-page&env=ci&ref=rpfix
+/tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2?org=my-org&site=my-site&requester=true
 ```
 
 ## Multi-step approvals

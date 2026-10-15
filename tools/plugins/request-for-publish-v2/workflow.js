@@ -18,7 +18,7 @@ const WORKERS = {
   ci: 'https://publish-requests-ci.aem-poc-lab.workers.dev',
   local: 'http://localhost:8787',
 };
-const INBOX = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox-v2/publish-requests-inbox';
+const INBOX = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2';
 // Multi-step approvals are served by the worker's v2 API only.
 const API = '/api/v2';
 

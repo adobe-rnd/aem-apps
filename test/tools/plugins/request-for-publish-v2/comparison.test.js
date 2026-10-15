@@ -261,7 +261,7 @@ describe('native workspace comparison adapter', () => {
   });
 
   it('does not retain capability declarations or an external comparator fallback', async () => {
-    const paths = ['request-for-publish.js', 'workflow.js', 'panel.js'];
+    const paths = ['request-for-publish-v2.js', 'workflow.js', 'panel.js'];
     const sources = await Promise.all(paths.map((path) => readFile(new URL(`../../../../tools/plugins/request-for-publish-v2/${path}`, import.meta.url), 'utf8')));
     sources.forEach((source) => {
       assert.doesNotMatch(source, /capabilities|tools\.aem\.live|links\.diff/);

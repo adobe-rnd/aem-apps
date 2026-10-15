@@ -209,7 +209,7 @@ describe('context-derived views', () => {
     }, undefined, moduleUrl);
     assert.equal(
       links.inbox,
-      'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox-v2/publish-requests-inbox?org=scdemos&site=benp5&ref=ewws0926',
+      'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2?org=scdemos&site=benp5&ref=ewws0926',
     );
     assert.equal(links.myRequests, `${links.inbox}&requester=true`);
     assert.equal(new URL(pageLinks(context, 'ci', moduleUrl).inbox).searchParams.get('env'), 'ci');

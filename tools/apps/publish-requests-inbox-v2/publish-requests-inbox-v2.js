@@ -151,7 +151,7 @@ class PublishRequestsApp extends LitElement {
    */
   get appBaseUrl() {
     const { org, repo } = this.context || {};
-    const appPath = 'tools/apps/publish-requests-inbox-v2/publish-requests-inbox';
+    const appPath = 'tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2';
     return `https://da.live/app/${org}/${repo}/${appPath}`;
   }
 

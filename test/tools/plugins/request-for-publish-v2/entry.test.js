@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-const source = readFileSync(new URL('../../../../tools/plugins/request-for-publish-v2/request-for-publish.js', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../../../../tools/plugins/request-for-publish-v2/request-for-publish-v2.js', import.meta.url), 'utf8');
 const makePanelSource = source.slice(source.indexOf('function makePanel('), source.indexOf('export default'));
 
 function loadPanel(overrides = {}) {

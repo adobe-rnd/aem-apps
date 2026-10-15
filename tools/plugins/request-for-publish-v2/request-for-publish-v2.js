@@ -55,7 +55,7 @@ export default async function init(sdk) {
   };
 }
 
-if (document.querySelector('script[src$="/request-for-publish.js"]')) {
+if (document.querySelector('script[src$="/request-for-publish-v2.js"]')) {
   try {
     document.body.append(makePanel(await DA_SDK));
   } catch {

@@ -1,8 +1,24 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { existsSync, readFileSync } from 'node:fs';
 import fixture, { context, pending, singleStep } from './fixture-client.js';
 
 const steps = [singleStep[0], { ...singleStep[0], index: 2, title: 'Final review' }];
+
+describe('v2 asset names', () => {
+  ['plugins/request-for-publish-v2', 'apps/publish-requests-inbox-v2'].forEach((directory) => {
+    const basename = directory.split('/').at(-1);
+    it(`uses the ${basename} suffix for HTML, JavaScript, and CSS`, () => {
+      const root = new URL(`../../../../tools/${directory}/`, import.meta.url);
+      ['html', 'js', 'css'].forEach((extension) => {
+        assert.ok(existsSync(new URL(`${basename}.${extension}`, root)), extension);
+        assert.equal(existsSync(new URL(`${basename.slice(0, -3)}.${extension}`, root)), false);
+      });
+      const html = readFileSync(new URL(`${basename}.html`, root), 'utf8');
+      assert.ok(html.includes(`/tools/${directory}/${basename}.js`));
+    });
+  });
+});
 
 describe('panel workflow fixture', () => {
   it('preserves explicit participant eligibility and leaves observer rows raw', async () => {

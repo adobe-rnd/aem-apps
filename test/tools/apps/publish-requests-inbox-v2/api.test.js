@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import * as api from '../../../../tools/apps/publish-requests-inbox-v2/api.js';
 
-const source = readFileSync(new URL('../../../../tools/apps/publish-requests-inbox-v2/publish-requests-inbox.js', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../../../../tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2.js', import.meta.url), 'utf8');
 
 function fixture(overrides = {}) {
   const scope = {

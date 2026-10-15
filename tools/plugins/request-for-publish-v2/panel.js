@@ -20,7 +20,7 @@ import {
 } from './workflow.js';
 
 const style = new CSSStyleSheet();
-style.replaceSync(await (await fetch(new URL('./request-for-publish.css', import.meta.url))).text());
+style.replaceSync(await (await fetch(new URL('./request-for-publish-v2.css', import.meta.url))).text());
 
 function peopleList(label, people) {
   const unique = [...new Set(people)];
