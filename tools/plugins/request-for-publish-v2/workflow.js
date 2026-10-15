@@ -40,7 +40,7 @@ export function normalizeContext(context = {}) {
   if (decoded.split('/').some((part) => part === '.' || part === '..')) return null;
   if (/\.[^/]+$/.test(path) && !path.endsWith('.html')) return null;
   return {
-    org, site, path, ref,
+    org, site, path: path.replace(/\.html$/, ''), ref,
   };
 }
 

@@ -152,6 +152,16 @@ function fixture({
 }
 
 describe('context-derived views', () => {
+  it('uses the same page identity for side-panel and Prepare HTML contexts', () => {
+    const sidePanel = normalizeContext(context);
+    const prepare = normalizeContext({ ...context, path: `${context.path}.html` });
+    assert.deepEqual(prepare, sidePanel);
+    const view = deriveView(prepare, data({ own: [pending], approvable: [pending] }));
+    assert.equal(view.view, 'approver');
+    assert.equal(view.canWithdraw, true);
+    assert.equal(view.canApprove, true);
+  });
+
   it('accepts both EW site and legacy repo context, without changing the request path', () => {
     assert.deepEqual(normalizeContext({ ...context, ref: 'feature' }), { ...context, ref: 'feature' });
     const legacy = { org: context.org, repo: context.site, path: context.path };

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import fixture, { context, pending, singleStep } from './fixture-client.js';
+import { normalizeContext, deriveView } from '../../../../tools/plugins/request-for-publish-v2/workflow.js';
 
 const steps = [singleStep[0], { ...singleStep[0], index: 2, title: 'Final review' }];
 
@@ -21,6 +22,24 @@ describe('v2 asset names', () => {
 });
 
 describe('panel workflow fixture', () => {
+  it('recognizes a side-panel submission when opened from Prepare', async () => {
+    const { client, calls } = fixture({ role: 'both', steps });
+    const panelContext = normalizeContext(context);
+    const prepareContext = normalizeContext({ ...context, path: `${context.path}.html` });
+    await client.submit(panelContext, 'Review this page');
+    const view = deriveView(prepareContext, await client.load(prepareContext));
+    assert.equal(view.view, 'approver');
+    assert.equal(view.canWithdraw, true);
+    assert.equal(view.canApprove, true);
+    const result = await client.approve(prepareContext, view.request, { step: 1, final: false });
+    assert.deepEqual(result.advanced, [{ path: context.path, step: 2 }]);
+    assert.equal(calls.some((call) => call.route === 'publish'), false);
+    assert.deepEqual(
+      calls.find((call) => call.route.endsWith('/approve')).body.paths,
+      [context.path],
+    );
+  });
+
   it('preserves explicit participant eligibility and leaves observer rows raw', async () => {
     const denied = { ...pending, canApproveNow: false, isFinal: false };
     const { client } = fixture({ role: 'both', rows: [denied] });
