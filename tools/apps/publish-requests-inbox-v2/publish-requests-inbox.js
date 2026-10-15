@@ -893,7 +893,7 @@ published,
             <sl-button
               class="pw-fill-accent pw-action-sm"
               @click=${(e) => { e.stopPropagation(); this.handleInboxApprove(request); }}
-              ?disabled=${isProcessing || this._approveAllProcessing || request.canApproveNow === false}
+              ?disabled=${isProcessing || this._approveAllProcessing || request.canApproveNow !== true}
             >
               ${this.approveLabel(request, isProcessing)}
             </sl-button>
@@ -909,7 +909,7 @@ published,
               <span class="detail-label">Step</span>
               <span class="detail-value">
                 ${request.stepInfo.current} of ${request.stepInfo.count}${request.stepInfo.title ? ` — ${request.stepInfo.title}` : ''}
-                ${request.canApproveNow === false ? ' (awaiting another reviewer)' : ''}
+                ${request.canApproveNow !== true ? ' (awaiting another reviewer)' : ''}
               </span>
             </div>
           ` : nothing}
@@ -936,14 +936,14 @@ published,
   }
 
   approveLabel(request, isProcessing) {
-    if (request.canApproveNow === false) return 'Awaiting other reviewers';
+    if (request.canApproveNow !== true) return 'Awaiting other reviewers';
     if (!isFinalStep(request)) return isProcessing ? 'Approving...' : 'Approve Step';
     return isProcessing ? 'Publishing...' : 'Approve & Publish';
   }
 
   /** Requests waiting on a step this user can act on right now. */
   get actionableCount() {
-    return this._pendingRequests.filter((r) => r.canApproveNow !== false).length;
+    return this._pendingRequests.filter((r) => r.canApproveNow === true).length;
   }
 
   // ======== My Requests (requester view) renders ========
@@ -1049,7 +1049,7 @@ published,
     const title = info.title ? ` — ${info.title}` : '';
     let note = 'Approving this step publishes the page.';
     if (!isFinalStep(request)) note = 'Approving advances the request; the page is not published yet.';
-    if (request.canApproveNow === false) note = 'This step is waiting on another reviewer.';
+    if (request.canApproveNow !== true) note = 'This step is waiting on another reviewer.';
     return html`
       <p class="reviewer-info">
         <strong>Step ${info.current} of ${info.count}${title}</strong> — ${note}

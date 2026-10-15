@@ -311,7 +311,7 @@ export async function getApproversForPath(org, site, path, token) {
  * @param {string} userEmail - Unused; the worker derives identity from the token.
  */
 export async function getAllPendingRequestsForUser(org, site, userEmail, token) {
-  const url = `${getWorkerUrl()}/api/v2/requests?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
+  const url = `${getWorkerUrl()}/api/v2/requests?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}&role=approver`;
   const resp = await fetch(url, getOpts(token, 'GET'));
   const { requests } = await readWorkerResponse(resp);
   if (!Array.isArray(requests)) throw new Error('The workflow service returned an invalid request list.');
@@ -361,9 +361,12 @@ export function isFinalStep(request) {
  * @returns {Promise<Object>} { success, approved, notFound, unauthorized, stale, completed }
  */
 export async function approveRequests(org, site, paths, token, step, final = false) {
+  if (!Number.isInteger(step) || step < 1) {
+    return { success: false, error: 'Cannot determine the current step. Refresh before approving.' };
+  }
   try {
     const body = { org, site, paths };
-    if (step !== undefined) body.step = step;
+    body.step = step;
     if (final) body.final = true;
     const resp = await fetch(`${getWorkerUrl()}/api/v2/requests/approve`, getOpts(token, 'POST', body));
     const result = await resp.json();

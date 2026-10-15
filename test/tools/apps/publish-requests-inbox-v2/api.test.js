@@ -114,6 +114,47 @@ describe('inbox v2 API', () => {
     });
     assert.equal((await api.checkPublishRequest('org', 'site', '/page', 'token')).path, '/page');
   });
+
+  it('requests the approver queue explicitly', async (test) => {
+    global.window = { location: { hostname: 'localhost', search: '' } };
+    test.after(() => { delete global.window; });
+    test.mock.method(global, 'fetch', async (href) => {
+      assert.equal(new URL(href).searchParams.get('role'), 'approver');
+      return Response.json({ requests: [] });
+    });
+    await api.getAllPendingRequestsForUser('org', 'site', null, 'token');
+  });
+
+  it('never sends an approval without a valid expected step', async (test) => {
+    global.window = { location: { hostname: 'localhost', search: '' } };
+    test.after(() => { delete global.window; });
+    const mocked = test.mock.method(global, 'fetch', async () => Response.json({ approved: ['/page'] }));
+    const results = await Promise.all([undefined, null, 0, -1, '1'].map((step) => (
+      api.approveRequests('org', 'site', ['/page'], 'token', step)
+    )));
+    assert.equal(mocked.mock.callCount(), 0);
+    results.forEach((result) => {
+      assert.equal(result.success, false);
+      assert.match(result.error, /step.*refresh|refresh.*step/i);
+    });
+  });
+
+  it('sends final true only for explicitly final approvals', async (test) => {
+    global.window = { location: { hostname: 'localhost', search: '' } };
+    test.after(() => { delete global.window; });
+    const bodies = [];
+    test.mock.method(global, 'fetch', async (_href, opts) => {
+      const body = JSON.parse(opts.body);
+      bodies.push(body);
+      return Response.json(body.final ? { completed: ['/page'] }
+        : { advanced: [{ path: '/page', step: 2 }] });
+    });
+    await api.approveRequests('org', 'site', ['/page'], 'token', 1, true);
+    await api.approveRequests('org', 'site', ['/page'], 'token', 1, false);
+    assert.equal(bodies[0].final, true);
+    assert.equal(Object.hasOwn(bodies[1], 'final'), false);
+    assert.equal(bodies[0].step, 1);
+  });
 });
 
 describe('inbox v2 approval handlers', () => {
