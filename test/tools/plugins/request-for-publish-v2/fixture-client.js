@@ -82,10 +82,10 @@ export default function fixture(options = {}) {
             requests: allowed ? structuredClone(state.rows).map((row) => {
               const model = buildStepModel(state.steps, row.step);
               return {
-                ...row,
                 canApproveNow: true,
                 stepInfo: model,
                 isFinal: model.current === model.lastStaffed,
+                ...row,
               };
             }) : [],
           });
