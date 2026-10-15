@@ -36,8 +36,22 @@ describe('inbox v2 API', () => {
 
   it('distinguishes intermediate and final staffed steps', () => {
     assert.equal(api.isFinalStep({ stepInfo: { current: 1, lastStaffed: 2 } }), false);
-    assert.equal(api.isFinalStep({ stepInfo: { current: 2, lastStaffed: 2 } }), true);
+    assert.equal(api.isFinalStep({
+      isFinal: true, stepInfo: { current: 2, lastStaffed: 2 },
+    }), true);
     assert.equal(api.isFinalStep({ stepInfo: { current: 1, lastStaffed: null } }), false);
+  });
+
+  it('fails closed without explicit worker finality or a current step', () => {
+    [undefined, {}, { isFinal: true },
+      { stepInfo: { current: 2, lastStaffed: 2 } },
+      { stepInfo: { current: 3, lastStaffed: 2 } },
+      { isFinal: true, stepInfo: { current: 3, lastStaffed: 2, complete: true } },
+      { isFinal: false, stepInfo: { current: 2, lastStaffed: 2 } },
+    ].forEach((row) => assert.equal(api.isFinalStep(row), false));
+    assert.equal(api.isFinalStep({
+      isFinal: true, stepInfo: { current: 1, lastStaffed: 2 },
+    }), true);
   });
 
   it('preserves per-path worker outcomes including partial stale results', async (test) => {

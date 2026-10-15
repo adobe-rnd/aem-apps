@@ -334,10 +334,8 @@ export async function checkPublishRequest(org, site, path, token) {
  */
 export function isFinalStep(request) {
   const info = request?.stepInfo;
-  // An older worker sends no step info: treat every request as single-step.
-  if (!info) return true;
-  if (!info.lastStaffed) return false;
-  return info.current >= info.lastStaffed;
+  return request?.isFinal === true && Number.isInteger(info?.current)
+    && info.current > 0 && !info.complete && request.canApproveNow !== false;
 }
 
 /**
