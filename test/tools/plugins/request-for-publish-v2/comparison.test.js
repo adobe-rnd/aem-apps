@@ -209,7 +209,16 @@ describe('save before preview sequencing', () => {
           const route = new URL(href).pathname;
           calls.push(route);
           return new Response(JSON.stringify(route.endsWith('/approve')
-            ? { approved: [context.path] } : { requests: [pending] }));
+            ? {
+              approved: [context.path],
+              completed: final ? [context.path] : [],
+              advanced: final ? [] : [{ path: context.path, step: 2 }],
+            }
+            : {
+              requests: [{
+                ...pending, isFinal: final, canApproveNow: true, stepInfo: { current: 1 },
+              }],
+            }));
         },
       });
       await client.approve(context, pending, { step: 1, final });

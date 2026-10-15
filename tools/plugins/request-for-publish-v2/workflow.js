@@ -258,6 +258,7 @@ export function createClient({
     if (rows.length !== 1 || !sameRequest(rows[0], expected)) {
       throw failure('This request changed or is no longer pending. Refresh before taking action.', { stale: true });
     }
+    return rows[0];
   }
 
   async function contentAction(action, context, label) {
@@ -273,14 +274,31 @@ export function createClient({
     }
   }
 
-  async function record(context, step) {
-    const result = await json(`${API}/requests/approve`, context, { paths: [context.path], step });
+  async function record(context, step, final) {
+    let result;
+    try {
+      result = await json(`${API}/requests/approve`, context, {
+        paths: [context.path], step, ...(final ? { final: true } : {}),
+      });
+    } catch (error) {
+      if (error.status === 409) {
+        await list(context, { role: 'approver', path: context.path }).catch(() => {});
+        throw failure('Approval conflict. The request changed; refresh and review its current status.', { status: 409 });
+      }
+      throw error;
+    }
     if (result.stale?.includes(context.path)) {
       throw failure('This request was advanced by someone else. Refresh before taking action.');
     }
     if (!result.approved?.includes(context.path) || result.unauthorized?.includes(context.path)
       || result.notFound?.includes(context.path)) {
       throw failure('The page was published, but approval was not recorded. Refresh to check access and request status.');
+    }
+    if (final ? !result.completed?.includes(context.path)
+      : !result.advanced?.some((entry) => entry.path === context.path)) {
+      throw failure(final
+        ? 'Published, but workflow was not completed. Refresh to check the request.'
+        : 'Approval did not advance the workflow. Refresh; if it completed, publish the page manually.');
     }
     return result;
   }
@@ -342,22 +360,24 @@ export function createClient({
       return result;
     },
     async approve(context, expected, { step, final } = {}, onPhase = () => {}) {
-      await revalidate(context, expected);
-      // Only the last step publishes, so earlier approvals cannot leave the
-      // page live with the request unrecorded.
+      const fresh = await revalidate(context, expected, 'approver');
+      if (fresh.canApproveNow !== true || typeof fresh.isFinal !== 'boolean'
+        || fresh.isFinal !== final || fresh.stepInfo?.current !== step) {
+        throw failure('This request changed. Refresh and review its current step before approving.');
+      }
       if (final) {
         onPhase('Publishing page…');
         await contentAction(publish, context, 'Publish');
       }
       onPhase('Updating request…');
-      try { return await record(context, step); } catch (error) {
+      try { return await record(context, step, fresh.isFinal); } catch (error) {
         throw failure(error.message, { status: error.status, published: !!final });
       }
     },
     async complete(context, expected, { step } = {}) {
       try {
         await revalidate(context, expected);
-        return await record(context, step);
+        return await record(context, step, true);
       } catch (error) {
         throw failure(error.message, { status: error.status, published: true });
       }

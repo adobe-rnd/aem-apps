@@ -22,6 +22,8 @@ import {
 const context = { org: 'example', site: 'website', path: '/drafts/page' };
 const pending = {
   path: context.path,
+  isFinal: true,
+  canApproveNow: true,
   status: 'pending',
   requester: 'author@example.com',
   created: '2026-01-01T10:00:00Z',
@@ -71,9 +73,20 @@ function fixture({
       if (url.pathname === '/api/v2/requests' && !opts.method) {
         const role = url.searchParams.get('role');
         if (role === 'page') return response({ requests: page });
-        return response({ requests: role === 'requester' ? own : approvable });
+        return response({
+          requests: (role === 'requester' ? own : approvable)
+            .map((row) => ({ stepInfo: { current: 1, lastStaffed: 1 }, ...row })),
+        });
       }
-      if (url.pathname.endsWith('/approve')) return response({ approved: [context.path], notFound: [], unauthorized: [] });
+      if (url.pathname.endsWith('/approve')) {
+        return response({
+          approved: [context.path],
+          notFound: [],
+          unauthorized: [],
+          completed: body.final ? [context.path] : [],
+          advanced: body.final ? [] : [{ path: context.path, step: 2 }],
+        });
+      }
       return response({ success: true, notifiedApprovers: ['reviewer@example.com'] });
     },
     preview: async () => { calls.push({ path: 'preview' }); return response({}, publishFail ? 500 : 200); },
@@ -376,6 +389,29 @@ describe('workflow operations', () => {
     await client.approve(context, pending, last);
     assert.deepEqual(calls.map((call) => call.path), ['/api/v2/requests', 'publish', '/api/v2/requests/approve']);
     assert.equal(calls[2].body.step, 1);
+    assert.equal(calls[2].body.final, true);
+  });
+  it('does not publish when fresh worker finality differs from the loaded row', async () => {
+    const { client, calls } = fixture({ approvable: [{ ...pending, isFinal: false }] });
+    await assert.rejects(client.approve(context, pending, last), /changed|refresh|conflict/i);
+    assert.equal(calls.some((call) => call.path === 'publish'), false);
+  });
+  it('does not accept an advanced result after final publishing', async () => {
+    const { client } = fixture({
+      approvable: [pending],
+      fail: (url) => url.pathname.endsWith('/approve') && response({
+        approved: [context.path], completed: [], advanced: [{ path: context.path, step: 2 }],
+      }),
+    });
+    await assert.rejects(client.approve(context, pending, last), /workflow.*not completed/i);
+  });
+  it('re-reads after an approval conflict and tells the reviewer to refresh', async () => {
+    const { client, calls } = fixture({
+      approvable: [pending],
+      fail: (url) => url.pathname.endsWith('/approve') && response({ error: 'Finality changed' }, 409),
+    });
+    await assert.rejects(client.approve(context, pending, last), /conflict.*refresh/i);
+    assert.equal(calls.filter((call) => call.path === '/api/v2/requests').length, 2);
   });
   it('does not publish a replaced or missing request', async () => {
     const { client, calls } = fixture({ approvable: [{ ...pending, created: '2026-02-01T10:00:00Z' }] });
@@ -403,15 +439,20 @@ describe('workflow operations', () => {
     );
   });
   it('approves an intermediate step without publishing', async () => {
-    const { client, calls } = fixture({ approvable: [pending] });
-    await client.approve(context, pending, { step: 1, final: false });
+    const row = { ...pending, isFinal: false };
+    const { client, calls } = fixture({ approvable: [row] });
+    await client.approve(context, row, { step: 1, final: false });
     assert.deepEqual(calls.map((call) => call.path), ['/api/v2/requests', '/api/v2/requests/approve']);
     assert.equal(calls[1].body.step, 1);
   });
   it('does not claim publication when an intermediate step fails to record', async () => {
-    const { client } = fixture({ approvable: [pending], fail: (url) => url.pathname.endsWith('/approve') && response({ error: 'Email failed' }, 400) });
+    const row = { ...pending, isFinal: false };
+    const { client } = fixture({ approvable: [row], fail: (url) => url.pathname.endsWith('/approve') && response({ error: 'Email failed' }, 400) });
     const stepOnly = { step: 1, final: false };
-    await assert.rejects(client.approve(context, pending, stepOnly), (e) => e.published === false);
+    await assert.rejects(
+      client.approve(context, row, stepOnly),
+      (error) => error.published === false,
+    );
   });
   it('reports a step the worker considers already advanced', async () => {
     const stale = {

@@ -205,7 +205,7 @@ class RequestForPublish extends LitElement {
     const { current, steps } = this.state;
     // Trailing steps without approvers are skipped, so the last staffed step publishes.
     const next = steps.find((step) => step.index > current && step.approvers.length > 0);
-    const final = !next;
+    const final = expected?.isFinal === true;
     const messages = {
       submit: 'Request sent. An approver can now review this page.',
       resend: 'Notification sent again. Your request is still pending.',
@@ -213,7 +213,7 @@ class RequestForPublish extends LitElement {
       reject: 'Request rejected.',
       approve: final
         ? 'Published. The publish request is complete.'
-        : `Step approved. The reviewers for ${next.title} have been notified.`,
+        : `Step approved. The reviewers for ${next?.title || 'the next step'} have been notified.`,
       complete: 'The publish request is now complete.',
     };
     this._busy = 'Working…';
