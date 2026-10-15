@@ -284,11 +284,25 @@ export async function pollJobStatus(jobSelfUrl, maxWaitMs = 60000, intervalMs = 
  * Resolved approvers (incl. CC, when cc.can-approve) for a path.
  * @returns {Promise<string[]>} Deduplicated authorized emails (empty if none).
  */
+async function readWorkerResponse(resp) {
+  const result = await resp.json().catch(() => null);
+  if (!resp.ok || !result) {
+    const labels = {
+      401: 'Your session has expired. Reopen the app.',
+      403: 'You are not authorized for this workflow.',
+    };
+    const fallback = resp.status >= 500 ? 'The workflow backend is unavailable. Retry later.'
+      : 'The workflow service returned an invalid response.';
+    const label = labels[resp.status] || fallback;
+    throw Object.assign(new Error(`${label} ${result?.error || ''} (${resp.status})`.trim()), { status: resp.status });
+  }
+  return result;
+}
+
 export async function getApproversForPath(org, site, path, token) {
   const url = `${getWorkerUrl()}/api/v2/approvers?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}&path=${encodeURIComponent(path)}`;
   const resp = await fetch(url, getOpts(token, 'GET'));
-  if (!resp.ok) return [];
-  const { approvers = [], cc = [] } = await resp.json();
+  const { approvers = [], cc = [] } = await readWorkerResponse(resp);
   return [...approvers, ...cc];
 }
 
@@ -299,8 +313,8 @@ export async function getApproversForPath(org, site, path, token) {
 export async function getAllPendingRequestsForUser(org, site, userEmail, token) {
   const url = `${getWorkerUrl()}/api/v2/requests?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
   const resp = await fetch(url, getOpts(token, 'GET'));
-  if (!resp.ok) return [];
-  const { requests = [] } = await resp.json();
+  const { requests } = await readWorkerResponse(resp);
+  if (!Array.isArray(requests)) throw new Error('The workflow service returned an invalid request list.');
   return requests;
 }
 
@@ -311,8 +325,8 @@ export async function getAllPendingRequestsForUser(org, site, userEmail, token) 
 export async function getAllPendingRequestsByRequester(org, site, userEmail, token) {
   const url = `${getWorkerUrl()}/api/v2/requests?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}&role=requester`;
   const resp = await fetch(url, getOpts(token, 'GET'));
-  if (!resp.ok) return [];
-  const { requests = [] } = await resp.json();
+  const { requests } = await readWorkerResponse(resp);
+  if (!Array.isArray(requests)) throw new Error('The workflow service returned an invalid request list.');
   return requests;
 }
 
@@ -321,13 +335,8 @@ export async function getAllPendingRequestsByRequester(org, site, userEmail, tok
  * @returns {Promise<Object|null>}
  */
 export async function checkPublishRequest(org, site, path, token) {
-  try {
-    const pending = await getAllPendingRequestsForUser(org, site, null, token);
-    return pending.find((r) => r.path === path && r.status === 'pending') || null;
-  } catch (error) {
-    console.error('Error checking publish request:', error);
-    return null;
-  }
+  const pending = await getAllPendingRequestsForUser(org, site, null, token);
+  return pending.find((r) => r.path === path && r.status === 'pending') || null;
 }
 
 /**
@@ -385,8 +394,8 @@ export async function rejectRequest(org, site, path, reason, token) {
       org, site, path, reason,
     }));
     const result = await resp.json();
-    if (!resp.ok) return { success: false, error: result.error || 'Failed to reject request' };
-    return { success: true };
+    if (!resp.ok) return { success: false, status: resp.status, error: result.error || 'Failed to reject request' };
+    return { ...result, success: result.success === true };
   } catch (error) {
     console.error('Error rejecting request:', error);
     return { success: false, error: error.message || 'An error occurred' };
@@ -401,8 +410,8 @@ export async function withdrawRequest(org, site, path, token) {
   try {
     const resp = await fetch(`${getWorkerUrl()}/api/v2/requests/withdraw`, getOpts(token, 'POST', { org, site, path }));
     const result = await resp.json();
-    if (!resp.ok) return { success: false, error: result.error || 'Failed to withdraw request' };
-    return { success: true };
+    if (!resp.ok) return { success: false, status: resp.status, error: result.error || 'Failed to withdraw request' };
+    return { ...result, success: result.success === true };
   } catch (error) {
     console.error('Error withdrawing request:', error);
     return { success: false, error: error.message || 'An error occurred' };
@@ -420,8 +429,8 @@ export async function resendPublishRequest(org, site, path, requesterEmail, toke
       org, site, path, resend: true,
     }));
     const result = await resp.json();
-    if (!resp.ok) return { success: false, error: result.error || 'Failed to resend publish request' };
-    return { success: true };
+    if (!resp.ok) return { success: false, status: resp.status, error: result.error || 'Failed to resend publish request' };
+    return { ...result, success: result.success === true };
   } catch (error) {
     console.error('Error resending publish request:', error);
     return { success: false, error: error.message || 'An error occurred' };

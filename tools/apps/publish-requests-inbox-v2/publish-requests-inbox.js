@@ -309,6 +309,15 @@ class PublishRequestsApp extends LitElement {
    * Initialize single-request review mode (existing behavior)
    */
   async initReview() {
+    try {
+      await this.loadReview();
+    } catch (error) {
+      this._state = 'error';
+      this._message = { type: 'error', text: error.message };
+    }
+  }
+
+  async loadReview() {
     // Check if this path has a pending publish request in the requests sheet
     const pendingRequest = await checkPublishRequest(this._org, this._site, this._path, this.token);
     if (!pendingRequest) {
@@ -457,6 +466,14 @@ class PublishRequestsApp extends LitElement {
 
   // ======== Single-request action handlers ========
 
+  mutationNotice(result, text) {
+    const warning = result.emailErrors?.length;
+    return {
+      type: warning ? 'info' : 'success',
+      text: warning ? `${text} Some notification emails could not be sent.` : text,
+    };
+  }
+
   async prepareApproval(request) {
     const fresh = await checkPublishRequest(this._org, this._site, request.path, this.token);
     if (!fresh || fresh.canApproveNow !== true || typeof fresh.isFinal !== 'boolean'
@@ -518,7 +535,7 @@ published,
       if (result.success) {
         this._nextStep = result.advanced?.find((entry) => entry.path === this._path);
         this._state = result.completed?.includes(this._path) ? 'approved' : 'advanced';
-        this._message = { type: 'success', text: result.published ? 'Published.' : 'Step approved. The next reviewers have been notified.' };
+        this._message = this.mutationNotice(result, result.published ? 'Published.' : 'Step approved.');
       } else {
         this._message = { type: 'error', text: result.error };
       }
@@ -552,6 +569,7 @@ published,
 
     if (result.success) {
       this._state = 'rejected';
+      this._message = this.mutationNotice(result, 'Request rejected.');
     } else {
       this._message = { type: 'error', text: result.error };
     }
@@ -568,7 +586,7 @@ published,
       const result = await this.approveOne(request);
       if (result.success) {
         this._pendingRequests = this._pendingRequests.filter((r) => r.path !== request.path);
-        this._message = { type: 'success', text: result.published ? `Published: ${request.path}` : `Step approved: ${request.path}` };
+        this._message = this.mutationNotice(result, result.published ? `Published: ${request.path}` : `Step approved: ${request.path}`);
       } else {
         this._message = { type: 'error', text: result.error };
       }
@@ -713,7 +731,7 @@ published,
     this._myRequestActions = updated;
 
     if (result.success) {
-      this._message = { type: 'success', text: `Publish request re-sent for ${request.path}` };
+      this._message = this.mutationNotice(result, `Publish request re-sent for ${request.path}`);
     } else {
       this._message = { type: 'error', text: `Failed to resend: ${result.error}` };
     }
@@ -734,7 +752,7 @@ published,
 
     if (result.success) {
       this._pendingRequests = this._pendingRequests.filter((r) => r.path !== request.path);
-      this._message = { type: 'success', text: `Withdrawn: ${request.path}` };
+      this._message = this.mutationNotice(result, `Withdrawn: ${request.path}`);
     } else {
       this._message = { type: 'error', text: `Failed to withdraw: ${result.error}` };
     }
@@ -1124,9 +1142,9 @@ published,
         </div>
         <h2 class="status-heading">Error</h2>
         <p class="status-body">
-          This page requires URL parameters to identify the content to review.
-          Please access this page via the link in your approval email.
+          ${this._message?.text || 'Unable to load the workflow. Check the organization and site.'}
         </p>
+        <sl-button @click=${() => this.init()}>Retry</sl-button>
       </div>
     `;
   }

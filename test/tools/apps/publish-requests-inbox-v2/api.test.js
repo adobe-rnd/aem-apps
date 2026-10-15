@@ -73,6 +73,35 @@ describe('inbox v2 API', () => {
     assert.deepEqual(result.unauthorized, ['/denied']);
     assert.deepEqual(result.notFound, ['/gone']);
   });
+
+  [401, 403, 500, 502].forEach((status) => {
+    it(`does not turn worker ${status} responses into empty queues`, async (test) => {
+      global.window = { location: { hostname: 'localhost', search: '' } };
+      test.after(() => { delete global.window; });
+      test.mock.method(global, 'fetch', async () => Response.json({ error: 'Worker failure' }, { status }));
+      await assert.rejects(
+        api.getAllPendingRequestsForUser('org', 'site', null, 'token'),
+        (error) => error.status === status,
+      );
+      await assert.rejects(
+        api.getAllPendingRequestsByRequester('org', 'site', null, 'token'),
+        (error) => error.status === status,
+      );
+      await assert.rejects(
+        api.checkPublishRequest('org', 'site', '/page', 'token'),
+        (error) => error.status === status,
+      );
+    });
+  });
+
+  it('preserves successful mutation email warnings and failure status', async (test) => {
+    global.window = { location: { hostname: 'localhost', search: '' } };
+    test.after(() => { delete global.window; });
+    const emailErrors = [{ error: 'Mail unavailable' }];
+    test.mock.method(global, 'fetch', async () => Response.json({ success: true, emailErrors }));
+    const result = await api.rejectRequest('org', 'site', '/page', 'Reason', 'token');
+    assert.deepEqual(result.emailErrors, emailErrors);
+  });
 });
 
 describe('inbox v2 approval handlers', () => {
@@ -129,6 +158,31 @@ describe('inbox v2 approval handlers', () => {
     app.renderContent = () => '';
     assert.match(app.render(), /CI workflow.*[\s\S]*live site/);
     assert.match(app.render(), /role="status"/);
+  });
+
+  it('shows review lookup errors instead of no-request state', async () => {
+    const app = fixture({
+      checkPublishRequest: async () => { throw new Error('Backend unavailable (502)'); },
+    });
+    await app.initReview();
+    assert.equal(app._state, 'error');
+    assert.match(app._message.text, /502/);
+    assert.match(app.renderError(), /Retry/);
+  });
+
+  it('shows email failure as a warning after a recorded approval', async () => {
+    const app = fixture({
+      checkPublishRequest: async () => finalRow,
+      publishContent: async () => ({ success: true }),
+      approveRequests: async () => ({
+        success: true, completed: ['/page'], emailErrors: [{ error: 'Mail unavailable' }],
+      }),
+    });
+    app._reviewRequest = finalRow;
+    await app.handleApprove();
+    assert.equal(app._state, 'approved');
+    assert.equal(app._message.type, 'info');
+    assert.match(app._message.text, /notification.*failed|emails.*not.*sent/i);
   });
 
   it('revalidates a final request before publishing', async () => {
