@@ -55,7 +55,7 @@ The SDK's `actions.openComparison({ candidate, baseline })` and `actions.closeCo
 
 Before every submission, even when no comparison was opened, the integrated client awaits `actions.saveDocument()`. This separate action must return `{ ok: true }` to confirm current editor edits are saved; it may return `{ ok: false, error }` on failure. A missing method, rejected promise, failure reply, or invalid/undefined result blocks both preview and the request. The client's `beforePreview` save gate is mandatory and must also return that confirmation. Deployment of the host save implementation and SDK method is a submission prerequisite; hosts without them cannot silently skip saving. Approval does not save or preview: it publishes the current preview as before. Successful workflow transitions dispatch close comparison; failed/unknown publication also dispatches close to avoid leaving misleading pre-publication content visible.
 
-Preview and publish use the existing main content workflow even when the plugin code comes from a feature branch.
+Preview, publish, and page links use the validated SDK context content ref (letters, digits, and hyphens only), defaulting to `main` when omitted. The inbox app code ref is derived separately from the plugin module URL, not from the content ref.
 
 ## Configuration
 

@@ -20,6 +20,32 @@ import {
 } from '../../../../tools/plugins/request-for-publish-v2/workflow.js';
 
 const context = { org: 'example', site: 'website', path: '/drafts/page' };
+describe('content refs', () => {
+  it('defaults to main and accepts hostname/path-safe refs', () => {
+    assert.equal(normalizeContext(context).ref, 'main');
+    assert.equal(normalizeContext({ ...context, ref: 'Release-42' }).ref, 'Release-42');
+  });
+
+  it('rejects invalid context refs', () => {
+    ['', null, 42, '../main', 'draft/ref', 'draft.ref', 'draft_ref', 'draft?ref',
+      'draft#ref', 'draft\\ref', 'draft ref', 'draft\n'].forEach((ref) => {
+      assert.equal(normalizeContext({ ...context, ref }), null, `Invalid ref: ${ref}`);
+    });
+  });
+
+  it('uses the content ref for page links and the module ref for inbox links', () => {
+    const links = pageLinks(
+      normalizeContext({ ...context, path: '/drafts/page.html', ref: 'release-42' }),
+      'ci',
+      'https://rpfix--aem-apps--adobe-rnd.aem.page/tools/plugins/request-for-publish-v2/workflow.js',
+    );
+    assert.equal(links.preview, 'https://release-42--website--example.aem.page/drafts/page');
+    assert.equal(links.live, 'https://release-42--website--example.aem.live/drafts/page');
+    assert.equal(new URL(links.inbox).searchParams.get('ref'), 'rpfix');
+    assert.equal(new URL(links.myRequests).searchParams.get('ref'), 'rpfix');
+  });
+});
+
 const pending = {
   path: context.path,
   isFinal: true,

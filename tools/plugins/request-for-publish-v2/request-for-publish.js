@@ -23,8 +23,10 @@ function makePanel({ context, token, actions }) {
   if (token) setImsDetails(token);
   const request = actions?.daFetch || daFetch;
   const content = (operation) => (page) => {
-    const { org, site, path } = page;
-    const { href } = new URL(`https://admin.hlx.page/${operation}/${org}/${site}/main${path}`);
+    const {
+      org, site, path, ref,
+    } = page;
+    const { href } = new URL(`https://admin.hlx.page/${operation}/${org}/${site}/${ref}${path}`);
     return request(`https://da-etc.adobeaem.workers.dev/cors?url=${encodeURIComponent(href)}`, { method: 'POST' });
   };
   const panel = document.createElement('request-for-publish');

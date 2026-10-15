@@ -32,6 +32,7 @@ export function workerOrigin(location) {
 export function normalizeContext(context = {}) {
   const { org, path, ref = 'main' } = context;
   const site = context.site || context.repo;
+  if (typeof ref !== 'string' || !ref || /[^a-z0-9-]/i.test(ref)) return null;
   if (![org, site].every((part) => typeof part === 'string' && /^[a-z0-9][a-z0-9.-]*$/i.test(part))) return null;
   if (typeof path !== 'string' || !path.startsWith('/') || /[?#\\]/.test(path)) return null;
   let decoded;
@@ -147,7 +148,9 @@ export function deriveView(context, data) {
 }
 
 export function pageLinks(context, env, moduleUrl = import.meta.url) {
-  const { org, site, path } = context;
+  const {
+    org, site, path, ref: contentRef = 'main',
+  } = context;
   const delivered = path.replace(/\.html$/, '').replace(/\/index$/, '/');
   const query = new URLSearchParams({ org, site });
   if (env === 'ci') query.set('env', env);
@@ -155,8 +158,8 @@ export function pageLinks(context, env, moduleUrl = import.meta.url) {
   const ref = codeHost.match(/^([a-z0-9-]+)--aem-apps--adobe-rnd\.aem\.(?:page|live)$/)?.[1];
   if (ref && ref !== 'main') query.set('ref', ref);
   return {
-    preview: `https://main--${site}--${org}.aem.page${delivered}`,
-    live: `https://main--${site}--${org}.aem.live${delivered}`,
+    preview: `https://${contentRef}--${site}--${org}.aem.page${delivered}`,
+    live: `https://${contentRef}--${site}--${org}.aem.live${delivered}`,
     inbox: `${INBOX}?${query}`,
     myRequests: `${INBOX}?${query}&requester=true`,
   };
