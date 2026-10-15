@@ -1338,6 +1338,10 @@ published,
     }
     return html`
       ${this.renderToolbar()}
+      ${new URLSearchParams(window.location.search).get('env') === 'ci' ? html`
+        <div class="message message--info" role="status">
+          CI workflow configuration. Publishing affects the live site.
+        </div>` : nothing}
       ${this.renderMessage()}
       <div class="pw-content">
         ${this.renderContent()}

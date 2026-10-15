@@ -121,6 +121,16 @@ describe('inbox v2 approval handlers', () => {
     assert.equal(params.has('path'), false);
   });
 
+  it('persistently warns that CI approvals still publish live content', () => {
+    const app = fixture({ window: { location: { search: '?env=ci' } } });
+    app._state = 'inbox';
+    app.renderToolbar = () => '';
+    app.renderMessage = () => '';
+    app.renderContent = () => '';
+    assert.match(app.render(), /CI workflow.*[\s\S]*live site/);
+    assert.match(app.render(), /role="status"/);
+  });
+
   it('revalidates a final request before publishing', async () => {
     const calls = [];
     const app = fixture({
