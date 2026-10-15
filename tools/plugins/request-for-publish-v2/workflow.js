@@ -262,7 +262,7 @@ export function createClient({
   }
 
   async function revalidate(context, expected, role) {
-    const rows = forPage(await list(context, role ? { role } : {}), context.path);
+    const rows = forPage(await list(context, { role, path: context.path }), context.path);
     if (rows.length !== 1 || !sameRequest(rows[0], expected)) {
       throw failure('This request changed or is no longer pending. Refresh before taking action.', { stale: true });
     }
@@ -330,8 +330,8 @@ export function createClient({
       const [configResult, people, own, approvable, page] = await Promise.all([
         json(`${API}/config`, context),
         json(`${API}/approvers`, context, null, { path: context.path }),
-        list(context, { role: 'requester' }),
-        list(context),
+        list(context, { role: 'requester', path: context.path }),
+        list(context, { role: 'approver', path: context.path }),
         list(context, { role: 'page', path: context.path }),
       ]);
       if (!configResult.config) throw failure('The publish workflow is not configured for this site.');
@@ -376,7 +376,7 @@ export function createClient({
     },
     async reject(context, expected, reason) {
       if (!reason.trim()) throw failure('Enter a reason for rejection.');
-      await revalidate(context, expected);
+      await revalidate(context, expected, 'approver');
       const result = await json(`${API}/requests/reject`, context, { path: context.path, reason: reason.trim() });
       if (result.success !== true) throw failure('This request is no longer pending. Refresh to check its status.');
       return result;
@@ -402,7 +402,7 @@ export function createClient({
     },
     async complete(context, expected, { step } = {}) {
       try {
-        await revalidate(context, expected);
+        await revalidate(context, expected, 'approver');
         return await record(context, step, true);
       } catch (error) {
         if (error.stale) return reconcilePublished(context);

@@ -221,16 +221,26 @@ class RequestForPublish extends LitElement {
     this._fieldError = undefined;
     const phase = (label) => { if (epoch === this._epoch) this._busy = label; };
     try {
-      if (action === 'submit') await client.submit(context, comment, phase);
-      else if (action === 'reject') await client.reject(context, expected, this._reason);
-      else if (action === 'approve') await client.approve(context, expected, { step: current, final }, phase);
-      else if (action === 'complete') await client.complete(context, expected, { step: current });
-      else await client[action](context, expected, phase);
+      let result;
+      if (action === 'submit') result = await client.submit(context, comment, phase);
+      else if (action === 'reject') result = await client.reject(context, expected, this._reason);
+      else if (action === 'approve') result = await client.approve(context, expected, { step: current, final }, phase);
+      else if (action === 'complete') result = await client.complete(context, expected, { step: current });
+      else result = await client[action](context, expected, phase);
       if (epoch !== this._epoch) return;
       if (['submit', 'approve', 'reject', 'withdraw'].includes(action)) {
         this.workspace?.close?.().catch(() => {});
       }
-      this._notice = { type: 'success', text: messages[action] };
+      const emailFailed = Array.isArray(result?.emailErrors) && result.emailErrors.length > 0;
+      let message = messages[action];
+      if (emailFailed && action === 'resend') message = 'Your request is still pending.';
+      else if (emailFailed && action === 'approve' && !final) message = 'Step approved.';
+      this._notice = {
+        type: emailFailed ? 'info' : 'success',
+        text: emailFailed
+          ? `${message} Email notification delivery failed for one or more recipients. Do not repeat the action to retry notifications.`
+          : message,
+      };
       if (action === 'submit') this._comment = '';
       if (action === 'approve' || action === 'complete') this._receipt = undefined;
       this._confirmation = undefined;

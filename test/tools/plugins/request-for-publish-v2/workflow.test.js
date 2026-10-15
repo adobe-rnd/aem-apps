@@ -114,7 +114,12 @@ function fixture({
     request: async (href, opts = {}) => {
       const url = new URL(href);
       const body = opts.body ? JSON.parse(opts.body) : null;
-      calls.push({ path: url.pathname, role: url.searchParams.get('role'), body });
+      calls.push({
+        path: url.pathname,
+        role: url.searchParams.get('role'),
+        queryPath: url.searchParams.get('path'),
+        body,
+      });
       if (fail) {
         const failed = fail(url, opts);
         if (failed) return failed;
@@ -125,7 +130,7 @@ function fixture({
         const role = url.searchParams.get('role');
         if (role === 'page') return response({ requests: page });
         return response({
-          requests: (role === 'requester' ? own : approvable)
+          requests: ({ requester: own, approver: approvable }[role] || [])
             .map((row) => ({ stepInfo: { current: 1, lastStaffed: 1 }, ...row })),
         });
       }
@@ -344,7 +349,7 @@ describe('uninvolved viewers', () => {
     const view = deriveView(context, data({ page: [pending, { ...pending, requester: 'other@example.com' }] }));
     assert.equal(view.view, 'blocked');
   });
-  it('reads the page queue without a role filter', async () => {
+  it('reads the explicit page queue', async () => {
     const { client, calls } = fixture({ page: [pending] });
     const loaded = await client.load(context);
     assert.deepEqual(loaded.page, [pending]);
@@ -354,6 +359,34 @@ describe('uninvolved viewers', () => {
 });
 
 describe('workflow operations', () => {
+  it('loads explicit page-scoped role queues without discarding participant roles', async () => {
+    const future = { ...pending, canApproveNow: false };
+    const { client, calls } = fixture({
+      own: [pending], approvable: [future], page: [{ path: context.path, status: 'pending' }],
+    });
+    const loaded = await client.load(context);
+    assert.equal(calls.length, 5);
+    const queues = calls.filter((call) => call.path === '/api/v2/requests');
+    assert.deepEqual(queues.map((call) => call.role), ['requester', 'approver', 'page']);
+    assert.equal(queues.every((call) => call.queryPath === context.path), true);
+    const state = deriveView(context, loaded);
+    assert.equal(state.view, 'approver');
+    assert.equal(state.canApprove, false);
+    assert.equal(state.canWithdraw, true);
+  });
+
+  ['approve', 'reject', 'complete', 'withdraw', 'resend'].forEach((action) => {
+    it(`revalidates ${action} with an explicit page-scoped role`, async () => {
+      const { client, calls } = fixture({ own: [pending], approvable: [pending] });
+      if (action === 'approve') await client.approve(context, pending, last);
+      else if (action === 'complete') await client.complete(context, pending, { step: 1 });
+      else if (action === 'reject') await client.reject(context, pending, 'Not ready');
+      else await client[action](context, pending);
+      assert.equal(calls[0].role, ['withdraw', 'resend'].includes(action) ? 'requester' : 'approver');
+      assert.equal(calls[0].queryPath, context.path);
+    });
+  });
+
   it('loads both role queues and server-resolved recipients', async () => {
     const { client, calls } = fixture({ own: [pending] });
     const loaded = await client.load(context);

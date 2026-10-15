@@ -96,6 +96,87 @@ describe('review step controls', () => {
   });
 });
 
+describe('mutation notification results', () => {
+  const operations = [
+    { action: 'submit' }, { action: 'reject' }, { action: 'withdraw' },
+    { action: 'resend' }, { action: 'complete' },
+    { action: 'approve', isFinal: true }, { action: 'approve', isFinal: false },
+  ];
+  operations.forEach(({ action, isFinal = true }) => {
+    [true, false].forEach((emailFailed) => {
+      it(`${action} (final=${isFinal}) preserves success with emailFailed=${emailFailed}`, async () => {
+        const panel = await panelFixture();
+        const request = {
+          path: '/page',
+          status: 'pending',
+          comment: 'Ready',
+          isFinal,
+          canApproveNow: true,
+          stepInfo: { current: 1 },
+        };
+        let mutations = 0;
+        let refreshed = 0;
+        let closed = 0;
+        Object.assign(panel, {
+          context: { org: 'example', site: 'website', path: '/page' },
+          _epoch: 1,
+          _comment: 'Ready',
+          _reason: 'Not ready',
+          _receipt: action === 'complete' ? request : undefined,
+          _data: {
+            own: ['withdraw', 'resend'].includes(action) ? [request] : [],
+            approvable: ['approve', 'reject', 'complete'].includes(action) ? [request] : [],
+            page: [],
+            approvers: ['reviewer@example.com'],
+            steps: [{ index: 1, approvers: ['reviewer@example.com'] }],
+            settings: {},
+          },
+          client: {
+            [action]: async () => {
+              mutations += 1;
+              return { success: true, emailErrors: emailFailed ? [{ error: 'Delivery failed' }] : [] };
+            },
+          },
+          workspace: { close: async () => { closed += 1; } },
+          refresh: async () => { refreshed += 1; },
+        });
+        await panel.act(action);
+        const notice = Reflect.get(panel, '_notice');
+        assert.equal(mutations, 1);
+        assert.equal(refreshed, 1);
+        assert.equal(closed, ['submit', 'approve', 'reject', 'withdraw'].includes(action) ? 1 : 0);
+        assert.equal(notice.type, emailFailed ? 'info' : 'success');
+        if (emailFailed) assert.match(notice.text, /notification.*fail/i);
+        else assert.doesNotMatch(notice.text, /notification.*fail/i);
+        assert.equal(Reflect.get(panel, '_receipt'), undefined);
+      });
+    });
+  });
+
+  it('does not mutate a redacted observer request', async () => {
+    const panel = await panelFixture();
+    let mutations = 0;
+    Object.assign(panel, {
+      context: { org: 'example', site: 'website', path: '/page' },
+      _data: {
+        own: [],
+        approvable: [],
+        page: [{ path: '/page', status: 'pending' }],
+        approvers: [],
+        steps: [],
+        settings: {},
+      },
+      client: {
+        approve: async () => { mutations += 1; },
+        withdraw: async () => { mutations += 1; },
+      },
+    });
+    await panel.act('approve');
+    await panel.act('withdraw');
+    assert.equal(mutations, 0);
+  });
+});
+
 describe('native workspace comparison adapter', () => {
   it('dispatches synchronous undefined review actions without capability declarations', async () => {
     const calls = [];
