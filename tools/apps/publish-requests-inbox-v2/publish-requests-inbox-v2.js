@@ -27,7 +27,6 @@ import {
   isFinalStep,
   rejectRequest,
   withdrawRequest,
-  getApproversForPath,
   getAllPendingRequestsForUser,
   getAllPendingRequestsByRequester,
   resendPublishRequest,
@@ -102,6 +101,7 @@ class PublishRequestsApp extends LitElement {
     _requester: { state: true },
     // Single-review mode: the pending row, kept for its step position
     _reviewRequest: { state: true },
+    _nextStep: { state: true },
     // Inbox mode
     _pendingRequests: { state: true },
     _processingPaths: { state: true },
@@ -151,7 +151,7 @@ class PublishRequestsApp extends LitElement {
    */
   get appBaseUrl() {
     const { org, repo } = this.context || {};
-    const appPath = 'tools/apps/publish-requests-inbox-v2/publish-requests-inbox';
+    const appPath = 'tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2';
     return `https://da.live/app/${org}/${repo}/${appPath}`;
   }
 
@@ -170,23 +170,22 @@ class PublishRequestsApp extends LitElement {
   }
 
   getReviewUrl(request) {
-    const params = new URLSearchParams();
-    params.set('org', this._org);
-    params.set('site', this._site);
-    params.set('path', request.path);
-    if (request.requester) params.set('author', request.requester);
-    // Build preview URL for the request path
-    const path = request.path?.replace(/\/index$/, '') || '';
-    const previewUrl = `https://main--${this._site}--${this._org}.aem.page${path}`;
-    params.set('preview', previewUrl);
+    const params = this.navigationParams({ org: this._org, site: this._site, path: request.path });
     return `${this.appBaseUrl}?${params.toString()}`;
   }
 
   getInboxUrl() {
-    const params = new URLSearchParams();
-    params.set('org', this._org);
-    params.set('site', this._site);
+    const params = this.navigationParams({ org: this._org, site: this._site });
     return `${this.appBaseUrl}?${params.toString()}`;
+  }
+
+  navigationParams(values) {
+    const current = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(values);
+    ['env', 'ref'].forEach((key) => {
+      if (current.has(key)) params.set(key, current.get(key));
+    });
+    return params;
   }
 
   async loadSiteSettings(org, site) {
@@ -209,7 +208,7 @@ class PublishRequestsApp extends LitElement {
 
   updateUrl(params) {
     try {
-      const qs = new URLSearchParams(params).toString();
+      const qs = this.navigationParams(params).toString();
       window.history.replaceState(null, '', `${window.location.pathname}?${qs}`);
     } catch { /* cross-origin iframe — ignore */ }
   }
@@ -222,9 +221,9 @@ class PublishRequestsApp extends LitElement {
     this._org = urlParams.get('org') || '';
     this._site = urlParams.get('site') || '';
     this._path = urlParams.get('path') || '';
-    this._authorEmail = urlParams.get('author') || '';
-    this._previewUrl = urlParams.get('preview') || '';
-    this._comment = urlParams.get('comment') || '';
+    this._authorEmail = '';
+    this._previewUrl = '';
+    this._comment = '';
     this._requester = urlParams.get('requester') || false;
 
     if (this._org && this._site) {
@@ -282,6 +281,22 @@ class PublishRequestsApp extends LitElement {
   }
 
   /**
+   * Re-read the inbox from the worker after an approval. An approved step can
+   * land on the same person again (they approve consecutive steps, or the next
+   * step is skipped and they staff the one after), so dropping the row locally
+   * would hide work that is still theirs.
+   */
+  async refreshInbox() {
+    try {
+      this._pendingRequests = await getAllPendingRequestsForUser(
+        this._org, this._site, this._userEmail, this.token,
+      );
+    } catch (error) {
+      console.error('Error refreshing inbox:', error);
+    }
+  }
+
+  /**
    * Initialize my-requests mode: fetch all pending requests submitted by the current user
    */
   async initMyRequests() {
@@ -309,6 +324,15 @@ class PublishRequestsApp extends LitElement {
    * Initialize single-request review mode (existing behavior)
    */
   async initReview() {
+    try {
+      await this.loadReview();
+    } catch (error) {
+      this._state = 'error';
+      this._message = { type: 'error', text: error.message };
+    }
+  }
+
+  async loadReview() {
     // Check if this path has a pending publish request in the requests sheet
     const pendingRequest = await checkPublishRequest(this._org, this._site, this._path, this.token);
     if (!pendingRequest) {
@@ -318,37 +342,16 @@ class PublishRequestsApp extends LitElement {
     }
     this._reviewRequest = pendingRequest;
 
-    // Use requester from sheet if author not in URL params
-    if (!this._authorEmail && pendingRequest.requester) {
-      this._authorEmail = pendingRequest.requester;
+    this._authorEmail = pendingRequest.requester || '';
+    this._comment = pendingRequest.comment || '';
+    if (![this._org, this._site].every((value) => /^[a-z0-9-]+$/.test(value))) {
+      this._state = 'error';
+      this._message = { type: 'error', text: 'Invalid organization or site.' };
+      return;
     }
-
-    // Use comment from sheet if not provided via URL params
-    if (!this._comment && pendingRequest.comment) {
-      this._comment = pendingRequest.comment;
-    }
-
-    // Check if the current user is an authorized approver for this content path
-    if (this._userEmail) {
-      try {
-        const approvers = await getApproversForPath(this._org, this._site, this._path, this.token);
-        const normalizedUser = this._userEmail.toLowerCase();
-        const isApprover = approvers.some((a) => a.toLowerCase() === normalizedUser);
-        if (!isApprover) {
-          this._state = 'unauthorized';
-          this._message = {
-            type: 'error',
-            text: `You (${this._userEmail}) are not authorized to approve or reject this request. Please contact your administrator.`,
-          };
-          return;
-        }
-      } catch (error) {
-        console.error('Error checking approvers:', error);
-        this._state = 'error';
-        this._message = { type: 'error', text: error.message };
-        return;
-      }
-    }
+    const preview = new URL(`https://main--${this._site}--${this._org}.aem.page`);
+    preview.pathname = this._path.replace(/\.html$/, '').replace(/\/index$/, '/');
+    this._previewUrl = preview.href;
 
     this._state = 'review';
   }
@@ -410,8 +413,6 @@ class PublishRequestsApp extends LitElement {
     this._path = request.path;
     this._authorEmail = request.requester || request.authorEmail || '';
     this._comment = request.comment || '';
-    const path = request.path?.replace(/\/index$/, '') || '';
-    this._previewUrl = `https://main--${this._site}--${this._org}.aem.page${path}`;
     this._message = null;
     this._state = 'loading';
 
@@ -419,9 +420,7 @@ class PublishRequestsApp extends LitElement {
       org: this._org,
       site: this._site,
       path: request.path,
-      preview: this._previewUrl,
     };
-    if (request.requester) urlParams.author = request.requester;
     this.updateUrl(urlParams);
 
     await this.initReview();
@@ -460,6 +459,64 @@ class PublishRequestsApp extends LitElement {
 
   // ======== Single-request action handlers ========
 
+  mutationNotice(result, text) {
+    const warning = result.emailErrors?.length;
+    return {
+      type: warning ? 'info' : 'success',
+      text: warning ? `${text} Some notification emails could not be sent.` : text,
+    };
+  }
+
+  async prepareApproval(request) {
+    const fresh = await checkPublishRequest(this._org, this._site, request.path, this.token);
+    if (!fresh || fresh.canApproveNow !== true || typeof fresh.isFinal !== 'boolean'
+      || !Number.isInteger(fresh.stepInfo?.current)
+      || fresh.stepInfo.current !== request.stepInfo?.current
+      || fresh.isFinal !== request.isFinal || fresh.created !== request.created
+      || fresh.requester !== request.requester) {
+      throw new Error('This request changed or cannot be approved. Refresh and review its current step.');
+    }
+    return fresh;
+  }
+
+  async approveOne(request) {
+    let published = false;
+    try {
+      const fresh = await this.prepareApproval(request);
+      if (fresh.isFinal) {
+        const publication = await publishContent(this._org, this._site, fresh.path);
+        if (!publication.success) return publication;
+        published = true;
+      }
+      const result = await approveRequests(
+        this._org, this._site, [fresh.path], this.token, fresh.stepInfo.current, fresh.isFinal,
+      );
+      if (result.status === 409 || result.stale?.includes(fresh.path)) {
+        await checkPublishRequest(this._org, this._site, fresh.path, this.token).catch(() => {});
+        return { success: false, published, error: 'Approval conflict. The request changed; refresh and review its current status.' };
+      }
+      const accepted = fresh.isFinal ? result.completed?.includes(fresh.path)
+        : result.advanced?.includes(fresh.path);
+      if (!result.success || !accepted || result.unauthorized?.includes(fresh.path)
+        || result.notFound?.includes(fresh.path)) {
+        return {
+          success: false,
+published,
+          error: published ? `Published, but workflow was not completed. ${result.error || 'Refresh to check the request.'}`
+            : result.error || 'Approval was not recorded. Refresh to check access and request status.',
+        };
+      }
+      const nextRequest = fresh.isFinal ? null : await checkPublishRequest(
+        this._org, this._site, fresh.path, this.token,
+      ).catch(() => null);
+      return {
+ ...result, success: true, published, nextStep: nextRequest?.stepInfo,
+};
+    } catch (error) {
+      return { success: false, published, error: error.message };
+    }
+  }
+
   async handleApprove() {
     // guard against re-entry before Lit re-render disables the button
     if (this._isProcessing) return;
@@ -472,32 +529,11 @@ class PublishRequestsApp extends LitElement {
     this._message = null;
 
     try {
-      const request = this._reviewRequest;
-      const step = request?.stepInfo?.current;
-      // Intermediate steps must not publish: later reviewers have yet to approve.
-      if (!isFinalStep(request)) {
-        const advance = await approveRequests(
-          this._org, this._site, [this._path], this.token, step,
-        );
-        this._message = advance.success
-          ? { type: 'success', text: 'Step approved. The next reviewers have been notified.' }
-          : { type: 'error', text: advance.error };
-        if (advance.success) this._state = 'approved';
-        return;
-      }
-
-      // Publish the content via Helix Admin API (under the user's session)
-      const result = await publishContent(this._org, this._site, this._path);
-
+      const result = await this.approveOne(this._reviewRequest);
       if (result.success) {
-        this._state = 'approved';
-        // Record the approval server-side: removes the pending row + emails the author.
-        const bookkeep = await approveRequests(
-          this._org, this._site, [this._path], this.token, step,
-        );
-        if (!bookkeep.success) {
-          this._message = { type: 'info', text: `Published, but recording the approval failed: ${bookkeep.error}` };
-        }
+        this._nextStep = result.nextStep;
+        this._state = result.completed?.includes(this._path) ? 'approved' : 'advanced';
+        this._message = this.mutationNotice(result, result.published ? 'Published.' : 'Step approved.');
       } else {
         this._message = { type: 'error', text: result.error };
       }
@@ -507,6 +543,10 @@ class PublishRequestsApp extends LitElement {
   }
 
   async handleReject() {
+    if (this._reviewRequest?.canApproveNow !== true) {
+      this._message = { type: 'error', text: 'This step is awaiting another reviewer. Refresh to check access.' };
+      return;
+    }
     if (this._needsEmail) {
       this._rejectError = 'Unable to determine your email. Please log in again.';
       return;
@@ -531,6 +571,7 @@ class PublishRequestsApp extends LitElement {
 
     if (result.success) {
       this._state = 'rejected';
+      this._message = this.mutationNotice(result, 'Request rejected.');
     } else {
       this._message = { type: 'error', text: result.error };
     }
@@ -543,41 +584,19 @@ class PublishRequestsApp extends LitElement {
     this._processingPaths = new Set([...this._processingPaths, request.path]);
     this.requestUpdate();
 
-    const step = request.stepInfo?.current;
-    if (!isFinalStep(request)) {
-      // Intermediate step: advance the workflow without publishing.
-      const advance = await approveRequests(
-        this._org, this._site, [request.path], this.token, step,
-      );
-      if (advance.success) {
-        this._pendingRequests = this._pendingRequests.filter((r) => r.path !== request.path);
-        this._message = {
-          type: 'success',
-          text: `Step approved for ${request.path}. The next reviewers have been notified.`,
-        };
-      } else {
-        this._message = { type: 'error', text: `Failed to approve ${request.path}: ${advance.error}` };
-      }
-    } else {
-      const result = await publishContent(this._org, this._site, request.path);
-
+    try {
+      const result = await this.approveOne(request);
       if (result.success) {
-        this._pendingRequests = this._pendingRequests.filter((r) => r.path !== request.path);
-        // Record approval server-side (sheet removal + author email).
-        const bookkeep = await approveRequests(
-          this._org, this._site, [request.path], this.token, step,
-        );
-        this._message = bookkeep.success
-          ? { type: 'success', text: `Published: ${request.path}` }
-          : { type: 'info', text: `Published: ${request.path}. Recording approval failed: ${bookkeep.error}` };
+        this._message = this.mutationNotice(result, result.published ? `Published: ${request.path}` : `Step approved: ${request.path}`);
+        await this.refreshInbox();
       } else {
-        this._message = { type: 'error', text: `Failed to publish ${request.path}: ${result.error}` };
+        this._message = { type: 'error', text: result.error };
       }
+    } finally {
+      const updated = new Set(this._processingPaths);
+      updated.delete(request.path);
+      this._processingPaths = updated;
     }
-
-    const updated = new Set(this._processingPaths);
-    updated.delete(request.path);
-    this._processingPaths = updated;
   }
 
   /**
@@ -589,34 +608,60 @@ class PublishRequestsApp extends LitElement {
     const byStep = new Map();
     requests.forEach((request) => {
       const step = request.stepInfo?.current;
-      const key = step ?? 'none';
-      if (!byStep.has(key)) byStep.set(key, { step, paths: [] });
+      const final = request.isFinal === true;
+      const key = `${step}:${final}`;
+      if (!byStep.has(key)) byStep.set(key, { step, final, paths: [] });
       byStep.get(key).paths.push(request.path);
     });
 
     const approved = [];
     const errors = [];
+    const warnings = [];
     const groups = [...byStep.values()];
-    await groups.reduce(async (previous, { step, paths }) => {
+    await groups.reduce(async (previous, { step, final, paths }) => {
       await previous;
-      const result = await approveRequests(this._org, this._site, paths, this.token, step);
-      if (result.success) approved.push(...paths);
-      else errors.push(result.error);
+      const result = await approveRequests(this._org, this._site, paths, this.token, step, final);
+      const accepted = final ? result.completed || []
+        : result.advanced || [];
+      const denied = new Set([
+        ...(result.stale || []), ...(result.unauthorized || []), ...(result.notFound || []),
+      ]);
+      const successes = paths.filter((path) => accepted.includes(path) && !denied.has(path));
+      approved.push(...successes);
+      const failed = paths.filter((path) => !successes.includes(path));
+      if (failed.length) {
+        errors.push(`Not approved: ${failed.join(', ')}. ${result.error || 'Refresh to check conflicts, authorization, or requests not found.'}`);
+      }
+      if (result.status === 409 || result.stale?.length) {
+        await Promise.all(paths.map((path) => checkPublishRequest(
+          this._org, this._site, path, this.token,
+        ).catch(() => {})));
+      }
+      if (result.emailErrors?.length) warnings.push('Approval recorded, but some notification emails could not be sent.');
     }, Promise.resolve());
 
-    return { approved, error: errors.join(' ') || null };
+    return { approved, error: errors.join(' ') || null, warning: warnings.join(' ') || null };
   }
 
   async handleApproveAll() {
-    const actionable = this._pendingRequests.filter((r) => r.canApproveNow !== false);
+    const actionable = this._pendingRequests.filter((r) => r.canApproveNow === true);
     const waiting = this._pendingRequests.length - actionable.length;
     if (actionable.length === 0) return;
 
     this._approveAllProcessing = true;
     this._message = null;
 
+    try {
+      await Promise.all(actionable.map((request) => this.prepareApproval(request)));
+    } catch (error) {
+      this._approveAllProcessing = false;
+      this._message = { type: 'error', text: error.message };
+      return;
+    }
+
     const finals = actionable.filter((r) => isFinalStep(r));
     const intermediates = actionable.filter((r) => !isFinalStep(r));
+    const intermediateResult = await this.approveGrouped(intermediates);
 
     let publishedPaths = [];
     let publishError = null;
@@ -627,46 +672,36 @@ class PublishRequestsApp extends LitElement {
       this._message = { type: 'info', text: `Starting bulk publish of ${paths.length} pages...` };
       this.requestUpdate();
 
-      const bulkResult = await bulkPublishContent(this._org, this._site, paths);
-      if (!bulkResult.success) {
-        this._approveAllProcessing = false;
-        this._message = { type: 'error', text: `Bulk publish failed: ${bulkResult.error}` };
-        return;
-      }
-
-      const jobSelfUrl = bulkResult.links?.self;
-      if (jobSelfUrl) {
-        this._message = { type: 'info', text: 'Bulk publish job started. Waiting for completion...' };
-        this.requestUpdate();
-
-        const jobResult = await pollJobStatus(jobSelfUrl);
-        if (!jobResult.success) {
-          this._approveAllProcessing = false;
-          this._message = {
-            type: 'error',
-            text: `Bulk publish job did not complete in time. Some pages may still be publishing. ${jobResult.error || ''}`,
-          };
-          return;
+      try {
+        const bulkResult = await bulkPublishContent(this._org, this._site, paths);
+        if (!bulkResult.success) {
+          publishError = `Bulk publish failed: ${bulkResult.error}`;
+        } else if (bulkResult.links?.self) {
+          const jobResult = await pollJobStatus(bulkResult.links.self);
+          const confirmed = new Set((jobResult.job?.data?.resources || [])
+            .filter((resource) => resource.status === 200 || resource.status === 304)
+            .map((resource) => resource.path));
+          publishedPaths = paths.filter((path) => confirmed.has(path));
+          const unconfirmed = paths.filter((path) => !confirmed.has(path));
+          if (!jobResult.success || unconfirmed.length) {
+            publishError = `Publication not confirmed for: ${unconfirmed.join(', ') || 'remaining job resources'}. ${jobResult.error || ''} Check the live pages before retrying.`;
+          }
+        } else {
+          publishedPaths = paths;
         }
-
-        // 200 = published, 304 = already up-to-date — both are success
-        const failedPaths = (jobResult.job?.data?.resources || [])
-          .filter((r) => r.status !== 200 && r.status !== 304).map((r) => r.path);
-        publishedPaths = paths.filter((p) => !failedPaths.includes(p));
-        if (failedPaths.length > 0) publishError = `Failed to publish: ${failedPaths.join(', ')}.`;
-      } else {
-        publishedPaths = paths;
+      } catch (error) {
+        publishError = `Bulk publish could not be confirmed. ${error.message}`;
       }
     }
 
     const publishedSet = new Set(publishedPaths);
-    const { approved, error } = await this.approveGrouped([
-      ...intermediates,
-      ...finals.filter((r) => publishedSet.has(r.path)),
-    ]);
+    const finalResult = await this.approveGrouped(finals.filter((r) => publishedSet.has(r.path)));
+    const approved = [...intermediateResult.approved, ...finalResult.approved];
+    const error = [intermediateResult.error, finalResult.error].filter(Boolean).join(' ');
+    const warning = [intermediateResult.warning, finalResult.warning].filter(Boolean).join(' ');
 
     const approvedSet = new Set(approved);
-    this._pendingRequests = this._pendingRequests.filter((r) => !approvedSet.has(r.path));
+    await this.refreshInbox();
     this._approveAllProcessing = false;
 
     const publishedCount = finals.filter((r) => approvedSet.has(r.path)).length;
@@ -679,7 +714,7 @@ class PublishRequestsApp extends LitElement {
 
     this._message = publishError || error
       ? { type: 'error', text: `${summary} ${publishError || ''} ${error || ''}`.trim() }
-      : { type: 'success', text: summary };
+      : { type: warning ? 'info' : 'success', text: `${summary} ${warning || ''}`.trim() };
   }
 
   // ======== My-requests action handlers ========
@@ -698,7 +733,7 @@ class PublishRequestsApp extends LitElement {
     this._myRequestActions = updated;
 
     if (result.success) {
-      this._message = { type: 'success', text: `Publish request re-sent for ${request.path}` };
+      this._message = this.mutationNotice(result, `Publish request re-sent for ${request.path}`);
     } else {
       this._message = { type: 'error', text: `Failed to resend: ${result.error}` };
     }
@@ -719,7 +754,7 @@ class PublishRequestsApp extends LitElement {
 
     if (result.success) {
       this._pendingRequests = this._pendingRequests.filter((r) => r.path !== request.path);
-      this._message = { type: 'success', text: `Withdrawn: ${request.path}` };
+      this._message = this.mutationNotice(result, `Withdrawn: ${request.path}`);
     } else {
       this._message = { type: 'error', text: `Failed to withdraw: ${result.error}` };
     }
@@ -795,6 +830,8 @@ class PublishRequestsApp extends LitElement {
         return this.renderMyRequests();
       case 'approved':
         return this.renderApproved();
+      case 'advanced':
+        return this.renderAdvanced();
       case 'rejected':
         return this.renderRejected();
       case 'review':
@@ -877,7 +914,7 @@ class PublishRequestsApp extends LitElement {
             <sl-button
               class="pw-fill-accent pw-action-sm"
               @click=${(e) => { e.stopPropagation(); this.handleInboxApprove(request); }}
-              ?disabled=${isProcessing || this._approveAllProcessing || request.canApproveNow === false}
+              ?disabled=${isProcessing || this._approveAllProcessing || request.canApproveNow !== true}
             >
               ${this.approveLabel(request, isProcessing)}
             </sl-button>
@@ -893,7 +930,7 @@ class PublishRequestsApp extends LitElement {
               <span class="detail-label">Step</span>
               <span class="detail-value">
                 ${request.stepInfo.current} of ${request.stepInfo.count}${request.stepInfo.title ? ` — ${request.stepInfo.title}` : ''}
-                ${request.canApproveNow === false ? ' (awaiting another reviewer)' : ''}
+                ${request.canApproveNow !== true ? ' (awaiting another reviewer)' : ''}
               </span>
             </div>
           ` : nothing}
@@ -920,14 +957,14 @@ class PublishRequestsApp extends LitElement {
   }
 
   approveLabel(request, isProcessing) {
-    if (request.canApproveNow === false) return 'Awaiting other reviewers';
+    if (request.canApproveNow !== true) return 'Awaiting other reviewers';
     if (!isFinalStep(request)) return isProcessing ? 'Approving...' : 'Approve Step';
     return isProcessing ? 'Publishing...' : 'Approve & Publish';
   }
 
   /** Requests waiting on a step this user can act on right now. */
   get actionableCount() {
-    return this._pendingRequests.filter((r) => r.canApproveNow !== false).length;
+    return this._pendingRequests.filter((r) => r.canApproveNow === true).length;
   }
 
   // ======== My Requests (requester view) renders ========
@@ -1033,7 +1070,7 @@ class PublishRequestsApp extends LitElement {
     const title = info.title ? ` — ${info.title}` : '';
     let note = 'Approving this step publishes the page.';
     if (!isFinalStep(request)) note = 'Approving advances the request; the page is not published yet.';
-    if (request.canApproveNow === false) note = 'This step is waiting on another reviewer.';
+    if (request.canApproveNow !== true) note = 'This step is waiting on another reviewer.';
     return html`
       <p class="reviewer-info">
         <strong>Step ${info.current} of ${info.count}${title}</strong> — ${note}
@@ -1107,9 +1144,23 @@ class PublishRequestsApp extends LitElement {
         </div>
         <h2 class="status-heading">Error</h2>
         <p class="status-body">
-          This page requires URL parameters to identify the content to review.
-          Please access this page via the link in your approval email.
+          ${this._message?.text || 'Unable to load the workflow. Check the organization and site.'}
         </p>
+        <sl-button @click=${() => this.init()}>Retry</sl-button>
+      </div>
+    `;
+  }
+
+  renderAdvanced() {
+    return html`
+      <div class="status-page">
+        <h2 class="status-heading status-heading--success">Step approved</h2>
+        <p class="status-body">${this._nextStep?.current
+          ? `Waiting on step ${this._nextStep.current}.` : 'Waiting on the next reviewers.'}</p>
+        <p><code>${this._path}</code></p>
+        <a href="${this.getInboxUrl()}" class="back-link" @click=${(event) => this.backToInbox(event)}>
+          Back to inbox
+        </a>
       </div>
     `;
   }
@@ -1262,7 +1313,7 @@ class PublishRequestsApp extends LitElement {
               class="pw-fill-accent"
               @click=${this.handleApprove}
               ?disabled=${this._isProcessing || this._needsEmail
-                || this._reviewRequest?.canApproveNow === false}
+                || this._reviewRequest?.canApproveNow !== true}
             >
               ${this.approveLabel(this._reviewRequest || {}, this._isProcessing)}
             </sl-button>
@@ -1307,6 +1358,10 @@ class PublishRequestsApp extends LitElement {
     }
     return html`
       ${this.renderToolbar()}
+      ${new URLSearchParams(window.location.search).get('env') === 'ci' ? html`
+        <div class="message message--info" role="status">
+          CI workflow configuration. Publishing affects the live site.
+        </div>` : nothing}
       ${this.renderMessage()}
       <div class="pw-content">
         ${this.renderContent()}

@@ -16,7 +16,7 @@
 /* eslint-disable no-await-in-loop */
 import '../../../../tools/plugins/request-for-publish-v2/panel.js';
 import fixture, { singleStep } from './fixture-client.js';
-import { createWorkspaceActions } from '../../../../tools/plugins/request-for-publish-v2/workflow.js';
+import { buildStepModel, createWorkspaceActions } from '../../../../tools/plugins/request-for-publish-v2/workflow.js';
 
 const ctx = { org: 'example', site: 'website', path: '/drafts/page' };
 const row = {
@@ -47,17 +47,41 @@ const button = (label) => [...current.shadowRoot.querySelectorAll('button')].fin
 const noExternalComparison = () => !current.shadowRoot.querySelector('a[href*="tools.aem.live"]');
 const stepClass = (index) => current.shadowRoot.querySelectorAll('.step')[index - 1]?.className;
 // Step bodies are collapsed by default; expand before asserting on their contents.
-const open = async (index = 1) => { current.toggle(index); await tick(); };
+const open = async (index) => {
+  const toggle = index === undefined
+    ? current.shadowRoot.querySelector('.step.current .step-toggle')
+    : current.shadowRoot.querySelectorAll('.step-toggle')[index - 1];
+  if (toggle?.getAttribute('aria-expanded') === 'false') toggle.click();
+  await tick();
+};
+const normalize = (data) => {
+  const enrich = (entry) => {
+    const model = buildStepModel(data.steps, entry.step, entry.stepInfo);
+    return {
+      canApproveNow: true,
+      isFinal: model.current === model.lastStaffed,
+      stepInfo: model,
+      ...entry,
+    };
+  };
+  return { ...data, own: data.own.map(enrich), approvable: data.approvable.map(enrich) };
+};
 async function show(data = base, overrides = {}) {
   current = document.createElement('request-for-publish');
   current.context = ctx;
-  current.client = { load: async () => structuredClone(data), ...overrides };
+  const load = overrides.load || (async () => structuredClone(data));
+  current.client = {
+    ...overrides,
+    load: async (...args) => normalize(await load(...args)),
+  };
   mount.replaceChildren(current);
   await tick();
   return current;
 }
 async function test(name, fn) {
+  document.querySelector('#results').textContent = [...results, `RUNNING ${name}`].join('\n');
   try { await fn(); results.push(`PASS ${name}`); } catch (error) { results.push(`FAIL ${name}: ${error.message}`); }
+  document.querySelector('#results').textContent = results.join('\n');
 }
 
 await test('initiation derives from an empty queue, with no role selector or SMART guidance', async () => {
@@ -114,13 +138,19 @@ await test('native review keeps the note and maps the current workflow view', as
   assert(text().includes('current document'), 'pending author input label is wrong');
   assert(text().includes(row.comment), 'pending request note lost');
 });
-await test('missing comparison method disables review without an external fallback', async () => {
+await test('missing comparison method omits native review and offers preview and live links', async () => {
   const check = async (data, pending = false) => {
     await show(data);
     current.workspace = createWorkspaceActions();
     if (pending) await open();
     else await tick();
-    assert(button('Review changes')?.disabled, 'missing comparator did not disable review');
+    assert(!button('Review changes'), 'unavailable native comparator offered');
+    if (data.page.length) {
+      assert(!current.shadowRoot.querySelector('.review-links'), 'observer comparison controls exposed');
+    } else {
+      assert(current.shadowRoot.querySelector('a[href*=".aem.page/"]'), 'preview comparison link missing');
+      assert(current.shadowRoot.querySelector('a[href*=".aem.live/"]'), 'live comparison link missing');
+    }
     assert(noExternalComparison(), 'external comparison fallback remains');
   };
   await check(base);
@@ -160,8 +190,9 @@ await test('pending request automatically shows requester actions', async () => 
 });
 await test('approvable request automatically shows decisions and author note', async () => {
   await show({ ...base, approvable: [row] });
-  assert(button('Approve & publish'), 'missing inline approval on the collapsed current step');
+  assert(!button('Approve & publish'), 'approval shown on the collapsed current step');
   await open();
+  assert(button('Approve & publish'), 'missing approval in the expanded current step');
   assert(button('Reject…'), 'missing rejection');
   assert(text().includes(row.comment), 'author note missing');
   assert(!button('Withdraw…'), 'non-owner withdrawal shown');
@@ -217,6 +248,7 @@ await test('publication failure offers completion-only recovery', async () => {
     approve: async () => { throw Object.assign(new Error('Recording failed'), { published: true }); },
     complete: async () => { completion += 1; },
   });
+  await open();
   button('Approve & publish').click();
   await tick();
   assert(/Published/.test(text()) && button('Retry request update'), 'partial outcome hidden');
@@ -237,6 +269,7 @@ await test('publication remains visible when the follow-up status read fails', a
       throw Object.assign(new Error('Recording failed'), { published: true });
     },
   });
+  await open();
   button('Approve & publish').click();
   await tick();
   assert(/Published/.test(text()), 'confirmed publication disappeared after a read failure');
@@ -251,6 +284,7 @@ await test('published page with no remaining request does not offer an unsafe re
       throw Object.assign(new Error('Notification failed'), { published: true });
     },
   });
+  await open();
   button('Approve & publish').click();
   await tick();
   assert(!button('Retry request update'), 'retry offered for a request that has disappeared');
@@ -265,6 +299,7 @@ await test('ambiguous publication blocks another publish attempt', async () => {
       throw Object.assign(new Error('Response lost'), { publishUnknown: true });
     },
   });
+  await open();
   button('Approve & publish').click();
   await tick();
   assert(/Publication outcome unknown/.test(text()), 'unknown publication is not explicit');
@@ -283,6 +318,7 @@ await test('page changes clear stale content before the first new render', async
 });
 await test('primary button has AA text contrast in light and dark themes', async () => {
   await show({ ...base, approvable: [row] });
+  await open();
   const luminance = (color) => color.match(/\d+(?:\.\d+)?/g).slice(0, 3)
     .map((channel) => Number(channel) / 255)
     .map((channel) => (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4))
@@ -311,6 +347,7 @@ await test('site theme colours the primary action and links with AA contrast, an
   };
   const settings = { ...base.settings, accentColor: '#903', accentColorHover: '#730026' };
   await show({ ...base, approvable: [row], settings });
+  await open();
   const previous = document.documentElement.style.colorScheme;
   try {
     ['light', 'dark'].forEach((scheme) => {
@@ -323,8 +360,9 @@ await test('site theme colours the primary action and links with AA contrast, an
     });
   } finally { document.documentElement.style.colorScheme = previous; }
   assert(current.style.getPropertyValue('--pw-accent-hover') === '#730026', 'hover accent not applied');
-  current.client = { load: async () => structuredClone({ ...base, approvable: [row] }) };
+  current.client = { load: async () => normalize(structuredClone({ ...base, approvable: [row] })) };
   await tick();
+  await open();
   assert(getComputedStyle(button('Approve & publish')).backgroundColor !== 'rgb(153, 0, 51)', 'stale theme kept for an unthemed site');
 });
 
@@ -433,6 +471,7 @@ await test('local integration: request, approver review and successful publicati
   await current.refresh();
   await tick();
   assert(text().includes('Please review the updated introduction.'), 'reviewer lost request note');
+  await open();
   button('Approve & publish').click();
   await tick();
   assert(text().includes('Published. The publish request is complete.'), 'approval completion missing');
@@ -506,6 +545,7 @@ await test('local integration: preview failure keeps the note and sends no reque
 await test('local integration: completion retry does not publish twice', async () => {
   const { client, calls, state } = fixture({ role: 'approver', rows: [row], failRecord: true });
   await show(base, client);
+  await open();
   button('Approve & publish').click();
   await tick();
   assert(button('Retry request update') && !button('Approve & publish'), 'unsafe recovery controls');
@@ -518,6 +558,7 @@ await test('local integration: completion retry does not publish twice', async (
 await test('local integration: unknown publication cannot be retried', async () => {
   const { client, calls } = fixture({ role: 'approver', rows: [row], unknownPublish: true });
   await show(base, client);
+  await open();
   button('Approve & publish').click();
   await tick();
   assert(text().includes('Publication outcome unknown'), 'unknown outcome hidden');
@@ -541,14 +582,17 @@ await test('every step is listed with its title and description, collapsed by de
   assert(current.shadowRoot.querySelectorAll('.step').length === 2, 'steps not listed');
   assert(text().includes('Legal review') && text().includes('Claims and disclaimers.'), 'step title or description missing');
   assert(!current.shadowRoot.querySelector('.step-body'), 'a step body was expanded by default');
+  assert(!button('Approve') && !button('Approve & publish'), 'collapsed step offers approval');
   assert(/Step 1 of 2/.test(text()), 'step position missing from the summary');
 });
 await test('an intermediate step approves without publishing', async () => {
   await show({ ...base, steps: twoSteps, approvable: [row] });
+  await open();
   assert(button('Approve') && !button('Approve & publish'), 'intermediate step offers publication');
 });
 await test('approving names the step that was notified next', async () => {
   await show({ ...base, steps: twoSteps, approvable: [row] }, { approve: async () => {} });
+  await open();
   button('Approve').click();
   await tick();
   assert(text().includes('Brand review'), 'next step not named in the approval notice');
@@ -556,6 +600,7 @@ await test('approving names the step that was notified next', async () => {
 await test('an untitled next step is named by its number', async () => {
   const mixed = [twoSteps[0], { ...twoSteps[1], title: '' }];
   await show({ ...base, steps: mixed, approvable: [row] }, { approve: async () => {} });
+  await open();
   button('Approve').click();
   await tick();
   assert(text().includes('Step 2'), 'untitled next step not named by number');
@@ -565,11 +610,13 @@ await test('the last staffed step publishes even when later steps are empty', as
     index: 2, title: 'Empty', description: '', approvers: [], cc: [],
   };
   await show({ ...base, steps: [twoSteps[0], empty], approvable: [row] });
+  await open();
   assert(button('Approve & publish'), 'last staffed step does not publish');
 });
 await test('the final step is the only one that publishes', async () => {
   const approved = { ...row, step: 'legal@example.com:1:2026-01-01T11:00:00Z' };
   await show({ ...base, steps: twoSteps, approvable: [approved] });
+  await open();
   assert(button('Approve & publish') && !button('Approve'), 'final step does not publish');
   assert(/Step 2 of 2/.test(text()), 'wrong current step');
 });
@@ -594,10 +641,12 @@ await test('an approver of a later step cannot act on the current one', async ()
   await open(1);
   assert(!button('Reject…'), 'rejection offered outside the current step');
 });
-await test('an uninvolved viewer sees a read-only stepper, not an initiation form', async () => {
+await test('an uninvolved viewer sees pending status without private workflow details or actions', async () => {
   await show({ ...base, steps: twoSteps, page: [row] });
   assert(!button('Request publish'), 'initiation form offered while a request is pending');
-  assert(current.shadowRoot.querySelectorAll('.step').length === 2, 'steps not listed');
+  assert(!current.shadowRoot.querySelector('.steps'), 'private workflow steps exposed');
+  assert(!/Legal review|Brand review|legal@example.com|brand@example.com|watcher@example.com/.test(text()), 'private workflow metadata exposed');
+  assert(!text().includes(row.comment), 'private request note exposed');
   assert(/Awaiting approval/.test(text()), 'wrong status for an uninvolved viewer');
   await open(1);
   assert(!button('Approve') && !button('Reject…') && !button('Withdraw…'), 'actions offered to an uninvolved viewer');
@@ -616,7 +665,8 @@ await test('a lone unlabelled step keeps the decisions inline', async () => {
   await show({ ...base, steps: untitledStep, approvable: [row] });
   assert(!current.shadowRoot.querySelector('.steps'), 'stepper shown for a single unlabelled step');
   assert(button('Approve & publish') && button('Reject…'), 'decisions missing without a stepper');
-  assert(button('Review changes')?.disabled && noExternalComparison(), 'missing native review control or external fallback remains');
+  assert(!button('Review changes') && noExternalComparison(), 'unavailable native review or external fallback offered');
+  assert(current.shadowRoot.querySelector('a[href*=".aem.page/"]') && current.shadowRoot.querySelector('a[href*=".aem.live/"]'), 'preview or live comparison link missing');
   assert(text().includes(row.comment), 'author note missing');
   assert(/Pending approval/.test(text()), 'step counter shown for a single step');
 });
@@ -636,12 +686,14 @@ await test('a step with no approvers is skipped', async () => {
 await test('local integration: a two-step request publishes only on the last approval', async () => {
   const { client, calls, state } = fixture({ role: 'approver', rows: [row], steps: twoSteps });
   await show({ ...base, steps: twoSteps }, client);
+  await open();
   button('Approve').click();
   await tick();
   assert(text().includes('Step approved.') && text().includes('Brand review'), 'intermediate approval not reported');
   assert(!calls.some((call) => call.route === 'publish'), 'intermediate approval published');
   assert(state.rows.length === 1 && state.rows[0].step.includes(':1:'), 'step log not written');
   assert(/Step 2 of 2/.test(text()), 'request did not advance');
+  await open();
   button('Approve & publish').click();
   await tick();
   assert(calls.filter((call) => call.route === 'publish').length === 1, 'final approval did not publish');
@@ -653,6 +705,7 @@ await test('local integration: approving a step someone else advanced is refused
   const { client, calls, state } = fixture({ role: 'approver', rows: [row], steps: twoSteps });
   await show({ ...base, steps: twoSteps }, client);
   state.rows = [{ ...row, step: 'someone@example.com:1:T' }];
+  await open();
   button('Approve').click();
   await tick();
   assert(!calls.some((call) => call.route === 'publish'), 'stale approval published');
