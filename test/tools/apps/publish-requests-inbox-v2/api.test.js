@@ -367,6 +367,8 @@ describe('inbox v2 approval handlers', () => {
         calls.push(...paths);
         return { advanced: paths };
       },
+      // the worker no longer lists what this user advanced
+      getAllPendingRequestsForUser: async () => rows.filter((row) => !calls.includes(row.path)),
     });
     app._pendingRequests = rows;
     await app.handleApproveAll();
@@ -391,12 +393,28 @@ describe('inbox v2 approval handlers', () => {
         calls.push(...paths);
         return { completed: paths };
       },
+      getAllPendingRequestsForUser: async () => rows.filter((row) => !calls.includes(row.path)),
     });
     app._pendingRequests = rows;
     await app.handleApproveAll();
     assert.deepEqual(calls, ['/page']);
     assert.deepEqual(Array.from(app._pendingRequests, (row) => row.path), ['/unknown']);
     assert.match(app._message.text, /1 published/);
+  });
+
+  it('keeps a request listed when the same user staffs the next step', async () => {
+    const row = { ...finalRow, isFinal: false, stepInfo: { current: 1, lastStaffed: 2 } };
+    const advanced = { ...row, isFinal: true, stepInfo: { current: 2, lastStaffed: 2 } };
+    const app = fixture({
+      checkPublishRequest: async () => row,
+      approveRequests: async () => ({ success: true, advanced: ['/page'] }),
+      getAllPendingRequestsForUser: async () => [advanced],
+    });
+    app._pendingRequests = [row];
+    app._userEmail = 'me@example.com';
+    await app.handleInboxApprove(row);
+    assert.deepEqual(app._pendingRequests, [advanced]);
+    assert.match(app._message.text, /Step approved: \/page/);
   });
 
   it('never publishes an intermediate approval', async () => {

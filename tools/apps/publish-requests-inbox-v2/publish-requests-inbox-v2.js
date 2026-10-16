@@ -281,6 +281,22 @@ class PublishRequestsApp extends LitElement {
   }
 
   /**
+   * Re-read the inbox from the worker after an approval. An approved step can
+   * land on the same person again (they approve consecutive steps, or the next
+   * step is skipped and they staff the one after), so dropping the row locally
+   * would hide work that is still theirs.
+   */
+  async refreshInbox() {
+    try {
+      this._pendingRequests = await getAllPendingRequestsForUser(
+        this._org, this._site, this._userEmail, this.token,
+      );
+    } catch (error) {
+      console.error('Error refreshing inbox:', error);
+    }
+  }
+
+  /**
    * Initialize my-requests mode: fetch all pending requests submitted by the current user
    */
   async initMyRequests() {
@@ -571,8 +587,8 @@ published,
     try {
       const result = await this.approveOne(request);
       if (result.success) {
-        this._pendingRequests = this._pendingRequests.filter((r) => r.path !== request.path);
         this._message = this.mutationNotice(result, result.published ? `Published: ${request.path}` : `Step approved: ${request.path}`);
+        await this.refreshInbox();
       } else {
         this._message = { type: 'error', text: result.error };
       }
@@ -685,7 +701,7 @@ published,
     const warning = [intermediateResult.warning, finalResult.warning].filter(Boolean).join(' ');
 
     const approvedSet = new Set(approved);
-    this._pendingRequests = this._pendingRequests.filter((r) => !approvedSet.has(r.path));
+    await this.refreshInbox();
     this._approveAllProcessing = false;
 
     const publishedCount = finals.filter((r) => approvedSet.has(r.path)).length;
