@@ -16,7 +16,166 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import vm from 'node:vm';
 import * as workflow from '../../../../tools/plugins/request-for-publish-v2/workflow.js';
+
+async function panelFixture() {
+  const source = await readFile(new URL('../../../../tools/plugins/request-for-publish-v2/panel.js', import.meta.url), 'utf8');
+  const start = source.indexOf('class RequestForPublish');
+  const end = source.indexOf("customElements.define('request-for-publish'");
+  const App = vm.runInNewContext(`${source.slice(start, end)}; RequestForPublish`, {
+    ...workflow,
+    URLSearchParams,
+    window: { location: { search: '' } },
+    LitElement: class {},
+    html: (strings, ...values) => strings.reduce((text, part, index) => `${text}${part}${values[index] ?? ''}`, ''),
+    nothing: '',
+    peopleList: () => '',
+  });
+  return new App();
+}
+
+describe('review step controls', () => {
+  it('uses worker finality for the approval label even when local steps disagree', async () => {
+    const panel = await panelFixture();
+    panel.renderLinks = () => '';
+    const step = {
+      index: 1, state: 'current', approvers: [], cc: [],
+    };
+    [true, false].forEach((isFinal) => {
+      const markup = panel.renderStepBody(step, {
+        canApprove: true,
+        current: isFinal ? 1 : 2,
+        lastStaffed: isFinal ? 2 : 1,
+        request: { isFinal },
+      });
+      assert.equal(markup.includes('Approve & publish'), isFinal);
+    });
+  });
+
+  it('renders a redacted observer without inventing progress or mutation controls', async () => {
+    const panel = await panelFixture();
+    panel.context = { org: 'example', site: 'website', path: '/page' };
+    Object.assign(panel, {
+      _data: {
+        own: [],
+        approvable: [],
+        page: [{ path: '/page', status: 'pending', created: '2026-01-01' }],
+        approvers: ['reviewer@example.com'],
+        steps: [{ index: 1, approvers: ['reviewer@example.com'] }],
+        settings: {},
+      },
+    });
+    const markup = panel.renderContent();
+    assert.match(markup, /Awaiting approval/);
+    assert.doesNotMatch(markup, /Step 1 of|Approved by|Approve<|Approve & publish|Withdraw|Resend notification/);
+  });
+
+  it('does not offer approval outside the expanded review body', async () => {
+    const panel = await panelFixture();
+    const step = {
+      index: 1, state: 'current', title: 'Legal', approvers: [], cc: [],
+    };
+    const state = { canApprove: true, request: { comment: 'Review this note' } };
+    panel.renderLinks = () => 'View preview';
+    const collapsed = panel.renderStep(step, state);
+    assert.doesNotMatch(collapsed, /Approve|step-action/);
+    panel.toggle(1);
+    const expanded = panel.renderStep(step, state);
+    assert.match(expanded, /aria-current=step/);
+    assert.match(expanded, /step-body[\s\S]*Review this note[\s\S]*View preview[\s\S]*Approve/);
+  });
+
+  it('offers manual page links when native comparison is unavailable', async () => {
+    const panel = await panelFixture();
+    panel.context = { org: 'example', site: 'website', path: '/page' };
+    const markup = panel.renderLinks();
+    assert.match(markup, /Comparison is not available in this editor/);
+    assert.match(markup, /Open live page/);
+    assert.doesNotMatch(markup, /Review changes<|Compare the current/);
+  });
+});
+
+describe('mutation notification results', () => {
+  const operations = [
+    { action: 'submit' }, { action: 'reject' }, { action: 'withdraw' },
+    { action: 'resend' }, { action: 'complete' },
+    { action: 'approve', isFinal: true }, { action: 'approve', isFinal: false },
+  ];
+  operations.forEach(({ action, isFinal = true }) => {
+    [true, false].forEach((emailFailed) => {
+      it(`${action} (final=${isFinal}) preserves success with emailFailed=${emailFailed}`, async () => {
+        const panel = await panelFixture();
+        const request = {
+          path: '/page',
+          status: 'pending',
+          comment: 'Ready',
+          isFinal,
+          canApproveNow: true,
+          stepInfo: { current: 1 },
+        };
+        let mutations = 0;
+        let refreshed = 0;
+        let closed = 0;
+        Object.assign(panel, {
+          context: { org: 'example', site: 'website', path: '/page' },
+          _epoch: 1,
+          _comment: 'Ready',
+          _reason: 'Not ready',
+          _receipt: action === 'complete' ? request : undefined,
+          _data: {
+            own: ['withdraw', 'resend'].includes(action) ? [request] : [],
+            approvable: ['approve', 'reject', 'complete'].includes(action) ? [request] : [],
+            page: [],
+            approvers: ['reviewer@example.com'],
+            steps: [{ index: 1, approvers: ['reviewer@example.com'] }],
+            settings: {},
+          },
+          client: {
+            [action]: async () => {
+              mutations += 1;
+              return { success: true, emailErrors: emailFailed ? [{ error: 'Delivery failed' }] : [] };
+            },
+          },
+          workspace: { close: async () => { closed += 1; } },
+          refresh: async () => { refreshed += 1; },
+        });
+        await panel.act(action);
+        const notice = Reflect.get(panel, '_notice');
+        assert.equal(mutations, 1);
+        assert.equal(refreshed, 1);
+        assert.equal(closed, ['submit', 'approve', 'reject', 'withdraw'].includes(action) ? 1 : 0);
+        assert.equal(notice.type, emailFailed ? 'info' : 'success');
+        if (emailFailed) assert.match(notice.text, /notification.*fail/i);
+        else assert.doesNotMatch(notice.text, /notification.*fail/i);
+        assert.equal(Reflect.get(panel, '_receipt'), undefined);
+      });
+    });
+  });
+
+  it('does not mutate a redacted observer request', async () => {
+    const panel = await panelFixture();
+    let mutations = 0;
+    Object.assign(panel, {
+      context: { org: 'example', site: 'website', path: '/page' },
+      _data: {
+        own: [],
+        approvable: [],
+        page: [{ path: '/page', status: 'pending' }],
+        approvers: [],
+        steps: [],
+        settings: {},
+      },
+      client: {
+        approve: async () => { mutations += 1; },
+        withdraw: async () => { mutations += 1; },
+      },
+    });
+    await panel.act('approve');
+    await panel.act('withdraw');
+    assert.equal(mutations, 0);
+  });
+});
 
 describe('native workspace comparison adapter', () => {
   it('dispatches synchronous undefined review actions without capability declarations', async () => {
@@ -102,7 +261,7 @@ describe('native workspace comparison adapter', () => {
   });
 
   it('does not retain capability declarations or an external comparator fallback', async () => {
-    const paths = ['request-for-publish.js', 'workflow.js', 'panel.js'];
+    const paths = ['request-for-publish-v2.js', 'workflow.js', 'panel.js'];
     const sources = await Promise.all(paths.map((path) => readFile(new URL(`../../../../tools/plugins/request-for-publish-v2/${path}`, import.meta.url), 'utf8')));
     sources.forEach((source) => {
       assert.doesNotMatch(source, /capabilities|tools\.aem\.live|links\.diff/);
@@ -209,7 +368,16 @@ describe('save before preview sequencing', () => {
           const route = new URL(href).pathname;
           calls.push(route);
           return new Response(JSON.stringify(route.endsWith('/approve')
-            ? { approved: [context.path] } : { requests: [pending] }));
+            ? {
+              approved: [context.path],
+              completed: final ? [context.path] : [],
+              advanced: final ? [] : [context.path],
+            }
+            : {
+              requests: [{
+                ...pending, isFinal: final, canApproveNow: true, stepInfo: { current: 1 },
+              }],
+            }));
         },
       });
       await client.approve(context, pending, { step: 1, final });

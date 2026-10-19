@@ -78,7 +78,17 @@ export default function fixture(options = {}) {
           if (role === 'page') return response({ requests: structuredClone(state.rows) });
           const own = role === 'requester';
           const allowed = state.role === 'both' || state.role === (own ? 'requester' : 'approver');
-          return response({ requests: allowed ? structuredClone(state.rows) : [] });
+          return response({
+            requests: allowed ? structuredClone(state.rows).map((row) => {
+              const model = buildStepModel(state.steps, row.step);
+              return {
+                canApproveNow: true,
+                stepInfo: model,
+                isFinal: model.current === model.lastStaffed,
+                ...row,
+              };
+            }) : [],
+          });
         }
       }
       if (route === '/api/v2/requests') {
@@ -112,6 +122,7 @@ export default function fixture(options = {}) {
           unauthorized: [],
           stale: [],
           completed: completed ? [page.path] : [],
+          advanced: completed ? [] : [page.path],
         });
       }
       if (['/api/v2/requests/reject', '/api/v2/requests/withdraw'].includes(route)) {

@@ -18,7 +18,7 @@ const WORKERS = {
   ci: 'https://publish-requests-ci.aem-poc-lab.workers.dev',
   local: 'http://localhost:8787',
 };
-const INBOX = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox-v2/publish-requests-inbox';
+const INBOX = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2';
 // Multi-step approvals are served by the worker's v2 API only.
 const API = '/api/v2';
 
@@ -32,6 +32,7 @@ export function workerOrigin(location) {
 export function normalizeContext(context = {}) {
   const { org, path, ref = 'main' } = context;
   const site = context.site || context.repo;
+  if (typeof ref !== 'string' || !ref || /[^a-z0-9-]/i.test(ref)) return null;
   if (![org, site].every((part) => typeof part === 'string' && /^[a-z0-9][a-z0-9.-]*$/i.test(part))) return null;
   if (typeof path !== 'string' || !path.startsWith('/') || /[?#\\]/.test(path)) return null;
   let decoded;
@@ -39,7 +40,7 @@ export function normalizeContext(context = {}) {
   if (decoded.split('/').some((part) => part === '.' || part === '..')) return null;
   if (/\.[^/]+$/.test(path) && !path.endsWith('.html')) return null;
   return {
-    org, site, path, ref,
+    org, site, path: path.replace(/\.html$/, ''), ref,
   };
 }
 
@@ -135,10 +136,15 @@ export function deriveView(context, data) {
   if (approvable.length) view = 'approver';
   else if (own.length) view = 'requester';
   else if (onPage.length) view = 'observer';
-  // Approver eligibility stays worker-authoritative; an older worker omits the flag.
-  const canApprove = !!approvable.length && approvable[0].canApproveNow !== false;
+  const canApprove = !!approvable.length && request.canApproveNow === true
+    && typeof request.isFinal === 'boolean'
+    && Number.isInteger(request.stepInfo?.current) && request.stepInfo.current > 0;
   return {
-    ...buildStepModel(data.steps, request?.step, request?.stepInfo),
+    ...(view === 'observer'
+      ? {
+        steps: [], current: null, count: 0, bare: true,
+      }
+      : buildStepModel(data.steps, request?.step, request?.stepInfo)),
     view,
     request,
     canApprove,
@@ -147,7 +153,9 @@ export function deriveView(context, data) {
 }
 
 export function pageLinks(context, env, moduleUrl = import.meta.url) {
-  const { org, site, path } = context;
+  const {
+    org, site, path, ref: contentRef = 'main',
+  } = context;
   const delivered = path.replace(/\.html$/, '').replace(/\/index$/, '/');
   const query = new URLSearchParams({ org, site });
   if (env === 'ci') query.set('env', env);
@@ -155,8 +163,8 @@ export function pageLinks(context, env, moduleUrl = import.meta.url) {
   const ref = codeHost.match(/^([a-z0-9-]+)--aem-apps--adobe-rnd\.aem\.(?:page|live)$/)?.[1];
   if (ref && ref !== 'main') query.set('ref', ref);
   return {
-    preview: `https://main--${site}--${org}.aem.page${delivered}`,
-    live: `https://main--${site}--${org}.aem.live${delivered}`,
+    preview: `https://${contentRef}--${site}--${org}.aem.page${delivered}`,
+    live: `https://${contentRef}--${site}--${org}.aem.live${delivered}`,
     inbox: `${INBOX}?${query}`,
     myRequests: `${INBOX}?${query}&requester=true`,
   };
@@ -254,10 +262,11 @@ export function createClient({
   }
 
   async function revalidate(context, expected, role) {
-    const rows = forPage(await list(context, role ? { role } : {}), context.path);
+    const rows = forPage(await list(context, { role, path: context.path }), context.path);
     if (rows.length !== 1 || !sameRequest(rows[0], expected)) {
       throw failure('This request changed or is no longer pending. Refresh before taking action.', { stale: true });
     }
+    return rows[0];
   }
 
   async function contentAction(action, context, label) {
@@ -273,14 +282,45 @@ export function createClient({
     }
   }
 
-  async function record(context, step) {
-    const result = await json(`${API}/requests/approve`, context, { paths: [context.path], step });
+  async function reconcilePublished(context) {
+    const rows = await list(context, { role: 'page', path: context.path });
+    if (!forPage(rows, context.path).length) {
+      return { approved: [context.path], completed: [context.path], alreadyCompleted: true };
+    }
+    throw failure('The page was published, but this request was advanced or changed. Refresh and review its current status.', { clearReceipt: true });
+  }
+
+  async function record(context, step, final) {
+    let result;
+    try {
+      result = await json(`${API}/requests/approve`, context, {
+        paths: [context.path], step, ...(final ? { final: true } : {}),
+      });
+    } catch (error) {
+      if (error.status === 409) {
+        await list(context, { role: 'approver', path: context.path }).catch(() => {});
+        throw failure('Approval conflict. The request changed; refresh and review its current status.', { status: 409, clearReceipt: final });
+      }
+      throw error;
+    }
+    if (final && !result.unauthorized?.includes(context.path)
+      && (result.stale?.includes(context.path) || result.notFound?.includes(context.path))) {
+      return reconcilePublished(context);
+    }
     if (result.stale?.includes(context.path)) {
       throw failure('This request was advanced by someone else. Refresh before taking action.');
     }
     if (!result.approved?.includes(context.path) || result.unauthorized?.includes(context.path)
       || result.notFound?.includes(context.path)) {
-      throw failure('The page was published, but approval was not recorded. Refresh to check access and request status.');
+      throw failure(final
+        ? 'The page was published, but approval was not recorded. Refresh to check access and request status.'
+        : 'Approval was not recorded. Refresh to check access and request status.');
+    }
+    if (final ? !result.completed?.includes(context.path)
+      : !result.advanced?.includes(context.path)) {
+      throw failure(final
+        ? 'Published, but workflow was not completed. Refresh to check the request.'
+        : 'Approval did not advance the workflow. Refresh; if it completed, publish the page manually.');
     }
     return result;
   }
@@ -290,8 +330,8 @@ export function createClient({
       const [configResult, people, own, approvable, page] = await Promise.all([
         json(`${API}/config`, context),
         json(`${API}/approvers`, context, null, { path: context.path }),
-        list(context, { role: 'requester' }),
-        list(context),
+        list(context, { role: 'requester', path: context.path }),
+        list(context, { role: 'approver', path: context.path }),
         list(context, { role: 'page', path: context.path }),
       ]);
       if (!configResult.config) throw failure('The publish workflow is not configured for this site.');
@@ -336,30 +376,39 @@ export function createClient({
     },
     async reject(context, expected, reason) {
       if (!reason.trim()) throw failure('Enter a reason for rejection.');
-      await revalidate(context, expected);
+      await revalidate(context, expected, 'approver');
       const result = await json(`${API}/requests/reject`, context, { path: context.path, reason: reason.trim() });
       if (result.success !== true) throw failure('This request is no longer pending. Refresh to check its status.');
       return result;
     },
     async approve(context, expected, { step, final } = {}, onPhase = () => {}) {
-      await revalidate(context, expected);
-      // Only the last step publishes, so earlier approvals cannot leave the
-      // page live with the request unrecorded.
+      const fresh = await revalidate(context, expected, 'approver');
+      if (fresh.canApproveNow !== true || typeof fresh.isFinal !== 'boolean'
+        || fresh.isFinal !== final || fresh.stepInfo?.current !== step) {
+        throw failure('This request changed. Refresh and review its current step before approving.');
+      }
       if (final) {
         onPhase('Publishing page…');
         await contentAction(publish, context, 'Publish');
       }
       onPhase('Updating request…');
-      try { return await record(context, step); } catch (error) {
-        throw failure(error.message, { status: error.status, published: !!final });
+      try { return await record(context, step, fresh.isFinal); } catch (error) {
+        const message = final && error.clearReceipt
+          ? `The page is live. ${error.message}` : error.message;
+        throw failure(message, {
+          status: error.status, published: !!final, clearReceipt: error.clearReceipt,
+        });
       }
     },
     async complete(context, expected, { step } = {}) {
       try {
-        await revalidate(context, expected);
-        return await record(context, step);
+        await revalidate(context, expected, 'approver');
+        return await record(context, step, true);
       } catch (error) {
-        throw failure(error.message, { status: error.status, published: true });
+        if (error.stale) return reconcilePublished(context);
+        throw failure(error.message, {
+          status: error.status, published: true, clearReceipt: error.clearReceipt,
+        });
       }
     },
   };
