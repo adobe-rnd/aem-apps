@@ -20,7 +20,7 @@ import {
 } from './workflow.js';
 
 const style = new CSSStyleSheet();
-style.replaceSync(await (await fetch(new URL('./request-for-publish.css', import.meta.url))).text());
+style.replaceSync(await (await fetch(new URL('./request-for-publish-v2.css', import.meta.url))).text());
 
 function peopleList(label, people) {
   const unique = [...new Set(people)];
@@ -205,7 +205,7 @@ class RequestForPublish extends LitElement {
     const { current, steps } = this.state;
     // Trailing steps without approvers are skipped, so the last staffed step publishes.
     const next = steps.find((step) => step.index > current && step.approvers.length > 0);
-    const final = !next;
+    const final = expected?.isFinal === true;
     const messages = {
       submit: 'Request sent. An approver can now review this page.',
       resend: 'Notification sent again. Your request is still pending.',
@@ -213,7 +213,7 @@ class RequestForPublish extends LitElement {
       reject: 'Request rejected.',
       approve: final
         ? 'Published. The publish request is complete.'
-        : `Step approved. The reviewers for ${next.title} have been notified.`,
+        : `Step approved. The reviewers for ${next?.title || 'the next step'} have been notified.`,
       complete: 'The publish request is now complete.',
     };
     this._busy = 'Working…';
@@ -221,22 +221,33 @@ class RequestForPublish extends LitElement {
     this._fieldError = undefined;
     const phase = (label) => { if (epoch === this._epoch) this._busy = label; };
     try {
-      if (action === 'submit') await client.submit(context, comment, phase);
-      else if (action === 'reject') await client.reject(context, expected, this._reason);
-      else if (action === 'approve') await client.approve(context, expected, { step: current, final }, phase);
-      else if (action === 'complete') await client.complete(context, expected, { step: current });
-      else await client[action](context, expected, phase);
+      let result;
+      if (action === 'submit') result = await client.submit(context, comment, phase);
+      else if (action === 'reject') result = await client.reject(context, expected, this._reason);
+      else if (action === 'approve') result = await client.approve(context, expected, { step: current, final }, phase);
+      else if (action === 'complete') result = await client.complete(context, expected, { step: current });
+      else result = await client[action](context, expected, phase);
       if (epoch !== this._epoch) return;
       if (['submit', 'approve', 'reject', 'withdraw'].includes(action)) {
         this.workspace?.close?.().catch(() => {});
       }
-      this._notice = { type: 'success', text: messages[action] };
+      const emailFailed = Array.isArray(result?.emailErrors) && result.emailErrors.length > 0;
+      let message = messages[action];
+      if (emailFailed && action === 'resend') message = 'Your request is still pending.';
+      else if (emailFailed && action === 'approve' && !final) message = 'Step approved.';
+      this._notice = {
+        type: emailFailed ? 'info' : 'success',
+        text: emailFailed
+          ? `${message} Email notification delivery failed for one or more recipients. Do not repeat the action to retry notifications.`
+          : message,
+      };
       if (action === 'submit') this._comment = '';
       if (action === 'approve' || action === 'complete') this._receipt = undefined;
       this._confirmation = undefined;
     } catch (error) {
       if (epoch !== this._epoch) return;
-      if (error.published) this._receipt = expected;
+      if (error.clearReceipt) this._receipt = undefined;
+      else if (error.published) this._receipt = expected;
       if (error.publishUnknown) this._unknown = expected;
       if (error.published || error.publishUnknown) this.workspace?.close?.().catch(() => {});
       this._notice = { type: 'error', text: error.message };
@@ -290,11 +301,14 @@ class RequestForPublish extends LitElement {
     const links = pageLinks(this.page, new URLSearchParams(window.location.search).get('env'));
     const { view } = this.state;
     const native = this.workspace?.canCompare;
-    const hint = `Compare the current ${view === 'approver' ? 'preview' : 'document'} with the live page.`;
+    const hint = native
+      ? `Compare the current ${view === 'approver' ? 'preview' : 'document'} with the live page.`
+      : 'Comparison is not available in this editor. Open the preview and live page to compare.';
     return html`<div class="review-links">
-      <button class="review-link" ?disabled=${this.disabled || !native}
-        @click=${this.reviewChanges}>${this._reviewing ? 'Opening comparison…' : 'Review changes'}</button>
+      ${native ? html`<button class="review-link" ?disabled=${this.disabled}
+        @click=${this.reviewChanges}>${this._reviewing ? 'Opening comparison…' : 'Review changes'}</button>` : nothing}
       <a href=${links.preview} target="_blank" rel="noopener noreferrer">Open preview <span aria-hidden="true">↗</span></a>
+      ${!native ? html`<a href=${links.live} target="_blank" rel="noopener noreferrer">Open live page</a>` : nothing}
       <p class="hint">${hint}</p>
     </div>`;
   }
@@ -329,7 +343,7 @@ class RequestForPublish extends LitElement {
     </div>`;
   }
 
-  renderStepBody(step, state, inline = false) {
+  renderStepBody(step, state) {
     if (step.state === 'approved') {
       const when = step.approvedAt && new Date(step.approvedAt);
       return html`<dl class="metadata">
@@ -345,7 +359,7 @@ class RequestForPublish extends LitElement {
         ${peopleList('Also notified', step.cc)}`;
     }
     if (this._confirmation) return this.renderConfirmation();
-    const approveInline = inline && state.canApprove;
+    const approveInline = state.canApprove;
     const actionable = approveInline || state.canApprove || state.canWithdraw;
     return html`
       ${peopleList('Approvers', step.approvers)}
@@ -353,7 +367,7 @@ class RequestForPublish extends LitElement {
       ${state.request.comment ? html`<div class="detail"><span class="label">Request note</span><p class="note">${state.request.comment}</p></div>` : nothing}
       ${this.renderLinks()}
       ${actionable ? html`<div class="decision-actions">
-        ${approveInline ? html`<button class="primary" ?disabled=${this.disabled} @click=${() => this.act('approve')}>${state.current >= state.lastStaffed ? 'Approve & publish' : 'Approve'}</button>` : nothing}
+        ${approveInline ? html`<button class="primary" ?disabled=${this.disabled} @click=${() => this.act('approve')}>${state.request?.isFinal === true ? 'Approve & publish' : 'Approve'}</button>` : nothing}
         ${state.canApprove ? html`<button class="quiet" data-action="reject" ?disabled=${this.disabled} @click=${() => this.confirm('reject')}>Reject…</button>` : nothing}
         ${state.canWithdraw ? html`<button class="quiet" ?disabled=${this.disabled} @click=${() => this.act('resend')}>Resend notification</button>
           <button class="quiet" data-action="withdraw" ?disabled=${this.disabled} @click=${() => this.confirm('withdraw')}>Withdraw…</button>` : nothing}
@@ -363,8 +377,7 @@ class RequestForPublish extends LitElement {
   renderStep(step, state) {
     const expanded = this._expanded.has(step.index);
     const current = step.state === 'current';
-    const actionable = current && state.canApprove && state.request && !this._confirmation;
-    return html`<li class="step ${step.state}">
+    return html`<li class="step ${step.state}" aria-current=${current ? 'step' : nothing}>
       <div class="step-head">
         <button class="step-toggle" aria-expanded=${expanded ? 'true' : 'false'} @click=${() => this.toggle(step.index)}>
           <span class="marker" aria-hidden="true"></span>
@@ -375,7 +388,6 @@ class RequestForPublish extends LitElement {
             ${step.state === 'skipped' ? html`<span class="step-meta">Skipped — no approvers</span>` : nothing}
           </span>
         </button>
-        ${actionable ? html`<button class="primary step-action" ?disabled=${this.disabled} @click=${() => this.act('approve')}>${state.current >= state.lastStaffed ? 'Approve & publish' : 'Approve'}</button>` : nothing}
       </div>
       ${expanded ? html`<div class="step-body">${this.renderStepBody(step, state)}</div>` : nothing}
     </li>`;
@@ -419,7 +431,7 @@ class RequestForPublish extends LitElement {
         ${created && !Number.isNaN(created.getTime()) ? html`<div><dt>Submitted</dt><dd><time datetime=${request.created}>${created.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</time></dd></div>` : nothing}
       </dl>` : nothing}
       ${state.bare
-    ? html`${current ? this.renderStepBody(current, state, true) : nothing}`
+    ? html`${current ? this.renderStepBody(current, state) : nothing}`
     : html`<ol class="steps">${state.steps.map((step) => this.renderStep(step, state))}</ol>`}
       ${this.authorSupport ? html`<p class="hint support-note">If your content owner is away, contact <a href=${`mailto:${this.authorSupport}`}>${this.authorSupport}</a> for assistance with content approvals.</p>` : nothing}
       ${requesting ? html`${this.renderGuidance()}${this.renderLinks()}${this.renderRequestForm()}` : nothing}

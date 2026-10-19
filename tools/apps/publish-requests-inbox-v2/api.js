@@ -22,7 +22,10 @@ const LOCAL_WORKER_URL = 'http://localhost:8787';
 const CORS_PROXY = 'https://da-etc.adobeaem.workers.dev/cors';
 
 // daFetch ensures a fresh IMS token is used on every request (handles token expiry)
-const { daFetch } = await import('https://da.live/nx/utils/daFetch.js');
+async function daFetch(...args) {
+  const sdk = await import('https://da.live/nx/utils/daFetch.js');
+  return sdk.daFetch(...args);
+}
 
 /**
  * Get the Worker URL. Falls back to localhost:8787 for local development;
@@ -240,6 +243,7 @@ export async function bulkPublishContent(org, site, paths) {
 export async function pollJobStatus(jobSelfUrl, maxWaitMs = 60000, intervalMs = 2000) {
   const jobUrl = `${CORS_PROXY}?url=${encodeURIComponent(jobSelfUrl)}/details`;
   const startTime = Date.now();
+  let lastJob;
 
   while (Date.now() - startTime < maxWaitMs) {
     try {
@@ -251,6 +255,7 @@ export async function pollJobStatus(jobSelfUrl, maxWaitMs = 60000, intervalMs = 
       }
 
       const job = await resp.json();
+      lastJob = job;
       const { state } = job;
 
       // Terminal states
@@ -266,7 +271,7 @@ export async function pollJobStatus(jobSelfUrl, maxWaitMs = 60000, intervalMs = 
     }
   }
 
-  return { success: false, error: 'Job polling timed out or encountered an error' };
+  return { success: false, job: lastJob, error: 'Job polling timed out or encountered an error' };
 }
 
 // ===========================================================================
@@ -279,11 +284,25 @@ export async function pollJobStatus(jobSelfUrl, maxWaitMs = 60000, intervalMs = 
  * Resolved approvers (incl. CC, when cc.can-approve) for a path.
  * @returns {Promise<string[]>} Deduplicated authorized emails (empty if none).
  */
+async function readWorkerResponse(resp) {
+  const result = await resp.json().catch(() => null);
+  if (!resp.ok || !result) {
+    const labels = {
+      401: 'Your session has expired. Reopen the app.',
+      403: 'You are not authorized for this workflow.',
+    };
+    const fallback = resp.status >= 500 ? 'The workflow backend is unavailable. Retry later.'
+      : 'The workflow service returned an invalid response.';
+    const label = labels[resp.status] || fallback;
+    throw Object.assign(new Error(`${label} ${result?.error || ''} (${resp.status})`.trim()), { status: resp.status });
+  }
+  return result;
+}
+
 export async function getApproversForPath(org, site, path, token) {
   const url = `${getWorkerUrl()}/api/v2/approvers?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}&path=${encodeURIComponent(path)}`;
   const resp = await fetch(url, getOpts(token, 'GET'));
-  if (!resp.ok) return [];
-  const { approvers = [], cc = [] } = await resp.json();
+  const { approvers = [], cc = [] } = await readWorkerResponse(resp);
   return [...approvers, ...cc];
 }
 
@@ -292,10 +311,10 @@ export async function getApproversForPath(org, site, path, token) {
  * @param {string} userEmail - Unused; the worker derives identity from the token.
  */
 export async function getAllPendingRequestsForUser(org, site, userEmail, token) {
-  const url = `${getWorkerUrl()}/api/v2/requests?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
+  const url = `${getWorkerUrl()}/api/v2/requests?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}&role=approver`;
   const resp = await fetch(url, getOpts(token, 'GET'));
-  if (!resp.ok) return [];
-  const { requests = [] } = await resp.json();
+  const { requests } = await readWorkerResponse(resp);
+  if (!Array.isArray(requests)) throw new Error('The workflow service returned an invalid request list.');
   return requests;
 }
 
@@ -306,8 +325,8 @@ export async function getAllPendingRequestsForUser(org, site, userEmail, token) 
 export async function getAllPendingRequestsByRequester(org, site, userEmail, token) {
   const url = `${getWorkerUrl()}/api/v2/requests?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}&role=requester`;
   const resp = await fetch(url, getOpts(token, 'GET'));
-  if (!resp.ok) return [];
-  const { requests = [] } = await resp.json();
+  const { requests } = await readWorkerResponse(resp);
+  if (!Array.isArray(requests)) throw new Error('The workflow service returned an invalid request list.');
   return requests;
 }
 
@@ -316,13 +335,13 @@ export async function getAllPendingRequestsByRequester(org, site, userEmail, tok
  * @returns {Promise<Object|null>}
  */
 export async function checkPublishRequest(org, site, path, token) {
-  try {
-    const pending = await getAllPendingRequestsForUser(org, site, null, token);
-    return pending.find((r) => r.path === path && r.status === 'pending') || null;
-  } catch (error) {
-    console.error('Error checking publish request:', error);
-    return null;
-  }
+  const params = new URLSearchParams({
+    org, site, role: 'page', path,
+  });
+  const resp = await fetch(`${getWorkerUrl()}/api/v2/requests?${params}`, getOpts(token));
+  const { requests: pending } = await readWorkerResponse(resp);
+  if (!Array.isArray(pending)) throw new Error('The workflow service returned an invalid request list.');
+  return pending.find((r) => r.path === path && r.status === 'pending') || null;
 }
 
 /**
@@ -331,10 +350,8 @@ export async function checkPublishRequest(org, site, path, token) {
  */
 export function isFinalStep(request) {
   const info = request?.stepInfo;
-  // An older worker sends no step info: treat every request as single-step.
-  if (!info) return true;
-  if (!info.lastStaffed) return false;
-  return info.current >= info.lastStaffed;
+  return request?.isFinal === true && Number.isInteger(info?.current)
+    && info.current > 0 && !info.complete && request.canApproveNow !== false;
 }
 
 /**
@@ -343,21 +360,32 @@ export function isFinalStep(request) {
  * @param {number} [step] - The step the caller believes is current.
  * @returns {Promise<Object>} { success, approved, notFound, unauthorized, stale, completed }
  */
-export async function approveRequests(org, site, paths, token, step) {
+export async function approveRequests(org, site, paths, token, step, final = false) {
+  if (!Number.isInteger(step) || step < 1) {
+    return { success: false, error: 'Cannot determine the current step. Refresh before approving.' };
+  }
   try {
     const body = { org, site, paths };
-    if (step !== undefined) body.step = step;
+    body.step = step;
+    if (final) body.final = true;
     const resp = await fetch(`${getWorkerUrl()}/api/v2/requests/approve`, getOpts(token, 'POST', body));
     const result = await resp.json();
-    if (!resp.ok) return { success: false, error: result.error || 'Failed to record approval' };
-    if (result.stale?.length) {
+    if (!resp.ok) {
       return {
-        success: false,
-        error: 'This request was advanced by someone else. Refresh to see its current step.',
-        ...result,
+        ...result, success: false, status: resp.status, error: result.error || 'Failed to record approval',
       };
     }
-    return { success: true, ...result };
+    const accepted = final ? result.completed || []
+      : result.advanced || [];
+    const denied = [
+      ...(result.stale || []), ...(result.unauthorized || []), ...(result.notFound || []),
+    ];
+    const success = paths.every((path) => accepted.includes(path) && !denied.includes(path));
+    return {
+      ...result,
+      success,
+      error: success ? null : 'Some approvals were not recorded. Refresh to check conflicts, access, and request status.',
+    };
   } catch (error) {
     console.error('Error recording approval:', error);
     return { success: false, error: error.message || 'An error occurred' };
@@ -374,8 +402,8 @@ export async function rejectRequest(org, site, path, reason, token) {
       org, site, path, reason,
     }));
     const result = await resp.json();
-    if (!resp.ok) return { success: false, error: result.error || 'Failed to reject request' };
-    return { success: true };
+    if (!resp.ok) return { success: false, status: resp.status, error: result.error || 'Failed to reject request' };
+    return { ...result, success: result.success === true };
   } catch (error) {
     console.error('Error rejecting request:', error);
     return { success: false, error: error.message || 'An error occurred' };
@@ -390,8 +418,8 @@ export async function withdrawRequest(org, site, path, token) {
   try {
     const resp = await fetch(`${getWorkerUrl()}/api/v2/requests/withdraw`, getOpts(token, 'POST', { org, site, path }));
     const result = await resp.json();
-    if (!resp.ok) return { success: false, error: result.error || 'Failed to withdraw request' };
-    return { success: true };
+    if (!resp.ok) return { success: false, status: resp.status, error: result.error || 'Failed to withdraw request' };
+    return { ...result, success: result.success === true };
   } catch (error) {
     console.error('Error withdrawing request:', error);
     return { success: false, error: error.message || 'An error occurred' };
@@ -409,8 +437,8 @@ export async function resendPublishRequest(org, site, path, requesterEmail, toke
       org, site, path, resend: true,
     }));
     const result = await resp.json();
-    if (!resp.ok) return { success: false, error: result.error || 'Failed to resend publish request' };
-    return { success: true };
+    if (!resp.ok) return { success: false, status: resp.status, error: result.error || 'Failed to resend publish request' };
+    return { ...result, success: result.success === true };
   } catch (error) {
     console.error('Error resending publish request:', error);
     return { success: false, error: error.message || 'An error occurred' };

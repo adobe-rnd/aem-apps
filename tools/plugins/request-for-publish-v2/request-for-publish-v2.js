@@ -21,11 +21,18 @@ import './panel.js';
 
 function makePanel({ context, token, actions }) {
   if (token) setImsDetails(token);
-  const request = actions?.daFetch || daFetch;
+  const request = (href, options = {}) => {
+    const headers = new Headers(options.headers);
+    headers.set('Authorization', `Bearer ${token}`);
+    return fetch(href, { ...options, headers });
+  };
+  const contentRequest = actions?.daFetch || daFetch;
   const content = (operation) => (page) => {
-    const { org, site, path } = page;
-    const { href } = new URL(`https://admin.hlx.page/${operation}/${org}/${site}/main${path}`);
-    return request(`https://da-etc.adobeaem.workers.dev/cors?url=${encodeURIComponent(href)}`, { method: 'POST' });
+    const {
+      org, site, path, ref,
+    } = page;
+    const { href } = new URL(`https://admin.hlx.page/${operation}/${org}/${site}/${ref}${path}`);
+    return contentRequest(`https://da-etc.adobeaem.workers.dev/cors?url=${encodeURIComponent(href)}`, { method: 'POST' });
   };
   const panel = document.createElement('request-for-publish');
   panel.context = context;
@@ -48,7 +55,7 @@ export default async function init(sdk) {
   };
 }
 
-if (document.querySelector('script[src$="/request-for-publish.js"]')) {
+if (document.querySelector('script[src$="/request-for-publish-v2.js"]')) {
   try {
     document.body.append(makePanel(await DA_SDK));
   } catch {
