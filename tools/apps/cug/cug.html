@@ -22,18 +22,20 @@
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="https://da.live/nx2/styles/styles.css">
     <link rel="stylesheet" href="./cug.css">
+    <script src="./cug.js" type="module"></script>
   </head>
   <body class="cug">
     <main>
       <h1>Closed User Groups</h1>
-      <div class="cug-toolbar">
+      <form id="cug-site-form" class="cug-toolbar">
         <div class="cug-site-field">
           <label for="cug-site">Org/site</label>
           <input id="cug-site" type="text" placeholder="org/site" autocomplete="off" spellcheck="false">
         </div>
-        <button class="cug-primary" type="button">Get CUG</button>
-      </div>
+        <button id="cug-get" class="cug-primary" type="submit">Get CUG</button>
+      </form>
 
+      <p id="cug-status" role="status" aria-live="polite" hidden></p>
       <div class="cug-table-scroll" role="region" aria-label="Closed user group rules" tabindex="0">
         <table class="cug-rules">
           <caption class="cug-sr-only">Editable closed user group rules</caption>
@@ -136,8 +138,13 @@
         </table>
       </div>
 
+      <div id="cug-row-menu" class="cug-row-menu" role="menu" aria-label="Insert a rule" hidden>
+        <button type="button" role="menuitem" data-position="above">Insert row above</button>
+        <button type="button" role="menuitem" data-position="below">Insert row below</button>
+      </div>
+
       <div class="cug-actions">
-        <button class="cug-primary" type="button">Apply CUG</button>
+        <button id="cug-apply" class="cug-primary" type="button" disabled>Apply CUG</button>
       </div>
 
       <section class="cug-lookup" aria-labelledby="cug-lookup-title">
