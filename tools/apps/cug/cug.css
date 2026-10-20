@@ -307,8 +307,10 @@ body.cug {
 }
 
 .cug .cug-primary:disabled {
-  opacity: 0.5;
-  cursor: wait;
+  background: var(--s2-blue-200, #cce4ff);
+  border-color: var(--s2-blue-200, #cce4ff);
+  color: var(--s2-gray-600, #6e6e6e);
+  cursor: not-allowed;
 }
 
 .cug #cug-status[data-error] {

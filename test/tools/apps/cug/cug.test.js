@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  assertSiteExists, fetchCugRows, saveCugRows, siteFromHash,
+  assertSiteExists, fetchCugRows, generateCugHeaders, saveCugRows, siteFromHash,
 } from '../../../../tools/apps/cug/data.js';
 
 describe('assertSiteExists', () => {
@@ -55,6 +55,27 @@ describe('CUG org/site initialization', () => {
 });
 
 describe('saveCugRows', () => {
+  it('generates headers from the saved app spreadsheet format for the selected site', async () => {
+    let posted;
+    await generateCugHeaders('/org/site', {
+      data: [
+        { Path: '/members/**', Authentication: 'true', Groups: '' },
+        { Path: '/partners/**', Authentication: '', Groups: 'gold,silver' },
+      ],
+    }, async (url, options) => {
+      if (options.method === 'POST') {
+        assert.equal(url, 'https://admin.hlx.page/config/org/sites/site/headers.json');
+        posted = JSON.parse(options.body);
+        return { ok: true };
+      }
+      return { ok: true, json: async () => ({ headers: {} }) };
+    });
+    assert.deepEqual(posted, {
+      '/members/**': [{ key: 'x-aem-cug-required', value: 'true' }],
+      '/partners/**': [{ key: 'x-aem-cug-groups', value: 'gold,silver' }],
+    });
+  });
+
   it('saves ordered browser values as multipart JSON and preserves sheet metadata', async () => {
     const source = {
       total: 1,

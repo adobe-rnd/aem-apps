@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { applyCugHeaders } from '../../plugins/cug/headers.js';
+
 export function siteFromHash(hash) {
   return hash.startsWith('#/') ? hash.slice(1) : '';
 }
@@ -106,4 +108,15 @@ export async function saveCugRows(site, rows, daFetch) {
   body.append('data', new Blob([JSON.stringify(updated)], { type: 'application/json' }));
   const response = await daFetch(sourceUrl(site), { method: 'PUT', body });
   if (!response.ok) throw new Error(`Spreadsheet save failed (HTTP ${response.status}).`);
+  return updated;
+}
+
+export async function generateCugHeaders(site, sheet, daFetch) {
+  const { org, repo } = siteParts(site);
+  const rows = sheet.data.map((row) => ({
+    url: row.Path,
+    'cug-required': row.Authentication,
+    'cug-groups': row.Groups,
+  }));
+  return applyCugHeaders(org, repo, rows, daFetch);
 }

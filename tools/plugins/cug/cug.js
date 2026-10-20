@@ -15,17 +15,10 @@
  */
 /* eslint-disable import/no-unresolved */
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
+import { applyCugHeaders, fetchExistingNonCugHeaders, postHeaders } from './headers.js';
 
 const DA_SOURCE_BASE = 'https://admin.da.live/source';
-const ADMIN_API_BASE = 'https://admin.hlx.page';
 const CUG_SHEET_PATH = 'closed-user-groups.json';
-const HEADER_CUG_REQUIRED = 'x-aem-cug-required';
-const HEADER_CUG_GROUPS = 'x-aem-cug-groups';
-const HEADER_CUG_LOGIN_PATH = 'x-aem-cug-login-path';
-
-function isCugHeader(key) {
-  return key === HEADER_CUG_REQUIRED || key === HEADER_CUG_GROUPS || key === HEADER_CUG_LOGIN_PATH;
-}
 
 async function fetchCugSheet(org, site, token) {
   const url = `${DA_SOURCE_BASE}/${org}/${site}/${CUG_SHEET_PATH}`;
@@ -39,96 +32,6 @@ async function fetchCugSheet(org, site, token) {
 
   const json = await resp.json();
   return Array.isArray(json.data) ? json.data : [];
-}
-
-function transformToHeadersConfig(rows) {
-  const config = {};
-
-  rows.forEach((row) => {
-    const path = (row.url || '').trim();
-    if (!path || !path.startsWith('/') || config[path]) return;
-
-    const headers = [];
-    const required = (row['cug-required'] || '').trim().toLowerCase();
-    if (required === 'true' || required === 'false') {
-      headers.push({ key: HEADER_CUG_REQUIRED, value: required });
-    }
-
-    const groups = (row['cug-groups'] || '').trim();
-    if (groups) {
-      headers.push({ key: HEADER_CUG_GROUPS, value: groups });
-    }
-
-    const loginPath = (row['cug-login-path'] || '').trim();
-    if (loginPath) {
-      headers.push({ key: HEADER_CUG_LOGIN_PATH, value: loginPath });
-    }
-
-    if (headers.length > 0) {
-      config[path] = headers;
-    }
-  });
-
-  return config;
-}
-
-async function fetchExistingNonCugHeaders(org, site, token) {
-  const url = `${ADMIN_API_BASE}/config/${org}/aggregated/${site}.json`;
-  const resp = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!resp.ok) {
-    if (resp.status === 404) return {};
-    const body = await resp.text().catch(() => '');
-    throw new Error(`Failed to read site config: ${resp.status} ${resp.statusText} ${body}`);
-  }
-
-  const config = await resp.json();
-  const existing = config.headers || {};
-  const filtered = {};
-
-  Object.entries(existing).forEach(([path, headerList]) => {
-    const nonCug = Array.isArray(headerList)
-      ? headerList.filter((h) => !isCugHeader(h.key))
-      : [];
-    if (nonCug.length > 0) {
-      filtered[path] = nonCug;
-    }
-  });
-
-  return filtered;
-}
-
-function mergeHeaders(nonCugHeaders, cugHeaders) {
-  const merged = { ...nonCugHeaders };
-
-  Object.entries(cugHeaders).forEach(([path, cugList]) => {
-    const existing = merged[path] || [];
-    merged[path] = [...existing, ...cugList];
-  });
-
-  return merged;
-}
-
-async function postHeaders(org, site, headersConfig, token) {
-  const url = `${ADMIN_API_BASE}/config/${org}/sites/${site}/headers.json`;
-  // The Config Service rejects an empty headers map with 400; use DELETE to clear it instead.
-  const isEmpty = Object.keys(headersConfig).length === 0;
-  const resp = await fetch(url, {
-    method: isEmpty ? 'DELETE' : 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    ...(isEmpty ? {} : { body: JSON.stringify(headersConfig) }),
-  });
-
-  if (!resp.ok && resp.status !== 404) {
-    const body = await resp.text().catch(() => '');
-    const method = isEmpty ? 'DELETE' : 'POST';
-    throw new Error(`Config Service ${method} failed: ${resp.status} ${resp.statusText} — ${body}`);
-  }
 }
 
 function renderUI(container, onRegenerate, onRemove) {
@@ -200,25 +103,20 @@ function renderUI(container, onRegenerate, onRemove) {
 (async function init() {
   const { context, token } = await DA_SDK;
   const { org, site } = context;
+  const request = (url, options = {}) => fetch(url, {
+    ...options,
+    headers: { ...options.headers, Authorization: `Bearer ${token}` },
+  });
 
   renderUI(
     document.body,
     async () => {
       const rows = await fetchCugSheet(org, site, token);
-      const cugHeaders = transformToHeadersConfig(rows);
-      const nonCugHeaders = await fetchExistingNonCugHeaders(org, site, token);
-      const merged = mergeHeaders(nonCugHeaders, cugHeaders);
-
-      await postHeaders(org, site, merged, token);
-
-      return {
-        cugPaths: Object.keys(cugHeaders).length,
-        totalPaths: Object.keys(merged).length,
-      };
+      return applyCugHeaders(org, site, rows, request);
     },
     async () => {
-      const nonCugHeaders = await fetchExistingNonCugHeaders(org, site, token);
-      await postHeaders(org, site, nonCugHeaders, token);
+      const nonCugHeaders = await fetchExistingNonCugHeaders(org, site, request);
+      await postHeaders(org, site, nonCugHeaders, request);
     },
   );
 }());

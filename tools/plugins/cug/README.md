@@ -25,6 +25,7 @@ Only the first row for a given `url` is used; duplicate paths in the sheet are i
 tools/plugins/cug/
 ├── cug.html   # Entry point (Prepare-menu dialog shell)
 ├── cug.js     # Fetches the sheet, transforms rows to headers, applies/removes via the Config Service
+├── headers.js # Shared transformation and Config Service workflow, also used by the CUG app
 └── cug.css    # Styles
 ```
 

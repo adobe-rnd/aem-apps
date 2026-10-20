@@ -36,7 +36,7 @@
       </form>
 
       <p id="cug-status" role="status" aria-live="polite" hidden></p>
-      <div class="cug-table-scroll" role="region" aria-label="Closed user group rules" tabindex="0">
+      <div class="cug-table-scroll" role="region" aria-label="Closed user group rules" tabindex="0" hidden>
         <table class="cug-rules">
           <caption class="cug-sr-only">Editable closed user group rules</caption>
           <thead>
@@ -48,14 +48,18 @@
               <th scope="col"><span class="cug-sr-only">Delete</span></th>
             </tr>
           </thead>
-          <tbody>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <template id="cug-row-template">
             <tr>
               <td>
                 <button class="cug-icon cug-drag" type="button" aria-label="Move rule 1">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" stroke-width="3" stroke-linecap="round"/></svg>
                 </button>
               </td>
-              <td><input type="text" value="/members/**" aria-label="Path for rule 1" spellcheck="false"></td>
+              <td><input type="text" aria-label="Path for rule 1" spellcheck="false"></td>
               <td>
                 <button class="cug-auth-chip" type="button" aria-label="Remove required authentication from rule 1">
                   <span>Required</span>
@@ -75,88 +79,38 @@
                 </button>
               </td>
             </tr>
-            <tr>
-              <td>
-                <button class="cug-icon cug-drag" type="button" aria-label="Move rule 2">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" stroke-width="3" stroke-linecap="round"/></svg>
-                </button>
-              </td>
-              <td><input type="text" value="/partners/**" aria-label="Path for rule 2" spellcheck="false"></td>
-              <td>
-                <button class="cug-auth-chip" type="button" aria-label="Remove required authentication from rule 2">
-                  <span>Required</span>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" stroke-linecap="round"/></svg>
-                </button>
-              </td>
-              <td>
-                <div class="cug-groups" role="group" aria-label="Groups for rule 2">
-                  <button class="cug-group-chip" type="button" aria-label="Remove gold group from rule 2">
-                    <span>gold</span>
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" stroke-linecap="round"/></svg>
-                  </button>
-                  <button class="cug-group-chip" type="button" aria-label="Remove silver group from rule 2">
-                    <span>silver</span>
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" stroke-linecap="round"/></svg>
-                  </button>
-                  <button class="cug-icon cug-group-add" type="button" aria-label="Add group to rule 2">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
-                  </button>
-                </div>
-              </td>
-              <td>
-                <button class="cug-icon cug-delete" type="button" aria-label="Delete rule 2">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </button>
-              </td>
-            </tr>
-            <tr>
-              <td>
-                <button class="cug-icon cug-drag" type="button" aria-label="Move rule 3">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" stroke-width="3" stroke-linecap="round"/></svg>
-                </button>
-              </td>
-              <td><input type="text" aria-label="Path for rule 3" spellcheck="false"></td>
-              <td>
-                <button class="cug-icon cug-auth-add" type="button" aria-label="Require authentication for rule 3">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
-                </button>
-              </td>
-              <td>
-                <div class="cug-groups" role="group" aria-label="Groups for rule 3">
-                  <button class="cug-icon cug-group-add" type="button" aria-label="Add group to rule 3">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
-                  </button>
-                </div>
-              </td>
-              <td>
-                <button class="cug-icon cug-delete" type="button" aria-label="Delete rule 3">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      </template>
+      <template id="cug-auth-add-template">
+        <button class="cug-icon cug-auth-add" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+        </button>
+      </template>
+      <template id="cug-group-template">
+        <button class="cug-group-chip" type="button">
+          <span></span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" stroke-linecap="round"/></svg>
+        </button>
+      </template>
 
       <div id="cug-row-menu" class="cug-row-menu" role="menu" aria-label="Insert a rule" hidden>
         <button type="button" role="menuitem" data-position="above">Insert row above</button>
         <button type="button" role="menuitem" data-position="below">Insert row below</button>
       </div>
 
-      <div class="cug-actions">
+      <div class="cug-actions" hidden>
         <button id="cug-apply" class="cug-primary" type="button" disabled>Apply CUG</button>
       </div>
 
-      <section class="cug-lookup" aria-labelledby="cug-lookup-title">
+      <section class="cug-lookup" aria-labelledby="cug-lookup-title" hidden>
         <h2 id="cug-lookup-title">Check CUG for a path</h2>
         <div class="cug-toolbar">
           <div class="cug-site-field">
             <label for="cug-path">Path</label>
             <input id="cug-path" type="text" value="/partners/google" autocomplete="off" spellcheck="false">
           </div>
-          <button class="cug-primary" type="button">Check CUG</button>
+          <button id="cug-check" class="cug-primary" type="button" aria-controls="cug-access-result" aria-expanded="false" disabled>Check CUG</button>
         </div>
-        <div class="cug-access-card">
+        <div id="cug-access-result" class="cug-access-card" hidden>
           <dl class="cug-access-details">
             <div>
               <dt>Access for</dt>
