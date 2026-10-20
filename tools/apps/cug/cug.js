@@ -17,7 +17,7 @@
 // eslint-disable-next-line import/no-unresolved
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import {
-  assertSiteExists, fetchCugRows, fetchPageCug, generateCugHeaders, saveCugRows, siteFromHash,
+  assertSiteExists, fetchCugRows, generateCugHeaders, livePageUrl, saveCugRows, siteFromHash,
 } from './data.js';
 
 const siteInput = document.querySelector('#cug-site');
@@ -27,7 +27,6 @@ const getButton = document.querySelector('#cug-get');
 const applyButton = document.querySelector('#cug-apply');
 const checkButton = document.querySelector('#cug-check');
 const pathInput = document.querySelector('#cug-path');
-const accessResult = document.querySelector('#cug-access-result');
 const status = document.querySelector('#cug-status');
 const table = document.querySelector('.cug-rules');
 const tbody = table.querySelector('tbody');
@@ -63,14 +62,12 @@ function updateActionButtons() {
   checkButton.disabled = unavailable || pathInput.value.trim() === '';
 }
 
-function resetAccessResult() {
-  accessResult.hidden = true;
-  checkButton.setAttribute('aria-expanded', 'false');
-}
-
-pathInput.addEventListener('input', () => {
-  resetAccessResult();
-  updateActionButtons();
+pathInput.addEventListener('input', updateActionButtons);
+pathInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && !event.isComposing) {
+    event.preventDefault();
+    checkButton.click();
+  }
 });
 
 function updateRowLabels() {
@@ -211,43 +208,18 @@ function setBusy(busy) {
   updateActionButtons();
 }
 
-siteInput.addEventListener('input', () => {
-  resetAccessResult();
-  updateActionButtons();
-});
+siteInput.addEventListener('input', updateActionButtons);
 
-checkButton.addEventListener('click', async () => {
+checkButton.addEventListener('click', () => {
   if (checkButton.disabled) return;
-  resetAccessResult();
-  setBusy(true);
-  status.hidden = false;
+  status.hidden = true;
   status.removeAttribute('data-error');
-  status.textContent = 'Checking live page CUG headers...';
   try {
-    const result = await fetchPageCug(siteInput.value, pathInput.value, fetch);
-    document.querySelector('#cug-access-path').textContent = result.path;
-    const authentication = document.querySelector('#cug-access-authentication');
-    authentication.replaceChildren();
-    if (result.authentication) {
-      const badge = document.createElement('span');
-      badge.className = 'cug-access-badge';
-      badge.textContent = 'Required';
-      authentication.append(badge);
-    }
-    document.querySelector('#cug-access-groups').replaceChildren(...result.groups.map((group) => {
-      const badge = document.createElement('span');
-      badge.className = 'cug-access-badge';
-      badge.textContent = group;
-      return badge;
-    }));
-    accessResult.hidden = false;
-    checkButton.setAttribute('aria-expanded', 'true');
-    status.textContent = `Checked live CUG headers for ${result.path}.`;
+    window.open(livePageUrl(siteInput.value, pathInput.value), '_blank', 'noopener,noreferrer');
   } catch (error) {
+    status.hidden = false;
     status.dataset.error = 'true';
-    status.textContent = `Could not check CUG: ${error.message}`;
-  } finally {
-    setBusy(false);
+    status.textContent = `Could not open page: ${error.message}`;
   }
 });
 
@@ -428,7 +400,6 @@ function renderRows(rows) {
 document.querySelector('#cug-site-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   if (getButton.disabled) return;
-  resetAccessResult();
   loadedSite = null;
   setBusy(true);
   siteSections.forEach((section) => { section.hidden = true; });

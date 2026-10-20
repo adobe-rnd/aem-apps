@@ -1,61 +1,27 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  assertSiteExists, fetchCugRows, fetchPageCug, generateCugHeaders, saveCugRows, siteFromHash,
+  assertSiteExists, fetchCugRows, generateCugHeaders, livePageUrl, saveCugRows, siteFromHash,
 } from '../../../../tools/apps/cug/data.js';
 
-describe('fetchPageCug', () => {
-  const respond = (headers = {}, status = 200) => async () => (
-    new Response(null, { status, headers })
-  );
+describe('livePageUrl', () => {
+  it('builds the live page URL from the selected org/site and trimmed path', () => {
+    assert.equal(
+      livePageUrl(' /org/site/ ', ' /partners/google '),
+      'https://main--site--org.aem.live/partners/google',
+    );
+    assert.equal(livePageUrl('/org/site', '/'), 'https://main--site--org.aem.live/');
+    assert.equal(
+      livePageUrl('org/site', '/partners?q=gold#details'),
+      'https://main--site--org.aem.live/partners?q=gold#details',
+    );
+  });
 
-  it('requests live headers for the selected org/site and input path', async () => {
-    const result = await fetchPageCug(' /org/site/ ', ' /partners/google ', async (url, options) => {
-      assert.equal(url, 'https://main--site--org.aem.live/partners/google');
-      assert.deepEqual(options, { method: 'HEAD', cache: 'no-store', redirect: 'error' });
-      return new Response(null, {
-        headers: { 'X-Aem-Cug-Required': 'true', 'X-Aem-Cug-Groups': 'gold, silver, ,bronze' },
-      });
+  it('rejects invalid org/site and non-page paths', () => {
+    assert.throws(() => livePageUrl('org', '/'), /Enter an org\/site/);
+    ['', '  ', 'partners', '//other.example/a', '/\\other.example/a'].forEach((path) => {
+      assert.throws(() => livePageUrl('org/site', path), /Enter a page path/);
     });
-    assert.deepEqual(result, {
-      path: '/partners/google', authentication: true, groups: ['gold', 'silver', 'bronze'],
-    });
-  });
-
-  it('leaves absent and false header values empty', async () => {
-    await Promise.all(['', 'false', 'other'].map(async (required) => {
-      assert.deepEqual(await fetchPageCug('org/site', '/', respond({
-        'x-aem-cug-required': required, 'x-aem-cug-groups': ' , ',
-      })), { path: '/', authentication: false, groups: [] });
-    }));
-    assert.deepEqual(await fetchPageCug('org/site', '/', respond()), {
-      path: '/', authentication: false, groups: [],
-    });
-  });
-
-  it('reads CUG headers on protected responses, including groups-only restrictions', async () => {
-    assert.deepEqual(await fetchPageCug('org/site', '/members', respond({
-      'x-aem-cug-required': 'TRUE',
-    }, 401)), { path: '/members', authentication: true, groups: [] });
-    assert.deepEqual(await fetchPageCug('org/site', '/partners', respond({
-      'x-aem-cug-groups': 'gold,silver',
-    }, 403)), { path: '/partners', authentication: false, groups: ['gold', 'silver'] });
-  });
-
-  it('rejects invalid org/site and non-page paths before making requests', async () => {
-    await assert.rejects(fetchPageCug('org', '/', () => assert.fail('Unexpected request')), /Enter an org\/site/);
-    await Promise.all(['', '  ', 'partners', '//other.example/a', '/\\other.example/a'].map((path) => (
-      assert.rejects(fetchPageCug('org/site', path, () => assert.fail('Unexpected request')), /Enter a page path/)
-    )));
-  });
-
-  it('surfaces HTTP and network failures instead of returning empty access results', async () => {
-    await Promise.all([401, 403, 404, 500].map((status) => (
-      assert.rejects(fetchPageCug('org/site', '/', respond({}, status)), new RegExp(`HTTP ${status}`))
-    )));
-    await assert.rejects(fetchPageCug('org/site', '/', async () => {
-      throw new TypeError('Failed to fetch');
-    }), /Failed to fetch/);
   });
 });
 

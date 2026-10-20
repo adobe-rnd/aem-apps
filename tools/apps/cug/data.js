@@ -32,27 +32,13 @@ function sourceUrl(site) {
   return `https://admin.da.live/source/${org}/${repo}/.da/cug/cug.json`;
 }
 
-export async function fetchPageCug(site, inputPath, request) {
+export function livePageUrl(site, inputPath) {
   const { org, repo } = siteParts(site);
   const path = inputPath.trim();
   if (!path.startsWith('/') || path.startsWith('//') || path.includes('\\')) {
     throw new Error('Enter a page path starting with /, such as /partners/google.');
   }
-  const url = `https://main--${repo}--${org}.aem.live${path}`;
-  const response = await request(url, { method: 'HEAD', cache: 'no-store', redirect: 'error' });
-  const required = response.headers.get('x-aem-cug-required');
-  const groups = response.headers.get('x-aem-cug-groups');
-  // Protected pages may return their CUG headers with an access-denied status.
-  const protectedPage = [401, 403].includes(response.status)
-    && (required !== null || groups !== null);
-  if (!response.ok && !protectedPage) {
-    throw new Error(`Live page request failed (HTTP ${response.status}).`);
-  }
-  return {
-    path,
-    authentication: required?.trim().toLowerCase() === 'true',
-    groups: (groups ?? '').split(',').map((group) => group.trim()).filter(Boolean),
-  };
+  return `https://main--${repo}--${org}.aem.live${path}`;
 }
 
 export async function assertSiteExists(site, daFetch) {
