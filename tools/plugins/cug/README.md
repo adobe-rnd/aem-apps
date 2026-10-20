@@ -17,6 +17,10 @@ Closed User Groups restrict access to pages at the CDN edge using headers on the
 
 Only the first row for a given `url` is used; duplicate paths in the sheet are ignored.
 
+The `cug-required` value may be `true`, `false`, or empty. Boolean and text
+`true`/`false` values generate the corresponding `x-aem-cug-required` header;
+empty values omit that header. Groups and login-path headers are independent.
+
 ## Architecture
 
 ### Files

@@ -5,6 +5,22 @@ import {
 } from '../../../../tools/plugins/cug/headers.js';
 
 describe('CUG header generation', () => {
+  it('emits true and false for boolean values and omits empty authentication headers', () => {
+    assert.deepEqual(transformToHeadersConfig([
+      { url: '/required', 'cug-required': true },
+      { url: '/not-required', 'cug-required': false },
+      { url: '/unset', 'cug-required': '' },
+      { url: '/null', 'cug-required': null },
+      { url: '/groups-only', 'cug-required': '', 'cug-groups': 'gold' },
+      { url: '/login-only', 'cug-login-path': '/login' },
+    ]), {
+      '/required': [{ key: 'x-aem-cug-required', value: 'true' }],
+      '/not-required': [{ key: 'x-aem-cug-required', value: 'false' }],
+      '/groups-only': [{ key: 'x-aem-cug-groups', value: 'gold' }],
+      '/login-only': [{ key: 'x-aem-cug-login-path', value: '/login' }],
+    });
+  });
+
   it('preserves plugin column semantics, login paths, and first valid duplicate', () => {
     assert.deepEqual(transformToHeadersConfig([
       {
@@ -59,6 +75,36 @@ describe('CUG header generation', () => {
       '/other/**': [{ key: 'x-custom', value: 'keep' }],
     });
     assert.deepEqual(result, { cugPaths: 1, totalPaths: 2 });
+  });
+
+  it('replaces true with explicit false and removes the required header when unset', async () => {
+    await applyCugHeaders('org', 'site', [
+      { url: '/not-required', 'cug-required': 'false' },
+      { url: '/unset', 'cug-required': '', 'cug-groups': 'gold' },
+    ], async (url, options) => {
+      if (options.method === 'POST') {
+        assert.deepEqual(JSON.parse(options.body), {
+          '/not-required': [{ key: 'x-aem-cug-required', value: 'false' }],
+          '/unset': [
+            { key: 'cache-control', value: 'no-cache' },
+            { key: 'x-aem-cug-groups', value: 'gold' },
+          ],
+        });
+        return { ok: true };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          headers: {
+            '/not-required': [{ key: 'x-aem-cug-required', value: 'true' }],
+            '/unset': [
+              { key: 'cache-control', value: 'no-cache' },
+              { key: 'x-aem-cug-required', value: 'false' },
+            ],
+          },
+        }),
+      };
+    });
   });
 
   it('deletes an empty header map and accepts only a DELETE 404 as success', async () => {

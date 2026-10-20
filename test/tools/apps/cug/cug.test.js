@@ -1,29 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  assertSiteExists, fetchCugRows, generateCugHeaders, livePageUrl, saveCugRows, siteFromHash,
+  assertSiteExists, fetchCugRows, generateCugHeaders, saveCugRows, siteFromHash,
 } from '../../../../tools/apps/cug/data.js';
-
-describe('livePageUrl', () => {
-  it('builds the live page URL from the selected org/site and trimmed path', () => {
-    assert.equal(
-      livePageUrl(' /org/site/ ', ' /partners/google '),
-      'https://main--site--org.aem.live/partners/google',
-    );
-    assert.equal(livePageUrl('/org/site', '/'), 'https://main--site--org.aem.live/');
-    assert.equal(
-      livePageUrl('org/site', '/partners?q=gold#details'),
-      'https://main--site--org.aem.live/partners?q=gold#details',
-    );
-  });
-
-  it('rejects invalid org/site and non-page paths', () => {
-    assert.throws(() => livePageUrl('org', '/'), /Enter an org\/site/);
-    ['', '  ', 'partners', '//other.example/a', '/\\other.example/a'].forEach((path) => {
-      assert.throws(() => livePageUrl('org/site', path), /Enter a page path/);
-    });
-  });
-});
 
 describe('assertSiteExists', () => {
   it('checks the organization site list rather than the potentially empty site root', async () => {
@@ -81,6 +60,8 @@ describe('saveCugRows', () => {
     await generateCugHeaders('/org/site', {
       data: [
         { Path: '/members/**', Authentication: 'true', Groups: '' },
+        { Path: '/public/**', Authentication: 'false', Groups: '' },
+        { Path: '/unset/**', Authentication: '', Groups: '' },
         { Path: '/partners/**', Authentication: '', Groups: 'gold,silver' },
       ],
     }, async (url, options) => {
@@ -93,6 +74,7 @@ describe('saveCugRows', () => {
     });
     assert.deepEqual(posted, {
       '/members/**': [{ key: 'x-aem-cug-required', value: 'true' }],
+      '/public/**': [{ key: 'x-aem-cug-required', value: 'false' }],
       '/partners/**': [{ key: 'x-aem-cug-groups', value: 'gold,silver' }],
     });
   });
@@ -111,7 +93,7 @@ describe('saveCugRows', () => {
     await saveCugRows('/org/site', [
       { path: '/changed/**', authentication: true, groups: ['gold', 'silver'] },
       { path: '/other/**', authentication: false, groups: ['bronze'] },
-      { path: '', authentication: false, groups: [] },
+      { path: '', authentication: '', groups: [] },
     ], async (url, options) => {
       assert.equal(url, 'https://admin.da.live/source/org/site/.da/cug/cug.json');
       if (options.method === 'PUT') {
@@ -128,10 +110,40 @@ describe('saveCugRows', () => {
       limit: 3,
       data: [
         { Path: '/changed/**', Authentication: 'true', Groups: 'gold,silver' },
-        { Path: '/other/**', Authentication: '', Groups: 'bronze' },
+        { Path: '/other/**', Authentication: 'false', Groups: 'bronze' },
         { Path: '', Authentication: '', Groups: '' },
       ],
     });
+  });
+
+  it('round-trips all three authentication values without converting false to empty', async () => {
+    const rows = [
+      { path: '/required', authentication: 'true', groups: [] },
+      { path: '/not-required', authentication: 'false', groups: [] },
+      { path: '/unset', authentication: '', groups: ['gold'] },
+    ];
+    let sheet = { data: [] };
+    const request = async (url, options) => {
+      if (options.method === 'PUT') {
+        sheet = JSON.parse(await options.body.get('data').text());
+        return { ok: true };
+      }
+      return { ok: true, json: async () => sheet };
+    };
+    const saved = await saveCugRows('org/site', rows, request);
+    assert.deepEqual(saved.data.map((row) => row.Authentication), ['true', 'false', '']);
+    assert.deepEqual(await fetchCugRows('org/site', request), rows);
+  });
+
+  it('rejects invalid authentication values instead of silently saving a different state', async () => {
+    await Promise.all(['yes', 0, '0'].map((authentication) => (
+      assert.rejects(saveCugRows('org/site', [
+        { path: '/a', authentication, groups: [] },
+      ], async (url, options) => {
+        assert.notEqual(options.method, 'PUT');
+        return { ok: true, json: async () => ({ data: [] }) };
+      }), /Invalid Authentication value in row 1/)
+    )));
   });
 
   it('saves an empty table as an empty sheet', async () => {
@@ -201,10 +213,10 @@ describe('fetchCugRows', () => {
     assert.equal(requestedUrl, 'https://admin.da.live/source/jckautzmann/jck-ew1/.da/cug/cug.json');
     assert.deepEqual(requestedOptions, { cache: 'no-store' });
     assert.deepEqual(rows, [
-      { path: '/members/**', authentication: true, groups: [] },
-      { path: '/partners/**', authentication: true, groups: ['gold', 'silver'] },
-      { path: '/partners/gold**', authentication: false, groups: ['gold'] },
-      { path: '/partners/silver**', authentication: false, groups: ['silver'] },
+      { path: '/members/**', authentication: 'true', groups: [] },
+      { path: '/partners/**', authentication: 'true', groups: ['gold', 'silver'] },
+      { path: '/partners/gold**', authentication: '', groups: ['gold'] },
+      { path: '/partners/silver**', authentication: '', groups: ['silver'] },
     ]);
   });
 
@@ -214,9 +226,19 @@ describe('fetchCugRows', () => {
       { Path: '/b', Authentication: true, Groups: '' },
     ]));
     assert.deepEqual(rows, [
-      { path: '/a', authentication: false, groups: ['gold', 'silver'] },
-      { path: '/b', authentication: true, groups: [] },
+      { path: '/a', authentication: 'false', groups: ['gold', 'silver'] },
+      { path: '/b', authentication: 'true', groups: [] },
     ]);
+  });
+
+  it('distinguishes true, false, and empty text values', async () => {
+    const rows = await fetchCugRows('org/site', respond([
+      { Authentication: 'true' },
+      { Authentication: 'false' },
+      { Authentication: '' },
+      {},
+    ]));
+    assert.deepEqual(rows.map((row) => row.authentication), ['true', 'false', '', '']);
   });
 
   it('preserves duplicate paths and blank rows without adding extra rows', async () => {

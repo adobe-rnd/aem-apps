@@ -27,12 +27,15 @@
   <body class="cug">
     <main>
       <h1>Closed User Groups</h1>
+      <p class="cug-docs">
+        <a href="https://www.aem.live/developer/closed-user-groups" target="_blank" rel="noopener noreferrer" aria-label="Documentation (opens in a new tab)">Documentation</a>
+      </p>
       <form id="cug-site-form" class="cug-toolbar">
         <div class="cug-site-field">
           <label for="cug-site">Org/site</label>
           <input id="cug-site" type="text" placeholder="org/site" autocomplete="off" spellcheck="false">
         </div>
-        <button id="cug-get" class="cug-primary" type="submit">Get CUG</button>
+        <button id="cug-get" class="cug-primary" type="submit">Load</button>
       </form>
 
       <p id="cug-status" role="status" aria-live="polite" hidden></p>
@@ -61,10 +64,11 @@
               </td>
               <td><input type="text" aria-label="Path for rule 1" spellcheck="false"></td>
               <td>
-                <button class="cug-auth-chip" type="button" aria-label="Remove required authentication from rule 1">
-                  <span>Required</span>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" stroke-linecap="round"/></svg>
-                </button>
+                <select class="cug-auth-select" aria-label="Authentication for rule 1">
+                  <option value="" aria-label="Not set"></option>
+                  <option value="true">Required</option>
+                  <option value="false">Not required</option>
+                </select>
               </td>
               <td>
                 <div class="cug-groups" role="group" aria-label="Groups for rule 1">
@@ -80,11 +84,6 @@
               </td>
             </tr>
       </template>
-      <template id="cug-auth-add-template">
-        <button class="cug-icon cug-auth-add" type="button">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
-        </button>
-      </template>
       <template id="cug-group-template">
         <button class="cug-group-chip" type="button">
           <span></span>
@@ -98,19 +97,9 @@
       </div>
 
       <div class="cug-actions" hidden>
-        <button id="cug-apply" class="cug-primary" type="button" disabled>Apply CUG</button>
+        <button id="cug-apply" class="cug-primary" type="button" disabled>Apply</button>
       </div>
 
-      <section class="cug-lookup" aria-labelledby="cug-lookup-title" hidden>
-        <h2 id="cug-lookup-title">Check CUG for a path</h2>
-        <div class="cug-toolbar">
-          <div class="cug-site-field">
-            <label for="cug-path">Path</label>
-            <input id="cug-path" type="text" autocomplete="off" spellcheck="false">
-          </div>
-          <button id="cug-check" class="cug-primary" type="button" aria-label="Check CUG (opens in a new tab)" disabled>Check CUG</button>
-        </div>
-      </section>
     </main>
   </body>
 </html>

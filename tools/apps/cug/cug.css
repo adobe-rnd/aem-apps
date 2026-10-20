@@ -34,12 +34,22 @@ body.cug {
 }
 
 .cug h1 {
-  margin: 0 0 32px;
+  margin: 0 0 8px;
   color: var(--s2-gray-900, #1d1d1d);
   font-size: var(--s2-heading-size-xl, 32px);
   font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.02em;
+}
+
+.cug .cug-docs {
+  margin: 0 0 32px;
+  font-size: 14px;
+}
+
+.cug .cug-docs a {
+  color: var(--s2-blue-900, #0265dc);
+  text-decoration: underline;
 }
 
 .cug .cug-toolbar {
@@ -61,11 +71,13 @@ body.cug {
 }
 
 .cug input,
+.cug select,
 .cug button {
   font: inherit;
 }
 
-.cug input {
+.cug input,
+.cug select {
   width: 100%;
   min-height: 36px;
   margin: 0;
@@ -90,7 +102,7 @@ body.cug {
   font-weight: 700;
 }
 
-.cug :is(input, button, [tabindex]):focus-visible {
+.cug :is(a, input, select, button, [tabindex]):focus-visible {
   outline: 2px solid var(--s2-blue-900, #0265dc);
   outline-offset: 3px;
 }
@@ -223,8 +235,34 @@ body.cug {
   min-width: 0;
 }
 
-.cug .cug-group-chip,
-.cug .cug-auth-chip {
+.cug .cug-auth-select {
+  min-width: 140px;
+  padding-right: 36px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='m2 4 4 4 4-4' fill='none' stroke='%236e6e6e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+  cursor: pointer;
+}
+
+@media (forced-colors: active) {
+  .cug .cug-auth-select {
+    appearance: auto;
+    background-image: none;
+  }
+}
+
+.cug .cug-auth-select option {
+  color: var(--s2-gray-800, #292929);
+}
+
+.cug .cug-auth-select:has(option[value=""]:checked),
+.cug .cug-auth-select option[value=""] {
+  color: var(--s2-gray-600, #6e6e6e);
+}
+
+.cug .cug-group-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -236,19 +274,16 @@ body.cug {
   color: inherit;
 }
 
-.cug .cug-group-chip:hover,
-.cug .cug-auth-chip:hover {
+.cug .cug-group-chip:hover {
   background: var(--s2-gray-100, #f0f0f0);
 }
 
-.cug .cug-group-chip svg,
-.cug .cug-auth-chip svg {
+.cug .cug-group-chip svg {
   width: 16px;
   height: 16px;
 }
 
-.cug .cug-group-add,
-.cug .cug-auth-add {
+.cug .cug-group-add {
   flex-shrink: 0;
   border: 1px solid var(--s2-gray-300, #c6c6c6);
   border-radius: 50%;
@@ -257,17 +292,6 @@ body.cug {
 .cug .cug-actions {
   display: inline-flex;
   margin-top: 24px;
-}
-
-.cug .cug-lookup {
-  margin-top: 48px;
-}
-
-.cug .cug-lookup h2 {
-  margin: 0 0 24px;
-  color: var(--s2-gray-900, #1d1d1d);
-  font-size: 22px;
-  line-height: 1.3;
 }
 
 .cug .cug-primary:hover {

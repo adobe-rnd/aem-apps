@@ -23,7 +23,7 @@ export function transformToHeadersConfig(rows) {
     const path = (row.url || '').trim();
     if (!path || !path.startsWith('/') || config[path]) return;
     const headers = [];
-    const required = (row['cug-required'] || '').trim().toLowerCase();
+    const required = String(row['cug-required'] ?? '').trim().toLowerCase();
     if (required === 'true' || required === 'false') {
       headers.push({ key: CUG_HEADERS[0], value: required });
     }

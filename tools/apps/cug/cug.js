@@ -17,7 +17,7 @@
 // eslint-disable-next-line import/no-unresolved
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import {
-  assertSiteExists, fetchCugRows, generateCugHeaders, livePageUrl, saveCugRows, siteFromHash,
+  assertSiteExists, fetchCugRows, generateCugHeaders, saveCugRows, siteFromHash,
 } from './data.js';
 
 const siteInput = document.querySelector('#cug-site');
@@ -25,20 +25,15 @@ siteInput.value = siteFromHash(window.location.hash);
 
 const getButton = document.querySelector('#cug-get');
 const applyButton = document.querySelector('#cug-apply');
-const checkButton = document.querySelector('#cug-check');
-const pathInput = document.querySelector('#cug-path');
 const status = document.querySelector('#cug-status');
 const table = document.querySelector('.cug-rules');
 const tbody = table.querySelector('tbody');
 const rowTemplate = document.querySelector('#cug-row-template').content.querySelector('tr');
-const authAddTemplate = document.querySelector('#cug-auth-add-template').content.querySelector('button');
-const authRequiredTemplate = rowTemplate.querySelector('.cug-auth-chip').cloneNode(true);
 const groupTemplate = document.querySelector('#cug-group-template').content.querySelector('button');
 const rowMenu = document.querySelector('#cug-row-menu');
 const siteSections = [
   table.closest('.cug-table-scroll'),
   applyButton.closest('.cug-actions'),
-  document.querySelector('.cug-lookup'),
 ];
 let loadedSite = null;
 let draggedRow = null;
@@ -49,7 +44,7 @@ let pendingHeadersSite = null;
 function tableRows() {
   return [...tbody.rows].filter((row) => !row.hasAttribute('data-entry-row')).map((row) => ({
     path: row.querySelector('input').value,
-    authentication: Boolean(row.querySelector('.cug-auth-chip')),
+    authentication: row.querySelector('.cug-auth-select').value,
     groups: [...row.querySelectorAll('.cug-group-chip span')].map((group) => group.textContent),
   }));
 }
@@ -59,16 +54,7 @@ function updateActionButtons() {
     || loadedSite === null || siteInput.value.trim() !== loadedSite;
   applyButton.disabled = unavailable
     || (JSON.stringify(tableRows()) === savedRows && pendingHeadersSite !== loadedSite);
-  checkButton.disabled = unavailable || pathInput.value.trim() === '';
 }
-
-pathInput.addEventListener('input', updateActionButtons);
-pathInput.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter' && !event.isComposing) {
-    event.preventDefault();
-    checkButton.click();
-  }
-});
 
 function updateRowLabels() {
   [...tbody.rows].forEach((row, index) => {
@@ -86,10 +72,7 @@ function updateRowLabels() {
     const remove = row.querySelector('.cug-delete');
     remove.setAttribute('aria-label', `Delete rule ${rule}`);
     remove.disabled = entry;
-    const auth = row.querySelector('.cug-auth-chip, .cug-auth-add');
-    auth.setAttribute('aria-label', auth.classList.contains('cug-auth-chip')
-      ? `Remove required authentication from rule ${rule}`
-      : `Require authentication for rule ${rule}`);
+    row.querySelector('.cug-auth-select').setAttribute('aria-label', `Authentication for rule ${rule}`);
     row.querySelector('.cug-groups').setAttribute('aria-label', `Groups for rule ${rule}`);
     row.querySelector('.cug-group-add').setAttribute('aria-label', `Add group to rule ${rule}`);
     row.querySelectorAll('.cug-group-chip').forEach((chip) => {
@@ -103,7 +86,7 @@ function updateRowLabels() {
 function announceChange(message) {
   status.hidden = false;
   status.removeAttribute('data-error');
-  status.textContent = `${message} Click Apply CUG to save.`;
+  status.textContent = `${message} Click Apply to save.`;
 }
 
 function closeRowMenu() {
@@ -202,35 +185,12 @@ function setBusy(busy) {
   }
   getButton.disabled = busy;
   siteInput.readOnly = busy;
-  pathInput.readOnly = busy;
   tbody.inert = busy;
   table.setAttribute('aria-busy', String(busy));
   updateActionButtons();
 }
 
 siteInput.addEventListener('input', updateActionButtons);
-
-checkButton.addEventListener('click', () => {
-  if (checkButton.disabled) return;
-  status.hidden = true;
-  status.removeAttribute('data-error');
-  try {
-    window.open(livePageUrl(siteInput.value, pathInput.value), '_blank', 'noopener,noreferrer');
-  } catch (error) {
-    status.hidden = false;
-    status.dataset.error = 'true';
-    status.textContent = `Could not open page: ${error.message}`;
-  }
-});
-
-function setAuthentication(row, required, rule) {
-  const button = (required ? authRequiredTemplate : authAddTemplate).cloneNode(true);
-  button.setAttribute('aria-label', required
-    ? `Remove required authentication from rule ${rule}`
-    : `Require authentication for rule ${rule}`);
-  row.cells[2].replaceChildren(button);
-  return button;
-}
 
 function createGroupChip(group, rule) {
   const chip = groupTemplate.cloneNode(true);
@@ -242,7 +202,7 @@ function createGroupChip(group, rule) {
 function createRow({ path, authentication, groups }, rule) {
   const row = rowTemplate.cloneNode(true);
   row.querySelector('input').value = path;
-  setAuthentication(row, authentication, rule);
+  row.querySelector('.cug-auth-select').value = authentication;
   const groupList = row.querySelector('.cug-groups');
   const addButton = groupList.querySelector('.cug-group-add');
   groupList.replaceChildren();
@@ -256,11 +216,12 @@ function createRow({ path, authentication, groups }, rule) {
 function ensureEntryRow() {
   const entry = tbody.querySelector('[data-entry-row]');
   if (entry && (entry.querySelector('input').value !== ''
-    || entry.querySelector('.cug-auth-chip, .cug-group-chip'))) {
+    || entry.querySelector('.cug-auth-select').value !== ''
+    || entry.querySelector('.cug-group-chip'))) {
     entry.removeAttribute('data-entry-row');
   }
   if (!tbody.querySelector('[data-entry-row]')) {
-    const row = createRow({ path: '', authentication: false, groups: [] }, tbody.rows.length + 1);
+    const row = createRow({ path: '', authentication: '', groups: [] }, tbody.rows.length + 1);
     row.dataset.entryRow = 'true';
     tbody.append(row);
   }
@@ -286,7 +247,7 @@ tbody.addEventListener('click', (event) => {
 rowMenu.addEventListener('click', (event) => {
   const button = event.target.closest('[data-position]');
   if (!button || !menuRow?.isConnected || table.getAttribute('aria-busy') === 'true') return;
-  const row = createRow({ path: '', authentication: false, groups: [] }, 0);
+  const row = createRow({ path: '', authentication: '', groups: [] }, 0);
   tbody.insertBefore(row, button.dataset.position === 'above' ? menuRow : menuRow.nextElementSibling);
   closeRowMenu();
   ensureEntryRow();
@@ -319,12 +280,8 @@ document.addEventListener('click', (event) => {
 window.addEventListener('scroll', closeRowMenu, true);
 window.addEventListener('resize', closeRowMenu);
 
-tbody.addEventListener('click', (event) => {
-  const button = event.target.closest('.cug-auth-add, .cug-auth-chip');
-  if (!button || table.getAttribute('aria-busy') === 'true') return;
-  const row = button.closest('tr');
-  const rule = [...tbody.rows].indexOf(row) + 1;
-  setAuthentication(row, button.classList.contains('cug-auth-add'), rule).focus();
+tbody.addEventListener('change', (event) => {
+  if (!event.target.matches('.cug-auth-select') || table.getAttribute('aria-busy') === 'true') return;
   ensureEntryRow();
 });
 
@@ -404,7 +361,7 @@ document.querySelector('#cug-site-form').addEventListener('submit', async (event
   setBusy(true);
   siteSections.forEach((section) => { section.hidden = true; });
   status.hidden = false;
-  status.textContent = 'Loading CUG rules...';
+  status.textContent = 'Loading rules...';
   status.removeAttribute('data-error');
   try {
     await assertSiteExists(siteInput.value, daFetch);
@@ -412,17 +369,15 @@ document.querySelector('#cug-site-form').addEventListener('submit', async (event
     renderRows(rows);
     savedRows = JSON.stringify(tableRows());
     loadedSite = siteInput.value.trim();
-    siteSections.forEach((section) => {
-      section.hidden = section.classList.contains('cug-lookup') && rows.length === 0;
-    });
+    siteSections.forEach((section) => { section.hidden = false; });
     status.textContent = rows.length
-      ? `Loaded ${rows.length} CUG rule${rows.length === 1 ? '' : 's'}.`
-      : 'No CUG rules found. Add a rule in the empty row below.';
+      ? `Loaded ${rows.length} rule${rows.length === 1 ? '' : 's'}.`
+      : 'No rules found. Add a rule in the empty row below.';
   } catch (error) {
     tbody.replaceChildren();
     ensureEntryRow();
     status.dataset.error = 'true';
-    status.textContent = `Could not load CUG rules: ${error.message}`;
+    status.textContent = `Could not load rules: ${error.message}`;
   } finally {
     setBusy(false);
   }
@@ -431,12 +386,12 @@ document.querySelector('#cug-site-form').addEventListener('submit', async (event
 applyButton.addEventListener('click', async () => {
   setBusy(true);
   status.hidden = false;
-  status.textContent = 'Saving CUG rules...';
+  status.textContent = 'Saving rules...';
   status.removeAttribute('data-error');
   let sheetSaved = false;
   try {
     if (loadedSite === null || loadedSite !== siteInput.value.trim()) {
-      throw new Error('Load CUG rules for this org/site before saving.');
+      throw new Error('Load rules for this org/site before saving.');
     }
     const pendingGroups = [...tbody.querySelectorAll('.cug-group-input')];
     if (!pendingGroups.every((input) => commitGroup(input))) {
@@ -447,15 +402,15 @@ applyButton.addEventListener('click', async () => {
     sheetSaved = true;
     savedRows = JSON.stringify(rows);
     pendingHeadersSite = loadedSite;
-    status.textContent = 'CUG rules saved. Applying CUG headers...';
+    status.textContent = 'Rules saved. Applying headers...';
     const result = await generateCugHeaders(loadedSite, sheet, daFetch);
     pendingHeadersSite = null;
-    status.textContent = `Saved ${rows.length} CUG rule${rows.length === 1 ? '' : 's'} and applied CUG headers to ${result.cugPaths} path${result.cugPaths === 1 ? '' : 's'}.`;
+    status.textContent = `Saved ${rows.length} rule${rows.length === 1 ? '' : 's'} and applied headers to ${result.cugPaths} path${result.cugPaths === 1 ? '' : 's'}.`;
   } catch (error) {
     status.dataset.error = 'true';
     status.textContent = sheetSaved
-      ? `CUG rules were saved, but applying CUG headers failed: ${error.message} Click Apply CUG to retry.`
-      : `Could not save CUG rules: ${error.message}`;
+      ? `Rules were saved, but applying headers failed: ${error.message} Click Apply to retry.`
+      : `Could not save rules: ${error.message}`;
   } finally {
     setBusy(false);
   }

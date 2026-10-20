@@ -32,15 +32,6 @@ function sourceUrl(site) {
   return `https://admin.da.live/source/${org}/${repo}/.da/cug/cug.json`;
 }
 
-export function livePageUrl(site, inputPath) {
-  const { org, repo } = siteParts(site);
-  const path = inputPath.trim();
-  if (!path.startsWith('/') || path.startsWith('//') || path.includes('\\')) {
-    throw new Error('Enter a page path starting with /, such as /partners/google.');
-  }
-  return `https://main--${repo}--${org}.aem.live${path}`;
-}
-
 export async function assertSiteExists(site, daFetch) {
   const { org, repo } = siteParts(site);
   const response = await daFetch(`https://admin.da.live/list/${org}/`, { cache: 'no-store' });
@@ -74,6 +65,14 @@ async function fetchSheet(site, daFetch) {
   return sheet;
 }
 
+function normalizeAuthentication(value, index) {
+  const authentication = value ?? '';
+  if (![true, false, 'true', 'false', ''].includes(authentication)) {
+    throw new Error(`Invalid Authentication value in row ${index + 1}.`);
+  }
+  return String(authentication);
+}
+
 export async function fetchCugRows(site, daFetch) {
   const sheet = await fetchSheet(site, daFetch);
   return sheet.data.map((row, index) => {
@@ -83,17 +82,14 @@ export async function fetchCugRows(site, daFetch) {
     if (!Object.hasOwn(row, 'Authentication') && Object.values(row).some((value) => value !== '')) {
       throw new Error(`Missing Authentication column in row ${index + 1}. Check the spreadsheet header.`);
     }
-    const auth = row.Authentication ?? '';
-    if (![true, false, 'true', 'false', ''].includes(auth)) {
-      throw new Error(`Invalid Authentication value in row ${index + 1}.`);
-    }
+    const authentication = normalizeAuthentication(row.Authentication, index);
     if ((row.Path !== undefined && typeof row.Path !== 'string')
       || (row.Groups !== undefined && typeof row.Groups !== 'string')) {
       throw new Error(`Path and Groups must be text in row ${index + 1}.`);
     }
     return {
       path: row.Path ?? '',
-      authentication: auth === true || auth === 'true',
+      authentication,
       groups: (row.Groups ?? '').split(',').map((group) => group.trim()).filter(Boolean),
     };
   });
@@ -101,9 +97,9 @@ export async function fetchCugRows(site, daFetch) {
 
 export async function saveCugRows(site, rows, daFetch) {
   const sheet = await fetchSheet(site, daFetch);
-  const data = rows.map(({ path, authentication, groups }) => ({
+  const data = rows.map(({ path, authentication, groups }, index) => ({
     Path: path,
-    Authentication: authentication ? 'true' : '',
+    Authentication: normalizeAuthentication(authentication, index),
     Groups: groups.join(','),
   }));
   const updated = {
