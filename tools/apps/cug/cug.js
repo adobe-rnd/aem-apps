@@ -17,7 +17,7 @@
 // eslint-disable-next-line import/no-unresolved
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import {
-  assertSiteExists, fetchCugRows, generateCugHeaders, saveCugRows, siteFromHash,
+  assertSiteExists, fetchCugRows, fetchPageCug, generateCugHeaders, saveCugRows, siteFromHash,
 } from './data.js';
 
 const siteInput = document.querySelector('#cug-site');
@@ -28,10 +28,6 @@ const applyButton = document.querySelector('#cug-apply');
 const checkButton = document.querySelector('#cug-check');
 const pathInput = document.querySelector('#cug-path');
 const accessResult = document.querySelector('#cug-access-result');
-checkButton.addEventListener('click', () => {
-  accessResult.hidden = false;
-  checkButton.setAttribute('aria-expanded', 'true');
-});
 const status = document.querySelector('#cug-status');
 const table = document.querySelector('.cug-rules');
 const tbody = table.querySelector('tbody');
@@ -67,7 +63,15 @@ function updateActionButtons() {
   checkButton.disabled = unavailable || pathInput.value.trim() === '';
 }
 
-pathInput.addEventListener('input', updateActionButtons);
+function resetAccessResult() {
+  accessResult.hidden = true;
+  checkButton.setAttribute('aria-expanded', 'false');
+}
+
+pathInput.addEventListener('input', () => {
+  resetAccessResult();
+  updateActionButtons();
+});
 
 function updateRowLabels() {
   [...tbody.rows].forEach((row, index) => {
@@ -201,12 +205,51 @@ function setBusy(busy) {
   }
   getButton.disabled = busy;
   siteInput.readOnly = busy;
+  pathInput.readOnly = busy;
   tbody.inert = busy;
   table.setAttribute('aria-busy', String(busy));
   updateActionButtons();
 }
 
-siteInput.addEventListener('input', updateActionButtons);
+siteInput.addEventListener('input', () => {
+  resetAccessResult();
+  updateActionButtons();
+});
+
+checkButton.addEventListener('click', async () => {
+  if (checkButton.disabled) return;
+  resetAccessResult();
+  setBusy(true);
+  status.hidden = false;
+  status.removeAttribute('data-error');
+  status.textContent = 'Checking live page CUG headers...';
+  try {
+    const result = await fetchPageCug(siteInput.value, pathInput.value, fetch);
+    document.querySelector('#cug-access-path').textContent = result.path;
+    const authentication = document.querySelector('#cug-access-authentication');
+    authentication.replaceChildren();
+    if (result.authentication) {
+      const badge = document.createElement('span');
+      badge.className = 'cug-access-badge';
+      badge.textContent = 'Required';
+      authentication.append(badge);
+    }
+    document.querySelector('#cug-access-groups').replaceChildren(...result.groups.map((group) => {
+      const badge = document.createElement('span');
+      badge.className = 'cug-access-badge';
+      badge.textContent = group;
+      return badge;
+    }));
+    accessResult.hidden = false;
+    checkButton.setAttribute('aria-expanded', 'true');
+    status.textContent = `Checked live CUG headers for ${result.path}.`;
+  } catch (error) {
+    status.dataset.error = 'true';
+    status.textContent = `Could not check CUG: ${error.message}`;
+  } finally {
+    setBusy(false);
+  }
+});
 
 function setAuthentication(row, required, rule) {
   const button = (required ? authRequiredTemplate : authAddTemplate).cloneNode(true);
@@ -385,8 +428,7 @@ function renderRows(rows) {
 document.querySelector('#cug-site-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   if (getButton.disabled) return;
-  accessResult.hidden = true;
-  checkButton.setAttribute('aria-expanded', 'false');
+  resetAccessResult();
   loadedSite = null;
   setBusy(true);
   siteSections.forEach((section) => { section.hidden = true; });

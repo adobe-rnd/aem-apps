@@ -70,5 +70,16 @@ Click a row's delete icon to remove it. Reordering and deletion stay local until
 **Apply CUG** saves the table.
 The trailing entry row cannot be moved or deleted.
 
-The **Check CUG** result card is hidden until **Check CUG** is clicked and resets
-when loading a site's rules. Its displayed results are still mockup values.
+**Check CUG** requests the live page headers with an uncached `HEAD` request to
+`https://main--{site}--{org}.aem.live{path}`. Enter a path starting with `/`.
+The result card displays that path, **Required** when `x-aem-cug-required` is
+`true`, and one badge per comma-separated group in `x-aem-cug-groups`.
+Missing or false authentication and missing groups leave the corresponding
+fields empty. The check reads deployed headers, not unsaved table values.
+Protected responses (HTTP 401/403) can still provide CUG headers.
+Other HTTP failures and network/CORS failures display an error, not an empty
+access result. The live server must allow cross-origin requests and expose
+the CUG response headers to the browser.
+The result card stays hidden until a successful check and resets when changing
+the path or org/site or loading a site's rules. Inputs and actions are locked
+while a check is in progress.
