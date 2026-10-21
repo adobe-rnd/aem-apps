@@ -21,5 +21,17 @@ module.exports = {
       files: ['test/**/*.js'],
       env: { node: true },
     },
+    {
+      files: ['tools/apps/graphql/core/**/*.js'],
+      env: { browser: false, 'shared-node-browser': true },
+      rules: {
+        'no-restricted-imports': ['error', {
+          patterns: [{
+            group: ['../**/*.js', '!../../../deps/graphql/**/*.js', '*:*'],
+            message: 'GraphQL core only imports core modules and the bundled graphql dependency.',
+          }],
+        }],
+      },
+    },
   ],
 };
