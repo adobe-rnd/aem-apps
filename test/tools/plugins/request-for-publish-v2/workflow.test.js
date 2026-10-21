@@ -173,6 +173,20 @@ describe('context-derived views', () => {
       assert.equal(normalizeContext(ctx), null);
     });
   });
+  it('accepts a file opened in /media and keeps its extension', () => {
+    const file = normalizeContext({ ...context, path: '/docs/brochure.pdf', view: 'media' });
+    assert.deepEqual(file, {
+      org: 'example', site: 'website', path: '/docs/brochure.pdf', ref: 'main', file: true,
+    });
+    assert.equal(pageLinks(file).preview, 'https://main--website--example.aem.page/docs/brochure.pdf');
+    assert.equal(pageLinks(file).live, 'https://main--website--example.aem.live/docs/brochure.pdf');
+  });
+  it('rejects non-HTML paths outside /media', () => {
+    ['edit', 'sheet', undefined].forEach((view) => {
+      assert.equal(normalizeContext({ ...context, path: '/docs/brochure.pdf', view }), null);
+      assert.equal(normalizeContext({ ...context, path: '/data.json', view }), null);
+    });
+  });
   it('derives initiation only after loaded data and a matching rule', () => {
     assert.equal(deriveView(context, undefined).view, 'loading');
     assert.equal(deriveView(context, data()).view, 'request');
@@ -471,6 +485,20 @@ describe('workflow operations', () => {
     const { client, calls } = fixture({ publishFail: true });
     await assert.rejects(client.submit(context, 'A note'), /preview/i);
     assert.deepEqual(calls.map((call) => call.path), ['preview']);
+  });
+  it('submits a /media file without asking the editor to save', async () => {
+    const calls = [];
+    const client = createClient({
+      base: 'https://workflow.example',
+      beforePreview: async () => { calls.push('save'); return { ok: false, error: 'no-document' }; },
+      preview: async () => { calls.push('preview'); return response({}); },
+      request: async (href, opts = {}) => { calls.push(JSON.parse(opts.body)); return response({ success: true }); },
+    });
+    const file = normalizeContext({ ...context, path: '/docs/brochure.pdf', view: 'media' });
+    await client.submit(file, 'A note');
+    assert.deepEqual(calls, ['preview', {
+      org: 'example', site: 'website', path: '/docs/brochure.pdf', comment: 'A note',
+    }]);
   });
   it('previews before submission and sends no client-selected identity or approvers', async () => {
     const { client, calls } = fixture();

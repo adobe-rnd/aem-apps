@@ -94,6 +94,17 @@ describe('review step controls', () => {
     assert.match(markup, /Open live page/);
     assert.doesNotMatch(markup, /Review changes<|Compare the current/);
   });
+
+  it('offers preview and live links instead of a comparison for a /media file', async () => {
+    const panel = await panelFixture();
+    panel.workspace = { canCompare: true };
+    panel.context = {
+      org: 'example', site: 'website', path: '/docs/brochure.pdf', view: 'media',
+    };
+    const markup = panel.renderLinks();
+    assert.doesNotMatch(markup, /Review changes<|Compare the current|not available in this editor/);
+    assert.match(markup, /aem\.page\/docs\/brochure\.pdf[\s\S]*aem\.live\/docs\/brochure\.pdf/);
+  });
 });
 
 describe('mutation notification results', () => {
