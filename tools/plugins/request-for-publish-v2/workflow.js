@@ -30,7 +30,9 @@ export function workerOrigin(location) {
 }
 
 export function normalizeContext(context = {}) {
-  const { org, path, ref = 'main' } = context;
+  const {
+    org, path, ref = 'main', view,
+  } = context;
   const site = context.site || context.repo;
   if (typeof ref !== 'string' || !ref || /[^a-z0-9-]/i.test(ref)) return null;
   if (![org, site].every((part) => typeof part === 'string' && /^[a-z0-9][a-z0-9.-]*$/i.test(part))) return null;
@@ -38,9 +40,11 @@ export function normalizeContext(context = {}) {
   let decoded;
   try { decoded = decodeURIComponent(path); } catch { return null; }
   if (decoded.split('/').some((part) => part === '.' || part === '..')) return null;
-  if (/\.[^/]+$/.test(path) && !path.endsWith('.html')) return null;
+  // Files opened in /media (PDFs, images) have no editor document to save or compare.
+  const file = /\.[^/]+$/.test(path) && !path.endsWith('.html');
+  if (file && view !== 'media') return null;
   return {
-    org, site, path: path.replace(/\.html$/, ''), ref,
+    org, site, path: path.replace(/\.html$/, ''), ref, ...(file ? { file } : {}),
   };
 }
 
@@ -355,10 +359,12 @@ export function createClient({
       };
     },
     async submit(context, comment, onPhase = () => {}) {
-      if (typeof beforePreview !== 'function') throw failure('The editor could not confirm current edits were saved.');
-      onPhase('Saving current edits…');
-      const saved = await beforePreview(context);
-      if (saved?.ok !== true) throw failure('The editor could not confirm current edits were saved.');
+      if (!context.file) {
+        if (typeof beforePreview !== 'function') throw failure('The editor could not confirm current edits were saved.');
+        onPhase('Saving current edits…');
+        const saved = await beforePreview(context);
+        if (saved?.ok !== true) throw failure('The editor could not confirm current edits were saved.');
+      }
       onPhase('Updating preview…');
       await contentAction(preview, context, 'Preview');
       onPhase('Sending request…');

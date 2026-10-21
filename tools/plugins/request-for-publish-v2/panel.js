@@ -113,7 +113,7 @@ class RequestForPublish extends LitElement {
   get disabled() { return !!this._busy || !!this._loading || !!this._reviewing; }
 
   async reviewChanges() {
-    if (this.disabled || !this.workspace?.canCompare) return;
+    if (this.disabled || !this.workspace?.canCompare || this.page?.file) return;
     const epoch = this._epoch;
     this._reviewing = true;
     try {
@@ -300,10 +300,10 @@ class RequestForPublish extends LitElement {
   renderLinks() {
     const links = pageLinks(this.page, new URLSearchParams(window.location.search).get('env'));
     const { view } = this.state;
-    const native = this.workspace?.canCompare;
-    const hint = native
-      ? `Compare the current ${view === 'approver' ? 'preview' : 'document'} with the live page.`
-      : 'Comparison is not available in this editor. Open the preview and live page to compare.';
+    const native = this.workspace?.canCompare && !this.page.file;
+    let hint = 'Comparison is not available in this editor. Open the preview and live page to compare.';
+    if (native) hint = `Compare the current ${view === 'approver' ? 'preview' : 'document'} with the live page.`;
+    if (this.page.file) hint = 'Open the preview and live file to compare.';
     return html`<div class="review-links">
       ${native ? html`<button class="review-link" ?disabled=${this.disabled}
         @click=${this.reviewChanges}>${this._reviewing ? 'Opening comparison…' : 'Review changes'}</button>` : nothing}

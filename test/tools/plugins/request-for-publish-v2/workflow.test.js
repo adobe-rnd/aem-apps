@@ -492,7 +492,10 @@ describe('workflow operations', () => {
       base: 'https://workflow.example',
       beforePreview: async () => { calls.push('save'); return { ok: false, error: 'no-document' }; },
       preview: async () => { calls.push('preview'); return response({}); },
-      request: async (href, opts = {}) => { calls.push(JSON.parse(opts.body)); return response({ success: true }); },
+      request: async (href, opts = {}) => {
+        calls.push(JSON.parse(opts.body));
+        return response({ success: true });
+      },
     });
     const file = normalizeContext({ ...context, path: '/docs/brochure.pdf', view: 'media' });
     await client.submit(file, 'A note');
