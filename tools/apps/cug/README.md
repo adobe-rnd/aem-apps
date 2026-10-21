@@ -11,10 +11,47 @@ https://da.live/app/adobe-rnd/aem-apps/tools/apps/cug/cug?ref=cug#/jckautzmann/j
 ```
 
 Use `ref=local` with the local AEM development server to test uncommitted code.
-The URL hash prefills the editable **Org/site** field.
+The URL hash prefills the editable **org/site or AEM URL** field.
+Both `#/org/site` and `#org/site` are accepted. The field accepts either
+`/org/site` or `org/site`.
+You can also paste an HTTPS AEM preview or live page URL, such as
+`https://main--site--org.aem.page/path` or
+`https://main--site--org.aem.live/path`. The app infers the org/site from the
+hostname; the branch, page path, query, and fragment do not affect which rules
+are loaded or saved. It reads DA's source sheet, not the pasted page URL.
 Press **Enter** in that field or click **Load** to load the rules.
-Initially, everything below **Load** is hidden and the table has no sample
-rows. After a successful load, the table and **Apply** appear.
+Initially, the table and **Apply** are hidden and the table has no sample rows.
+After a successful load, the table and **Apply** appear unless a legacy
+spreadsheet is detected.
+
+The app checks for legacy spreadsheets only when **Load** is used, not when the
+page opens, even if an org/site is supplied in the URL hash.
+If `/.da/cug/cug.json` is missing (HTTP 404) but `/closed-user-groups.json` exists,
+the app shows this notice below **Load**:
+
+> **Legacy spreadsheet detected**
+>
+> This site uses a legacy Closed User Groups spreadsheet. To manage access in this app, migrate your existing rules.
+
+A **Migrate** button appears below the message. The status text, rules table,
+and **Apply** remain hidden until migration succeeds.
+
+**Migrate** copies `/closed-user-groups.json` to `/.da/cug/cug.json`, preserving
+the spreadsheet's data, row order, and metadata without renaming columns.
+The original spreadsheet is left untouched. The app checks the destination
+again before copying and refuses to overwrite an existing spreadsheet.
+After copying, it uses the normal loading logic to display the table.
+The copied sheet must have the app's `Path`, `Authentication`, and `Groups`
+columns. If copying succeeds but loading fails, the app reports both outcomes
+and offers **Load** to retry without copying again.
+Migration does not preview, publish, or apply headers. **Apply** is enabled
+immediately after migration, even without edits, so you can apply the migrated
+rules. Controls are locked while copying, and failures are displayed.
+
+An existing new spreadsheet, even an empty one, suppresses the notice. Changing
+the site or starting another load clears stale notices. Access and request
+failures are reported, not treated as missing spreadsheets. Detection is read-only;
+it does not copy, delete, or migrate either spreadsheet.
 
 **Load** first checks the organization's site list. If the org/site is not
 found, it displays a message and hides the table and **Apply** until a valid
@@ -26,7 +63,8 @@ DA's authenticated source API. Each spreadsheet row becomes exactly one table
 row, in source order. An additional empty entry row stays at the bottom. Editing
 its path, selecting Required or Not required, or committing a group creates another
 empty entry row. Empty or missing spreadsheets show **No rules found**
-and only the entry row. Loading failures clear stale rules and display an error;
+and only the entry row, unless the legacy notice is displayed.
+Loading failures clear stale rules and display an error;
 permission errors are not treated as missing sheets.
 Reads bypass the browser cache so spreadsheet changes are reflected on each load.
 Nonempty rows missing the `Authentication` column display an explicit header error.
@@ -52,10 +90,12 @@ Unrelated headers are preserved; old CUG headers (including
 login-path headers) are replaced. Empty CUG rules remove previous restrictions.
 The merged headers are applied directly to the site's Config Service.
 **Apply** is disabled (light blue) while the table matches its last loaded
-or saved state. Table changes enable it; reverting all changes or successfully
-saving disables it again. It is also disabled while loading/saving or when the
+or saved state, unless header application is pending after migration or a failed
+apply. Table changes enable it; reverting all changes disables it only when no
+header application is pending. Successfully saving and applying headers disables
+it again. It is also disabled while loading/saving or when the
 loaded org/site no longer matches.
-Load the site first; changing **Org/site** requires another load before saving.
+Load the site first; changing **org/site or AEM URL** requires another load before saving.
 Rows are saved in their displayed order, excluding the untouched entry row.
 Authentication is written as `"true"`, `"false"`, or `""`, matching the dropdown.
 Groups are joined with commas. Spreadsheet metadata such as column widths is

@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  assertSiteExists, fetchCugRows, generateCugHeaders, saveCugRows, siteFromHash,
+  assertSiteExists, fetchCugRows, fetchCugState, generateCugHeaders,
+  migrateCugSheet, saveCugRows, siteFromHash,
 } from '../../../../tools/apps/cug/data.js';
 
 describe('assertSiteExists', () => {
@@ -38,6 +39,20 @@ describe('assertSiteExists', () => {
   it('rejects invalid org/site input without a request', async () => {
     await assert.rejects(assertSiteExists('org', () => assert.fail('Unexpected request')), /Enter an org\/site/);
   });
+
+  it('rejects unsupported and malformed page URLs before making a request', async () => {
+    await Promise.all([
+      'https://example.com/path',
+      'https://main--site--org.aem.live.example.com/path',
+      'https://main--site.aem.page/path',
+      'http://main--site--org.aem.live/path',
+      'https://user:password@main--site--org.aem.live/path',
+      'https://main--site--org.aem.live:8080/path',
+      'https://',
+    ].map((site) => (
+      assert.rejects(assertSiteExists(site, () => assert.fail('Unexpected request')), /Enter an org\/site/)
+    )));
+  });
 });
 
 describe('CUG org/site initialization', () => {
@@ -45,12 +60,72 @@ describe('CUG org/site initialization', () => {
     assert.equal(siteFromHash('#/jckautzmann/jck-ew1'), '/jckautzmann/jck-ew1');
   });
 
+  it('also accepts a site hash without a leading slash', () => {
+    assert.equal(siteFromHash('#jckautzmann/jck-ew1'), 'jckautzmann/jck-ew1');
+  });
+
   it('leaves the field empty when no site hash is supplied', () => {
     assert.equal(siteFromHash(''), '');
   });
 
   it('ignores unrelated URL fragments', () => {
-    assert.equal(siteFromHash('#section'), '');
+    ['#section', '#/org', '#/org/site/extra', '#//org/site', 'org/site'].forEach((hash) => {
+      assert.equal(siteFromHash(hash), '');
+    });
+  });
+});
+
+describe('CUG org/site field formats', () => {
+  [
+    '/org/site',
+    'org/site',
+    'https://main--site--org.aem.page/path',
+    'https://main--site--org.aem.live/path',
+    ' https://feature-branch--site--org.aem.live/path?query=value#section ',
+    'https://MAIN--SITE--ORG.aem.page/',
+  ].forEach((site) => {
+    it(`supports checking, loading, saving, and applying headers for ${site}`, async () => {
+      const request = async (url, options) => {
+        if (url === 'https://admin.da.live/list/org/') {
+          return { ok: true, json: async () => [{ name: 'site' }] };
+        }
+        if (url === 'https://admin.da.live/source/org/site/.da/cug/cug.json') {
+          return options.method === 'PUT'
+            ? { ok: true }
+            : {
+              ok: true,
+              json: async () => ({
+                data: [{ Path: '/members/**', Authentication: 'true', Groups: '' }],
+              }),
+            };
+        }
+        if (url === 'https://admin.hlx.page/config/org/aggregated/site.json') {
+          return { ok: true, json: async () => ({ headers: {} }) };
+        }
+        assert.equal(url, 'https://admin.hlx.page/config/org/sites/site/headers.json');
+        assert.equal(options.method, 'POST');
+        assert.deepEqual(JSON.parse(options.body), {
+          '/members/**': [{ key: 'x-aem-cug-required', value: 'true' }],
+        });
+        return { ok: true };
+      };
+      await assertSiteExists(site, request);
+      const rows = await fetchCugRows(site, request);
+      const sheet = await saveCugRows(site, rows, request);
+      assert.deepEqual(await generateCugHeaders(site, sheet, request), {
+        cugPaths: 1, totalPaths: 1,
+      });
+    });
+  });
+
+  it('infers hyphenated org/site names from an AEM URL and ignores its path', async () => {
+    await assertSiteExists(
+      'https://main--jck-ew1--jckautzmann.aem.live/path',
+      async (url) => {
+        assert.equal(url, 'https://admin.da.live/list/jckautzmann/');
+        return { ok: true, json: async () => [{ name: 'jck-ew1' }] };
+      },
+    );
   });
 });
 
@@ -190,6 +265,220 @@ describe('saveCugRows', () => {
       assert.notEqual(options.method, 'PUT');
       return { ok: false, status: 403 };
     }), /request failed.*403/);
+  });
+});
+
+describe('migrateCugSheet', () => {
+  const currentUrl = 'https://admin.da.live/source/org/site/.da/cug/cug.json';
+  const legacyUrl = 'https://admin.da.live/source/org/site/closed-user-groups.json';
+  const missing = { ok: false, status: 404 };
+
+  it('copies all spreadsheet data and metadata unchanged and loads through the existing parser', async () => {
+    const legacy = {
+      total: 3,
+      limit: 3,
+      offset: 0,
+      ':sheetname': 'data',
+      ':type': 'sheet',
+      ':colWidths': [200, 100, 150],
+      data: [
+        {
+          Path: '/members/**', Authentication: true, Groups: '', Extra: 'preserved',
+        },
+        { Path: '/partners/**', Authentication: false, Groups: 'gold, silver' },
+        { Path: '/public/**', Authentication: '', Groups: '' },
+      ],
+    };
+    const original = JSON.stringify(legacy);
+    const requested = [];
+    let copied = null;
+    const request = async (url, options) => {
+      requested.push({ url, method: options.method ?? 'GET' });
+      if (options.method === 'PUT') {
+        assert.equal(url, currentUrl);
+        assert.equal(options.body.get('data').type, 'application/json');
+        copied = JSON.parse(await options.body.get('data').text());
+        return { ok: true };
+      }
+      assert.equal(options.cache, 'no-store');
+      if (url === currentUrl) {
+        return copied === null ? missing : { ok: true, json: async () => copied };
+      }
+      assert.equal(url, legacyUrl);
+      return { ok: true, json: async () => legacy };
+    };
+    const result = await migrateCugSheet('https://main--site--org.aem.page/path', request);
+    assert.deepEqual(result, legacy);
+    assert.deepEqual(copied, legacy);
+    assert.equal(JSON.stringify(legacy), original);
+    assert.deepEqual(requested, [
+      { url: currentUrl, method: 'GET' },
+      { url: legacyUrl, method: 'GET' },
+      { url: currentUrl, method: 'PUT' },
+    ]);
+    assert.deepEqual(await fetchCugRows('/org/site', request), [
+      { path: '/members/**', authentication: 'true', groups: [] },
+      { path: '/partners/**', authentication: 'false', groups: ['gold', 'silver'] },
+      { path: '/public/**', authentication: '', groups: [] },
+    ]);
+  });
+
+  it('copies an empty spreadsheet without synthesizing or changing metadata', async () => {
+    const legacy = { data: [], ':sheetname': 'data' };
+    await migrateCugSheet('org/site', async (url, options) => {
+      if (options.method === 'PUT') {
+        assert.equal(url, currentUrl);
+        assert.deepEqual(JSON.parse(await options.body.get('data').text()), legacy);
+        return { ok: true };
+      }
+      return url === currentUrl ? missing : { ok: true, json: async () => legacy };
+    });
+  });
+
+  it('refuses to overwrite an existing destination, including an empty one', async () => {
+    await Promise.all([[], [{ Path: '/existing', Authentication: 'true' }]].map((data) => (
+      assert.rejects(migrateCugSheet('org/site', async (url, options) => {
+        assert.equal(url, currentUrl);
+        assert.notEqual(options.method, 'PUT');
+        return { ok: true, json: async () => ({ data }) };
+      }), /already exists.*Click Load/)
+    )));
+  });
+
+  it('does not write if the legacy spreadsheet has disappeared', async () => {
+    await assert.rejects(migrateCugSheet('/org/site', async (url, options) => {
+      assert.notEqual(options.method, 'PUT');
+      return missing;
+    }), /legacy spreadsheet was not found/);
+  });
+
+  it('surfaces access and server failures at either read without writing', async () => {
+    await Promise.all([currentUrl, legacyUrl].flatMap((target) => (
+      [401, 403, 500].map((status) => (
+        assert.rejects(migrateCugSheet('org/site', async (url, options) => {
+          assert.notEqual(options.method, 'PUT');
+          return url === target ? { ok: false, status } : missing;
+        }), new RegExp(`HTTP ${status}`))
+      ))
+    )));
+  });
+
+  it('does not write malformed spreadsheets', async () => {
+    await assert.rejects(migrateCugSheet('org/site', async (url, options) => {
+      assert.notEqual(options.method, 'PUT');
+      return url === currentUrl ? missing : { ok: true, json: async () => ({}) };
+    }), /must contain a data sheet/);
+  });
+
+  it('reports copy write failures', async () => {
+    await Promise.all([403, 500].map((status) => (
+      assert.rejects(migrateCugSheet('org/site', async (url, options) => {
+        if (options.method === 'PUT') {
+          assert.equal(url, currentUrl);
+          return { ok: false, status };
+        }
+        return url === currentUrl ? missing : { ok: true, json: async () => ({ data: [] }) };
+      }), new RegExp(`save failed.*${status}`))
+    )));
+  });
+
+  it('surfaces network failures instead of reporting success', async () => {
+    await assert.rejects(migrateCugSheet('org/site', async (url, options) => {
+      if (options.method === 'PUT') throw new Error('Network failed');
+      return url === currentUrl ? missing : { ok: true, json: async () => ({ data: [] }) };
+    }), /Network failed/);
+  });
+
+  it('validates the site before making requests', async () => {
+    await assert.rejects(migrateCugSheet('invalid', () => assert.fail('Unexpected request')), /Enter an org\/site/);
+  });
+});
+
+describe('fetchCugState legacy detection', () => {
+  const currentUrl = 'https://admin.da.live/source/org/site/.da/cug/cug.json';
+  const legacyUrl = 'https://admin.da.live/source/org/site/closed-user-groups.json';
+  const missing = () => ({
+    ok: false,
+    status: 404,
+    json: () => assert.fail('Do not parse missing spreadsheet responses'),
+  });
+
+  it('detects a legacy sheet only when the new sheet is missing, without loading legacy rules', async () => {
+    const requested = [];
+    const state = await fetchCugState('https://main--site--org.aem.live/path', async (url, options) => {
+      requested.push(url);
+      assert.deepEqual(options, { cache: 'no-store' });
+      if (url === currentUrl) return missing();
+      assert.equal(url, legacyUrl);
+      return {
+        ok: true,
+        json: async () => ({ data: [{ url: '/members/**', 'cug-required': 'true' }] }),
+      };
+    });
+    assert.deepEqual(requested, [currentUrl, legacyUrl]);
+    assert.deepEqual(state, { rows: [], hasLegacySheet: true });
+  });
+
+  it('recognizes an empty legacy sheet as existing', async () => {
+    const state = await fetchCugState('org/site', async (url) => (
+      url === currentUrl ? missing() : { ok: true, json: async () => ({ data: [] }) }
+    ));
+    assert.deepEqual(state, { rows: [], hasLegacySheet: true });
+  });
+
+  it('does not check the legacy sheet when a new sheet exists, even if empty', async () => {
+    await Promise.all([[], [{ Path: '/a', Authentication: 'false', Groups: '' }]].map(async (data) => {
+      const state = await fetchCugState('/org/site', async (url) => {
+        assert.equal(url, currentUrl);
+        return { ok: true, json: async () => ({ data }) };
+      });
+      assert.equal(state.hasLegacySheet, false);
+      assert.equal(state.rows.length, data.length);
+    }));
+  });
+
+  it('reports no legacy sheet when both spreadsheets are missing', async () => {
+    const requested = [];
+    const state = await fetchCugState('org/site', async (url) => {
+      requested.push(url);
+      return missing();
+    });
+    assert.deepEqual(state, { rows: [], hasLegacySheet: false });
+    assert.deepEqual(requested, [currentUrl, legacyUrl]);
+  });
+
+  it('does not treat current-sheet access or server errors as missing', async () => {
+    await Promise.all([401, 403, 500].map((status) => (
+      assert.rejects(fetchCugState('org/site', async (url) => {
+        assert.equal(url, currentUrl);
+        return { ok: false, status };
+      }), new RegExp(`HTTP ${status}`))
+    )));
+  });
+
+  it('surfaces legacy-sheet access and server errors instead of reporting absence', async () => {
+    await Promise.all([401, 403, 500].map((status) => (
+      assert.rejects(fetchCugState('org/site', async (url) => (
+        url === currentUrl ? missing() : { ok: false, status }
+      )), new RegExp(`HTTP ${status}`))
+    )));
+  });
+
+  it('reports malformed current and legacy spreadsheets', async () => {
+    await Promise.all([currentUrl, legacyUrl].map((target) => (
+      assert.rejects(fetchCugState('org/site', async (url) => (
+        url === target ? { ok: true, json: async () => ({}) } : missing()
+      )), /must contain a data sheet/)
+    )));
+  });
+
+  it('surfaces network failures when reading either spreadsheet', async () => {
+    await Promise.all([currentUrl, legacyUrl].map((target) => (
+      assert.rejects(fetchCugState('org/site', async (url) => {
+        if (url === target) throw new Error('Network failed');
+        return missing();
+      }), /Network failed/)
+    )));
   });
 });
 

@@ -16,20 +16,39 @@
 
 import { applyCugHeaders } from '../../plugins/cug/headers.js';
 
+const SITE_PATTERN = /^\/?([a-z0-9-]+)\/([a-z0-9-]+)\/?$/i;
+const AEM_HOST_PATTERN = /^[a-z0-9-]+--([a-z0-9-]+)--([a-z0-9-]+)\.aem\.(?:page|live)$/i;
+const SITE_INPUT_ERROR = 'Enter an org/site or an HTTPS .aem.page or .aem.live URL.';
+
 export function siteFromHash(hash) {
-  return hash.startsWith('#/') ? hash.slice(1) : '';
+  const site = hash.startsWith('#') ? hash.slice(1) : '';
+  return SITE_PATTERN.test(site) ? site : '';
 }
 
 function siteParts(site) {
-  const match = site.trim().match(/^\/?([a-z0-9-]+)\/([a-z0-9-]+)\/?$/i);
-  if (!match) throw new Error('Enter an org/site, such as /jckautzmann/jck-ew1.');
-  const [, org, repo] = match;
+  const input = site.trim();
+  const match = input.match(SITE_PATTERN);
+  if (match) {
+    const [, org, repo] = match;
+    return { org, repo };
+  }
+  let url;
+  try {
+    url = new URL(input);
+  } catch (cause) {
+    throw new Error(SITE_INPUT_ERROR, { cause });
+  }
+  const host = url.hostname.match(AEM_HOST_PATTERN);
+  if (!host || url.protocol !== 'https:' || url.username || url.password || url.port) {
+    throw new Error(SITE_INPUT_ERROR);
+  }
+  const [, repo, org] = host;
   return { org, repo };
 }
 
-function sourceUrl(site) {
+function sourceUrl(site, path = '/.da/cug/cug.json') {
   const { org, repo } = siteParts(site);
-  return `https://admin.da.live/source/${org}/${repo}/.da/cug/cug.json`;
+  return `https://admin.da.live/source/${org}/${repo}${path}`;
 }
 
 export async function assertSiteExists(site, daFetch) {
@@ -47,18 +66,9 @@ export async function assertSiteExists(site, daFetch) {
   }
 }
 
-async function fetchSheet(site, daFetch) {
-  const response = await daFetch(sourceUrl(site), { cache: 'no-store' });
-  if (response.status === 404) {
-    return {
-      total: 0,
-      limit: 0,
-      offset: 0,
-      data: [],
-      ':sheetname': 'data',
-      ':type': 'sheet',
-    };
-  }
+async function fetchSheet(site, daFetch, path) {
+  const response = await daFetch(sourceUrl(site, path), { cache: 'no-store' });
+  if (response.status === 404) return null;
   if (!response.ok) throw new Error(`Spreadsheet request failed (HTTP ${response.status}).`);
   const sheet = await response.json();
   if (!Array.isArray(sheet.data)) throw new Error('The spreadsheet must contain a data sheet.');
@@ -73,9 +83,13 @@ function normalizeAuthentication(value, index) {
   return String(authentication);
 }
 
-export async function fetchCugRows(site, daFetch) {
+export async function fetchCugState(site, daFetch) {
   const sheet = await fetchSheet(site, daFetch);
-  return sheet.data.map((row, index) => {
+  if (sheet === null) {
+    const legacySheet = await fetchSheet(site, daFetch, '/closed-user-groups.json');
+    return { rows: [], hasLegacySheet: legacySheet !== null };
+  }
+  const rows = sheet.data.map((row, index) => {
     if (!row || typeof row !== 'object' || Array.isArray(row)) {
       throw new Error(`Invalid spreadsheet row ${index + 1}.`);
     }
@@ -93,10 +107,33 @@ export async function fetchCugRows(site, daFetch) {
       groups: (row.Groups ?? '').split(',').map((group) => group.trim()).filter(Boolean),
     };
   });
+  return { rows, hasLegacySheet: false };
+}
+
+export async function fetchCugRows(site, daFetch) {
+  const { rows } = await fetchCugState(site, daFetch);
+  return rows;
+}
+
+async function writeSheet(site, sheet, daFetch) {
+  const body = new FormData();
+  body.append('data', new Blob([JSON.stringify(sheet)], { type: 'application/json' }));
+  const response = await daFetch(sourceUrl(site), { method: 'PUT', body });
+  if (!response.ok) throw new Error(`Spreadsheet save failed (HTTP ${response.status}).`);
+  return sheet;
+}
+
+export async function migrateCugSheet(site, daFetch) {
+  if (await fetchSheet(site, daFetch) !== null) {
+    throw new Error('The destination spreadsheet already exists. Click Load to use it.');
+  }
+  const sheet = await fetchSheet(site, daFetch, '/closed-user-groups.json');
+  if (sheet === null) throw new Error('The legacy spreadsheet was not found. Click Load to check again.');
+  return writeSheet(site, sheet, daFetch);
 }
 
 export async function saveCugRows(site, rows, daFetch) {
-  const sheet = await fetchSheet(site, daFetch);
+  const sheet = await fetchSheet(site, daFetch) ?? { ':sheetname': 'data', ':type': 'sheet' };
   const data = rows.map(({ path, authentication, groups }, index) => ({
     Path: path,
     Authentication: normalizeAuthentication(authentication, index),
@@ -109,11 +146,7 @@ export async function saveCugRows(site, rows, daFetch) {
     offset: 0,
     data,
   };
-  const body = new FormData();
-  body.append('data', new Blob([JSON.stringify(updated)], { type: 'application/json' }));
-  const response = await daFetch(sourceUrl(site), { method: 'PUT', body });
-  if (!response.ok) throw new Error(`Spreadsheet save failed (HTTP ${response.status}).`);
-  return updated;
+  return writeSheet(site, updated, daFetch);
 }
 
 export async function generateCugHeaders(site, sheet, daFetch) {

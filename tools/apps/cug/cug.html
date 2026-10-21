@@ -32,12 +32,19 @@
       </p>
       <form id="cug-site-form" class="cug-toolbar">
         <div class="cug-site-field">
-          <label for="cug-site">Org/site</label>
-          <input id="cug-site" type="text" placeholder="org/site" autocomplete="off" spellcheck="false">
+          <label for="cug-site">org/site or AEM URL</label>
+          <input id="cug-site" type="text" placeholder="org/site or AEM URL" autocomplete="off" spellcheck="false">
         </div>
         <button id="cug-get" class="cug-primary" type="submit">Load</button>
       </form>
 
+      <div id="cug-legacy-notice" hidden>
+        <div role="status" aria-live="polite">
+          <h2>Legacy spreadsheet detected</h2>
+          <p>This site uses a legacy Closed User Groups spreadsheet. To manage access in this app, migrate your existing rules.</p>
+        </div>
+        <button id="cug-migrate" class="cug-primary" type="button">Migrate</button>
+      </div>
       <p id="cug-status" role="status" aria-live="polite" hidden></p>
       <div class="cug-table-scroll" role="region" aria-label="Closed user group rules" tabindex="0" hidden>
         <table class="cug-rules">

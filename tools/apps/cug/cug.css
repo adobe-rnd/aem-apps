@@ -64,6 +64,16 @@ body.cug {
   flex: 1 1 220px;
 }
 
+.cug #cug-legacy-notice h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.cug #cug-legacy-notice p {
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
 .cug label {
   display: block;
   margin-bottom: 8px;

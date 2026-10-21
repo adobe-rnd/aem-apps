@@ -17,7 +17,7 @@
 // eslint-disable-next-line import/no-unresolved
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import {
-  assertSiteExists, fetchCugRows, generateCugHeaders, saveCugRows, siteFromHash,
+  assertSiteExists, fetchCugState, generateCugHeaders, migrateCugSheet, saveCugRows, siteFromHash,
 } from './data.js';
 
 const siteInput = document.querySelector('#cug-site');
@@ -26,6 +26,8 @@ siteInput.value = siteFromHash(window.location.hash);
 const getButton = document.querySelector('#cug-get');
 const applyButton = document.querySelector('#cug-apply');
 const status = document.querySelector('#cug-status');
+const legacyNotice = document.querySelector('#cug-legacy-notice');
+const migrateButton = document.querySelector('#cug-migrate');
 const table = document.querySelector('.cug-rules');
 const tbody = table.querySelector('tbody');
 const rowTemplate = document.querySelector('#cug-row-template').content.querySelector('tr');
@@ -184,13 +186,17 @@ function setBusy(busy) {
     closeRowMenu();
   }
   getButton.disabled = busy;
+  migrateButton.disabled = busy;
   siteInput.readOnly = busy;
   tbody.inert = busy;
   table.setAttribute('aria-busy', String(busy));
   updateActionButtons();
 }
 
-siteInput.addEventListener('input', updateActionButtons);
+siteInput.addEventListener('input', () => {
+  legacyNotice.hidden = true;
+  updateActionButtons();
+});
 
 function createGroupChip(group, rule) {
   const chip = groupTemplate.cloneNode(true);
@@ -354,18 +360,30 @@ function renderRows(rows) {
   ensureEntryRow();
 }
 
-document.querySelector('#cug-site-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  if (getButton.disabled) return;
+async function loadRules(migrate = false) {
+  if (getButton.disabled || (migrate && legacyNotice.hidden)) return;
+  legacyNotice.hidden = true;
   loadedSite = null;
   setBusy(true);
   siteSections.forEach((section) => { section.hidden = true; });
   status.hidden = false;
-  status.textContent = 'Loading rules...';
+  status.textContent = migrate ? 'Copying spreadsheet...' : 'Loading rules...';
   status.removeAttribute('data-error');
+  let sheetCopied = false;
   try {
     await assertSiteExists(siteInput.value, daFetch);
-    const rows = await fetchCugRows(siteInput.value, daFetch);
+    if (migrate) {
+      await migrateCugSheet(siteInput.value, daFetch);
+      sheetCopied = true;
+      pendingHeadersSite = siteInput.value.trim();
+      status.textContent = 'Spreadsheet copied. Loading rules...';
+    }
+    const { rows, hasLegacySheet } = await fetchCugState(siteInput.value, daFetch);
+    legacyNotice.hidden = !hasLegacySheet;
+    if (hasLegacySheet) {
+      status.hidden = true;
+      return;
+    }
     renderRows(rows);
     savedRows = JSON.stringify(tableRows());
     loadedSite = siteInput.value.trim();
@@ -377,10 +395,21 @@ document.querySelector('#cug-site-form').addEventListener('submit', async (event
     tbody.replaceChildren();
     ensureEntryRow();
     status.dataset.error = 'true';
-    status.textContent = `Could not load rules: ${error.message}`;
+    status.textContent = sheetCopied
+      ? `Spreadsheet copied, but rules could not be loaded: ${error.message} Click Load to retry.`
+      : `Could not ${migrate ? 'migrate' : 'load'} rules: ${error.message}`;
   } finally {
     setBusy(false);
   }
+}
+
+document.querySelector('#cug-site-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  await loadRules();
+});
+
+migrateButton.addEventListener('click', async () => {
+  await loadRules(true);
 });
 
 applyButton.addEventListener('click', async () => {
@@ -400,6 +429,7 @@ applyButton.addEventListener('click', async () => {
     const rows = tableRows();
     const sheet = await saveCugRows(loadedSite, rows, daFetch);
     sheetSaved = true;
+    legacyNotice.hidden = true;
     savedRows = JSON.stringify(rows);
     pendingHeadersSite = loadedSite;
     status.textContent = 'Rules saved. Applying headers...';
