@@ -18,26 +18,15 @@ import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 // eslint-disable-next-line import/no-unresolved
 import { crawl } from 'https://da.live/nx/public/utils/tree.js';
 
+import {
+  isHlx6, createLister, crawlHtml, discoverFragmentRoots, isLocaleFolder,
+} from './source.js';
+
 const FRAGMENTS_BASE = '/fragments';
 const CRAWL_THROTTLE = 10;
-const LOCALE_PATTERN = /^[a-z]{2}(-[a-z]{2,4})?$/i;
-const DA_ADMIN = 'https://admin.da.live';
 
 let selectedFragment = null;
 let currentPageLocale = null;
-
-function isLocaleFolder(name) {
-  return LOCALE_PATTERN.test(name);
-}
-
-function stripOrgRepoPrefix(path, org, repo) {
-  const prefix = `/${org}/${repo}`;
-  return path.startsWith(prefix) ? path.substring(prefix.length) || '/' : path;
-}
-
-function isFolderItem(item) {
-  return !item.ext && !item.name.includes('.') && item.name !== 'drafts';
-}
 
 function setFolderIconState(folderIcon, isExpanded) {
   if (!folderIcon) return;
@@ -56,129 +45,6 @@ function extractLocaleFromPath(path) {
     return segments[0];
   }
   return null;
-}
-
-/**
- * Discover all "fragments" folders at levels 0, 1, or 2
- * @param {string} org - Organization name
- * @param {string} repo - Repository name
- * @param {string} token - Auth token
- * @returns {Promise<Array>} Array of discovered fragment roots with metadata
- */
-async function discoverFragmentRoots(org, repo, token) {
-  const roots = [];
-
-  try {
-    const level0Path = `${DA_ADMIN}/list/${org}/${repo}/fragments`;
-    const response = await fetch(level0Path, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (response.ok) {
-      roots.push({
-        path: '/fragments',
-        locale: null,
-        depth: 1,
-        label: '/fragments',
-      });
-    }
-  } catch (error) {
-    // Ignore
-  }
-
-  try {
-    const rootListPath = `${DA_ADMIN}/list/${org}/${repo}`;
-    const response = await fetch(rootListPath, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (response.ok) {
-      const data = await response.json();
-      const folders = data.filter(isFolderItem);
-
-      const level1Checks = folders.map(async (folder) => {
-        const folderPath = stripOrgRepoPrefix(folder.path || `/${folder.name}`, org, repo);
-        const folderName = folder.name;
-        const fragmentsPath = `${DA_ADMIN}/list/${org}/${repo}${folderPath}/fragments`;
-
-        try {
-          const fragResponse = await fetch(fragmentsPath, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (fragResponse.ok) {
-            const locale = isLocaleFolder(folderName) ? folderName : null;
-            roots.push({
-              path: `${folderPath}/fragments`,
-              locale,
-              depth: 2,
-              label: `${folderPath}/fragments`,
-            });
-          }
-        } catch (err) {
-          // Ignore
-        }
-      });
-
-      await Promise.all(level1Checks);
-
-      const level2Checks = folders.map(async (folder) => {
-        const folderPath = stripOrgRepoPrefix(folder.path || `/${folder.name}`, org, repo);
-
-        try {
-          const subListPath = `${DA_ADMIN}/list/${org}/${repo}${folderPath}`;
-          const subResponse = await fetch(subListPath, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-
-          if (subResponse.ok) {
-            const subData = await subResponse.json();
-            const subFolders = subData.filter(isFolderItem);
-
-            const level2FragmentChecks = subFolders.map(async (subFolder) => {
-              const subFolderPath = stripOrgRepoPrefix(
-                subFolder.path || `${folderPath}/${subFolder.name}`,
-                org,
-                repo,
-              );
-
-              const fragmentsPath = `${DA_ADMIN}/list/${org}/${repo}${subFolderPath}/fragments`;
-
-              try {
-                const fragResponse = await fetch(fragmentsPath, {
-                  headers: { Authorization: `Bearer ${token}` },
-                });
-                if (fragResponse.ok) {
-                  const pathSegments = subFolderPath.split('/').filter(Boolean);
-                  const locale = pathSegments.length === 2 && isLocaleFolder(pathSegments[1])
-                    ? pathSegments[1] : null;
-                  roots.push({
-                    path: `${subFolderPath}/fragments`,
-                    locale,
-                    depth: 3,
-                    label: `${subFolderPath}/fragments`,
-                  });
-                }
-              } catch (err) {
-                // Ignore
-              }
-            });
-
-            await Promise.all(level2FragmentChecks);
-          }
-        } catch (err) {
-          // Ignore
-        }
-      });
-
-      await Promise.all(level2Checks);
-    }
-  } catch (error) {
-    // Ignore
-  }
-
-  return roots.sort((a, b) => {
-    if (!a.locale && b.locale) return -1;
-    if (a.locale && !b.locale) return 1;
-    return a.label.localeCompare(b.label);
-  });
 }
 
 function showMessage(text, isError = false, autoHide = false) {
@@ -605,12 +471,14 @@ async function loadFragments() {
     const currentLocale = extractLocaleFromPath(loadContext.path || '');
     currentPageLocale = currentLocale; // Store for search filtering
 
+    const { org, repo } = loadContext;
+    const hlx6 = await isHlx6(org, repo);
+    const list = createLister({
+      org, repo, token, hlx6,
+    });
+
     // Discover all fragment roots
-    const discoveredRoots = await discoverFragmentRoots(
-      loadContext.org,
-      loadContext.repo,
-      token,
-    );
+    const discoveredRoots = await discoverFragmentRoots(org, repo, list);
 
     // Fallback to hardcoded /fragments if no roots discovered
     if (discoveredRoots.length === 0) {
@@ -624,8 +492,13 @@ async function loadFragments() {
 
     const rootsWithFiles = await Promise.all(
       discoveredRoots.map(async (root) => {
+        // Helix 6 content isn't visible to the nx crawl (admin.da.live only)
+        if (hlx6) {
+          return { root, files: await crawlHtml(list, org, repo, root.path) };
+        }
+
         const files = [];
-        const fullPath = `/${loadContext.org}/${loadContext.repo}${root.path}`;
+        const fullPath = `/${org}/${repo}${root.path}`;
 
         const { results } = crawl({
           path: fullPath,
