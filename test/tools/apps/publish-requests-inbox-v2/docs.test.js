@@ -59,7 +59,8 @@ describe('I-14 v2 publish documentation', () => {
       assert.ok(text.includes('/tools/plugins/request-for-publish-v2/request-for-publish-v2.html'));
       assert.ok(text.includes('/tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2'));
       assert.match(text, /\| Pattern \| Workflow \| Approvers \| CC \|/);
-      assert.match(text, /`Path`.*fallback.*`Pattern`.*empty/i);
+      assert.doesNotMatch(text, /`Path`[^\n]*fallback/i);
+      assert.match(text, /only from the `Pattern` column[^.]*`Path`[^.]*ignored/i);
       assert.doesNotMatch(text, /v1 `Pattern`.*accepted/);
     });
     assert.ok(home.includes('tools/apps/publish-requests-inbox/publish-requests-inbox'));

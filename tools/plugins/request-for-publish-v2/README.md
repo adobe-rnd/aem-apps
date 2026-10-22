@@ -76,7 +76,7 @@ Sites can show a checklist before authors request approval. Nothing is shown unl
 
 ### Steps
 
-Each `publish-workflow-config` row maps a `Pattern` (exact path, `/a/*` or `/*`) either to a named `Workflow` or to inline `Approvers`/`CC`. `Path` is a v2 fallback only when `Pattern` is empty; use `Pattern` for both v1 and v2:
+Each `publish-workflow-config` row maps a `Pattern` (exact path, `/a/*` or `/*`) either to a named `Workflow` or to inline `Approvers`/`CC`. The worker reads rules only from the `Pattern` column, in v1 and v2; other columns such as `Path` are ignored. Header names are matched ignoring case:
 
 | Pattern | Workflow | Approvers | CC |
 |---|---|---|---|
@@ -92,7 +92,7 @@ An inline rule is a single, untitled step with exactly the v1 behavior: `CC` is 
 
 Row order within a workflow is the step order; there are no step numbers to keep in sync. `Title` falls back to `Step N`, and a missing description renders nothing. `CC` addresses are notified when their step becomes active and may approve it only when that row's `CC can approve` is `true`. A step completes when **any one** of its approvers approves. A step whose approvers resolve to nobody is skipped and rendered as such. A workflow name with no rows behaves like an unmatched path: no approvers.
 
-`/a/*` matches `/a` and paths below it on a segment boundary only. When two rules have the same path, the first row wins.
+`/a/*` matches `/a` and paths below it on a segment boundary only. When two rules have the same pattern, the first row wins.
 
 ### Request state
 
