@@ -9,6 +9,7 @@
   "ignore": [
     "node_modules/**",
     "tools/deps/**",
+    "tools/apps/block-library-generator/block-analysis-prompt.txt",
     "**/*.css",
     "**/*.md",
     ".husky/**",
