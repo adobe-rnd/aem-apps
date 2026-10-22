@@ -1,7 +1,7 @@
 # Publish Requests Inbox (v2)
 
 The approver-facing v2 inbox is a thin REST client of
-[publish-requests-worker](https://github.com/adobe-rnd/publish-requests-worker).
+[publish-requests-worker](https://github.com/cloudadoption/publish-requests-worker).
 It supports queue, single-page review, and the requester's own requests. The worker
 owns identity, authorization, configuration, approval steps, sheet I/O and email;
 the inbox publishes content under the approver's Helix session.
@@ -131,8 +131,8 @@ The worker reads site configuration at
 | `publish-workflow-groups-to-email` | Optional distribution-list expansion. |
 | `publish-workflow-settings` | Comment requirements, support, guidance, theme and inline-rule CC settings. |
 
-`Path` is a v2 fallback only when `Pattern` is empty. Use `Pattern` for both v1
-and v2 configuration:
+The worker reads rules only from the `Pattern` column, in v1 and v2; other
+columns such as `Path` are ignored. Header names are matched ignoring case:
 
 | Pattern | Workflow | Approvers | CC |
 |---------|----------|-----------|----|
