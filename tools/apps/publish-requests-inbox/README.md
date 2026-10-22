@@ -127,6 +127,7 @@ If the user's email cannot be determined from the Adobe IMS token, a warning is 
 | `publish-requests-inbox.js` | Main LitElement component with inbox and review modes, all UI states and event handlers |
 | `publish-requests-inbox.css` | Styles for all component states (inbox, review, approved, rejected, error, etc.) |
 | `api.js` | Thin REST client over `publish-requests-worker` (list/approve/reject/withdraw/resend, approvers/config) + client-side Helix publish (single & bulk) + job polling + IMS profile fetch |
+| `ims-profile.js` | Resolves the IMS profile endpoint from the token's `as` claim, so stage/local sessions query stage IMS (prod fallback) |
 
 ## Configuration
 
