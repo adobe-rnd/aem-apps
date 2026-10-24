@@ -18,8 +18,6 @@ import {
   daFetch, DA_ORIGIN, AEM_ADMIN, cleanPath,
 } from './fetch.js';
 
-const NX = 'https://da.live/nx';
-
 const EXT_MIME_TYPES = {
   html: 'text/html',
   json: 'application/json',
@@ -39,13 +37,8 @@ export function setEditUrlOrigin(origin) { if (origin) editUrlOrigin = origin; }
 export function getEditUrlOrigin() { return editUrlOrigin; }
 
 let mergeCopyFn;
-export function setMergeCopy(fn) { mergeCopyFn = fn; }
-async function ensureMergeCopy() {
-  if (!mergeCopyFn) {
-    const mod = await import(`${NX}/blocks/loc/project/index.js`);
-    mergeCopyFn = mod.mergeCopy;
-  }
-  return mergeCopyFn;
+export function setMergeCopy(fn) {
+  mergeCopyFn = fn;
 }
 
 export async function previewPage(org, site, pagePath, ext = 'html') {
@@ -95,15 +88,23 @@ export async function deleteCopy(org, site, pagePath, ext = 'html') {
 export async function mergeFromSource(org, sourceSite, targetSite, pagePath, ext = 'html') {
   try {
     const clean = cleanPath(pagePath, ext);
-    const mergeCopy = await ensureMergeCopy();
-    const url = {
-      source: `/${org}/${sourceSite}${clean}.${ext}`,
-      destination: `/${org}/${targetSite}${clean}.${ext}`,
-    };
-    const result = await mergeCopy(url, 'MSM Merge');
-    if (!result?.ok) return { error: 'Merge failed' };
+    if (typeof mergeCopyFn !== 'function') throw new Error('MSM requires SDK localization initialization');
+    const result = await mergeCopyFn({
+      urlSource: `/${org}/${sourceSite}${clean}.${ext}`,
+      urlTarget: `/${org}/${targetSite}${clean}.${ext}`,
+      msg: 'MSM Merge',
+    });
+    if (!result?.ok) {
+      return {
+        error: result?.error || `Merge failed (${result?.status || 'unknown'})`,
+        ...(typeof result?.code === 'string' ? { code: result.code } : {}),
+      };
+    }
     return { ok: true, editUrl: `${editUrlOrigin}/edit#/${org}/${targetSite}${clean}` };
   } catch (e) {
-    return { error: e.message || 'Merge failed' };
+    return {
+      error: e.message || 'Merge failed',
+      ...(typeof e.code === 'string' ? { code: e.code } : {}),
+    };
   }
 }
