@@ -1,0 +1,458 @@
+/*
+ * Copyright 2026 Adobe Systems Incorporated
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/* eslint-disable no-underscore-dangle */
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+import * as api from '../../../../tools/apps/publish-requests-inbox-v2/api.js';
+
+const source = readFileSync(new URL('../../../../tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2.js', import.meta.url), 'utf8');
+
+function fixture(overrides = {}) {
+  const scope = {
+    ...api,
+    LitElement: class { requestUpdate() { return this; } },
+    URL,
+    URLSearchParams,
+    window: { location: { search: '', pathname: '/inbox' } },
+    console,
+    html: (strings, ...values) => strings.reduce((text, part, index) => `${text}${part}${values[index] ?? ''}`, ''),
+    nothing: '',
+    ...overrides,
+  };
+  const start = source.indexOf('class PublishRequestsApp');
+  const end = source.indexOf("customElements.define('publish-requests-app'");
+  const App = vm.runInNewContext(`${source.slice(start, end)}; PublishRequestsApp`, scope);
+  const app = new App();
+  Object.assign(app, {
+    _org: 'example', _site: 'website', _path: '/page', token: 'token',
+  });
+  return app;
+}
+
+describe('inbox v2 API', () => {
+  it('can load approval helpers without loading the browser SDK', () => {
+    assert.equal(typeof api.isFinalStep, 'function');
+    assert.equal(typeof api.approveRequests, 'function');
+  });
+
+  it('distinguishes intermediate and final staffed steps', () => {
+    assert.equal(api.isFinalStep({ stepInfo: { current: 1, lastStaffed: 2 } }), false);
+    assert.equal(api.isFinalStep({
+      isFinal: true, stepInfo: { current: 2, lastStaffed: 2 },
+    }), true);
+    assert.equal(api.isFinalStep({ stepInfo: { current: 1, lastStaffed: null } }), false);
+  });
+
+  it('fails closed without explicit worker finality or a current step', () => {
+    [undefined, {}, { isFinal: true },
+      { stepInfo: { current: 2, lastStaffed: 2 } },
+      { stepInfo: { current: 3, lastStaffed: 2 } },
+      { isFinal: true, stepInfo: { current: 3, lastStaffed: 2, complete: true } },
+      { isFinal: false, stepInfo: { current: 2, lastStaffed: 2 } },
+    ].forEach((row) => assert.equal(api.isFinalStep(row), false));
+    assert.equal(api.isFinalStep({
+      isFinal: true, stepInfo: { current: 1, lastStaffed: 2 },
+    }), true);
+  });
+
+  it('preserves per-path worker outcomes including partial stale results', async (test) => {
+    test.mock.method(global, 'fetch', async () => Response.json({
+      approved: ['/page'],
+      completed: [],
+      advanced: ['/page'],
+      stale: ['/stale'],
+      unauthorized: ['/denied'],
+      notFound: ['/gone'],
+    }));
+    global.window = { location: { hostname: 'localhost', search: '' } };
+    test.after(() => { delete global.window; });
+    const result = await api.approveRequests('example', 'website', ['/page', '/stale'], 'token', 1);
+    assert.deepEqual(result.approved, ['/page']);
+    assert.deepEqual(result.stale, ['/stale']);
+    assert.deepEqual(result.advanced, ['/page']);
+    assert.deepEqual(result.unauthorized, ['/denied']);
+    assert.deepEqual(result.notFound, ['/gone']);
+  });
+
+  [401, 403, 500, 502].forEach((status) => {
+    it(`does not turn worker ${status} responses into empty queues`, async (test) => {
+      global.window = { location: { hostname: 'localhost', search: '' } };
+      test.after(() => { delete global.window; });
+      test.mock.method(global, 'fetch', async () => Response.json({ error: 'Worker failure' }, { status }));
+      await assert.rejects(
+        api.getAllPendingRequestsForUser('org', 'site', null, 'token'),
+        (error) => error.status === status,
+      );
+      await assert.rejects(
+        api.getAllPendingRequestsByRequester('org', 'site', null, 'token'),
+        (error) => error.status === status,
+      );
+      await assert.rejects(
+        api.checkPublishRequest('org', 'site', '/page', 'token'),
+        (error) => error.status === status,
+      );
+    });
+  });
+
+  it('preserves successful mutation email warnings and failure status', async (test) => {
+    global.window = { location: { hostname: 'localhost', search: '' } };
+    test.after(() => { delete global.window; });
+    const emailErrors = [{ error: 'Mail unavailable' }];
+    test.mock.method(global, 'fetch', async () => Response.json({ success: true, emailErrors }));
+    const result = await api.rejectRequest('org', 'site', '/page', 'Reason', 'token');
+    assert.deepEqual(result.emailErrors, emailErrors);
+  });
+
+  it('looks up one page with an explicit page role', async (test) => {
+    global.window = { location: { hostname: 'localhost', search: '' } };
+    test.after(() => { delete global.window; });
+    test.mock.method(global, 'fetch', async (href) => {
+      const url = new URL(href);
+      assert.equal(url.searchParams.get('role'), 'page');
+      assert.equal(url.searchParams.get('path'), '/page');
+      return Response.json({ requests: [{ path: '/page', status: 'pending' }] });
+    });
+    assert.equal((await api.checkPublishRequest('org', 'site', '/page', 'token')).path, '/page');
+  });
+
+  it('requests the approver queue explicitly', async (test) => {
+    global.window = { location: { hostname: 'localhost', search: '' } };
+    test.after(() => { delete global.window; });
+    test.mock.method(global, 'fetch', async (href) => {
+      assert.equal(new URL(href).searchParams.get('role'), 'approver');
+      return Response.json({ requests: [] });
+    });
+    await api.getAllPendingRequestsForUser('org', 'site', null, 'token');
+  });
+
+  it('never sends an approval without a valid expected step', async (test) => {
+    global.window = { location: { hostname: 'localhost', search: '' } };
+    test.after(() => { delete global.window; });
+    const mocked = test.mock.method(global, 'fetch', async () => Response.json({ approved: ['/page'] }));
+    const results = await Promise.all([undefined, null, 0, -1, '1'].map((step) => (
+      api.approveRequests('org', 'site', ['/page'], 'token', step)
+    )));
+    assert.equal(mocked.mock.callCount(), 0);
+    results.forEach((result) => {
+      assert.equal(result.success, false);
+      assert.match(result.error, /step.*refresh|refresh.*step/i);
+    });
+  });
+
+  it('sends final true only for explicitly final approvals', async (test) => {
+    global.window = { location: { hostname: 'localhost', search: '' } };
+    test.after(() => { delete global.window; });
+    const bodies = [];
+    test.mock.method(global, 'fetch', async (_href, opts) => {
+      const body = JSON.parse(opts.body);
+      bodies.push(body);
+      return Response.json(body.final ? { completed: ['/page'] }
+        : { advanced: ['/page'] });
+    });
+    await api.approveRequests('org', 'site', ['/page'], 'token', 1, true);
+    const intermediate = await api.approveRequests('org', 'site', ['/page'], 'token', 1, false);
+    assert.equal(intermediate.success, true);
+    assert.equal(bodies[0].final, true);
+    assert.equal(Object.hasOwn(bodies[1], 'final'), false);
+    assert.equal(bodies[0].step, 1);
+  });
+});
+
+describe('inbox v2 approval handlers', () => {
+  const finalRow = {
+    path: '/page',
+    isFinal: true,
+    canApproveNow: true,
+    stepInfo: { current: 1, lastStaffed: 1 },
+  };
+
+  it('replaces spoofed review metadata with worker data and a canonical preview', async () => {
+    const app = fixture({
+      checkPublishRequest: async () => ({
+        ...finalRow, requester: 'author@example.com', comment: 'Actual request note',
+      }),
+    });
+    app._authorEmail = 'ceo@attacker.example';
+    app._comment = 'Approved by legal';
+    app._previewUrl = ['javascript', 'alert(1)'].join(':');
+    await app.initReview();
+    assert.equal(app._authorEmail, 'author@example.com');
+    assert.equal(app._comment, 'Actual request note');
+    assert.equal(app._previewUrl, 'https://main--website--example.aem.page/page');
+  });
+
+  it('preserves env and ref across links and inline navigation', () => {
+    const browser = {
+      location: { search: '?env=ci&ref=rpfix&path=/old', pathname: '/inbox' },
+      history: {
+        replaceState: (_data, _unused, href) => {
+          browser.location.search = new URL(href, 'https://example.com').search;
+        },
+      },
+    };
+    const app = fixture({ window: browser });
+    app.context = { org: 'adobe-rnd', repo: 'aem-apps' };
+    [app.getReviewUrl({ path: '/page' }), app.getInboxUrl()].forEach((href) => {
+      const url = new URL(href);
+      assert.equal(url.searchParams.get('env'), 'ci');
+      assert.equal(url.searchParams.get('ref'), 'rpfix');
+    });
+    app.updateUrl({ org: 'other', site: 'another' });
+    const params = new URLSearchParams(browser.location.search);
+    assert.equal(params.get('env'), 'ci');
+    assert.equal(params.get('ref'), 'rpfix');
+    assert.equal(params.has('path'), false);
+  });
+
+  it('persistently warns that CI approvals still publish live content', () => {
+    const app = fixture({ window: { location: { search: '?env=ci' } } });
+    app._state = 'inbox';
+    app.renderToolbar = () => '';
+    app.renderMessage = () => '';
+    app.renderContent = () => '';
+    assert.match(app.render(), /CI workflow.*[\s\S]*live site/);
+    assert.match(app.render(), /role="status"/);
+  });
+
+  it('shows review lookup errors instead of no-request state', async () => {
+    const app = fixture({
+      checkPublishRequest: async () => { throw new Error('Backend unavailable (502)'); },
+    });
+    await app.initReview();
+    assert.equal(app._state, 'error');
+    assert.match(app._message.text, /502/);
+    assert.match(app.renderError(), /Retry/);
+  });
+
+  it('shows email failure as a warning after a recorded approval', async () => {
+    const app = fixture({
+      checkPublishRequest: async () => finalRow,
+      publishContent: async () => ({ success: true }),
+      approveRequests: async () => ({
+        success: true, completed: ['/page'], emailErrors: [{ error: 'Mail unavailable' }],
+      }),
+    });
+    app._reviewRequest = finalRow;
+    await app.handleApprove();
+    assert.equal(app._state, 'approved');
+    assert.equal(app._message.type, 'info');
+    assert.match(app._message.text, /notification.*failed|emails.*not.*sent/i);
+  });
+
+  it('uses worker eligibility without fetching a flat approver list', async () => {
+    const app = fixture({
+      checkPublishRequest: async () => finalRow,
+      getApproversForPath: async () => { throw new Error('Unnecessary approver lookup'); },
+    });
+    app._userEmail = 'reviewer@example.com';
+    await app.initReview();
+    assert.equal(app._state, 'review');
+  });
+
+  it('handles observer rows without comment or step', async () => {
+    const app = fixture({
+      checkPublishRequest: async () => ({ ...finalRow, canApproveNow: false }),
+      getApproversForPath: async () => { throw new Error('Unnecessary approver lookup'); },
+    });
+    app._userEmail = 'observer@example.com';
+    app._comment = 'Old note';
+    await app.initReview();
+    assert.equal(app._comment, '');
+    assert.equal(app._state, 'review');
+    assert.equal(app._reviewRequest.canApproveNow, false);
+  });
+
+  it('revalidates a final request before publishing', async () => {
+    const calls = [];
+    const app = fixture({
+      checkPublishRequest: async () => { calls.push('read'); return null; },
+      publishContent: async () => { calls.push('publish'); return { success: true }; },
+      approveRequests: async () => ({ success: true, completed: ['/page'] }),
+    });
+    app._reviewRequest = finalRow;
+    await app.handleApprove();
+    assert.deepEqual(calls, ['read']);
+    assert.match(app._message.text, /changed|refresh/i);
+  });
+
+  it('keeps a published request visible when the worker did not complete it', async () => {
+    const app = fixture({
+      checkPublishRequest: async () => finalRow,
+      publishContent: async () => ({ success: true }),
+      approveRequests: async () => ({ success: true, completed: [], advanced: [{ path: '/page' }] }),
+    });
+    app._pendingRequests = [finalRow];
+    await app.handleInboxApprove(finalRow);
+    assert.equal(app._pendingRequests.length, 1);
+    assert.match(app._message.text, /published.*workflow.*not completed/i);
+  });
+
+  it('re-reads a conflicting approval and releases its processing guard', async () => {
+    let reads = 0;
+    const app = fixture({
+      checkPublishRequest: async () => { reads += 1; return finalRow; },
+      publishContent: async () => ({ success: true }),
+      approveRequests: async () => ({ success: false, status: 409, error: 'Finality changed' }),
+    });
+    await app.handleInboxApprove(finalRow);
+    assert.equal(reads, 2);
+    assert.match(app._message.text, /conflict.*refresh/i);
+    assert.equal(app._processingPaths.size, 0);
+  });
+
+  it('groups approvals by the current step', async () => {
+    const calls = [];
+    const app = fixture({
+      approveRequests: async (...args) => {
+        calls.push(args);
+        return { success: true, approved: args[2], advanced: args[2] };
+      },
+    });
+    const result = await app.approveGrouped([
+      { path: '/one', stepInfo: { current: 1 } },
+      { path: '/two', stepInfo: { current: 2 } },
+    ]);
+    assert.deepEqual(calls.map((args) => args[4]), [1, 2]);
+    assert.deepEqual(Array.from(result.approved), ['/one', '/two']);
+  });
+
+  it('retains successful paths in a group with stale and unauthorized requests', async () => {
+    const app = fixture({
+      approveRequests: async () => ({
+        success: false,
+        approved: ['/one', '/denied'],
+        advanced: ['/one', '/denied'],
+        stale: ['/stale'],
+        unauthorized: ['/denied'],
+        notFound: ['/gone'],
+      }),
+    });
+    const rows = ['/one', '/stale', '/denied', '/gone'].map((path) => ({
+      path, isFinal: false, stepInfo: { current: 1 },
+    }));
+    const result = await app.approveGrouped(rows);
+    assert.deepEqual(Array.from(result.approved), ['/one']);
+    assert.match(result.error, /stale|conflict/i);
+    assert.match(result.error, /denied|authoriz/i);
+    assert.match(result.error, /gone|not found/i);
+  });
+
+  it('separates final and intermediate requests on the same step', async () => {
+    const calls = [];
+    const app = fixture({
+      approveRequests: async (...args) => {
+        calls.push(args);
+        return args[5] ? { completed: args[2] }
+          : { advanced: args[2] };
+      },
+    });
+    const result = await app.approveGrouped([
+      { path: '/final', isFinal: true, stepInfo: { current: 1 } },
+      { path: '/next', isFinal: false, stepInfo: { current: 1 } },
+    ]);
+    assert.deepEqual(calls.map((args) => args[5]), [true, false]);
+    assert.deepEqual(Array.from(result.approved), ['/final', '/next']);
+  });
+
+  it('advances intermediate requests even when bulk publishing fails', async () => {
+    const calls = [];
+    const rows = [finalRow, { ...finalRow, path: '/next', isFinal: false }];
+    const app = fixture({
+      checkPublishRequest: async (_org, _site, path) => rows.find((row) => row.path === path),
+      bulkPublishContent: async () => {
+        calls.push('bulk');
+        return { success: false, error: 'Backend failed' };
+      },
+      approveRequests: async (_org, _site, paths) => {
+        calls.push(...paths);
+        return { advanced: paths };
+      },
+      // the worker no longer lists what this user advanced
+      getAllPendingRequestsForUser: async () => rows.filter((row) => !calls.includes(row.path)),
+    });
+    app._pendingRequests = rows;
+    await app.handleApproveAll();
+    assert.deepEqual(calls, ['/next', 'bulk']);
+    assert.deepEqual(Array.from(app._pendingRequests, (row) => row.path), ['/page']);
+    assert.match(app._message.text, /1 advanced/);
+    assert.equal(app._approveAllProcessing, false);
+  });
+
+  it('records only confirmed published resources when a bulk job times out', async () => {
+    const rows = [finalRow, { ...finalRow, path: '/unknown' }];
+    const calls = [];
+    const app = fixture({
+      checkPublishRequest: async (_org, _site, path) => rows.find((row) => row.path === path),
+      bulkPublishContent: async () => ({ success: true, links: { self: 'https://admin.example/job' } }),
+      pollJobStatus: async () => ({
+        success: false,
+        error: 'Timed out',
+        job: { data: { resources: [{ path: '/page', status: 200 }] } },
+      }),
+      approveRequests: async (_org, _site, paths) => {
+        calls.push(...paths);
+        return { completed: paths };
+      },
+      getAllPendingRequestsForUser: async () => rows.filter((row) => !calls.includes(row.path)),
+    });
+    app._pendingRequests = rows;
+    await app.handleApproveAll();
+    assert.deepEqual(calls, ['/page']);
+    assert.deepEqual(Array.from(app._pendingRequests, (row) => row.path), ['/unknown']);
+    assert.match(app._message.text, /1 published/);
+  });
+
+  it('keeps a request listed when the same user staffs the next step', async () => {
+    const row = { ...finalRow, isFinal: false, stepInfo: { current: 1, lastStaffed: 2 } };
+    const advanced = { ...row, isFinal: true, stepInfo: { current: 2, lastStaffed: 2 } };
+    const app = fixture({
+      checkPublishRequest: async () => row,
+      approveRequests: async () => ({ success: true, advanced: ['/page'] }),
+      getAllPendingRequestsForUser: async () => [advanced],
+    });
+    app._pendingRequests = [row];
+    app._userEmail = 'me@example.com';
+    await app.handleInboxApprove(row);
+    assert.deepEqual(app._pendingRequests, [advanced]);
+    assert.match(app._message.text, /Step approved: \/page/);
+  });
+
+  it('never publishes an intermediate approval', async () => {
+    const calls = [];
+    let advanced = false;
+    const row = {
+      path: '/page', isFinal: false, canApproveNow: true, stepInfo: { current: 1, lastStaffed: 2 },
+    };
+    const app = fixture({
+      checkPublishRequest: async () => (advanced ? {
+        ...row, isFinal: true, stepInfo: { current: 2, lastStaffed: 2 },
+      } : row),
+      publishContent: async () => { calls.push('publish'); return { success: true }; },
+      approveRequests: async () => {
+        advanced = true;
+        return { success: true, advanced: ['/page'] };
+      },
+    });
+    app._reviewRequest = row;
+    await app.handleApprove();
+    assert.deepEqual(calls, []);
+    assert.equal(app._state, 'advanced');
+    assert.match(app.renderContent(), /Waiting on step 2/i);
+    assert.doesNotMatch(app.renderContent(), /Published!|View Published|aem.live/);
+  });
+});
