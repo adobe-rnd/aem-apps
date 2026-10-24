@@ -18,8 +18,6 @@ import {
   daFetch, DA_ORIGIN, AEM_ADMIN, cleanPath,
 } from './fetch.js';
 
-const NX = 'https://da.live/nx';
-
 const EXT_MIME_TYPES = {
   html: 'text/html',
   json: 'application/json',
@@ -39,21 +37,8 @@ export function setEditUrlOrigin(origin) { if (origin) editUrlOrigin = origin; }
 export function getEditUrlOrigin() { return editUrlOrigin; }
 
 let mergeCopyFn;
-let mergeCopyLoading;
 export function setMergeCopy(fn) {
   mergeCopyFn = fn;
-  mergeCopyLoading = undefined;
-}
-async function ensureMergeCopy() {
-  if (mergeCopyFn) return mergeCopyFn;
-  mergeCopyLoading ??= import(`${NX}/public/plugins/rollout/utils.js`).then(({ mergeCopy }) => {
-    mergeCopyFn ||= mergeCopy;
-    return mergeCopyFn;
-  }).catch((error) => {
-    mergeCopyLoading = undefined;
-    throw error;
-  });
-  return mergeCopyLoading;
 }
 
 export async function previewPage(org, site, pagePath, ext = 'html') {
@@ -103,17 +88,23 @@ export async function deleteCopy(org, site, pagePath, ext = 'html') {
 export async function mergeFromSource(org, sourceSite, targetSite, pagePath, ext = 'html') {
   try {
     const clean = cleanPath(pagePath, ext);
-    const mergeCopy = await ensureMergeCopy();
-    const result = await mergeCopy({
-      fetch: daFetch,
-      daOrigin: DA_ORIGIN,
+    if (typeof mergeCopyFn !== 'function') throw new Error('MSM requires SDK localization initialization');
+    const result = await mergeCopyFn({
       urlSource: `/${org}/${sourceSite}${clean}.${ext}`,
       urlTarget: `/${org}/${targetSite}${clean}.${ext}`,
       msg: 'MSM Merge',
     });
-    if (!result?.ok) return { error: result?.error || `Merge failed (${result?.status || 'unknown'})` };
+    if (!result?.ok) {
+      return {
+        error: result?.error || `Merge failed (${result?.status || 'unknown'})`,
+        ...(typeof result?.code === 'string' ? { code: result.code } : {}),
+      };
+    }
     return { ok: true, editUrl: `${editUrlOrigin}/edit#/${org}/${targetSite}${clean}` };
   } catch (e) {
-    return { error: e.message || 'Merge failed' };
+    return {
+      error: e.message || 'Merge failed',
+      ...(typeof e.code === 'string' ? { code: e.code } : {}),
+    };
   }
 }

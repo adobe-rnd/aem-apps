@@ -17,63 +17,43 @@ import {
   after, beforeEach, describe, it,
 } from 'node:test';
 import assert from 'node:assert/strict';
-import { registerHooks } from 'node:module';
 import {
   mergeFromSource, setMergeCopy, setEditUrlOrigin,
 } from '../../../../../tools/apps/msm/core/operations.js';
 import { setDaFetch } from '../../../../../tools/apps/msm/core/fetch.js';
 
-const publicCopyUrl = 'https://da.live/nx/public/plugins/rollout/utils.js';
-const mockModule = `
-  export const mergeCopy = async ({ fetch, daOrigin, urlSource, urlTarget, msg }) => {
-    if (!urlSource) throw new Error('Missing source path');
-    const [, org, site] = urlTarget.split('/');
-    await fetch(daOrigin + '/source/' + org + '/' + site + '/.da/translate.json');
-    return fetch(daOrigin + '/source' + urlTarget, { method: 'POST', body: msg });
-  };
-`;
-const hook = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === publicCopyUrl) {
-      return { url: `data:text/javascript,${encodeURIComponent(mockModule)}`, shortCircuit: true };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 after(() => {
-  hook.deregister();
   setDaFetch(undefined);
   setMergeCopy(undefined);
 });
 
-describe('MSM public merge integration', () => {
+describe('MSM SDK localization integration', () => {
   beforeEach(() => {
     setMergeCopy(undefined);
     setDaFetch(undefined);
     setEditUrlOrigin('https://da.live');
   });
 
-  it('loads the public copy utility and injects SDK fetch with destination config', async () => {
-    const requests = [];
-    setDaFetch(async (url, opts) => {
-      requests.push([url, opts]);
-      return { ok: true, json: async () => ({ config: { data: [] } }) };
+  it('uses the injected SDK loc action without app-side transport wiring', async () => {
+    let args;
+    setMergeCopy(async (options) => {
+      args = options;
+      return { ok: true, status: 200 };
     });
     const result = await mergeFromSource('org', 'source', 'target', '/en/page');
     assert.deepEqual(result, {
       ok: true, editUrl: 'https://da.live/edit#/org/target/en/page',
     });
-    assert.deepEqual(requests.map(([url]) => url), [
-      'https://admin.da.live/source/org/target/.da/translate.json',
-      'https://admin.da.live/source/org/target/en/page.html',
-    ]);
-    assert.equal(requests[1][1].body, 'MSM Merge');
+    assert.deepEqual(args, {
+      urlSource: '/org/source/en/page.html',
+      urlTarget: '/org/target/en/page.html',
+      msg: 'MSM Merge',
+    });
   });
 
   it('reports missing SDK initialization instead of importing private auth', async () => {
     const result = await mergeFromSource('org', 'source', 'target', '/page');
-    assert.equal(result.error, 'MSM requires SDK fetch initialization');
+    assert.equal(result.error, 'MSM requires SDK localization initialization');
   });
 
   it('retains copy error details for the caller', async () => {
@@ -82,40 +62,63 @@ describe('MSM public merge integration', () => {
     assert.equal(result.error, 'Source read failed (401)');
   });
 
-  it('uses the current SDK fetch after initialization changes', async () => {
-    setDaFetch(async () => ({ ok: true, json: async () => ({ config: { data: [] } }) }));
+  it('uses the current SDK loc action after initialization changes', async () => {
+    setMergeCopy(async () => ({ ok: true }));
     assert.equal((await mergeFromSource('org', 'source', 'target', '/page')).ok, true);
     let calls = 0;
-    setDaFetch(async () => {
+    setMergeCopy(async () => {
       calls += 1;
-      return { ok: true, json: async () => ({ config: { data: [] } }) };
+      return { ok: true };
     });
     assert.equal((await mergeFromSource('org', 'source', 'target', '/page')).ok, true);
-    assert.equal(calls, 2);
+    assert.equal(calls, 1);
   });
 
-  it('passes the direct public API arguments', async () => {
+  it('passes only operation data to the SDK loc action', async () => {
     let args;
     setMergeCopy(async (options) => {
       args = options;
       return { ok: true };
     });
     assert.equal((await mergeFromSource('org', 'source', 'target', '/page')).ok, true);
-    assert.equal(typeof args.fetch, 'function');
-    assert.deepEqual({ ...args, fetch: undefined }, {
-      fetch: undefined,
-      daOrigin: 'https://admin.da.live',
+    assert.deepEqual(args, {
       urlSource: '/org/source/page.html',
       urlTarget: '/org/target/page.html',
       msg: 'MSM Merge',
     });
   });
 
-  it('loads the public merge function for concurrent merges', async () => {
-    setDaFetch(async () => ({ ok: true, json: async () => ({ config: { data: [] } }) }));
+  it('shares the injected SDK loc action across concurrent merges', async () => {
+    let calls = 0;
+    setMergeCopy(async () => {
+      calls += 1;
+      return { ok: true };
+    });
     const results = await Promise.all(Array.from({ length: 6 }, () => (
       mergeFromSource('org', 'source', 'target', '/page')
     )));
     assert.ok(results.every((result) => result.ok));
+    assert.equal(calls, 6);
+  });
+
+  it('preserves SDK denial details for the caller', async () => {
+    setMergeCopy(async () => ({
+      ok: false, status: 500, error: 'Outside permitted scope', code: 'denied',
+    }));
+    assert.deepEqual(await mergeFromSource('org', 'source', 'target', '/page'), {
+      error: 'Outside permitted scope', code: 'denied',
+    });
+  });
+
+  it('reports a rejected SDK action without retrying', async () => {
+    let calls = 0;
+    setMergeCopy(async () => {
+      calls += 1;
+      throw Object.assign(new Error('Host connection closed'), { code: 'closed' });
+    });
+    assert.deepEqual(await mergeFromSource('org', 'source', 'target', '/page'), {
+      error: 'Host connection closed', code: 'closed',
+    });
+    assert.equal(calls, 1);
   });
 });

@@ -33,6 +33,7 @@ import {
   getStatusConfig,
   setSdkFetch as setUtilsSdkFetch,
   setEditUrlOrigin,
+  setMergeCopy,
 } from './utils.js';
 import { icon } from '../../apps/msm/core/icons.js';
 import { buildParentMap, effectiveSource, isOutOfSync } from '../../apps/msm/core/source-tree.js';
@@ -900,6 +901,7 @@ export default function render(details) {
 
     setConfigSdkFetch(actions.daFetch);
     setUtilsSdkFetch(actions.daFetch);
+    setMergeCopy(actions.loc.mergeCopy);
 
     if (document.referrer) {
       try {
