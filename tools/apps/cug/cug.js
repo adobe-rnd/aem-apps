@@ -67,9 +67,6 @@ function updateRowLabels() {
     drag.draggable = !entry;
     drag.disabled = entry;
     drag.setAttribute('aria-label', `Move rule ${rule}`);
-    drag.title = 'Click to insert a row; drag or use Up/Down to reorder';
-    drag.setAttribute('aria-haspopup', 'menu');
-    drag.setAttribute('aria-controls', 'cug-row-menu');
     drag.setAttribute('aria-expanded', String(menuRow === row));
     const remove = row.querySelector('.cug-delete');
     remove.setAttribute('aria-label', `Delete rule ${rule}`);
@@ -198,24 +195,21 @@ siteInput.addEventListener('input', () => {
   updateActionButtons();
 });
 
-function createGroupChip(group, rule) {
+function createGroupChip(group) {
   const chip = groupTemplate.cloneNode(true);
   chip.querySelector('span').textContent = group;
-  chip.setAttribute('aria-label', `Remove ${group} group from rule ${rule}`);
   return chip;
 }
 
-function createRow({ path, authentication, groups }, rule) {
+function createRow({ path, authentication, groups }) {
   const row = rowTemplate.cloneNode(true);
   row.querySelector('input').value = path;
   row.querySelector('.cug-auth-select').value = authentication;
   const groupList = row.querySelector('.cug-groups');
   const addButton = groupList.querySelector('.cug-group-add');
-  groupList.replaceChildren();
   groups.forEach((group) => {
-    groupList.append(createGroupChip(group, rule));
+    addButton.before(createGroupChip(group));
   });
-  groupList.append(addButton);
   return row;
 }
 
@@ -227,7 +221,7 @@ function ensureEntryRow() {
     entry.removeAttribute('data-entry-row');
   }
   if (!tbody.querySelector('[data-entry-row]')) {
-    const row = createRow({ path: '', authentication: '', groups: [] }, tbody.rows.length + 1);
+    const row = createRow({ path: '', authentication: '', groups: [] });
     row.dataset.entryRow = 'true';
     tbody.append(row);
   }
@@ -253,7 +247,7 @@ tbody.addEventListener('click', (event) => {
 rowMenu.addEventListener('click', (event) => {
   const button = event.target.closest('[data-position]');
   if (!button || !menuRow?.isConnected || table.getAttribute('aria-busy') === 'true') return;
-  const row = createRow({ path: '', authentication: '', groups: [] }, 0);
+  const row = createRow({ path: '', authentication: '', groups: [] });
   tbody.insertBefore(row, button.dataset.position === 'above' ? menuRow : menuRow.nextElementSibling);
   closeRowMenu();
   ensureEntryRow();
@@ -300,8 +294,7 @@ function commitGroup(input) {
   }
   input.onblur = null;
   if (group) {
-    const rule = [...tbody.rows].indexOf(input.closest('tr')) + 1;
-    input.before(createGroupChip(group, rule));
+    input.before(createGroupChip(group));
   }
   input.remove();
   ensureEntryRow();
@@ -356,7 +349,7 @@ tbody.addEventListener('input', (event) => {
 });
 
 function renderRows(rows) {
-  tbody.replaceChildren(...rows.map((row, index) => createRow(row, index + 1)));
+  tbody.replaceChildren(...rows.map(createRow));
   ensureEntryRow();
 }
 
@@ -393,7 +386,6 @@ async function loadRules(migrate = false) {
       : 'No rules found. Add a rule in the empty row below.';
   } catch (error) {
     tbody.replaceChildren();
-    ensureEntryRow();
     status.dataset.error = 'true';
     status.textContent = sheetCopied
       ? `Spreadsheet copied, but rules could not be loaded: ${error.message} Click Load to retry.`

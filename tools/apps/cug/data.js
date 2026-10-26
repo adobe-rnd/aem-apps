@@ -110,11 +110,6 @@ export async function fetchCugState(site, daFetch) {
   return { rows, hasLegacySheet: false };
 }
 
-export async function fetchCugRows(site, daFetch) {
-  const { rows } = await fetchCugState(site, daFetch);
-  return rows;
-}
-
 async function writeSheet(site, sheet, daFetch) {
   const body = new FormData();
   body.append('data', new Blob([JSON.stringify(sheet)], { type: 'application/json' }));

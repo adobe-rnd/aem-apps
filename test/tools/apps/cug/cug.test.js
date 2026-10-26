@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  assertSiteExists, fetchCugRows, fetchCugState, generateCugHeaders,
+  assertSiteExists, fetchCugState, generateCugHeaders,
   migrateCugSheet, saveCugRows, siteFromHash,
 } from '../../../../tools/apps/cug/data.js';
 
@@ -110,7 +110,7 @@ describe('CUG org/site field formats', () => {
         return { ok: true };
       };
       await assertSiteExists(site, request);
-      const rows = await fetchCugRows(site, request);
+      const { rows } = await fetchCugState(site, request);
       const sheet = await saveCugRows(site, rows, request);
       assert.deepEqual(await generateCugHeaders(site, sheet, request), {
         cugPaths: 1, totalPaths: 1,
@@ -207,7 +207,7 @@ describe('saveCugRows', () => {
     };
     const saved = await saveCugRows('org/site', rows, request);
     assert.deepEqual(saved.data.map((row) => row.Authentication), ['true', 'false', '']);
-    assert.deepEqual(await fetchCugRows('org/site', request), rows);
+    assert.deepEqual((await fetchCugState('org/site', request)).rows, rows);
   });
 
   it('rejects invalid authentication values instead of silently saving a different state', async () => {
@@ -316,7 +316,7 @@ describe('migrateCugSheet', () => {
       { url: legacyUrl, method: 'GET' },
       { url: currentUrl, method: 'PUT' },
     ]);
-    assert.deepEqual(await fetchCugRows('/org/site', request), [
+    assert.deepEqual((await fetchCugState('/org/site', request)).rows, [
       { path: '/members/**', authentication: 'true', groups: [] },
       { path: '/partners/**', authentication: 'false', groups: ['gold', 'silver'] },
       { path: '/public/**', authentication: '', groups: [] },
@@ -482,7 +482,7 @@ describe('fetchCugState legacy detection', () => {
   });
 });
 
-describe('fetchCugRows', () => {
+describe('fetchCugState row parsing', () => {
   const sourceRows = [
     { Path: '/members/**', Authentication: 'true', Groups: '' },
     { Path: '/partners/**', Authentication: 'true', Groups: 'gold,silver' },
@@ -494,7 +494,7 @@ describe('fetchCugRows', () => {
   it('fetches DA source and maps all actual spreadsheet rows in order', async () => {
     let requestedUrl;
     let requestedOptions;
-    const rows = await fetchCugRows('/myOrg/mySite', async (url, options) => {
+    const { rows } = await fetchCugState('/myOrg/mySite', async (url, options) => {
       requestedUrl = url;
       requestedOptions = options;
       return { ok: true, json: async () => ({ data: sourceRows }) };
@@ -510,7 +510,7 @@ describe('fetchCugRows', () => {
   });
 
   it('accepts org/site without leading slash and boolean authentication values', async () => {
-    const rows = await fetchCugRows(' org/site/ ', respond([
+    const { rows } = await fetchCugState(' org/site/ ', respond([
       { Path: '/a', Authentication: false, Groups: 'gold, silver' },
       { Path: '/b', Authentication: true, Groups: '' },
     ]));
@@ -521,7 +521,7 @@ describe('fetchCugRows', () => {
   });
 
   it('distinguishes true, false, and empty text values', async () => {
-    const rows = await fetchCugRows('org/site', respond([
+    const { rows } = await fetchCugState('org/site', respond([
       { Authentication: 'true' },
       { Authentication: 'false' },
       { Authentication: '' },
@@ -531,23 +531,23 @@ describe('fetchCugRows', () => {
   });
 
   it('preserves duplicate paths and blank rows without adding extra rows', async () => {
-    const rows = await fetchCugRows('org/site', respond([
+    const { rows } = await fetchCugState('org/site', respond([
       { Path: '/a', Authentication: '' },
       { Path: '/a', Authentication: '' },
       {},
     ]));
     assert.deepEqual(rows.map((row) => row.path), ['/a', '/a', '']);
-    assert.deepEqual(await fetchCugRows('org/site', respond([])), []);
+    assert.deepEqual((await fetchCugState('org/site', respond([]))).rows, []);
   });
 
   it('rejects invalid site paths before making a request', async () => {
-    await assert.rejects(fetchCugRows('/org/site/extra', () => {
+    await assert.rejects(fetchCugState('/org/site/extra', () => {
       assert.fail('Should not fetch invalid input');
     }), /Enter an org\/site/);
   });
 
   it('treats a missing sheet as having no rules without parsing the error body', async () => {
-    const rows = await fetchCugRows('org/site', async () => ({
+    const { rows } = await fetchCugState('org/site', async () => ({
       ok: false,
       status: 404,
       json: () => assert.fail('A missing sheet has no JSON source to parse'),
@@ -556,17 +556,17 @@ describe('fetchCugRows', () => {
   });
 
   it('reports a missing or stale Authentication header instead of rendering empty values', async () => {
-    await assert.rejects(fetchCugRows('org/site', respond([
+    await assert.rejects(fetchCugState('org/site', respond([
       { Path: '/members/**', Authenticaction: 'true', Groups: '' },
     ])), /Missing Authentication column in row 1/);
   });
 
   it('surfaces HTTP, network, and malformed spreadsheet errors', async () => {
-    await assert.rejects(fetchCugRows('org/site', async () => ({ ok: false, status: 403 })), /HTTP 403/);
-    await assert.rejects(fetchCugRows('org/site', async () => { throw new Error('Network failed'); }), /Network failed/);
-    await assert.rejects(fetchCugRows('org/site', respond(null)), /data sheet/);
-    await assert.rejects(fetchCugRows('org/site', respond([null])), /row 1/);
-    await assert.rejects(fetchCugRows('org/site', respond([{ Authentication: 'yes' }])), /Authentication/);
-    await assert.rejects(fetchCugRows('org/site', respond([{ Authentication: '', Groups: 42 }])), /must be text/);
+    await assert.rejects(fetchCugState('org/site', async () => ({ ok: false, status: 403 })), /HTTP 403/);
+    await assert.rejects(fetchCugState('org/site', async () => { throw new Error('Network failed'); }), /Network failed/);
+    await assert.rejects(fetchCugState('org/site', respond(null)), /data sheet/);
+    await assert.rejects(fetchCugState('org/site', respond([null])), /row 1/);
+    await assert.rejects(fetchCugState('org/site', respond([{ Authentication: 'yes' }])), /Authentication/);
+    await assert.rejects(fetchCugState('org/site', respond([{ Authentication: '', Groups: 42 }])), /must be text/);
   });
 });
