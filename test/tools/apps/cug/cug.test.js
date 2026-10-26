@@ -56,8 +56,8 @@ describe('assertSiteExists', () => {
 });
 
 describe('CUG org/site initialization', () => {
-  it('prefills the field from the forwarded DA hash, including the leading slash', () => {
-    assert.equal(siteFromHash('#/myOrg/mySite'), '/myOrg/mySite');
+  it('prefills the field from the forwarded DA hash without the leading slash', () => {
+    assert.equal(siteFromHash('#/myOrg/mySite'), 'myOrg/mySite');
   });
 
   it('also accepts a site hash without a leading slash', () => {

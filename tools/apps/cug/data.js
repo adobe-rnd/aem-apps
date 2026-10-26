@@ -22,7 +22,7 @@ const SITE_INPUT_ERROR = 'Enter an org/site or an HTTPS .aem.page or .aem.live U
 
 export function siteFromHash(hash) {
   const site = hash.startsWith('#') ? hash.slice(1) : '';
-  return SITE_PATTERN.test(site) ? site : '';
+  return SITE_PATTERN.test(site) ? site.replace(/^\//, '') : '';
 }
 
 function siteParts(site) {

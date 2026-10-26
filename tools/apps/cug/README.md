@@ -12,7 +12,8 @@ https://da.live/app/adobe-rnd/aem-apps/tools/apps/cug/cug?ref=cug#/myOrg/mySite
 
 Use `ref=local` with the local AEM development server to test uncommitted code.
 The URL hash prefills the editable **org/site or AEM URL** field.
-Both `#/org/site` and `#org/site` are accepted. The field accepts either
+Both `#/org/site` and `#org/site` are accepted and prefill the field as
+`org/site`, without a leading slash. Manual input still accepts either
 `/org/site` or `org/site`.
 You can also paste an HTTPS AEM preview or live page URL, such as
 `https://main--site--org.aem.page/path` or
