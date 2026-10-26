@@ -92,10 +92,12 @@
             </tr>
       </template>
       <template id="cug-group-template">
-        <button class="cug-group-chip" type="button">
-          <span></span>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" stroke-linecap="round"/></svg>
-        </button>
+        <span class="cug-group-chip">
+          <button class="cug-group-edit" type="button" aria-label="Edit group"><span></span></button>
+          <button class="cug-group-remove" type="button" aria-label="Remove group">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" stroke-linecap="round"/></svg>
+          </button>
+        </span>
       </template>
 
       <div id="cug-row-menu" class="cug-row-menu" role="menu" aria-label="Insert a rule" hidden>

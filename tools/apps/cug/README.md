@@ -38,13 +38,27 @@ A **Migrate** button appears below the message. The status text, rules table,
 and **Apply** remain hidden until migration succeeds.
 
 **Migrate** copies `/closed-user-groups.json` to `/.da/cug/cug.json`, preserving
-the spreadsheet's data, row order, and metadata without renaming columns.
+row order, additional columns other than `cug-login-path`, and spreadsheet
+metadata while translating the legacy columns:
+
+| Legacy column | App column |
+| --- | --- |
+| `url` | `Path` |
+| `cug-required` | `Authentication` |
+| `cug-groups` | `Groups` |
+
+The `cug-login-path` column is omitted from the destination; it is not migrated.
+Rows left with neither Authentication nor Groups, including login-only legacy
+rows, fail validation before writing.
+Legacy authentication values are normalized to `"true"`, `"false"`, or `""`.
+Rows already using the app's columns are retained. Conflicting legacy/app column
+pairs, malformed rows, and invalid paths are rejected before a destination is
+written.
 The original spreadsheet is left untouched. The app checks the destination
 again before copying and refuses to overwrite an existing spreadsheet.
 After copying, it uses the normal loading logic to display the table.
-The copied sheet must have the app's `Path`, `Authentication`, and `Groups`
-columns. If copying succeeds but loading fails, the app reports both outcomes
-and offers **Load** to retry without copying again.
+If copying succeeds but loading fails, the app reports both outcomes and offers
+**Load** to retry without copying again.
 Migration does not preview, publish, or apply headers. **Apply** is enabled
 immediately after migration, even without edits, so you can apply the migrated
 rules. Controls are locked while copying, and failures are displayed.
@@ -80,14 +94,22 @@ Browsers supporting customizable selects also show a styled option menu; other
 browsers retain their native menu. High-contrast mode uses the native control.
 In **Groups**, click **+** to open a field for one group. Press **Enter** or
 leave the field to add it as a chip; **Escape** cancels. Empty entries are
-discarded and commas are rejected. Click a chip's **x** to remove it.
+discarded and commas are rejected. Click a group name to edit it inline.
+**Enter** or leaving the field commits the edit; **Escape** or an empty edit
+restores the original name. Commas are rejected while editing as well.
+Only clicking a chip's **x** removes it; clicking the chip background leaves it
+unchanged. Both the group name and **x** are keyboard-accessible buttons with
+group-specific labels.
 Group changes are also saved by **Apply**.
 
 **Apply** saves the current browser table to the loaded site's source sheet.
-Before saving or applying headers, the app checks that every nonempty rule has
-a Path starting with `/` (surrounding whitespace is ignored). A row with
-authentication or groups also requires a Path; completely blank rows are allowed.
-Invalid paths display a bulleted list below **Could not save rules:** with one
+Before saving or applying headers, the app checks that every submitted rule has
+a Path starting with `/` (surrounding whitespace is ignored), and either an
+Authentication value or at least one nonempty group. **Not required** (`false`)
+counts as an Authentication value. Rows with both Authentication and Groups
+empty fail validation, including completely blank submitted rows. The untouched
+trailing entry row is excluded from saving and validation.
+Invalid rules display a bulleted list below **Could not save rules:** with one
 error for every malformed row, in table order, without changing the source sheet
 or live headers. Table edits remain available for correction and retry.
 After a successful save, it generates CUG headers from the saved spreadsheet
@@ -97,7 +119,7 @@ to the header scope, `Authentication` to `x-aem-cug-required`, and `Groups` to
 generates `x-aem-cug-required: false`; the blank option omits that header without changing
 any groups configured for the row.
 Unrelated headers are preserved; old CUG headers (including
-login-path headers) are replaced. Empty CUG rules remove previous restrictions.
+login-path headers) are replaced. Deleting all rules removes previous restrictions.
 The merged headers are applied directly to the site's Config Service.
 **Apply** is disabled (light blue) while the table matches its last loaded
 or saved state, unless header application is pending after migration or a failed
@@ -113,6 +135,13 @@ preserved. Saving failures leave table edits intact for retry. Saving does not
 preview or publish the sheet.
 If the sheet saves but header application fails, the app reports the partial
 success and keeps **Apply** enabled for retry, even without further edits.
+Loading a different org/site while its headers are pending asks for confirmation.
+**Cancel** restores the current site input and leaves its rules, error message,
+and retry action intact; **OK** proceeds to load the requested site. Equivalent
+org/site inputs and AEM URLs for the same site do not prompt and retain the retry
+action. This also applies to migrated rules that have not yet been applied.
+The warning does not add persistent or per-site retry tracking; resolve pending
+updates before switching when possible.
 If the source sheet does not exist (HTTP 404), **Apply** creates it.
 
 The table grows naturally up to 60% of the viewport height, then scrolls

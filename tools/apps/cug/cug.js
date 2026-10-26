@@ -18,7 +18,8 @@
 // eslint-disable-next-line import/no-unresolved
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import {
-  assertSiteExists, fetchCugState, generateCugHeaders, migrateCugSheet, saveCugRows, siteFromHash,
+  assertSiteExists, fetchCugState, generateCugHeaders, migrateCugSheet, saveCugRows,
+  siteFromHash, siteKey,
 } from './data.js';
 
 const siteInput = document.querySelector('#cug-site');
@@ -32,7 +33,7 @@ const migrateButton = document.querySelector('#cug-migrate');
 const table = document.querySelector('.cug-rules');
 const tbody = table.querySelector('tbody');
 const rowTemplate = document.querySelector('#cug-row-template').content.querySelector('tr');
-const groupTemplate = document.querySelector('#cug-group-template').content.querySelector('button');
+const groupTemplate = document.querySelector('#cug-group-template').content.querySelector('.cug-group-chip');
 const rowMenu = document.querySelector('#cug-row-menu');
 const siteSections = [
   table.closest('.cug-table-scroll'),
@@ -48,15 +49,22 @@ function tableRows() {
   return [...tbody.rows].filter((row) => !row.hasAttribute('data-entry-row')).map((row) => ({
     path: row.querySelector('input').value,
     authentication: row.querySelector('.cug-auth-select').value,
-    groups: [...row.querySelectorAll('.cug-group-chip span')].map((group) => group.textContent),
+    groups: [...row.querySelectorAll('.cug-group-chip')].map((chip) => (
+      chip.querySelector('.cug-group-input')?.value.trim() || chip.querySelector('span').textContent
+    )),
   }));
+}
+
+function hasPendingHeaders() {
+  return loadedSite !== null && pendingHeadersSite !== null
+    && siteKey(pendingHeadersSite) === siteKey(loadedSite);
 }
 
 function updateActionButtons() {
   const unavailable = table.getAttribute('aria-busy') === 'true'
     || loadedSite === null || siteInput.value.trim() !== loadedSite;
   applyButton.disabled = unavailable
-    || (JSON.stringify(tableRows()) === savedRows && pendingHeadersSite !== loadedSite);
+    || (JSON.stringify(tableRows()) === savedRows && !hasPendingHeaders());
 }
 
 function updateRowLabels() {
@@ -76,9 +84,15 @@ function updateRowLabels() {
     row.querySelector('.cug-groups').setAttribute('aria-label', `Groups for rule ${rule}`);
     row.querySelector('.cug-group-add').setAttribute('aria-label', `Add group to rule ${rule}`);
     row.querySelectorAll('.cug-group-chip').forEach((chip) => {
-      chip.setAttribute('aria-label', `Remove ${chip.querySelector('span').textContent} group from rule ${rule}`);
+      const group = chip.querySelector('span').textContent;
+      chip.querySelector('.cug-group-edit').setAttribute('aria-label', `Edit ${group} group in rule ${rule}`);
+      chip.querySelector('.cug-group-remove').setAttribute('aria-label', `Remove ${group} group from rule ${rule}`);
     });
-    row.querySelector('.cug-group-input')?.setAttribute('aria-label', `Add group to rule ${rule}`);
+    const groupInput = row.querySelector('.cug-group-input');
+    if (groupInput) {
+      groupInput.setAttribute('aria-label', groupInput.closest('.cug-group-chip')
+        ? `Edit group in rule ${rule}` : `Add group to rule ${rule}`);
+    }
   });
   updateActionButtons();
 }
@@ -294,7 +308,11 @@ function commitGroup(input) {
     return false;
   }
   input.onblur = null;
-  if (group) {
+  const chip = input.closest('.cug-group-chip');
+  if (chip) {
+    if (group) chip.querySelector('span').textContent = group;
+    chip.querySelector('.cug-group-edit').hidden = false;
+  } else if (group) {
     input.before(createGroupChip(group));
   }
   input.remove();
@@ -303,17 +321,23 @@ function commitGroup(input) {
 }
 
 tbody.addEventListener('click', (event) => {
-  const button = event.target.closest('.cug-group-add, .cug-group-chip');
+  const button = event.target.closest('.cug-group-add, .cug-group-edit, .cug-group-remove');
   if (!button || table.getAttribute('aria-busy') === 'true') return;
   const list = button.closest('.cug-groups');
-  if (button.classList.contains('cug-group-chip')) {
-    button.remove();
+  const existing = list.querySelector('.cug-group-input');
+  if (button.classList.contains('cug-group-remove')) {
+    const chip = button.closest('.cug-group-chip');
+    if (existing && !chip.contains(existing) && !commitGroup(existing)) {
+      existing.focus();
+      return;
+    }
+    if (existing) existing.onblur = null;
+    chip.remove();
     updateActionButtons();
     list.querySelector('.cug-group-add').focus();
     return;
   }
-  const existing = list.querySelector('.cug-group-input');
-  if (existing) {
+  if (existing && (!existing.closest('.cug-group-chip') || !commitGroup(existing))) {
     existing.focus();
     return;
   }
@@ -321,6 +345,11 @@ tbody.addEventListener('click', (event) => {
   input.type = 'text';
   input.className = 'cug-group-input';
   input.placeholder = 'Enter group';
+  const chip = button.closest('.cug-group-chip');
+  if (chip) {
+    input.value = chip.querySelector('span').textContent;
+    button.hidden = true;
+  }
   input.setAttribute('aria-label', button.getAttribute('aria-label'));
   input.autocomplete = 'off';
   input.spellcheck = false;
@@ -333,19 +362,29 @@ tbody.addEventListener('click', (event) => {
       keyEvent.preventDefault();
       input.onblur = null;
       input.remove();
+      button.hidden = false;
+      updateActionButtons();
       button.focus();
     }
   });
-  input.onblur = () => {
-    if (input.isConnected) commitGroup(input);
+  input.onblur = (blurEvent) => {
+    // Let action clicks commit edits without moving their targets before mouseup.
+    const groupAction = blurEvent.relatedTarget?.closest('.cug-group-add, .cug-group-edit, .cug-group-remove');
+    const handlesInput = groupAction?.closest('.cug-groups') === list;
+    if (input.isConnected && blurEvent.relatedTarget !== applyButton && !handlesInput) {
+      commitGroup(input);
+    }
   };
   button.before(input);
   input.focus();
+  input.select();
 });
 
 tbody.addEventListener('input', (event) => {
   if (event.target === event.target.closest('tr')?.cells[1].querySelector('input')) {
     ensureEntryRow();
+  } else if (event.target.matches('.cug-group-input')) {
+    updateActionButtons();
   }
 });
 
@@ -356,15 +395,25 @@ function renderRows(rows) {
 
 async function loadRules(migrate = false) {
   if (getButton.disabled || (migrate && legacyNotice.hidden)) return;
-  legacyNotice.hidden = true;
-  loadedSite = null;
-  setBusy(true);
-  siteSections.forEach((section) => { section.hidden = true; });
-  status.hidden = false;
-  status.textContent = migrate ? 'Copying spreadsheet...' : 'Loading rules...';
-  status.removeAttribute('data-error');
   let sheetCopied = false;
   try {
+    if (hasPendingHeaders() && siteKey(siteInput.value) !== siteKey(loadedSite)) {
+      // eslint-disable-next-line no-alert
+      const leave = window.confirm(`Rules for ${siteKey(loadedSite)} were saved, but their headers have not been applied. Leave this site anyway?`);
+      if (!leave) {
+        siteInput.value = loadedSite;
+        updateActionButtons();
+        siteInput.focus();
+        return;
+      }
+    }
+    legacyNotice.hidden = true;
+    loadedSite = null;
+    setBusy(true);
+    siteSections.forEach((section) => { section.hidden = true; });
+    status.hidden = false;
+    status.textContent = migrate ? 'Copying spreadsheet...' : 'Loading rules...';
+    status.removeAttribute('data-error');
     await assertSiteExists(siteInput.value, daFetch);
     if (migrate) {
       await migrateCugSheet(siteInput.value, daFetch);
@@ -386,7 +435,10 @@ async function loadRules(migrate = false) {
       ? `Loaded ${rows.length} rule${rows.length === 1 ? '' : 's'}.`
       : 'No rules found. Add a rule in the empty row below.';
   } catch (error) {
+    loadedSite = null;
+    siteSections.forEach((section) => { section.hidden = true; });
     tbody.replaceChildren();
+    status.hidden = false;
     status.dataset.error = 'true';
     status.textContent = sheetCopied
       ? `Spreadsheet copied, but rules could not be loaded: ${error.message} Click Load to retry.`

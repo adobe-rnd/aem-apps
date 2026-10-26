@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   assertSiteExists, fetchCugState, generateCugHeaders,
-  migrateCugSheet, saveCugRows, siteFromHash,
+  migrateCugSheet, saveCugRows, siteFromHash, siteKey,
 } from '../../../../tools/apps/cug/data.js';
 
 describe('assertSiteExists', () => {
@@ -76,6 +76,22 @@ describe('CUG org/site initialization', () => {
   });
 });
 
+describe('CUG site identity', () => {
+  it('uses the same key for equivalent org/site inputs and AEM URLs', () => {
+    [
+      'org/site', '/org/site', ' /org/site/ ',
+      'https://main--site--org.aem.page/path',
+      'https://branch--site--org.aem.live/other?query=value#section',
+    ].forEach((site) => assert.equal(siteKey(site), 'org/site'));
+    assert.notEqual(siteKey('org/other'), siteKey('org/site'));
+    assert.notEqual(siteKey('other/site'), siteKey('org/site'));
+  });
+
+  it('reports invalid site inputs', () => {
+    assert.throws(() => siteKey('invalid'), /Enter an org\/site/);
+  });
+});
+
 describe('CUG org/site field formats', () => {
   [
     '/org/site',
@@ -131,16 +147,39 @@ describe('CUG org/site field formats', () => {
 });
 
 describe('saveCugRows', () => {
+  it('rejects every row with empty authentication and groups before any request', async () => {
+    const rows = [
+      { path: '/empty/**', authentication: '', groups: [] },
+      { path: '/public/**', authentication: 'false', groups: [] },
+      { path: '/whitespace/**', authentication: '', groups: [' ', ''] },
+    ];
+    const messages = [1, 3].map((index) => (
+      `Invalid rule in row ${index}. Set Authentication or add at least one group.`
+    ));
+    const checkErrors = (error) => {
+      assert.ok(error instanceof AggregateError);
+      assert.deepEqual(error.errors.map((detail) => detail.message), messages);
+      return true;
+    };
+    const request = () => assert.fail('Empty rules must not trigger requests');
+    await assert.rejects(saveCugRows('org/site', rows, request), checkErrors);
+    await assert.rejects(generateCugHeaders('org/site', {
+      data: rows.map(({ path, authentication, groups }) => ({
+        Path: path, Authentication: authentication, Groups: groups.join(','),
+      })),
+    }, request), checkErrors);
+  });
+
   it('reports every malformed row in source order before any save or config request', async () => {
     const rows = [
       { path: 'members/**', authentication: 'true', groups: [] },
       { path: '/valid/**', authentication: 'true', groups: [] },
       { path: '', authentication: 'false', groups: [] },
-      { path: '', authentication: '', groups: [] },
+      { path: '/public/**', authentication: 'false', groups: [] },
       { path: 'partners/**', authentication: '', groups: ['gold'] },
     ];
     const messages = [1, 3, 5].map((index) => (
-      `Invalid Path in row ${index}. Enter a path starting with /, or leave the entire row empty.`
+      `Invalid Path in row ${index}. Enter a path starting with /.`
     ));
     const checkErrors = (error) => {
       assert.ok(error instanceof AggregateError);
@@ -169,21 +208,31 @@ describe('saveCugRows', () => {
     )));
   });
 
-  it('requires a path for authentication or groups but allows completely blank rows', async () => {
-    await Promise.all(['', '   '].flatMap((path) => [
+  it('always rejects empty paths regardless of authentication or groups', async () => {
+    await Promise.all(['', ' \t ', undefined, null].flatMap((path) => [
       { path, authentication: 'true', groups: [] },
       { path, authentication: 'false', groups: [] },
+      { path, authentication: true, groups: [] },
+      { path, authentication: false, groups: [] },
       { path, authentication: '', groups: ['gold'] },
-    ]).map((row) => (
-      assert.rejects(
-        saveCugRows(
-          'org/site',
-          [row],
-          () => assert.fail('Incomplete rules must not trigger requests'),
-        ),
+      { path, authentication: '', groups: [] },
+    ]).map(async (row) => {
+      const request = () => assert.fail('Empty paths must not trigger requests');
+      await assert.rejects(
+        saveCugRows('org/site', [row], request),
         /Invalid Path in row 1.*starting with \//,
-      )
-    )));
+      );
+      await assert.rejects(
+        generateCugHeaders('org/site', {
+          data: [{
+            Path: row.path,
+            Authentication: row.authentication,
+            Groups: row.groups.join(','),
+          }],
+        }, request),
+        /Invalid Path in row 1.*starting with \//,
+      );
+    }));
   });
 
   it('rejects invalid saved paths before reading or replacing live headers', async () => {
@@ -200,11 +249,10 @@ describe('saveCugRows', () => {
     )));
   });
 
-  it('allows blank rows and trims valid paths when applying headers', async () => {
+  it('trims valid paths when applying headers', async () => {
     await generateCugHeaders('org/site', {
       data: [
         { Path: ' /members/** ', Authentication: 'true', Groups: '' },
-        { Path: '   ', Authentication: '', Groups: '' },
       ],
     }, async (url, options) => {
       if (options.method === 'POST') {
@@ -224,7 +272,6 @@ describe('saveCugRows', () => {
       data: [
         { Path: '/members/**', Authentication: 'true', Groups: '' },
         { Path: '/public/**', Authentication: 'false', Groups: '' },
-        { Path: '/unset/**', Authentication: '', Groups: '' },
         { Path: '/partners/**', Authentication: '', Groups: 'gold,silver' },
       ],
     }, async (url, options) => {
@@ -256,7 +303,6 @@ describe('saveCugRows', () => {
     await saveCugRows('/org/site', [
       { path: '/changed/**', authentication: true, groups: ['gold', 'silver'] },
       { path: '/other/**', authentication: false, groups: ['bronze'] },
-      { path: '', authentication: '', groups: [] },
     ], async (url, options) => {
       assert.equal(url, 'https://admin.da.live/source/org/site/.da/cug/cug.json');
       if (options.method === 'PUT') {
@@ -269,12 +315,11 @@ describe('saveCugRows', () => {
     });
     assert.deepEqual(saved, {
       ...source,
-      total: 3,
-      limit: 3,
+      total: 2,
+      limit: 2,
       data: [
         { Path: '/changed/**', Authentication: 'true', Groups: 'gold,silver' },
         { Path: '/other/**', Authentication: 'false', Groups: 'bronze' },
-        { Path: '', Authentication: '', Groups: '' },
       ],
     });
   });
@@ -361,7 +406,157 @@ describe('migrateCugSheet', () => {
   const legacyUrl = 'https://admin.da.live/source/org/site/closed-user-groups.json';
   const missing = { ok: false, status: 404 };
 
-  it('copies all spreadsheet data and metadata unchanged and loads through the existing parser', async () => {
+  it('translates legacy columns and preserves rules through loading, editing, saving, and applying', async () => {
+    const legacy = {
+      total: 3,
+      limit: 3,
+      offset: 0,
+      ':sheetname': 'data',
+      ':type': 'sheet',
+      ':colWidths': [200, 100, 150, 200],
+      data: [
+        {
+          url: '/partners/**',
+          'cug-required': ' TRUE ',
+          'cug-groups': 'gold, silver',
+          'cug-login-path': 'https://idp.example.com/login',
+          Extra: 'preserved',
+        },
+        { url: '/public/**', 'cug-required': false },
+        { url: '/groups/**', 'cug-groups': 'gold' },
+      ],
+    };
+    const original = JSON.stringify(legacy);
+    let destination = null;
+    let posted;
+    const request = async (url, options = {}) => {
+      if (url === currentUrl) {
+        if (options.method === 'PUT') {
+          destination = JSON.parse(await options.body.get('data').text());
+          return { ok: true };
+        }
+        return destination === null ? missing : { ok: true, json: async () => destination };
+      }
+      if (url === legacyUrl) {
+        assert.equal(options.method, undefined);
+        return { ok: true, json: async () => legacy };
+      }
+      if (url === 'https://admin.hlx.page/config/org/aggregated/site.json') {
+        return { ok: true, json: async () => ({ headers: {} }) };
+      }
+      assert.equal(url, 'https://admin.hlx.page/config/org/sites/site/headers.json');
+      assert.equal(options.method, 'POST');
+      posted = JSON.parse(options.body);
+      return { ok: true };
+    };
+    await migrateCugSheet('org/site', request);
+    assert.deepEqual(Object.keys(destination.data[0]), [
+      'Path', 'Authentication', 'Groups', 'Extra',
+    ]);
+    assert.deepEqual(destination, {
+      ...legacy,
+      data: [
+        {
+          Path: '/partners/**',
+          Authentication: 'true',
+          Groups: 'gold, silver',
+          Extra: 'preserved',
+        },
+        { Path: '/public/**', Authentication: 'false', Groups: '' },
+        { Path: '/groups/**', Authentication: '', Groups: 'gold' },
+      ],
+    });
+    assert.equal(JSON.stringify(legacy), original);
+    const { rows } = await fetchCugState('org/site', request);
+    assert.deepEqual(rows, [
+      {
+        path: '/partners/**',
+        authentication: 'true',
+        groups: ['gold', 'silver'],
+      },
+      { path: '/public/**', authentication: 'false', groups: [] },
+      { path: '/groups/**', authentication: '', groups: ['gold'] },
+    ]);
+    rows[0].path = '/renamed/**';
+    const saved = await saveCugRows('org/site', [rows[1], rows[0], ...rows.slice(2)], request);
+    assert.equal(Object.hasOwn(saved.data[1], 'Login Path'), false);
+    assert.equal(Object.hasOwn(saved.data[1], 'cug-login-path'), false);
+    await generateCugHeaders('org/site', saved, request);
+    assert.deepEqual(posted, {
+      '/public/**': [{ key: 'x-aem-cug-required', value: 'false' }],
+      '/renamed/**': [
+        { key: 'x-aem-cug-required', value: 'true' },
+        { key: 'x-aem-cug-groups', value: 'gold,silver' },
+      ],
+      '/groups/**': [{ key: 'x-aem-cug-groups', value: 'gold' }],
+    });
+  });
+
+  it('rejects malformed legacy rules before writing a destination', async () => {
+    await Promise.all([
+      { data: [null] },
+      { data: [{ url: 'members/**', 'cug-required': 'true' }] },
+      { data: [{ url: '', 'cug-required': 'true' }] },
+      { data: [{ url: ' \t ', 'cug-required': false }] },
+      { data: [{ 'cug-groups': 'gold' }] },
+      { data: [{ url: '/members/**', 'cug-required': 'yes' }] },
+      { data: [{ url: '/members/**', 'cug-groups': 42 }] },
+      { data: [{ url: '/members/**', 'cug-required': '', 'cug-groups': '' }] },
+      { data: [{ url: '/members/**', 'cug-login-path': '/login' }] },
+      { data: [{}] },
+      { data: [{ url: '/members/**', Path: '/different/**' }] },
+      { data: [{ Unknown: 'not a rule' }] },
+    ].map((legacy) => (
+      assert.rejects(migrateCugSheet('org/site', async (url, options) => {
+        assert.notEqual(options.method, 'PUT');
+        return url === currentUrl ? missing : { ok: true, json: async () => legacy };
+      }), /row 1/)
+    )));
+  });
+
+  it('omits legacy login paths, including sheets using app columns', async () => {
+    const legacy = {
+      data: [
+        { url: '/members/**', 'cug-required': true, 'cug-login-path': 42 },
+        { Path: '/public/**', Authentication: 'false', 'cug-login-path': '/other-login' },
+      ],
+    };
+    const original = JSON.stringify(legacy);
+    await migrateCugSheet('org/site', async (url, options) => {
+      if (options.method === 'PUT') {
+        const saved = JSON.parse(await options.body.get('data').text());
+        assert.deepEqual(saved.data, [
+          { Path: '/members/**', Authentication: 'true', Groups: '' },
+          { Path: '/public/**', Authentication: 'false' },
+        ]);
+        return { ok: true };
+      }
+      return url === currentUrl ? missing : { ok: true, json: async () => legacy };
+    });
+    assert.equal(JSON.stringify(legacy), original);
+  });
+
+  it('preserves duplicate paths while normalizing legacy authentication', async () => {
+    const legacy = {
+      data: [
+        { url: '/members/**', 'cug-required': true },
+        { url: '/members/**', 'cug-required': ' FALSE ' },
+      ],
+    };
+    await migrateCugSheet('org/site', async (url, options) => {
+      if (options.method === 'PUT') {
+        const saved = JSON.parse(await options.body.get('data').text());
+        assert.deepEqual(saved.data, [
+          { Path: '/members/**', Authentication: 'true', Groups: '' },
+          { Path: '/members/**', Authentication: 'false', Groups: '' },
+        ]);
+        return { ok: true };
+      }
+      return url === currentUrl ? missing : { ok: true, json: async () => legacy };
+    });
+  });
+
+  it('retains spreadsheets already using app columns and loads through the existing parser', async () => {
     const legacy = {
       total: 3,
       limit: 3,
@@ -374,7 +569,7 @@ describe('migrateCugSheet', () => {
           Path: '/members/**', Authentication: true, Groups: '', Extra: 'preserved',
         },
         { Path: '/partners/**', Authentication: false, Groups: 'gold, silver' },
-        { Path: '/public/**', Authentication: '', Groups: '' },
+        { Path: '/public/**', Authentication: 'false', Groups: '' },
       ],
     };
     const original = JSON.stringify(legacy);
@@ -407,7 +602,7 @@ describe('migrateCugSheet', () => {
     assert.deepEqual((await fetchCugState('/org/site', request)).rows, [
       { path: '/members/**', authentication: 'true', groups: [] },
       { path: '/partners/**', authentication: 'false', groups: ['gold', 'silver'] },
-      { path: '/public/**', authentication: '', groups: [] },
+      { path: '/public/**', authentication: 'false', groups: [] },
     ]);
   });
 

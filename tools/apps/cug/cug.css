@@ -335,14 +335,39 @@ body.cug {
   align-items: center;
   gap: 6px;
   min-height: 32px;
-  padding: 4px 8px 4px 12px;
+  padding: 3px 4px 3px 12px;
   border: 1px solid var(--s2-gray-300, #c6c6c6);
   border-radius: 16px;
   background: var(--s2-gray-75, #f8f8f8);
   color: inherit;
 }
 
-.cug .cug-group-chip:hover {
+.cug .cug-group-edit {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+}
+
+.cug .cug-group-edit:hover {
+  text-decoration: underline;
+}
+
+.cug .cug-group-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+}
+
+.cug .cug-group-remove:hover {
   background: var(--s2-gray-100, #f0f0f0);
 }
 
