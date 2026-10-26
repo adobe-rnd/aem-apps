@@ -1,3 +1,4 @@
+/* global AggregateError */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -130,6 +131,93 @@ describe('CUG org/site field formats', () => {
 });
 
 describe('saveCugRows', () => {
+  it('reports every malformed row in source order before any save or config request', async () => {
+    const rows = [
+      { path: 'members/**', authentication: 'true', groups: [] },
+      { path: '/valid/**', authentication: 'true', groups: [] },
+      { path: '', authentication: 'false', groups: [] },
+      { path: '', authentication: '', groups: [] },
+      { path: 'partners/**', authentication: '', groups: ['gold'] },
+    ];
+    const messages = [1, 3, 5].map((index) => (
+      `Invalid Path in row ${index}. Enter a path starting with /, or leave the entire row empty.`
+    ));
+    const checkErrors = (error) => {
+      assert.ok(error instanceof AggregateError);
+      assert.equal(error.message, messages.join(' '));
+      assert.deepEqual(error.errors.map((detail) => detail.message), messages);
+      return true;
+    };
+    const request = () => assert.fail('Invalid rules must not trigger requests');
+    await assert.rejects(saveCugRows('org/site', rows, request), checkErrors);
+    await assert.rejects(generateCugHeaders('org/site', {
+      data: rows.map(({ path, authentication, groups }) => ({
+        Path: path, Authentication: authentication, Groups: groups.join(','),
+      })),
+    }, request), checkErrors);
+  });
+
+  it('rejects malformed paths before saving or making any request', async () => {
+    await Promise.all(['members/**', ' members/** ', 'https://example.com/members'].map((path) => (
+      assert.rejects(
+        saveCugRows('org/site', [
+          { path: '/valid/**', authentication: 'true', groups: [] },
+          { path, authentication: 'true', groups: [] },
+        ], () => assert.fail('Invalid paths must not trigger requests')),
+        /Invalid Path in row 2.*starting with \//,
+      )
+    )));
+  });
+
+  it('requires a path for authentication or groups but allows completely blank rows', async () => {
+    await Promise.all(['', '   '].flatMap((path) => [
+      { path, authentication: 'true', groups: [] },
+      { path, authentication: 'false', groups: [] },
+      { path, authentication: '', groups: ['gold'] },
+    ]).map((row) => (
+      assert.rejects(
+        saveCugRows(
+          'org/site',
+          [row],
+          () => assert.fail('Incomplete rules must not trigger requests'),
+        ),
+        /Invalid Path in row 1.*starting with \//,
+      )
+    )));
+  });
+
+  it('rejects invalid saved paths before reading or replacing live headers', async () => {
+    await Promise.all(['members/**', '', '   '].map((Path) => (
+      assert.rejects(
+        generateCugHeaders('org/site', {
+          data: [
+            { Path: '/valid/**', Authentication: 'true', Groups: '' },
+            { Path, Authentication: 'true', Groups: '' },
+          ],
+        }, () => assert.fail('Invalid rules must not trigger config requests')),
+        /Invalid Path in row 2.*starting with \//,
+      )
+    )));
+  });
+
+  it('allows blank rows and trims valid paths when applying headers', async () => {
+    await generateCugHeaders('org/site', {
+      data: [
+        { Path: ' /members/** ', Authentication: 'true', Groups: '' },
+        { Path: '   ', Authentication: '', Groups: '' },
+      ],
+    }, async (url, options) => {
+      if (options.method === 'POST') {
+        assert.deepEqual(JSON.parse(options.body), {
+          '/members/**': [{ key: 'x-aem-cug-required', value: 'true' }],
+        });
+        return { ok: true };
+      }
+      assert.equal(options.method, undefined);
+      return { ok: true, json: async () => ({ headers: {} }) };
+    });
+  });
+
   it('generates headers from the saved app spreadsheet format for the selected site', async () => {
     let posted;
     await generateCugHeaders('/org/site', {

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+/* global AggregateError */
 import { applyCugHeaders } from '../../plugins/cug/headers.js';
 
 const SITE_PATTERN = /^\/?([a-z0-9-]+)\/([a-z0-9-]+)\/?$/i;
@@ -127,13 +128,30 @@ export async function migrateCugSheet(site, daFetch) {
   return writeSheet(site, sheet, daFetch);
 }
 
+function validateRulePaths(rows) {
+  const errors = [];
+  rows.forEach((row, index) => {
+    const value = row.Path ?? '';
+    const path = typeof value === 'string' ? value.trim() : null;
+    const emptyRow = path === '' && normalizeAuthentication(row.Authentication, index) === ''
+      && !(row.Groups ?? '').trim();
+    if (!path?.startsWith('/') && !emptyRow) {
+      errors.push(new Error(`Invalid Path in row ${index + 1}. Enter a path starting with /, or leave the entire row empty.`));
+    }
+  });
+  if (errors.length) {
+    throw new AggregateError(errors, errors.map((error) => error.message).join(' '));
+  }
+}
+
 export async function saveCugRows(site, rows, daFetch) {
-  const sheet = await fetchSheet(site, daFetch) ?? { ':sheetname': 'data', ':type': 'sheet' };
   const data = rows.map(({ path, authentication, groups }, index) => ({
     Path: path,
     Authentication: normalizeAuthentication(authentication, index),
     Groups: groups.join(','),
   }));
+  validateRulePaths(data);
+  const sheet = await fetchSheet(site, daFetch) ?? { ':sheetname': 'data', ':type': 'sheet' };
   const updated = {
     ...sheet,
     total: data.length,
@@ -146,6 +164,7 @@ export async function saveCugRows(site, rows, daFetch) {
 
 export async function generateCugHeaders(site, sheet, daFetch) {
   const { org, repo } = siteParts(site);
+  validateRulePaths(sheet.data);
   const rows = sheet.data.map((row) => ({
     url: row.Path,
     'cug-required': row.Authentication,

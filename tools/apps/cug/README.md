@@ -84,6 +84,12 @@ discarded and commas are rejected. Click a chip's **x** to remove it.
 Group changes are also saved by **Apply**.
 
 **Apply** saves the current browser table to the loaded site's source sheet.
+Before saving or applying headers, the app checks that every nonempty rule has
+a Path starting with `/` (surrounding whitespace is ignored). A row with
+authentication or groups also requires a Path; completely blank rows are allowed.
+Invalid paths display a bulleted list below **Could not save rules:** with one
+error for every malformed row, in table order, without changing the source sheet
+or live headers. Table edits remain available for correction and retry.
 After a successful save, it generates CUG headers from the saved spreadsheet
 values using the same shared workflow as the Page Access plugin. `Path` maps
 to the header scope, `Authentication` to `x-aem-cug-required`, and `Groups` to

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+/* global AggregateError */
 // eslint-disable-next-line import/no-unresolved
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import {
@@ -430,9 +431,17 @@ applyButton.addEventListener('click', async () => {
     status.textContent = `Saved ${rows.length} rule${rows.length === 1 ? '' : 's'} and applied headers to ${result.cugPaths} path${result.cugPaths === 1 ? '' : 's'}.`;
   } catch (error) {
     status.dataset.error = 'true';
-    status.textContent = sheetSaved
-      ? `Rules were saved, but applying headers failed: ${error.message} Click Apply to retry.`
-      : `Could not save rules: ${error.message}`;
+    const list = document.createElement('ul');
+    const errors = error instanceof AggregateError ? error.errors : [error];
+    errors.forEach((detail) => {
+      const item = document.createElement('li');
+      item.textContent = detail.message;
+      list.append(item);
+    });
+    status.replaceChildren(sheetSaved
+      ? 'Rules were saved, but applying headers failed:'
+      : 'Could not save rules:', list);
+    if (sheetSaved) status.append('Click Apply to retry.');
   } finally {
     setBusy(false);
   }

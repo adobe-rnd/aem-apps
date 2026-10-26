@@ -373,8 +373,18 @@ body.cug {
   cursor: not-allowed;
 }
 
+.cug #cug-status {
+  margin: 1em 0;
+}
+
 .cug #cug-status[data-error] {
   color: var(--s2-red-800, #c9252d);
+}
+
+.cug #cug-status ul {
+  margin: 8px 0;
+  padding-left: 24px;
+  list-style-type: disc;
 }
 
 .cug .cug-sr-only {
