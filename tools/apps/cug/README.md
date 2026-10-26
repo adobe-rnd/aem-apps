@@ -105,6 +105,11 @@ If the sheet saves but header application fails, the app reports the partial
 success and keeps **Apply** enabled for retry, even without further edits.
 If the source sheet does not exist (HTTP 404), **Apply** creates it.
 
+The table grows naturally up to 60% of the viewport height, then scrolls
+vertically. Column headings stay visible while scrolling, and **Apply** stays
+outside the scrolling area below the table. On narrow screens, the table also
+scrolls horizontally.
+
 Drag a row's handle to reorder rules; the insertion line marks the drop position.
 Alternatively, focus the handle and use **Up/Down** arrow keys.
 Click the handle to open **Insert row above / Insert row below**. Choosing an
