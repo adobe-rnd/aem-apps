@@ -252,6 +252,8 @@ body.cug {
 .cug .cug-auth-select {
   min-width: 140px;
   padding-right: 36px;
+  line-height: 20px;
+  text-align: left;
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='m2 4 4 4 4-4' fill='none' stroke='%236e6e6e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -260,9 +262,61 @@ body.cug {
   cursor: pointer;
 }
 
+.cug .cug-auth-select:hover {
+  border-color: var(--s2-gray-500, #8f8f8f);
+  background-color: var(--s2-gray-75, #f8f8f8);
+}
+
+.cug .cug-auth-select:focus-visible {
+  border-color: var(--s2-blue-900, #0265dc);
+}
+
+@supports (appearance: base-select) {
+  .cug .cug-auth-select,
+  .cug .cug-auth-select::picker(select) {
+    appearance: base-select;
+  }
+
+  .cug .cug-auth-select::picker-icon {
+    display: none;
+  }
+
+  .cug .cug-auth-select::picker(select) {
+    margin-block: 4px;
+    padding: 4px;
+    border: 1px solid var(--s2-gray-300, #c6c6c6);
+    border-radius: 8px;
+    background: var(--s2-gray-25, #fff);
+    color: var(--s2-gray-800, #292929);
+    font: inherit;
+    box-shadow: 0 6px 20px rgb(0 0 0 / 14%);
+  }
+
+  .cug .cug-auth-select option {
+    gap: 8px;
+    min-height: 36px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .cug .cug-auth-select option:checked {
+    background: var(--s2-blue-200, #cce4ff);
+  }
+
+  .cug .cug-auth-select option:is(:hover, :focus-visible) {
+    outline: none;
+    background: var(--s2-gray-100, #f0f0f0);
+  }
+}
+
 @media (forced-colors: active) {
-  .cug .cug-auth-select {
+  .cug .cug-auth-select,
+  .cug .cug-auth-select::picker(select) {
     appearance: auto;
+  }
+
+  .cug .cug-auth-select {
     background-image: none;
   }
 }

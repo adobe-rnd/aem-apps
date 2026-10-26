@@ -74,6 +74,9 @@ with three distinct values: **Required** (`true`), **Not required** (`false`),
 and a blank option (empty value). Boolean and text values in the
 spreadsheet are supported. New rows default to the blank option. Changes stay local
 until **Apply** is clicked. Comma-separated groups become individual chips.
+The authentication field uses matching borders, spacing, hover, and focus styles.
+Browsers supporting customizable selects also show a styled option menu; other
+browsers retain their native menu. High-contrast mode uses the native control.
 In **Groups**, click **+** to open a field for one group. Press **Enter** or
 leave the field to add it as a chip; **Escape** cancels. Empty entries are
 discarded and commas are rejected. Click a chip's **x** to remove it.
