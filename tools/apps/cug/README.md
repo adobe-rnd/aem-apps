@@ -7,7 +7,7 @@ in a new tab and is available before loading a site.
 Open the app through DA to use your authenticated session:
 
 ```text
-https://da.live/app/adobe-rnd/aem-apps/tools/apps/cug/cug?ref=cug#/jckautzmann/jck-ew1
+https://da.live/app/adobe-rnd/aem-apps/tools/apps/cug/cug?ref=cug#/myOrg/mySite
 ```
 
 Use `ref=local` with the local AEM development server to test uncommitted code.

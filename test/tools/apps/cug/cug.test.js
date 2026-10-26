@@ -57,11 +57,11 @@ describe('assertSiteExists', () => {
 
 describe('CUG org/site initialization', () => {
   it('prefills the field from the forwarded DA hash, including the leading slash', () => {
-    assert.equal(siteFromHash('#/jckautzmann/jck-ew1'), '/jckautzmann/jck-ew1');
+    assert.equal(siteFromHash('#/myOrg/mySite'), '/myOrg/mySite');
   });
 
   it('also accepts a site hash without a leading slash', () => {
-    assert.equal(siteFromHash('#jckautzmann/jck-ew1'), 'jckautzmann/jck-ew1');
+    assert.equal(siteFromHash('#myOrg/mySite'), 'myOrg/mySite');
   });
 
   it('leaves the field empty when no site hash is supplied', () => {
@@ -120,10 +120,10 @@ describe('CUG org/site field formats', () => {
 
   it('infers hyphenated org/site names from an AEM URL and ignores its path', async () => {
     await assertSiteExists(
-      'https://main--jck-ew1--jckautzmann.aem.live/path',
+      'https://main--my-site--my-org.aem.live/path',
       async (url) => {
-        assert.equal(url, 'https://admin.da.live/list/jckautzmann/');
-        return { ok: true, json: async () => [{ name: 'jck-ew1' }] };
+        assert.equal(url, 'https://admin.da.live/list/my-org/');
+        return { ok: true, json: async () => [{ name: 'my-site' }] };
       },
     );
   });
@@ -494,12 +494,12 @@ describe('fetchCugRows', () => {
   it('fetches DA source and maps all actual spreadsheet rows in order', async () => {
     let requestedUrl;
     let requestedOptions;
-    const rows = await fetchCugRows('/jckautzmann/jck-ew1', async (url, options) => {
+    const rows = await fetchCugRows('/myOrg/mySite', async (url, options) => {
       requestedUrl = url;
       requestedOptions = options;
       return { ok: true, json: async () => ({ data: sourceRows }) };
     });
-    assert.equal(requestedUrl, 'https://admin.da.live/source/jckautzmann/jck-ew1/.da/cug/cug.json');
+    assert.equal(requestedUrl, 'https://admin.da.live/source/myOrg/mySite/.da/cug/cug.json');
     assert.deepEqual(requestedOptions, { cache: 'no-store' });
     assert.deepEqual(rows, [
       { path: '/members/**', authentication: 'true', groups: [] },
