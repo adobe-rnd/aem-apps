@@ -84,7 +84,8 @@ export default function createLocalization({ org, providers, services = {} } = {
   async function translationSupported(location, status) {
     const supports = services.translationConnectors?.supports;
     const sourceLanguage = status?.effectiveSource?.location?.language;
-    if (!supports || !sourceLanguage || !location.actions.includes('translate')) return true;
+    if (!sourceLanguage || !location.actions.includes('translate')) return true;
+    if (!supports) return false;
     return supports(sourceLanguage, location.language);
   }
 

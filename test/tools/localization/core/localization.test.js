@@ -192,6 +192,13 @@ describe('page: actions', () => {
     assert.deepEqual(translate.reasons, ['connector-unsupported']);
   });
 
+  it('disables translate when no connector service is configured', async () => {
+    const f = fakes({ pages: { 'global:/en/x': file('a', '1'), 'global:/uk/x': file('b', '7') } });
+    const result = await createLocalization({ org: 'acme', providers: f.providers }).page('global', '/uk/x');
+    const translate = result.actions.find((a) => a.action === 'translate');
+    assert.deepEqual(translate.reasons, ['connector-unsupported']);
+  });
+
   it('does not ask the connector when translate is not allowed', async () => {
     const f = fakes({ pages: { 'global:/en/p': file('a', '1') } });
     await create(f).page('brand-c', '/x/p');
