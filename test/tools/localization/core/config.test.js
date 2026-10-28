@@ -54,6 +54,7 @@ describe('parseConfig: locations', () => {
       onComplete: null,
       scope: 'org',
       valid: true,
+      resolved: true,
     });
     assert.deepEqual(model.issues, []);
     assert.equal(model.incomplete, false);
@@ -183,9 +184,12 @@ describe('parseConfig: language and label', () => {
 
 describe('parseConfig: source', () => {
   const withSource = (source, extra = {}) => parseConfig({
-    org: [row({
-      site: 'global', path: '/uk', language: 'en-GB', source, ...extra,
-    })],
+    org: [
+      row({ site: 'global', path: '/en', language: 'en-US' }),
+      row({
+        site: 'global', path: '/uk', language: 'en-GB', source, ...extra,
+      }),
+    ],
     sites: {},
   });
 
@@ -227,9 +231,12 @@ describe('parseConfig: source', () => {
 
 describe('parseConfig: relationship settings', () => {
   const settings = (extra) => parseConfig({
-    org: [row({
-      site: 'global', path: '/uk', language: 'en-GB', source: '/en', ...extra,
-    })],
+    org: [
+      row({ site: 'global', path: '/en', language: 'en-US' }),
+      row({
+        site: 'global', path: '/uk', language: 'en-GB', source: '/en', ...extra,
+      }),
+    ],
     sites: {},
   });
 
