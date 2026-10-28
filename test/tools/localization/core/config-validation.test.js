@@ -205,4 +205,12 @@ describe('validation: invalid ancestors', () => {
     assert.equal(ie.ancestor, 'global:/en');
     assert.equal(model.locations.get('global:/ie').valid, false);
   });
+
+  it('also reports invalid-ancestor on descendants with their own errors', () => {
+    const model = org(
+      loc('global', '/en', 'nope'),
+      loc('global', '/uk', 'en-GB', '/en', 'bogus'),
+    );
+    assert.deepEqual(codesFor(model, 'global:/uk'), ['invalid-actions', 'invalid-ancestor']);
+  });
 });

@@ -268,15 +268,17 @@ function validateGraph(locations, { incomplete, issue }) {
     }
   });
 
-  return { unresolved };
+  return { unresolved, inCycle };
 }
 
-function propagate(locations, { issues, unresolved, issue }) {
+function propagate(locations, {
+  issues, unresolved, inCycle, issue,
+}) {
   const ownInvalid = new Set(issues.filter((i) => i.level === 'error' && i.id).map((i) => i.id));
 
   locations.forEach((location) => {
     const ancestors = ancestorsOf(locations, location);
-    if (!ownInvalid.has(location.id)) {
+    if (!inCycle.has(location.id)) {
       const bad = ancestors.find((a) => ownInvalid.has(a.id));
       if (bad) {
         issue({
@@ -335,8 +337,10 @@ export function parseConfig({ org, sites = {} } = {}) {
   Object.entries(sites).forEach(([site, rows]) => addScope(rows, 'site', site.toLowerCase()));
 
   const incomplete = org === null;
-  const { unresolved } = validateGraph(locations, { incomplete, issue });
-  propagate(locations, { issues, unresolved, issue });
+  const { unresolved, inCycle } = validateGraph(locations, { incomplete, issue });
+  propagate(locations, {
+    issues, unresolved, inCycle, issue,
+  });
 
   const invalid = new Set(issues.filter((i) => i.level === 'error' && i.id).map((i) => i.id));
   invalid.forEach((id) => {
