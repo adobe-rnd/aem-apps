@@ -45,7 +45,7 @@ export function availableActions({ status, location, translationSupported = true
   const result = [];
 
   if (REFRESHABLE.includes(relationship)) {
-    const offered = ['rollout', 'translate'].filter((a) => location.actions.includes(a));
+    const offered = ['rollout', 'translate'].filter((action) => location.actions.includes(action));
     const preferred = offered.length === 1 || !sourceLanguage
       ? offered[0]
       : defaultRefreshAction(sourceLanguage, location.language);

@@ -29,9 +29,10 @@ const JOB_SYNC = { translating: 'translating', ready: 'ready to save' };
 const exists = (entry) => Boolean(entry?.info?.exists);
 
 function findEffectiveSource(chain) {
-  for (let i = 1; i < chain.length; i += 1) {
-    if (exists(chain[i])) return chain[i];
-    if (chain[i].ref.location.missingPages !== 'linked') return null;
+  for (let position = 1; position < chain.length; position += 1) {
+    const entry = chain[position];
+    if (exists(entry)) return entry;
+    if (entry.ref.location.missingPages !== 'linked') return null;
   }
   return null;
 }

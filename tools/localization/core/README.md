@@ -132,9 +132,9 @@ Per-page info comes from providers:
 
 ```js
 import { createLocalization } from './core/index.js';
-const loc = createLocalization({ org, providers, services });
-await loc.page(site, path) // { location, chain: [{ ref, info }], status, actions }
-loc.refresh()              // clear all caches
+const localization = createLocalization({ org, providers, services });
+await localization.page(site, path) // { location, chain: [{ ref, info }], status, actions }
+localization.refresh()              // clear all caches
 ```
 
 `page()`:

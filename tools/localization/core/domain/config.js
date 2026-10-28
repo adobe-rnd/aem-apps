@@ -34,7 +34,7 @@ const DEFAULTS = {
 const RELATIONSHIP_FIELDS = ['actions', 'missingPages', 'conflictBehavior', 'onComplete'];
 
 const FIELDS = ['path', 'language', 'label', 'source', ...RELATIONSHIP_FIELDS];
-const HEADER_MAP = Object.fromEntries(FIELDS.map((f) => [f.toLowerCase(), f]));
+const HEADER_MAP = Object.fromEntries(FIELDS.map((field) => [field.toLowerCase(), field]));
 
 const SITE_PATTERN = /^[a-z0-9-]+$/;
 
@@ -55,7 +55,7 @@ export function normalizePath(raw) {
   const stripped = value.replace(/\/+$/, '');
   if (!stripped) return '/';
   const segments = stripped.slice(1).split('/');
-  if (segments.some((s) => !s || s === '.' || s === '..')) return null;
+  if (segments.some((segment) => !segment || segment === '.' || segment === '..')) return null;
   return stripped;
 }
 
@@ -65,10 +65,10 @@ export function parseSource(raw, site) {
     const path = normalizePath(value);
     return path ? toId(site, path) : null;
   }
-  const idx = value.indexOf(':');
-  if (idx <= 0) return null;
-  const sourceSite = value.slice(0, idx).toLowerCase();
-  const rest = value.slice(idx + 1);
+  const colonIndex = value.indexOf(':');
+  if (colonIndex <= 0) return null;
+  const sourceSite = value.slice(0, colonIndex).toLowerCase();
+  const rest = value.slice(colonIndex + 1);
   if (!SITE_PATTERN.test(sourceSite) || !rest.startsWith('/')) return null;
   const path = normalizePath(rest);
   return path ? toId(sourceSite, path) : null;
@@ -76,23 +76,23 @@ export function parseSource(raw, site) {
 
 const toList = (value) => [...new Set((value || '')
   .split(',')
-  .map((v) => v.trim().toLowerCase())
+  .map((item) => item.trim().toLowerCase())
   .filter(Boolean))];
 
 function parseRow(fields, { site, index }, issue) {
-  const ctx = { site, row: index };
+  const rowContext = { site, row: index };
 
   const path = normalizePath(fields.path);
   if (!path) {
     issue({
-      ...ctx, code: 'invalid-path', field: 'path', message: `Invalid path "${fields.path}".`,
+      ...rowContext, code: 'invalid-path', field: 'path', message: `Invalid path "${fields.path}".`,
     });
     return null;
   }
 
   const id = toId(site, path);
   const fail = (code, field, message) => issue({
-    ...ctx, id, code, field, message,
+    ...rowContext, id, code, field, message,
   });
 
   const parsedLanguage = parseLanguage(fields.language);
@@ -115,9 +115,9 @@ function parseRow(fields, { site, index }, issue) {
   };
 
   if (!fields.source) {
-    const set = RELATIONSHIP_FIELDS.filter((f) => fields[f]);
-    if (set.length) {
-      fail('root-has-relationship-settings', set[0], `Root location has relationship settings (${set.join(', ')}) but no source.`);
+    const setFields = RELATIONSHIP_FIELDS.filter((field) => fields[field]);
+    if (setFields.length) {
+      fail('root-has-relationship-settings', setFields[0], `Root location has relationship settings (${setFields.join(', ')}) but no source.`);
     }
     return location;
   }
@@ -128,9 +128,9 @@ function parseRow(fields, { site, index }, issue) {
   const listField = (field, allowed, code) => {
     const values = toList(fields[field]);
     if (!values.length) return [...DEFAULTS[field]];
-    const bad = values.filter((v) => !allowed.includes(v));
-    if (bad.length) fail(code, field, `Unknown ${field}: ${bad.join(', ')}.`);
-    return values.filter((v) => allowed.includes(v));
+    const unknownValues = values.filter((value) => !allowed.includes(value));
+    if (unknownValues.length) fail(code, field, `Unknown ${field}: ${unknownValues.join(', ')}.`);
+    return values.filter((value) => allowed.includes(value));
   };
   const valueField = (field, allowed, code) => {
     const value = (fields[field] || '').toLowerCase();
@@ -151,6 +151,10 @@ function parseRow(fields, { site, index }, issue) {
 
 const siteOf = (id) => id.slice(0, id.indexOf(':'));
 
+const erroredIds = (issues) => new Set(issues
+  .filter((entry) => entry.level === 'error' && entry.id)
+  .map((entry) => entry.id));
+
 function findCycles(locations) {
   const inCycle = new Set();
   const done = new Set();
@@ -158,9 +162,9 @@ function findCycles(locations) {
     const stack = [];
     let current = start;
     while (current && !done.has(current.id)) {
-      const idx = stack.indexOf(current.id);
-      if (idx !== -1) {
-        stack.slice(idx).forEach((id) => inCycle.add(id));
+      const cycleStart = stack.indexOf(current.id);
+      if (cycleStart !== -1) {
+        stack.slice(cycleStart).forEach((id) => inCycle.add(id));
         break;
       }
       stack.push(current.id);
@@ -226,7 +230,7 @@ function validateGraph(locations, { loadedSites, issue }) {
         id: location.id, code: 'translate-same-language', field: 'actions', message: `Cannot translate ${source.language} to ${location.language}.`,
       });
     }
-    const copies = location.actions.some((a) => a === 'link' || a === 'rollout')
+    const copies = location.actions.some((action) => action === 'link' || action === 'rollout')
       && !location.actions.includes('translate');
     if (copies && !isSameBaseLanguage(source.language, location.language)) {
       issue({
@@ -241,15 +245,15 @@ function validateGraph(locations, { loadedSites, issue }) {
 function propagate(locations, {
   issues, unresolved, inCycle, issue,
 }) {
-  const ownInvalid = new Set(issues.filter((i) => i.level === 'error' && i.id).map((i) => i.id));
+  const ownInvalid = erroredIds(issues);
 
   locations.forEach((location) => {
     const ancestors = ancestorsOf(locations, location);
     if (!inCycle.has(location.id)) {
-      const bad = ancestors.find((a) => ownInvalid.has(a.id));
-      if (bad) {
+      const invalidAncestor = ancestors.find((ancestor) => ownInvalid.has(ancestor.id));
+      if (invalidAncestor) {
         issue({
-          id: location.id, ancestor: bad.id, code: 'invalid-ancestor', field: 'source', message: `Source chain includes invalid location ${bad.id}.`,
+          id: location.id, ancestor: invalidAncestor.id, code: 'invalid-ancestor', field: 'source', message: `Source chain includes invalid location ${invalidAncestor.id}.`,
         });
       }
     }
@@ -257,11 +261,11 @@ function propagate(locations, {
       location.resolved = false;
       return;
     }
-    const gap = ancestors.find((a) => unresolved.has(a.id));
-    if (gap) {
+    const unresolvedAncestor = ancestors.find((ancestor) => unresolved.has(ancestor.id));
+    if (unresolvedAncestor) {
       location.resolved = false;
       issue({
-        level: 'warning', id: location.id, ancestor: gap.id, code: 'ancestor-unresolved', field: 'source', message: `Source chain is incomplete above ${gap.id}.`,
+        level: 'warning', id: location.id, ancestor: unresolvedAncestor.id, code: 'ancestor-unresolved', field: 'source', message: `Source chain is incomplete above ${unresolvedAncestor.id}.`,
       });
     }
   });
@@ -302,7 +306,7 @@ export function parseConfig({ sites = {} } = {}) {
     issues, unresolved, inCycle, issue,
   });
 
-  const invalid = new Set(issues.filter((i) => i.level === 'error' && i.id).map((i) => i.id));
+  const invalid = erroredIds(issues);
   invalid.forEach((id) => {
     const location = locations.get(id);
     if (location) location.valid = false;

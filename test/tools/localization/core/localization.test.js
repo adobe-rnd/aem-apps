@@ -39,7 +39,7 @@ const CONFIGS = {
   unrelated: [{ path: '/', language: 'fr' }],
 };
 
-function fakes({
+function createFixture({
   configs = CONFIGS, pages = {}, indexes = {}, review = [], supports = true,
 } = {}) {
   const calls = {
@@ -72,8 +72,8 @@ function fakes({
   };
   const services = {
     translationConnectors: {
-      supports: async (src, tgt) => {
-        calls.supports.push(`${src}>${tgt}`);
+      supports: async (sourceLanguage, targetLanguage) => {
+        calls.supports.push(`${sourceLanguage}>${targetLanguage}`);
         return supports;
       },
     },
@@ -83,50 +83,71 @@ function fakes({
 
 const file = (id, version) => ({ exists: true, id, version });
 const base = (sourceId, sourceVersion, via = 'rollout') => ({ sourceId, sourceVersion, via });
-const create = (f) => createLocalization({ org: 'acme', providers: f.providers, services: f.services });
-const actionNames = (result) => result.actions.map((a) => a.action);
+const localizationFor = (fixture) => createLocalization({
+  org: 'acme',
+  providers: fixture.providers,
+  services: fixture.services,
+});
+const actionNames = (result) => result.actions.map((entry) => entry.action);
+const findAction = (result, name) => result.actions.find((entry) => entry.action === name);
 
 describe('page: config loading', () => {
   it('loads only the page site for a root page', async () => {
-    const f = fakes({ pages: { 'global:/en/x': file('a', '1') } });
-    const result = await create(f).page('global', '/en/x');
-    assert.deepEqual(f.calls.config, ['global']);
+    const fixture = createFixture({ pages: { 'global:/en/x': file('a', '1') } });
+    const result = await localizationFor(fixture).page('global', '/en/x');
+    assert.deepEqual(fixture.calls.config, ['global']);
     assert.equal(result.status.relationship, 'root');
   });
 
   it('walks up across sites, loading only sites in the chain', async () => {
-    const f = fakes({ pages: { 'global:/en/p': file('a', '1') } });
-    const result = await create(f).page('brand-c', '/x/p');
-    assert.deepEqual(f.calls.config, ['brand-c', 'brand-b', 'global']);
-    assert.deepEqual(result.chain.map((c) => `${c.ref.site}:${c.ref.path}`), [
+    const fixture = createFixture({ pages: { 'global:/en/p': file('a', '1') } });
+    const result = await localizationFor(fixture).page('brand-c', '/x/p');
+    assert.deepEqual(fixture.calls.config, ['brand-c', 'brand-b', 'global']);
+    assert.deepEqual(result.chain.map((entry) => `${entry.ref.site}:${entry.ref.path}`), [
       'brand-c:/x/p', 'brand-b:/es-en/p', 'global:/en/p',
     ]);
     assert.equal(result.location.id, 'brand-c:/x');
   });
 
   it('reports unknown when a source site config is unreadable', async () => {
-    const f = fakes({ configs: { ...CONFIGS, global: null } });
-    const result = await create(f).page('brand-b', '/es-en/p');
+    const fixture = createFixture({ configs: { ...CONFIGS, global: null } });
+    const result = await localizationFor(fixture).page('brand-b', '/es-en/p');
     assert.equal(result.status.relationship, 'unknown');
     assert.deepEqual(result.actions, []);
   });
 
   it('returns an empty result outside any location', async () => {
-    const f = fakes();
-    const result = await create(f).page('global', '/fr/x');
+    const result = await localizationFor(createFixture()).page('global', '/fr/x');
     assert.deepEqual(result, {
       location: null, chain: [], status: null, actions: [],
     });
+  });
+
+  it('discovers config ancestors through location sources past nested locations', async () => {
+    const fixture = createFixture({
+      configs: {
+        a: [{ path: '/t', language: 'en', source: 'b:/s' }],
+        b: [
+          { path: '/s', language: 'en', source: 'c:/r' },
+          { path: '/s/n', language: 'en' },
+        ],
+        c: [{ path: '/r', language: 'en' }],
+      },
+      pages: { 'a:/t/n/x': file('x', '1') },
+    });
+    const result = await localizationFor(fixture).page('a', '/t/n/x');
+    assert.deepEqual(fixture.calls.config, ['a', 'b', 'c']);
+    assert.equal(result.status.relationship, 'standalone');
   });
 });
 
 describe('page: page info', () => {
   it('combines page info and index entries keyed by page id', async () => {
-    const f = fakes({
+    const fixture = createFixture({
       pages: { 'global:/en/x': file('a', '1'), 'global:/uk/x': file('b', '7') },
       indexes: { 'global:/uk': { pages: { b: { base: base('a', '1') } }, pending: {} } },
     });
-    const result = await create(f).page('global', '/uk/x');
+    const result = await localizationFor(fixture).page('global', '/uk/x');
     assert.deepEqual(result.chain[0].info, {
       exists: true, id: 'b', version: '7', base: base('a', '1'), job: null, needsReview: false,
     });
@@ -135,17 +156,17 @@ describe('page: page info', () => {
   });
 
   it('reads pending jobs by path for pages that do not exist yet', async () => {
-    const f = fakes({
+    const fixture = createFixture({
       pages: { 'global:/en/x': file('a', '1') },
       indexes: { 'global:/uk': { pages: {}, pending: { '/uk/x': { job: { state: 'translating' } } } } },
     });
-    const result = await create(f).page('global', '/uk/x');
+    const result = await localizationFor(fixture).page('global', '/uk/x');
     assert.equal(result.status.relationship, 'linked');
     assert.deepEqual(result.status.sync, ['translating']);
   });
 
   it('fetches needsReview only for the page and its effective source', async () => {
-    const f = fakes({
+    const fixture = createFixture({
       configs: {
         ...CONFIGS,
         global: [
@@ -159,109 +180,94 @@ describe('page: page info', () => {
       indexes: { 'global:/ie': { pages: { c: { base: base('a', '1') } }, pending: {} } },
       review: ['global:/en/x'],
     });
-    const result = await create(f).page('global', '/ie/x');
-    assert.deepEqual(f.calls.needsReview.sort(), ['global:/en/x', 'global:/ie/x']);
+    const result = await localizationFor(fixture).page('global', '/ie/x');
+    assert.deepEqual(fixture.calls.needsReview.sort(), ['global:/en/x', 'global:/ie/x']);
     assert.deepEqual(result.status.sync, ['blocked by source review', 'current']);
   });
 
   it('does not fetch needsReview for a page that does not exist', async () => {
-    const f = fakes({ pages: { 'global:/en/x': file('a', '1') } });
-    await create(f).page('global', '/uk/x');
-    assert.deepEqual(f.calls.needsReview, ['global:/en/x']);
+    const fixture = createFixture({ pages: { 'global:/en/x': file('a', '1') } });
+    await localizationFor(fixture).page('global', '/uk/x');
+    assert.deepEqual(fixture.calls.needsReview, ['global:/en/x']);
   });
 });
 
 describe('page: actions', () => {
   it('derives available actions for the page', async () => {
-    const f = fakes({
+    const fixture = createFixture({
       pages: { 'global:/en/x': file('a', '1'), 'global:/uk/x': file('b', '7') },
       indexes: { 'global:/uk': { pages: { b: { base: base('a', '1') } }, pending: {} } },
     });
-    const result = await create(f).page('global', '/uk/x');
+    const result = await localizationFor(fixture).page('global', '/uk/x');
     assert.deepEqual(actionNames(result), ['rollout', 'translate', 'reconnect']);
   });
 
   it('asks the connector whether the language pair is supported', async () => {
-    const f = fakes({
+    const fixture = createFixture({
       pages: { 'global:/en/x': file('a', '1'), 'global:/uk/x': file('b', '7') },
       supports: false,
     });
-    const result = await create(f).page('global', '/uk/x');
-    assert.deepEqual(f.calls.supports, ['en-US>en-GB']);
-    const translate = result.actions.find((a) => a.action === 'translate');
-    assert.deepEqual(translate.reasons, ['connector-unsupported']);
+    const result = await localizationFor(fixture).page('global', '/uk/x');
+    assert.deepEqual(fixture.calls.supports, ['en-US>en-GB']);
+    assert.deepEqual(findAction(result, 'translate').reasons, ['connector-unsupported']);
   });
 
   it('disables translate when no connector service is configured', async () => {
-    const f = fakes({ pages: { 'global:/en/x': file('a', '1'), 'global:/uk/x': file('b', '7') } });
-    const result = await createLocalization({ org: 'acme', providers: f.providers }).page('global', '/uk/x');
-    const translate = result.actions.find((a) => a.action === 'translate');
-    assert.deepEqual(translate.reasons, ['connector-unsupported']);
+    const fixture = createFixture({
+      pages: { 'global:/en/x': file('a', '1'), 'global:/uk/x': file('b', '7') },
+    });
+    const localization = createLocalization({ org: 'acme', providers: fixture.providers });
+    const result = await localization.page('global', '/uk/x');
+    assert.deepEqual(findAction(result, 'translate').reasons, ['connector-unsupported']);
   });
 
   it('does not ask the connector when translate is not allowed', async () => {
-    const f = fakes({ pages: { 'global:/en/p': file('a', '1') } });
-    await create(f).page('brand-c', '/x/p');
-    assert.deepEqual(f.calls.supports, []);
+    const fixture = createFixture({ pages: { 'global:/en/p': file('a', '1') } });
+    await localizationFor(fixture).page('brand-c', '/x/p');
+    assert.deepEqual(fixture.calls.supports, []);
   });
 });
 
 describe('page: caching', () => {
-  it('discovers config ancestors through location sources past nested locations', async () => {
-    const f = fakes({
-      configs: {
-        a: [{ path: '/t', language: 'en', source: 'b:/s' }],
-        b: [
-          { path: '/s', language: 'en', source: 'c:/r' },
-          { path: '/s/n', language: 'en' },
-        ],
-        c: [{ path: '/r', language: 'en' }],
-      },
-      pages: { 'a:/t/n/x': file('x', '1') },
-    });
-    const result = await create(f).page('a', '/t/n/x');
-    assert.deepEqual(f.calls.config, ['a', 'b', 'c']);
-    assert.equal(result.status.relationship, 'standalone');
+  it('reuses configs, page info and index reads until refresh', async () => {
+    const fixture = createFixture({ pages: { 'global:/en/x': file('a', '1') } });
+    const localization = localizationFor(fixture);
+    await localization.page('global', '/uk/x');
+    await localization.page('global', '/uk/x');
+    assert.deepEqual(fixture.calls.config, ['global']);
+    assert.deepEqual(fixture.calls.pageInfo, ['global:/uk/x', 'global:/en/x']);
+    assert.deepEqual(fixture.calls.index, ['global:/uk', 'global:/en']);
+    assert.equal(fixture.calls.needsReview.length, 1);
+
+    localization.refresh();
+    await localization.page('global', '/uk/x');
+    assert.deepEqual(fixture.calls.config, ['global', 'global']);
+    assert.equal(fixture.calls.pageInfo.length, 4);
   });
 
   it('does not let reads started before refresh leak into later calls', async () => {
-    let release;
-    let first = true;
-    const configs = { global: CONFIGS.global };
-    const f = fakes({
-      configs,
+    let releaseStaleRead;
+    let isFirstRead = true;
+    const fixture = createFixture({
+      configs: { global: CONFIGS.global },
       pages: { 'global:/en/x': file('a', '1'), 'global:/uk/x': file('b', '7') },
       indexes: { 'global:/uk': { pages: { b: { base: base('a', '1') } }, pending: {} } },
     });
-    const { read } = f.providers.config;
-    f.providers.config.read = (site) => {
-      if (!first) return read(site);
-      first = false;
-      return new Promise((resolve) => { release = () => resolve([{ path: '/uk', language: 'en-GB' }]); });
+    const { read } = fixture.providers.config;
+    fixture.providers.config.read = (site) => {
+      if (!isFirstRead) return read(site);
+      isFirstRead = false;
+      return new Promise((resolve) => {
+        releaseStaleRead = () => resolve([{ path: '/uk', language: 'en-GB' }]);
+      });
     };
-    const loc = create(f);
-    const stale = loc.page('global', '/uk/x');
-    loc.refresh();
-    const fresh = loc.page('global', '/uk/x');
-    release();
-    await stale;
-    assert.equal((await fresh).status.relationship, 'local copy');
-    assert.equal((await loc.page('global', '/uk/x')).status.relationship, 'local copy');
-  });
-
-  it('reuses configs, page info and index reads until refresh', async () => {
-    const f = fakes({ pages: { 'global:/en/x': file('a', '1') } });
-    const loc = create(f);
-    await loc.page('global', '/uk/x');
-    await loc.page('global', '/uk/x');
-    assert.deepEqual(f.calls.config, ['global']);
-    assert.deepEqual(f.calls.pageInfo, ['global:/uk/x', 'global:/en/x']);
-    assert.deepEqual(f.calls.index, ['global:/uk', 'global:/en']);
-    assert.equal(f.calls.needsReview.length, 1);
-
-    loc.refresh();
-    await loc.page('global', '/uk/x');
-    assert.deepEqual(f.calls.config, ['global', 'global']);
-    assert.equal(f.calls.pageInfo.length, 4);
+    const localization = localizationFor(fixture);
+    const stalePage = localization.page('global', '/uk/x');
+    localization.refresh();
+    const freshPage = localization.page('global', '/uk/x');
+    releaseStaleRead();
+    await stalePage;
+    assert.equal((await freshPage).status.relationship, 'local copy');
+    assert.equal((await localization.page('global', '/uk/x')).status.relationship, 'local copy');
   });
 });

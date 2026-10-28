@@ -85,7 +85,7 @@ const LEGACY_HOST = /^[a-z0-9-]+$/;
 
 const siteFromHostname = (hostname) => {
   const parts = String(hostname).trim().toLowerCase().split('.')[0].split('--');
-  if (parts.length !== 3 || !parts.every((p) => LEGACY_HOST.test(p))) return null;
+  if (parts.length !== 3 || !parts.every((part) => LEGACY_HOST.test(part))) return null;
   return parts[1];
 };
 

@@ -15,7 +15,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { configFromRows, loc } from '../helpers.js';
+import { configFromLocationRows, locationRow } from '../helpers.js';
 import {
   findLocation,
   sourcePage,
@@ -31,87 +31,87 @@ import {
 // │   └── global:/emea/es  es-ES
 // │       └── brand-b:/es  es-ES
 // └── brand-b:/       en-US
-const m = configFromRows([
-  loc('global', '/en', 'en-US'),
-  loc('global', '/uk', 'en-GB', '/en', 'link, rollout, translate'),
-  loc('global', '/emea/en', 'en', '/en', 'link, rollout'),
-  loc('global', '/emea/es', 'es-ES', '/emea/en', 'rollout, translate'),
-  loc('brand-b', '/es', 'es-ES', 'global:/emea/es', 'link, rollout'),
-  loc('brand-b', '/', 'en-US', 'global:/en', 'link, rollout'),
+const model = configFromLocationRows([
+  locationRow('global', '/en', 'en-US'),
+  locationRow('global', '/uk', 'en-GB', '/en', 'link, rollout, translate'),
+  locationRow('global', '/emea/en', 'en', '/en', 'link, rollout'),
+  locationRow('global', '/emea/es', 'es-ES', '/emea/en', 'rollout, translate'),
+  locationRow('brand-b', '/es', 'es-ES', 'global:/emea/es', 'link, rollout'),
+  locationRow('brand-b', '/', 'en-US', 'global:/en', 'link, rollout'),
 ]);
 
 // global:/            en (root)
 // ├── global:/emea/en en   (nested inside its own source)
 // └── brand-b:/       en
-const nested = configFromRows([
-  loc('global', '/', 'en'),
-  loc('global', '/emea/en', 'en', '/'),
-  loc('brand-b', '/', 'en', 'global:/'),
+const nested = configFromLocationRows([
+  locationRow('global', '/', 'en'),
+  locationRow('global', '/emea/en', 'en', '/'),
+  locationRow('brand-b', '/', 'en', 'global:/'),
 ]);
 
-const ref = (r) => r && `${r.site}:${r.path}@${r.location.id}`;
-const refs = (list) => list.map(ref);
+const describeRef = (pageRef) => pageRef && `${pageRef.site}:${pageRef.path}@${pageRef.location.id}`;
+const describeRefs = (pageRefs) => pageRefs.map(describeRef);
 
 describe('findLocation', () => {
   it('finds the deepest containing location', () => {
-    assert.equal(findLocation(m, 'global', '/emea/es/products/x.html').id, 'global:/emea/es');
-    assert.equal(findLocation(m, 'brand-b', '/es/x').id, 'brand-b:/es');
+    assert.equal(findLocation(model, 'global', '/emea/es/products/x.html').id, 'global:/emea/es');
+    assert.equal(findLocation(model, 'brand-b', '/es/x').id, 'brand-b:/es');
   });
 
   it('matches the location folder itself', () => {
-    assert.equal(findLocation(m, 'global', '/emea/es').id, 'global:/emea/es');
+    assert.equal(findLocation(model, 'global', '/emea/es').id, 'global:/emea/es');
   });
 
   it('matches a whole-site location', () => {
-    assert.equal(findLocation(m, 'brand-b', '/about').id, 'brand-b:/');
-    assert.equal(findLocation(m, 'brand-b', '/').id, 'brand-b:/');
+    assert.equal(findLocation(model, 'brand-b', '/about').id, 'brand-b:/');
+    assert.equal(findLocation(model, 'brand-b', '/').id, 'brand-b:/');
   });
 
   it('does not match a sibling that shares a prefix', () => {
-    assert.equal(findLocation(m, 'global', '/english/x'), null);
-    assert.equal(findLocation(m, 'global', '/en.html'), null);
+    assert.equal(findLocation(model, 'global', '/english/x'), null);
+    assert.equal(findLocation(model, 'global', '/en.html'), null);
   });
 
   it('returns null outside any location', () => {
-    assert.equal(findLocation(m, 'global', '/fr/x'), null);
-    assert.equal(findLocation(m, 'other', '/en/x'), null);
+    assert.equal(findLocation(model, 'global', '/fr/x'), null);
+    assert.equal(findLocation(model, 'other', '/en/x'), null);
   });
 
   it('excludes dot-folders anywhere in the path', () => {
-    assert.equal(findLocation(m, 'global', '/en/.da/x.json'), null);
-    assert.equal(findLocation(m, 'brand-b', '/.trash/x'), null);
-    assert.equal(findLocation(m, 'brand-b', '/.snapshots/s1/x'), null);
+    assert.equal(findLocation(model, 'global', '/en/.da/x.json'), null);
+    assert.equal(findLocation(model, 'brand-b', '/.trash/x'), null);
+    assert.equal(findLocation(model, 'brand-b', '/.snapshots/s1/x'), null);
   });
 
   it('returns invalid locations too', () => {
-    const bad = configFromRows([loc('global', '/en', 'nope')]);
-    assert.equal(findLocation(bad, 'global', '/en/x').valid, false);
+    const invalidModel = configFromLocationRows([locationRow('global', '/en', 'nope')]);
+    assert.equal(findLocation(invalidModel, 'global', '/en/x').valid, false);
   });
 });
 
 describe('sourcePage', () => {
   it('maps to the same relative path in the source location', () => {
-    assert.equal(ref(sourcePage(m, 'global', '/uk/products/x')), 'global:/en/products/x@global:/en');
+    assert.equal(describeRef(sourcePage(model, 'global', '/uk/products/x')), 'global:/en/products/x@global:/en');
   });
 
   it('maps across sites and from a whole-site location', () => {
-    assert.equal(ref(sourcePage(m, 'brand-b', '/about')), 'global:/en/about@global:/en');
-    assert.equal(ref(sourcePage(m, 'brand-b', '/es/x')), 'global:/emea/es/x@global:/emea/es');
+    assert.equal(describeRef(sourcePage(model, 'brand-b', '/about')), 'global:/en/about@global:/en');
+    assert.equal(describeRef(sourcePage(model, 'brand-b', '/es/x')), 'global:/emea/es/x@global:/emea/es');
   });
 
   it('maps the location folder itself', () => {
-    assert.equal(ref(sourcePage(m, 'brand-b', '/')), 'global:/en@global:/en');
-    assert.equal(ref(sourcePage(m, 'global', '/uk')), 'global:/en@global:/en');
+    assert.equal(describeRef(sourcePage(model, 'brand-b', '/')), 'global:/en@global:/en');
+    assert.equal(describeRef(sourcePage(model, 'global', '/uk')), 'global:/en@global:/en');
   });
 
   it('maps into a whole-site source', () => {
-    assert.equal(ref(sourcePage(nested, 'brand-b', '/x')), 'global:/x@global:/');
-    assert.equal(ref(sourcePage(nested, 'global', '/emea/en/x')), 'global:/x@global:/');
+    assert.equal(describeRef(sourcePage(nested, 'brand-b', '/x')), 'global:/x@global:/');
+    assert.equal(describeRef(sourcePage(nested, 'global', '/emea/en/x')), 'global:/x@global:/');
   });
 
   it('returns null for root locations and unlocated pages', () => {
-    assert.equal(sourcePage(m, 'global', '/en/x'), null);
-    assert.equal(sourcePage(m, 'global', '/fr/x'), null);
+    assert.equal(sourcePage(model, 'global', '/en/x'), null);
+    assert.equal(sourcePage(model, 'global', '/fr/x'), null);
   });
 
   it('returns null when the mapped path belongs to a nested location', () => {
@@ -119,14 +119,14 @@ describe('sourcePage', () => {
   });
 
   it('returns null when the source location is missing', () => {
-    const partial = configFromRows([loc('global', '/uk', 'en-GB', 'other:/en')]);
+    const partial = configFromLocationRows([locationRow('global', '/uk', 'en-GB', 'other:/en')]);
     assert.equal(sourcePage(partial, 'global', '/uk/x'), null);
   });
 });
 
 describe('sourceChain', () => {
   it('starts with the page itself and ends at the root page', () => {
-    assert.deepEqual(refs(sourceChain(m, 'brand-b', '/es/x')), [
+    assert.deepEqual(describeRefs(sourceChain(model, 'brand-b', '/es/x')), [
       'brand-b:/es/x@brand-b:/es',
       'global:/emea/es/x@global:/emea/es',
       'global:/emea/en/x@global:/emea/en',
@@ -135,16 +135,19 @@ describe('sourceChain', () => {
   });
 
   it('is just the page for a root page', () => {
-    assert.deepEqual(refs(sourceChain(m, 'global', '/en/x')), ['global:/en/x@global:/en']);
+    assert.deepEqual(describeRefs(sourceChain(model, 'global', '/en/x')), ['global:/en/x@global:/en']);
   });
 
   it('is empty outside any location', () => {
-    assert.deepEqual(sourceChain(m, 'global', '/fr/x'), []);
+    assert.deepEqual(sourceChain(model, 'global', '/fr/x'), []);
   });
 
   it('stops on cycles', () => {
-    const cyclic = configFromRows([loc('global', '/a', 'en', '/b'), loc('global', '/b', 'en', '/a')]);
-    assert.deepEqual(refs(sourceChain(cyclic, 'global', '/a/x')), [
+    const cyclic = configFromLocationRows([
+      locationRow('global', '/a', 'en', '/b'),
+      locationRow('global', '/b', 'en', '/a'),
+    ]);
+    assert.deepEqual(describeRefs(sourceChain(cyclic, 'global', '/a/x')), [
       'global:/a/x@global:/a',
       'global:/b/x@global:/b',
     ]);
@@ -153,67 +156,67 @@ describe('sourceChain', () => {
 
 describe('targetPages', () => {
   it('returns direct target pages only, excluding self', () => {
-    assert.deepEqual(refs(targetPages(m, 'global', '/en/x')), [
+    assert.deepEqual(describeRefs(targetPages(model, 'global', '/en/x')), [
       'global:/uk/x@global:/uk',
       'global:/emea/en/x@global:/emea/en',
       'brand-b:/x@brand-b:/',
     ]);
-    assert.deepEqual(refs(targetPages(m, 'global', '/emea/es/x')), ['brand-b:/es/x@brand-b:/es']);
+    assert.deepEqual(describeRefs(targetPages(model, 'global', '/emea/es/x')), ['brand-b:/es/x@brand-b:/es']);
   });
 
   it('maps the location folder itself', () => {
-    assert.deepEqual(refs(targetPages(m, 'global', '/emea/es')), ['brand-b:/es@brand-b:/es']);
+    assert.deepEqual(describeRefs(targetPages(model, 'global', '/emea/es')), ['brand-b:/es@brand-b:/es']);
   });
 
   it('skips targets whose mapped path belongs to a nested location', () => {
-    assert.deepEqual(refs(targetPages(m, 'global', '/en/es/x')), [
+    assert.deepEqual(describeRefs(targetPages(model, 'global', '/en/es/x')), [
       'global:/uk/es/x@global:/uk',
       'global:/emea/en/es/x@global:/emea/en',
     ]);
   });
 
   it('maps a whole-site source into a nested target', () => {
-    assert.deepEqual(refs(targetPages(nested, 'global', '/x')), [
+    assert.deepEqual(describeRefs(targetPages(nested, 'global', '/x')), [
       'global:/emea/en/x@global:/emea/en',
       'brand-b:/x@brand-b:/',
     ]);
   });
 
   it('is empty for leaves and unlocated pages', () => {
-    assert.deepEqual(targetPages(m, 'brand-b', '/es/x'), []);
-    assert.deepEqual(targetPages(m, 'global', '/fr/x'), []);
+    assert.deepEqual(targetPages(model, 'brand-b', '/es/x'), []);
+    assert.deepEqual(targetPages(model, 'global', '/fr/x'), []);
   });
 
   it('excludes self for a self-sourced location', () => {
-    const self = configFromRows([loc('global', '/en', 'en', '/en')]);
-    assert.deepEqual(targetPages(self, 'global', '/en/x'), []);
+    const selfSourced = configFromLocationRows([locationRow('global', '/en', 'en', '/en')]);
+    assert.deepEqual(targetPages(selfSourced, 'global', '/en/x'), []);
   });
 });
 
 describe('targetLocations', () => {
   it('returns direct targets only', () => {
-    assert.deepEqual(targetLocations(m, 'global:/en').map((l) => l.id), [
+    assert.deepEqual(targetLocations(model, 'global:/en').map((location) => location.id), [
       'global:/uk', 'global:/emea/en', 'brand-b:/',
     ]);
-    assert.deepEqual(targetLocations(m, 'brand-b:/es'), []);
+    assert.deepEqual(targetLocations(model, 'brand-b:/es'), []);
   });
 });
 
 describe('equivalentSites', () => {
   it('includes every configured site', () => {
-    assert.deepEqual(equivalentSites(m), new Set(['global', 'brand-b']));
+    assert.deepEqual(equivalentSites(model), new Set(['global', 'brand-b']));
   });
 
   it('adds sites from legacy hostnames', () => {
     assert.deepEqual(
-      equivalentSites(m, ['main--brand-c--acme.aem.page', ' main--Global--acme.aem.live ', 'bogus']),
+      equivalentSites(model, ['main--brand-c--acme.aem.page', ' main--Global--acme.aem.live ', 'bogus']),
       new Set(['global', 'brand-b', 'brand-c']),
     );
   });
 
   it('ignores hostnames that are not ref--site--org', () => {
     assert.deepEqual(
-      equivalentSites(m, ['foo--unrelated.example', 'a--b--c--d.aem.page', '--x--y.aem.page', '']),
+      equivalentSites(model, ['foo--unrelated.example', 'a--b--c--d.aem.page', '--x--y.aem.page', '']),
       new Set(['global', 'brand-b']),
     );
   });

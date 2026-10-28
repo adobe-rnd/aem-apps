@@ -31,8 +31,10 @@ const row = (fields) => ({
 
 const global = (...rows) => parseConfig({ sites: { global: rows } });
 
-const codes = (model) => model.issues.map((i) => i.code);
-const issuesFor = (model, id) => model.issues.filter((i) => i.id === id).map((i) => i.code);
+const codes = (model) => model.issues.map((issue) => issue.code);
+const issuesFor = (model, id) => model.issues
+  .filter((issue) => issue.id === id)
+  .map((issue) => issue.code);
 
 describe('parseConfig: locations', () => {
   it('parses a site config row into a location keyed by site:path', () => {
@@ -94,8 +96,8 @@ describe('parseConfig: locations', () => {
   });
 
   it('errors on a duplicate location', () => {
-    const en = row({ path: '/en', language: 'en' });
-    const model = global(en, en);
+    const englishRow = row({ path: '/en', language: 'en' });
+    const model = global(englishRow, englishRow);
     assert.deepEqual(codes(model), ['duplicate-location']);
     assert.equal(model.locations.get('global:/en').valid, false);
   });
@@ -117,8 +119,8 @@ describe('parseConfig: paths', () => {
   });
 
   it('errors on relative or dot-segment paths', () => {
-    ['en', '/en/../fr', '/./en', '/en//fr'].forEach((p) => {
-      assert.deepEqual(codes(pathOf(p)), ['invalid-path'], p);
+    ['en', '/en/../fr', '/./en', '/en//fr'].forEach((path) => {
+      assert.deepEqual(codes(pathOf(path)), ['invalid-path'], path);
     });
   });
 });
@@ -162,17 +164,17 @@ describe('parseConfig: source', () => {
   });
 
   it('errors on malformed sources', () => {
-    ['en', 'global /en', 'global:', ':/en', 'global:/en/../x'].forEach((s) => {
-      assert.deepEqual(codes(withSource(s)), ['invalid-source'], s);
+    ['en', 'global /en', 'global:', ':/en', 'global:/en/../x'].forEach((source) => {
+      assert.deepEqual(codes(withSource(source)), ['invalid-source'], source);
     });
   });
 
   it('applies conservative defaults to a relationship', () => {
-    const loc = withSource('/en').locations.get('global:/uk');
-    assert.deepEqual(loc.actions, ['rollout']);
-    assert.equal(loc.missingPages, 'none');
-    assert.deepEqual(loc.conflictBehavior, ['merge']);
-    assert.equal(loc.onComplete, 'none');
+    const location = withSource('/en').locations.get('global:/uk');
+    assert.deepEqual(location.actions, ['rollout']);
+    assert.equal(location.missingPages, 'none');
+    assert.deepEqual(location.conflictBehavior, ['merge']);
+    assert.equal(location.onComplete, 'none');
   });
 
   it('does not share default lists between locations or calls', () => {
@@ -194,8 +196,8 @@ describe('parseConfig: relationship settings', () => {
   );
 
   it('parses actions as a trimmed, lowercased, deduped list', () => {
-    const loc = settings({ actions: ' Link, rollout ,TRANSLATE, link' }).locations.get('global:/uk');
-    assert.deepEqual(loc.actions, ['link', 'rollout', 'translate']);
+    const location = settings({ actions: ' Link, rollout ,TRANSLATE, link' }).locations.get('global:/uk');
+    assert.deepEqual(location.actions, ['link', 'rollout', 'translate']);
   });
 
   it('errors on unknown actions', () => {
@@ -211,8 +213,8 @@ describe('parseConfig: relationship settings', () => {
   });
 
   it('keeps conflictBehavior order (first = default)', () => {
-    const loc = settings({ conflictBehavior: 'overwrite, merge' }).locations.get('global:/uk');
-    assert.deepEqual(loc.conflictBehavior, ['overwrite', 'merge']);
+    const location = settings({ conflictBehavior: 'overwrite, merge' }).locations.get('global:/uk');
+    assert.deepEqual(location.conflictBehavior, ['overwrite', 'merge']);
   });
 
   it('errors on unknown conflictBehavior', () => {
@@ -248,11 +250,11 @@ describe('parseConfig: lenient headers', () => {
         Actions: 'link',
       },
     );
-    const loc = model.locations.get('global:/uk');
-    assert.equal(loc.missingPages, 'linked');
-    assert.deepEqual(loc.conflictBehavior, ['overwrite']);
-    assert.equal(loc.onComplete, 'preview');
-    assert.deepEqual(loc.actions, ['link']);
+    const location = model.locations.get('global:/uk');
+    assert.equal(location.missingPages, 'linked');
+    assert.deepEqual(location.conflictBehavior, ['overwrite']);
+    assert.equal(location.onComplete, 'preview');
+    assert.deepEqual(location.actions, ['link']);
   });
 });
 

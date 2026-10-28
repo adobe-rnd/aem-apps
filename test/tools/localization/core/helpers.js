@@ -15,11 +15,11 @@
  */
 import { parseConfig } from '../../../../tools/localization/core/domain/config.js';
 
-export const loc = (site, path, language, source = '', actions = '', missingPages = '') => ({
+export const locationRow = (site, path, language, source = '', actions = '', missingPages = '') => ({
   site, path, language, source, actions, missingPages,
 });
 
-export function configFromRows(rows, extraSites = {}) {
+export function configFromLocationRows(rows, extraSites = {}) {
   const sites = {};
   rows.forEach(({ site, ...rest }) => {
     sites[site] ??= [];

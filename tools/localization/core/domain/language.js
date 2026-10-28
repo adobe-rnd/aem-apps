@@ -36,18 +36,18 @@ export function parseLanguage(code) {
 
 const baseOf = ({ language, script }) => (script ? `${language}-${script}` : language);
 
-export function isSameBaseLanguage(a, b) {
-  const pa = parseLanguage(a);
-  const pb = parseLanguage(b);
-  if (!pa || !pb) return false;
-  return baseOf(pa) === baseOf(pb);
+export function isSameBaseLanguage(first, second) {
+  const firstParsed = parseLanguage(first);
+  const secondParsed = parseLanguage(second);
+  if (!firstParsed || !secondParsed) return false;
+  return baseOf(firstParsed) === baseOf(secondParsed);
 }
 
 export function canTranslate(source, target) {
-  const ps = parseLanguage(source);
-  const pt = parseLanguage(target);
-  if (!ps || !pt) return false;
-  return ps.tag !== pt.tag;
+  const sourceParsed = parseLanguage(source);
+  const targetParsed = parseLanguage(target);
+  if (!sourceParsed || !targetParsed) return false;
+  return sourceParsed.tag !== targetParsed.tag;
 }
 
 export function defaultRefreshAction(source, target) {

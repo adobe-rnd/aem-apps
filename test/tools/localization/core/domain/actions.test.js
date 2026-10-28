@@ -33,12 +33,16 @@ const sourceRef = (language = 'en-US') => ({
   site: 'global', path: '/en/x', location: { id: 'global:/en', language },
 });
 
-const status = (relationship, sync = [], effectiveSource = sourceRef()) => ({
+const statusWith = (relationship, sync = [], effectiveSource = sourceRef()) => ({
   relationship, sync, effectiveSource, reasons: [],
 });
 
-const byName = (list) => Object.fromEntries(list.map((a) => [a.action, a]));
-const names = (list) => list.map((a) => a.action);
+const actionNames = (actions) => actions.map((entry) => entry.action);
+
+const actionsByName = (status, locationOverrides = {}, options = {}) => Object.fromEntries(
+  availableActions({ status, location: location(locationOverrides), ...options })
+    .map((entry) => [entry.action, entry]),
+);
 
 describe('availableActions: no actions', () => {
   it('is empty without a status', () => {
@@ -47,174 +51,161 @@ describe('availableActions: no actions', () => {
 
   ['config error', 'unknown', 'root', 'standalone'].forEach((relationship) => {
     it(`is empty for ${relationship}`, () => {
-      const list = availableActions({
-        status: status(relationship, [], null),
+      const actions = availableActions({
+        status: statusWith(relationship, [], null),
         location: location(),
       });
-      assert.deepEqual(list, []);
+      assert.deepEqual(actions, []);
     });
   });
 });
 
 describe('availableActions: rollout and translate', () => {
   it('offers both on a current local copy with conflict options', () => {
-    const a = byName(availableActions({ status: status('local copy', ['current']), location: location() }));
-    assert.deepEqual(a.rollout, {
+    const actions = actionsByName(statusWith('local copy', ['current']));
+    assert.deepEqual(actions.rollout, {
       action: 'rollout', enabled: true, reasons: [], creates: false, options: ['merge', 'overwrite'], default: true,
     });
-    assert.deepEqual(a.translate, {
+    assert.deepEqual(actions.translate, {
       action: 'translate', enabled: true, reasons: [], creates: false, options: ['merge', 'overwrite'], default: false,
     });
   });
 
   it('marks translate as default when the base language differs', () => {
-    const a = byName(availableActions({
-      status: status('translation', ['current']),
-      location: location({ language: 'es' }),
-    }));
-    assert.equal(a.translate.default, true);
-    assert.equal(a.rollout.default, false);
+    const actions = actionsByName(statusWith('translation', ['current']), { language: 'es' });
+    assert.equal(actions.translate.default, true);
+    assert.equal(actions.rollout.default, false);
   });
 
   it('marks the only offered action as default', () => {
-    const a = byName(availableActions({
-      status: status('local copy', ['current']),
-      location: location({ language: 'es', actions: ['rollout'] }),
-    }));
-    assert.equal(a.rollout.default, true);
+    const actions = actionsByName(statusWith('local copy', ['current']), { language: 'es', actions: ['rollout'] });
+    assert.equal(actions.rollout.default, true);
   });
 
   it('creates on linked and not created pages, without options', () => {
     ['linked', 'not created'].forEach((relationship) => {
-      const a = byName(availableActions({ status: status(relationship), location: location() }));
-      assert.equal(a.rollout.creates, true, relationship);
-      assert.equal(a.rollout.options, undefined, relationship);
-      assert.equal(a.translate.creates, true, relationship);
+      const actions = actionsByName(statusWith(relationship));
+      assert.equal(actions.rollout.creates, true, relationship);
+      assert.equal(actions.rollout.options, undefined, relationship);
+      assert.equal(actions.translate.creates, true, relationship);
     });
   });
 
   it('omits actions not allowed by the location', () => {
-    const list = availableActions({
-      status: status('local copy', ['current']),
+    const actions = availableActions({
+      status: statusWith('local copy', ['current']),
       location: location({ actions: ['rollout'] }),
     });
-    assert.deepEqual(names(list), ['rollout']);
+    assert.deepEqual(actionNames(actions), ['rollout']);
   });
 
   it('disables when the page needs review', () => {
-    const a = byName(availableActions({ status: status('local copy', ['needs review', 'current']), location: location() }));
-    assert.deepEqual(a.rollout.reasons, ['needs-review']);
-    assert.deepEqual(a.translate.reasons, ['needs-review']);
-    assert.equal(a.rollout.enabled, false);
+    const actions = actionsByName(statusWith('local copy', ['needs review', 'current']));
+    assert.deepEqual(actions.rollout.reasons, ['needs-review']);
+    assert.deepEqual(actions.translate.reasons, ['needs-review']);
+    assert.equal(actions.rollout.enabled, false);
   });
 
   it('disables when the source needs review', () => {
-    const a = byName(availableActions({ status: status('linked', ['blocked by source review']), location: location() }));
-    assert.deepEqual(a.rollout.reasons, ['source-needs-review']);
-    assert.deepEqual(a.translate.reasons, ['source-needs-review']);
+    const actions = actionsByName(statusWith('linked', ['blocked by source review']));
+    assert.deepEqual(actions.rollout.reasons, ['source-needs-review']);
+    assert.deepEqual(actions.translate.reasons, ['source-needs-review']);
   });
 
   it('disables while a translation is in progress or ready', () => {
     ['translating', 'ready to save'].forEach((sync) => {
-      const a = byName(availableActions({ status: status('translation', [sync, 'current']), location: location() }));
-      assert.deepEqual(a.rollout.reasons, ['translation-in-progress'], sync);
-      assert.deepEqual(a.translate.reasons, ['translation-in-progress'], sync);
+      const actions = actionsByName(statusWith('translation', [sync, 'current']));
+      assert.deepEqual(actions.rollout.reasons, ['translation-in-progress'], sync);
+      assert.deepEqual(actions.translate.reasons, ['translation-in-progress'], sync);
     });
   });
 
   it('disables without an effective source', () => {
-    const a = byName(availableActions({ status: status('local copy', ['source deleted'], null), location: location() }));
-    assert.deepEqual(a.rollout.reasons, ['no-source']);
-    assert.deepEqual(a.translate.reasons, ['no-source']);
+    const actions = actionsByName(statusWith('local copy', ['source deleted'], null));
+    assert.deepEqual(actions.rollout.reasons, ['no-source']);
+    assert.deepEqual(actions.translate.reasons, ['no-source']);
   });
 
   it('disables translate for identical languages', () => {
-    const a = byName(availableActions({
-      status: status('local copy', ['current'], sourceRef('en-GB')),
-      location: location(),
-    }));
-    assert.deepEqual(a.translate.reasons, ['language-not-translatable']);
-    assert.equal(a.rollout.enabled, true);
+    const actions = actionsByName(statusWith('local copy', ['current'], sourceRef('en-GB')));
+    assert.deepEqual(actions.translate.reasons, ['language-not-translatable']);
+    assert.equal(actions.rollout.enabled, true);
   });
 
   it('disables translate when the connector does not support the pair', () => {
-    const a = byName(availableActions({
-      status: status('local copy', ['current']),
-      location: location(),
-      translationSupported: false,
-    }));
-    assert.deepEqual(a.translate.reasons, ['connector-unsupported']);
+    const actions = actionsByName(statusWith('local copy', ['current']), {}, { translationSupported: false });
+    assert.deepEqual(actions.translate.reasons, ['connector-unsupported']);
   });
 
   it('collects every reason', () => {
-    const a = byName(availableActions({
-      status: status('local copy', ['needs review', 'source deleted', 'translating'], null),
-      location: location(),
-      translationSupported: false,
-    }));
-    assert.deepEqual(a.translate.reasons, ['needs-review', 'translation-in-progress', 'no-source']);
+    const actions = actionsByName(
+      statusWith('local copy', ['needs review', 'source deleted', 'translating'], null),
+      {},
+      { translationSupported: false },
+    );
+    assert.deepEqual(actions.translate.reasons, ['needs-review', 'translation-in-progress', 'no-source']);
   });
 });
 
 describe('availableActions: reconnect', () => {
   it('is offered on local copies in a linked location, destructive', () => {
-    const a = byName(availableActions({ status: status('local copy', ['current']), location: location() }));
-    assert.deepEqual(a.reconnect, {
+    const actions = actionsByName(statusWith('local copy', ['current']));
+    assert.deepEqual(actions.reconnect, {
       action: 'reconnect', enabled: true, reasons: [], destructive: true,
     });
   });
 
   it('is offered on translations', () => {
-    const a = byName(availableActions({ status: status('translation', ['behind source']), location: location() }));
-    assert.ok(a.reconnect);
+    assert.ok(actionsByName(statusWith('translation', ['behind source'])).reconnect);
   });
 
   it('is not offered without link or in a none location', () => {
-    [location({ actions: ['rollout'] }), location({ missingPages: 'none' })].forEach((l) => {
-      const list = availableActions({ status: status('local copy', ['current']), location: l });
-      assert.ok(!names(list).includes('reconnect'));
+    [{ actions: ['rollout'] }, { missingPages: 'none' }].forEach((locationOverrides) => {
+      const actions = actionsByName(statusWith('local copy', ['current']), locationOverrides);
+      assert.equal(actions.reconnect, undefined);
     });
   });
 
   it('is not offered on linked or not created pages', () => {
     ['linked', 'not created'].forEach((relationship) => {
-      const list = availableActions({ status: status(relationship), location: location() });
-      assert.ok(!names(list).includes('reconnect'), relationship);
+      assert.equal(actionsByName(statusWith(relationship)).reconnect, undefined, relationship);
     });
   });
 
   it('is disabled while a translation is in progress', () => {
-    const a = byName(availableActions({ status: status('translation', ['translating']), location: location() }));
-    assert.deepEqual(a.reconnect.reasons, ['translation-in-progress']);
+    const actions = actionsByName(statusWith('translation', ['translating']));
+    assert.deepEqual(actions.reconnect.reasons, ['translation-in-progress']);
   });
 });
 
 describe('availableActions: save', () => {
   it('is offered when a translation is ready, with options', () => {
-    const a = byName(availableActions({ status: status('translation', ['ready to save', 'current']), location: location() }));
-    assert.deepEqual(a.save, {
+    const actions = actionsByName(statusWith('translation', ['ready to save', 'current']));
+    assert.deepEqual(actions.save, {
       action: 'save', enabled: true, reasons: [], creates: false, options: ['merge', 'overwrite'],
     });
   });
 
   it('creates when the page does not exist yet', () => {
-    const a = byName(availableActions({ status: status('not created', ['ready to save']), location: location() }));
-    assert.equal(a.save.creates, true);
-    assert.equal(a.save.options, undefined);
+    const actions = actionsByName(statusWith('not created', ['ready to save']));
+    assert.equal(actions.save.creates, true);
+    assert.equal(actions.save.options, undefined);
   });
 
   it('is disabled when the page needs review', () => {
-    const a = byName(availableActions({ status: status('translation', ['needs review', 'ready to save']), location: location() }));
-    assert.deepEqual(a.save.reasons, ['needs-review']);
+    const actions = actionsByName(statusWith('translation', ['needs review', 'ready to save']));
+    assert.deepEqual(actions.save.reasons, ['needs-review']);
   });
 
   it('is not offered otherwise', () => {
-    const list = availableActions({ status: status('translation', ['translating']), location: location() });
-    assert.ok(!names(list).includes('save'));
+    assert.equal(actionsByName(statusWith('translation', ['translating'])).save, undefined);
   });
 
   it('is offered on standalone pages with a ready job', () => {
-    const list = availableActions({ status: status('standalone', ['ready to save'], null), location: location() });
-    assert.deepEqual(names(list), ['save']);
+    const actions = availableActions({
+      status: statusWith('standalone', ['ready to save'], null),
+      location: location(),
+    });
+    assert.deepEqual(actionNames(actions), ['save']);
   });
 });
