@@ -72,6 +72,7 @@ function createFixture({
     },
   };
   const services = {
+    content: { merge: async () => ({ ok: true }) },
     translationConnectors: {
       supports: async (sourceLanguage, targetLanguage) => {
         calls.supports.push(`${sourceLanguage}>${targetLanguage}`);
@@ -217,7 +218,11 @@ describe('page: actions', () => {
     const fixture = createFixture({
       pages: { 'global:/en/x': file('a', '1'), 'global:/uk/x': file('b', '7') },
     });
-    const localization = createLocalization({ org: 'acme', providers: fixture.providers });
+    const localization = createLocalization({
+      org: 'acme',
+      providers: fixture.providers,
+      services: { content: fixture.services.content },
+    });
     const result = await localization.page('global', '/uk/x');
     assert.deepEqual(findAction(result, 'translate').reasons, ['connector-unsupported']);
   });
@@ -226,6 +231,88 @@ describe('page: actions', () => {
     const fixture = createFixture({ pages: { 'global:/en/p': file('a', '1') } });
     await localizationFor(fixture).page('brand-c', '/x/p');
     assert.deepEqual(fixture.calls.supports, []);
+  });
+});
+
+describe('page: backend gating', () => {
+  const hlx6Api = (hlx6Sites, calls = []) => ({
+    isHlx6: async ({ org, site }) => {
+      calls.push(`${org}/${site}`);
+      return hlx6Sites.includes(site);
+    },
+  });
+  const localizationWithApi = (fixture, api) => createLocalization({
+    org: 'acme', api, providers: fixture.providers, services: fixture.services,
+  });
+
+  it('disables copy actions when the page site is on Helix 6, keeping reconnect', async () => {
+    const fixture = createFixture({
+      pages: { 'global:/en/x': file('a', '1'), 'global:/uk/x': file('b', '7') },
+      indexes: { 'global:/uk': { pages: { b: { base: base('a', '1') } }, pending: {} } },
+    });
+    const calls = [];
+    const result = await localizationWithApi(fixture, hlx6Api(['global'], calls)).page('global', '/uk/x');
+    assert.deepEqual(findAction(result, 'rollout').reasons, ['backend-unsupported']);
+    assert.deepEqual(findAction(result, 'translate').reasons, ['backend-unsupported']);
+    assert.equal(findAction(result, 'reconnect').enabled, true);
+    assert.deepEqual(calls, ['acme/global']);
+  });
+
+  it('disables copy actions when the effective source site is on Helix 6', async () => {
+    const fixture = createFixture({
+      pages: { 'global:/en/p': file('a', '1'), 'brand-b:/es-en/p': file('b', '1') },
+    });
+    const calls = [];
+    const result = await localizationWithApi(fixture, hlx6Api(['global'], calls)).page('brand-b', '/es-en/p');
+    assert.deepEqual(findAction(result, 'rollout').reasons, ['backend-unsupported']);
+    assert.deepEqual(calls.sort(), ['acme/brand-b', 'acme/global']);
+  });
+
+  it('allows copy actions when both sites are on the legacy backend', async () => {
+    const fixture = createFixture({
+      pages: { 'global:/en/p': file('a', '1'), 'brand-b:/es-en/p': file('b', '1') },
+    });
+    const result = await localizationWithApi(fixture, hlx6Api([])).page('brand-b', '/es-en/p');
+    assert.equal(findAction(result, 'rollout').enabled, true);
+  });
+
+  it('caches the backend per site until refresh', async () => {
+    const fixture = createFixture({ pages: { 'global:/en/x': file('a', '1') } });
+    const calls = [];
+    const localization = localizationWithApi(fixture, hlx6Api([], calls));
+    await localization.page('global', '/uk/x');
+    await localization.page('global', '/uk/y');
+    assert.deepEqual(calls, ['acme/global']);
+    localization.refresh();
+    await localization.page('global', '/uk/x');
+    assert.deepEqual(calls, ['acme/global', 'acme/global']);
+  });
+
+  it('disables copy actions without a content service', async () => {
+    const fixture = createFixture({ pages: { 'global:/en/x': file('a', '1') } });
+    const localization = createLocalization({
+      org: 'acme',
+      providers: fixture.providers,
+      services: { translationConnectors: fixture.services.translationConnectors },
+    });
+    const result = await localization.page('global', '/uk/x');
+    assert.deepEqual(findAction(result, 'rollout').reasons, ['copy-engine-unavailable']);
+  });
+
+  it('builds the default content service from the SDK copy engine', async () => {
+    const fixture = createFixture({
+      pages: { 'global:/en/x': file('a', '1') },
+      indexes: { 'global:/uk': { pages: {}, pending: {} } },
+    });
+    const daFetch = async () => new Response('', { status: 404 });
+    const localization = createLocalization({
+      org: 'acme',
+      actions: { daFetch, loc: { mergeCopy: async () => ({ ok: true }) } },
+      providers: fixture.providers,
+      services: { translationConnectors: fixture.services.translationConnectors },
+    });
+    const result = await localization.page('global', '/uk/x');
+    assert.equal(findAction(result, 'rollout').enabled, true);
   });
 });
 

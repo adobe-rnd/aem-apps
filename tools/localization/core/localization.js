@@ -20,6 +20,8 @@ import { availableActions } from './domain/actions.js';
 import createConfigProvider from './providers/config.js';
 import createPageInfoProvider from './providers/page-info.js';
 import createLocIndexProvider from './providers/loc-index.js';
+import createContentService from './services/content.js';
+import createPublishService from './services/publish.js';
 import createLegacyApi, { DA_ORIGIN } from './api/legacy.js';
 
 const siteOf = (id) => id.slice(0, id.indexOf(':'));
@@ -30,6 +32,7 @@ const newCaches = () => ({
   pageInfo: new Map(),
   index: new Map(),
   review: new Map(),
+  hlx6: new Map(),
 });
 
 const cached = (cache, key, load) => {
@@ -52,16 +55,24 @@ function defaultProviders({ org, api }) {
   };
 }
 
+function defaultServices({ org, api, actions }) {
+  if (!api) return {};
+  const services = { publish: createPublishService({ org, api }) };
+  if (actions?.loc) services.content = createContentService({ org, api, loc: actions.loc });
+  return services;
+}
+
 export default function createLocalization({
   org,
   actions,
   api: apiOverride,
   daOrigin = DA_ORIGIN,
   providers: providerOverrides = {},
-  services = {},
+  services: serviceOverrides = {},
 } = {}) {
   const api = defaultApi({ api: apiOverride, actions, daOrigin });
   const providers = { ...defaultProviders({ org, api }), ...providerOverrides };
+  const services = { ...defaultServices({ org, api, actions }), ...serviceOverrides };
   if (!org || !providers.config || !providers.pageInfo || !providers.index) {
     throw new TypeError('createLocalization requires org and either an api, actions.daFetch, or config, pageInfo and index providers');
   }
@@ -117,6 +128,18 @@ export default function createLocalization({
     return supports(sourceLanguage, location.language);
   }
 
+  const isHlx6 = (snapshot, site) => cached(
+    snapshot.hlx6,
+    site,
+    async () => Boolean(await api?.isHlx6?.({ org, site })),
+  );
+
+  async function backendSupported(snapshot, site, status) {
+    const sites = new Set([site, status?.effectiveSource?.site].filter(Boolean));
+    const flags = await Promise.all([...sites].map((each) => isHlx6(snapshot, each)));
+    return !flags.some(Boolean);
+  }
+
   async function page(site, path) {
     const snapshot = caches;
     await loadSite(snapshot, site);
@@ -146,6 +169,8 @@ export default function createLocalization({
       status,
       location,
       translationSupported: await translationSupported(location, status),
+      backendSupported: await backendSupported(snapshot, site, status),
+      copyEngineAvailable: Boolean(services.content),
     });
     return {
       location, chain, status, actions: pageActions,

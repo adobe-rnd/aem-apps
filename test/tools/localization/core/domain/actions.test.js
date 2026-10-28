@@ -209,3 +209,34 @@ describe('availableActions: save', () => {
     assert.deepEqual(actionNames(actions), ['save']);
   });
 });
+
+describe('availableActions: backend', () => {
+  const ready = () => statusWith('translation', ['ready to save', 'current']);
+
+  it('disables copy actions on an unsupported backend, keeping reconnect', () => {
+    const actions = actionsByName(statusWith('local copy', ['current']), {}, { backendSupported: false });
+    assert.deepEqual(actions.rollout.reasons, ['backend-unsupported']);
+    assert.deepEqual(actions.translate.reasons, ['backend-unsupported']);
+    assert.equal(actions.reconnect.enabled, true);
+    assert.deepEqual(actionsByName(ready(), {}, { backendSupported: false }).save.reasons, ['backend-unsupported']);
+  });
+
+  it('disables copy actions without a copy engine, keeping reconnect', () => {
+    const actions = actionsByName(statusWith('local copy', ['current']), {}, { copyEngineAvailable: false });
+    assert.deepEqual(actions.rollout.reasons, ['copy-engine-unavailable']);
+    assert.deepEqual(actions.translate.reasons, ['copy-engine-unavailable']);
+    assert.equal(actions.reconnect.enabled, true);
+    assert.deepEqual(actionsByName(ready(), {}, { copyEngineAvailable: false }).save.reasons, ['copy-engine-unavailable']);
+  });
+
+  it('lists backend reasons after language reasons and before page blockers', () => {
+    const actions = actionsByName(
+      statusWith('translation', ['needs review']),
+      { language: 'en-US' },
+      { backendSupported: false, copyEngineAvailable: false },
+    );
+    assert.deepEqual(actions.translate.reasons, [
+      'language-not-translatable', 'backend-unsupported', 'copy-engine-unavailable', 'needs-review',
+    ]);
+  });
+});

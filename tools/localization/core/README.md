@@ -55,7 +55,7 @@ createLocalization({
 })
 ```
 
-Default providers are built from the `api` (by default, the legacy api over `actions.daFetch`). Any of them can be overridden, e.g. with fakes in tests. Without an `api` or `actions.daFetch`, all three providers must be passed. `content` and `publish` services exist (`content` copies via `actions.loc`, PR 801) but the facade doesn't wire them until `execute()` is built.
+Default providers are built from the `api` (by default, the legacy api over `actions.daFetch`). Any of them can be overridden, e.g. with fakes in tests. Without an `api` or `actions.daFetch`, all three providers must be passed. `content` and `publish` services exist (`content` copies via `actions.loc`, PR 801), but `execute()` isn't built yet. Defaults: `publish` whenever there's an `api`, and `content` when there's both an `api` and `actions.loc`. `services` overrides them per key.
 
 **Providers** supply data. The `index` provider also persists its own data.
 
@@ -143,7 +143,7 @@ Per-page info comes from providers:
 
 ## Actions
 
-`availableActions({ status, location, translationSupported })` → `[{ action, enabled, reasons, creates?, options?, default?, destructive? }]`
+`availableActions({ status, location, translationSupported, backendSupported, copyEngineAvailable })` → `[{ action, enabled, reasons, creates?, options?, default?, destructive? }]`
 
 | Action | Applies to | Gate |
 |---|---|---|
@@ -153,6 +153,8 @@ Per-page info comes from providers:
 
 - There's no detach action: rollout or translate on a linked page has `creates: true`, and the UI can call it "Detach".
 - Rollout and translate don't publish unless `onComplete` says so.
+- Rollout, translate and save use the DA-only copy engine (PR 801). They're disabled with `backend-unsupported` when the page's site or its effective source's site is on Helix 6, and with `copy-engine-unavailable` when there's no `content` service. Reconnect isn't affected.
+- Reason order: language/connector, then backend, then page blockers.
 
 ## Facade API
 
@@ -168,9 +170,10 @@ localization.refresh()              // clear all caches
 - Reads page info and index entries for every page in the chain.
 - Fetches `needsReview` only for the page itself (if it exists) and its effective source.
 - Asks `translationConnectors.supports()` only when the location allows translate.
+- Asks `api.isHlx6({ org, site })` for the page's site and its effective source's site (no `api` → legacy).
 - Outside any location, it returns `{ location: null, chain: [], status: null, actions: [] }`.
 
-Configs, page info, index reads and review flags are cached per instance until `refresh()`. Each call uses the caches current when it started, so reads still in flight during a `refresh()` never leak into later calls.
+Configs, page info, index reads, review flags and backend checks are cached per instance until `refresh()`. Each call uses the caches current when it started, so reads still in flight during a `refresh()` never leak into later calls.
 
 ## Domain API (internal)
 

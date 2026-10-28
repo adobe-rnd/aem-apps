@@ -19,7 +19,13 @@ export const REFRESHABLE = ['local copy', 'translation', 'linked', 'not created'
 const COPIES = ['local copy', 'translation'];
 const MISSING = ['linked', 'not created'];
 
-export function availableActions({ status, location, translationSupported = true }) {
+export function availableActions({
+  status,
+  location,
+  translationSupported = true,
+  backendSupported = true,
+  copyEngineAvailable = true,
+}) {
   if (!status || !location) return [];
   const { relationship, sync, effectiveSource } = status;
   const has = (value) => sync.includes(value);
@@ -27,6 +33,11 @@ export function availableActions({ status, location, translationSupported = true
   const options = creates ? undefined : [...location.conflictBehavior];
   const inProgress = has('translating') || has('ready to save');
   const sourceLanguage = effectiveSource?.location?.language;
+
+  const backendReasons = [
+    !backendSupported && 'backend-unsupported',
+    !copyEngineAvailable && 'copy-engine-unavailable',
+  ].filter(Boolean);
 
   const blockers = () => [
     has('needs review') && 'needs-review',
@@ -56,7 +67,7 @@ export function availableActions({ status, location, translationSupported = true
         if (!canTranslate(sourceLanguage, location.language)) reasons.push('language-not-translatable');
         else if (!translationSupported) reasons.push('connector-unsupported');
       }
-      reasons.push(...blockers());
+      reasons.push(...backendReasons, ...blockers());
       const extra = { creates, default: action === preferred };
       if (options) extra.options = options;
       result.push(entry(action, reasons, extra));
@@ -72,7 +83,8 @@ export function availableActions({ status, location, translationSupported = true
   if (has('ready to save')) {
     const extra = { creates };
     if (options) extra.options = options;
-    result.push(entry('save', has('needs review') ? ['needs-review'] : [], extra));
+    const saveReasons = [...backendReasons, ...(has('needs review') ? ['needs-review'] : [])];
+    result.push(entry('save', saveReasons, extra));
   }
 
   return result;
