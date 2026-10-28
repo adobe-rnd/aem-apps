@@ -59,6 +59,7 @@ describe('page-info provider: needsReview', () => {
     const markers = [
       '<da-diff-deleted><p>old</p></da-diff-deleted>',
       '<div class="hero" da-diff-added=""><p>new</p></div>',
+      '<div da-diff-deleted=""><p>old</p></div>',
       '<da-loc-added><p>legacy</p></da-loc-added>',
       '<da-loc-deleted><p>legacy</p></da-loc-deleted>',
     ];

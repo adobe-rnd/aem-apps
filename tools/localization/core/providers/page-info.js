@@ -15,7 +15,7 @@
  */
 import { listAll, requestFailed } from './da-admin.js';
 
-const DIFF_MARKERS = /<da-(diff|loc)-(added|deleted)[\s>]|\sda-diff-added[\s=>]/;
+const DIFF_MARKERS = /<da-(diff|loc)-(added|deleted)[\s>]|\sda-diff-(added|deleted)[\s=>]/;
 
 export default function createPageInfoProvider({ org, fetch, daOrigin }) {
   const sourceUrl = (site, path) => `${daOrigin}/source/${org}/${site}${path}`;
