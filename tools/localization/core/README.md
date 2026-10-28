@@ -36,8 +36,8 @@ Defaults are built from `{ org, fetch, daOrigin }`. Any of them can be overridde
 
 | Key | File | Methods |
 |---|---|---|
-| config | `providers/config.js` | `listSites() → [site]` (sites the user can read)<br>`read(site) → rows \| null` (`null` = unreadable) |
-| pageInfo | `providers/page-info.js` | `list(site, folder) → [{ path, exists, id, version }]`<br>`get(site, path) → { exists, id, version }`<br>`needsReview(site, path) → bool` (lazy: fetches content) |
+| config | `providers/config.js` | `listSites() → [site]` (`GET /list/{org}`, paginated)<br>`read(site) → rows \| null`: the `locations` sheet of `GET /config/{org}/{site}`; `[]` when there's no config or no sheet; `null` on 401/403 (unreadable) |
+| pageInfo | `providers/page-info.js` | `get(site, path) → { exists, id, version }`: `HEAD /source/...`; `id` = `X-da-id`, `version` = `ETag` (changes on every save, including saves that don't create a version)<br>`needsReview(site, path) → bool`: fetches the content and looks for `da-diff-*` / legacy `da-loc-*` markers<br>`list(site, folder) → [{ path, isFolder, lastModified? }]` (`GET /list/...`, paginated; no id/version) |
 | index | `providers/loc-index.js` | `read(locationId) → { pages: { [pageId]: { base, job, overrides } }, pending: { [path]: { job } } }` (`pending` covers pages that don't exist yet, e.g. a first translation)<br>`write(locationId, changes)` |
 
 **Services** perform operations.
@@ -51,6 +51,7 @@ Defaults are built from `{ org, fetch, daOrigin }`. Any of them can be overridde
 ## Model
 
 - **Location**: site + folder + language. Id: `site:/path`; `/` means the whole site.
+- **Page paths** are full DA paths within a site, including the extension (`/en/products/x.html`, `/en/data.json`).
 - **Relationship**: a location's link to its one source location. Locations form a forest, max depth 5 (including the root).
 - **Page**: belongs to its deepest containing location. Dot-folders (`.da`, `.trash`, …) belong to no location.
 - **Source page**: same relative path in the source location. If that path belongs to a nested location inside the source, the page has no source page.

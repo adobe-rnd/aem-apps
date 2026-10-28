@@ -13,11 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { listAll, requestFailed } from './da-admin.js';
 
 const LOCATIONS_SHEET = 'locations';
 const UNREADABLE = [401, 403];
-
-const requestFailed = (what, response) => new Error(`${what} failed with status ${response.status}`);
 
 export default function createConfigProvider({ org, fetch, daOrigin }) {
   async function read(site) {
@@ -29,15 +28,10 @@ export default function createConfigProvider({ org, fetch, daOrigin }) {
     return config?.[LOCATIONS_SHEET]?.data ?? [];
   }
 
-  async function listSites(continuationToken = null, names = []) {
-    const headers = continuationToken ? { 'da-continuation-token': continuationToken } : {};
-    const response = await fetch(`${daOrigin}/list/${org}`, { cache: 'no-store', headers });
-    if (!response.ok) throw requestFailed(`Listing sites for ${org}`, response);
-    const items = await response.json();
-    const allNames = [...names, ...items.filter((item) => !item.ext).map((item) => item.name)];
-    const nextToken = response.headers.get('da-continuation-token');
-    return nextToken ? listSites(nextToken, allNames) : allNames;
+  async function listSites() {
+    const items = await listAll(fetch, `${daOrigin}/list/${org}`, `Listing sites for ${org}`);
+    return items.filter((item) => !item.ext).map((item) => item.name);
   }
 
-  return { read, listSites: () => listSites() };
+  return { read, listSites };
 }
