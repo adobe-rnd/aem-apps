@@ -15,10 +15,12 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { DOMParser } from 'linkedom';
 import createPageInfoProvider from '../../../../../tools/localization/core/providers/page-info.js';
 
 const DA_ORIGIN = 'https://admin.example';
 const SOURCE = `${DA_ORIGIN}/source/acme/global/en/x.html`;
+const parseHtml = (text) => new DOMParser().parseFromString(text, 'text/html');
 
 function providerFor(routes) {
   const requests = [];
@@ -29,7 +31,12 @@ function providerFor(routes) {
     if (!route) return new Response('', { status: 404 });
     return new Response(route.body ?? '', { status: route.status ?? 200, headers: route.headers ?? {} });
   };
-  return { provider: createPageInfoProvider({ org: 'acme', fetch, daOrigin: DA_ORIGIN }), requests };
+  return {
+    provider: createPageInfoProvider({
+      org: 'acme', fetch, daOrigin: DA_ORIGIN, parseHtml,
+    }),
+    requests,
+  };
 }
 
 describe('page-info provider: get', () => {
@@ -76,6 +83,7 @@ describe('page-info provider: needsReview', () => {
       '<body><main><p>da-diff mention</p></main></body>',
       '<body><main><p>Use da-diff-added to mark additions.</p></main></body>',
       '<body><main><p>Also da-diff-deleted =  removals &gt; none</p></main></body>',
+      '<body><main><p title="Use da-diff-deleted for removals">Documentation</p></main></body>',
     ];
     await Promise.all(cleanBodies.map(async (body) => {
       const { provider } = providerFor({ [`GET ${SOURCE}`]: { body } });

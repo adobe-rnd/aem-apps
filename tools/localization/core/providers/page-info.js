@@ -15,9 +15,20 @@
  */
 import { listAll, requestFailed } from './da-admin.js';
 
-const DIFF_MARKERS = /<da-(diff|loc)-(added|deleted)[\s>/]|<[a-z][^<>]*\sda-diff-(added|deleted)[\s=>/]/i;
+const DIFF_SELECTOR = [
+  'da-diff-added',
+  'da-diff-deleted',
+  'da-loc-added',
+  'da-loc-deleted',
+  '[da-diff-added]',
+  '[da-diff-deleted]',
+].join(', ');
 
-export default function createPageInfoProvider({ org, fetch, daOrigin }) {
+const browserParseHtml = (text) => new DOMParser().parseFromString(text, 'text/html');
+
+export default function createPageInfoProvider({
+  org, fetch, daOrigin, parseHtml = browserParseHtml,
+}) {
   const sourceUrl = (site, path) => `${daOrigin}/source/${org}/${site}${path}`;
 
   async function get(site, path) {
@@ -35,7 +46,8 @@ export default function createPageInfoProvider({ org, fetch, daOrigin }) {
     const response = await fetch(sourceUrl(site, path), { cache: 'no-store' });
     if (response.status === 404) return false;
     if (!response.ok) throw requestFailed(`Reading ${org}/${site}${path}`, response);
-    return DIFF_MARKERS.test(await response.text());
+    const html = parseHtml(await response.text());
+    return html.querySelector(DIFF_SELECTOR) !== null;
   }
 
   async function list(site, folder) {
