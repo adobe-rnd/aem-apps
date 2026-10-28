@@ -72,8 +72,15 @@ describe('page-info provider: needsReview', () => {
   });
 
   it('is false for clean content', async () => {
-    const { provider } = providerFor({ [`GET ${SOURCE}`]: { body: '<body><main><p>da-diff mention</p></main></body>' } });
-    assert.equal(await provider.needsReview('global', '/en/x.html'), false);
+    const cleanBodies = [
+      '<body><main><p>da-diff mention</p></main></body>',
+      '<body><main><p>Use da-diff-added to mark additions.</p></main></body>',
+      '<body><main><p>Also da-diff-deleted =  removals &gt; none</p></main></body>',
+    ];
+    await Promise.all(cleanBodies.map(async (body) => {
+      const { provider } = providerFor({ [`GET ${SOURCE}`]: { body } });
+      assert.equal(await provider.needsReview('global', '/en/x.html'), false, body);
+    }));
   });
 
   it('is false for a missing page', async () => {
