@@ -38,8 +38,8 @@ const file = (id, version, extra = {}) => ({
   exists: true, id, version, ...extra,
 });
 
-const status = (path, factsByPath = {}, m = model, site = 'global') => pageStatus(
-  sourceChain(m, site, path).map((ref) => ({ ref, facts: factsByPath[ref.path] })),
+const status = (path, infoByPath = {}, m = model, site = 'global') => pageStatus(
+  sourceChain(m, site, path).map((ref) => ({ ref, info: infoByPath[ref.path] })),
 );
 
 const brief = (s) => s && { relationship: s.relationship, sync: s.sync };

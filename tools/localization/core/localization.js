@@ -20,56 +20,51 @@ import { availableActions } from './domain/actions.js';
 
 const siteOf = (id) => id.slice(0, id.indexOf(':'));
 
+const newCaches = () => ({
+  config: new Map(),
+  rows: new Map(),
+  pageInfo: new Map(),
+  index: new Map(),
+  review: new Map(),
+});
+
+const cached = (cache, key, load) => {
+  if (!cache.has(key)) cache.set(key, load());
+  return cache.get(key);
+};
+
 export default function createLocalization({ org, providers, services = {} } = {}) {
   if (!org || !providers?.config || !providers?.pageInfo || !providers?.index) {
     throw new TypeError('createLocalization requires org and config, pageInfo and index providers');
   }
 
-  let caches;
-  const refresh = () => {
-    caches = {
-      config: new Map(),
-      rows: new Map(),
-      pageInfo: new Map(),
-      index: new Map(),
-      review: new Map(),
-    };
-  };
-  refresh();
+  let caches = newCaches();
+  const refresh = () => { caches = newCaches(); };
 
-  const cached = (cache, key, load) => {
-    if (!cache.has(key)) cache.set(key, load());
-    return cache.get(key);
+  const loadSite = async (c, site) => {
+    const rows = await cached(c.config, site, () => providers.config.read(site));
+    c.rows.set(site, rows ?? null);
   };
 
-  const loadSite = async (site) => {
-    const rows = await cached(caches.config, site, () => providers.config.read(site));
-    caches.rows.set(site, rows ?? null);
-  };
+  const buildModel = (c) => parseConfig({ sites: Object.fromEntries(c.rows) });
 
-  const buildModel = () => parseConfig({ sites: Object.fromEntries(caches.rows) });
-
-  async function resolveChain(site, path) {
-    const model = buildModel();
-    const chain = sourceChain(model, site, path);
-    const source = chain.at(-1)?.location.source;
-    const nextSite = source && siteOf(source);
-    if (!nextSite || caches.rows.has(nextSite)) return { model, chain };
-    await loadSite(nextSite);
-    return resolveChain(site, path);
+  async function loadAncestors(c, location, seen = new Set()) {
+    if (!location?.source || seen.has(location.id)) return buildModel(c);
+    seen.add(location.id);
+    const sourceSite = siteOf(location.source);
+    if (!c.rows.has(sourceSite)) await loadSite(c, sourceSite);
+    const model = buildModel(c);
+    return loadAncestors(c, model.locations.get(location.source), seen);
   }
 
-  async function factsFor(ref) {
+  async function pageInfoFor(c, ref) {
     const info = await cached(
-      caches.pageInfo,
+      c.pageInfo,
       `${ref.site}:${ref.path}`,
       () => providers.pageInfo.get(ref.site, ref.path),
     );
-    const index = await cached(
-      caches.index,
-      ref.location.id,
-      () => providers.index.read(ref.location.id),
-    );
+    const locationId = ref.location.id;
+    const index = await cached(c.index, locationId, () => providers.index.read(locationId));
     const entry = info?.exists ? index?.pages?.[info.id] : index?.pending?.[ref.path];
     return {
       exists: Boolean(info?.exists),
@@ -80,8 +75,8 @@ export default function createLocalization({ org, providers, services = {} } = {
     };
   }
 
-  const needsReview = (ref) => cached(
-    caches.review,
+  const needsReview = (c, ref) => cached(
+    c.review,
     `${ref.site}:${ref.path}`,
     () => providers.pageInfo.needsReview(ref.site, ref.path),
   );
@@ -94,8 +89,9 @@ export default function createLocalization({ org, providers, services = {} } = {
   }
 
   async function page(site, path) {
-    await loadSite(site);
-    const { model, chain: refs } = await resolveChain(site, path);
+    const c = caches;
+    await loadSite(c, site);
+    const model = await loadAncestors(c, findLocation(buildModel(c), site, path));
     const location = findLocation(model, site, path);
     if (!location) {
       return {
@@ -103,13 +99,16 @@ export default function createLocalization({ org, providers, services = {} } = {
       };
     }
 
-    const chain = await Promise.all(refs.map(async (ref) => ({ ref, facts: await factsFor(ref) })));
+    const refs = sourceChain(model, site, path);
+    const chain = await Promise.all(refs.map(async (ref) => ({
+      ref, info: await pageInfoFor(c, ref),
+    })));
     const draft = pageStatus(chain);
 
-    const reviewed = chain.filter((entry, i) => (i === 0 && entry.facts.exists)
+    const reviewed = chain.filter((entry, i) => (i === 0 && entry.info.exists)
       || (draft?.effectiveSource && entry.ref === draft.effectiveSource));
     await Promise.all(reviewed.map(async (entry) => {
-      entry.facts.needsReview = Boolean(await needsReview(entry.ref));
+      entry.info.needsReview = Boolean(await needsReview(c, entry.ref));
     }));
 
     const status = pageStatus(chain);

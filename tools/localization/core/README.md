@@ -97,7 +97,7 @@ Validation produces issues as data (`{ level, code, site, row, id, field, messag
 
 ## Page state
 
-`pageStatus(chain)` → `{ relationship, sync, effectiveSource, reasons }`, or `null` when there's no page: an empty chain (no location), a missing root page, or a missing page with no content above it.
+`pageStatus(chain)`, where `chain` is `[{ ref, info }]` from `sourceChain`, → `{ relationship, sync, effectiveSource, reasons }`, or `null` when there's no page: an empty chain (no location), a missing root page, or a missing page with no content above it.
 
 - **relationship**: root · linked · local copy · translation · standalone · not created · unavailable · config error · unknown
 - **sync**, in urgency order: needs review · blocked by source review · source deleted · ready to save · translating · behind source · current
@@ -107,9 +107,9 @@ Validation produces issues as data (`{ level, code, site, row, id, field, messag
   - no source → standalone
 - **Behind source**: the recorded base (source page ID + version) ≠ the effective source.
 
-Per-page facts come from providers:
+Per-page info comes from providers:
 
-| Fact | Provider |
+| Info | Provider |
 |---|---|
 | exists, id, version | pageInfo (da-admin) |
 | base, job | index (`/.da/loc`) |
@@ -133,18 +133,18 @@ Per-page facts come from providers:
 ```js
 import { createLocalization } from './core/index.js';
 const loc = createLocalization({ org, providers, services });
-await loc.page(site, path) // { location, chain: [{ ref, facts }], status, actions }
+await loc.page(site, path) // { location, chain: [{ ref, info }], status, actions }
 loc.refresh()              // clear all caches
 ```
 
 `page()`:
-- Loads the page's site config, then each source site up the chain as it's discovered. It never scans the other sites.
+- Loads the page's site config, then each source site up the location chain as it's discovered (following location sources, even past nested locations). It never scans the other sites.
 - Reads page info and index entries for every page in the chain.
 - Fetches `needsReview` only for the page itself (if it exists) and its effective source.
 - Asks `translationConnectors.supports()` only when the location allows translate.
 - Outside any location, it returns `{ location: null, chain: [], status: null, actions: [] }`.
 
-Configs, page info, index reads and review flags are cached per instance until `refresh()`.
+Configs, page info, index reads and review flags are cached per instance until `refresh()`. Each call uses the caches current when it started, so reads still in flight during a `refresh()` never leak into later calls.
 
 ## Domain API (internal)
 

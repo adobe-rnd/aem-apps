@@ -120,14 +120,14 @@ describe('page: config loading', () => {
   });
 });
 
-describe('page: facts', () => {
+describe('page: page info', () => {
   it('combines page info and index entries keyed by page id', async () => {
     const f = fakes({
       pages: { 'global:/en/x': file('a', '1'), 'global:/uk/x': file('b', '7') },
       indexes: { 'global:/uk': { pages: { b: { base: base('a', '1') } }, pending: {} } },
     });
     const result = await create(f).page('global', '/uk/x');
-    assert.deepEqual(result.chain[0].facts, {
+    assert.deepEqual(result.chain[0].info, {
       exists: true, id: 'b', version: '7', base: base('a', '1'), job: null, needsReview: false,
     });
     assert.equal(result.status.relationship, 'local copy');
@@ -200,6 +200,48 @@ describe('page: actions', () => {
 });
 
 describe('page: caching', () => {
+  it('discovers config ancestors through location sources past nested locations', async () => {
+    const f = fakes({
+      configs: {
+        a: [{ path: '/t', language: 'en', source: 'b:/s' }],
+        b: [
+          { path: '/s', language: 'en', source: 'c:/r' },
+          { path: '/s/n', language: 'en' },
+        ],
+        c: [{ path: '/r', language: 'en' }],
+      },
+      pages: { 'a:/t/n/x': file('x', '1') },
+    });
+    const result = await create(f).page('a', '/t/n/x');
+    assert.deepEqual(f.calls.config, ['a', 'b', 'c']);
+    assert.equal(result.status.relationship, 'standalone');
+  });
+
+  it('does not let reads started before refresh leak into later calls', async () => {
+    let release;
+    let first = true;
+    const configs = { global: CONFIGS.global };
+    const f = fakes({
+      configs,
+      pages: { 'global:/en/x': file('a', '1'), 'global:/uk/x': file('b', '7') },
+      indexes: { 'global:/uk': { pages: { b: { base: base('a', '1') } }, pending: {} } },
+    });
+    const { read } = f.providers.config;
+    f.providers.config.read = (site) => {
+      if (!first) return read(site);
+      first = false;
+      return new Promise((resolve) => { release = () => resolve([{ path: '/uk', language: 'en-GB' }]); });
+    };
+    const loc = create(f);
+    const stale = loc.page('global', '/uk/x');
+    loc.refresh();
+    const fresh = loc.page('global', '/uk/x');
+    release();
+    await stale;
+    assert.equal((await fresh).status.relationship, 'local copy');
+    assert.equal((await loc.page('global', '/uk/x')).status.relationship, 'local copy');
+  });
+
   it('reuses configs, page info and index reads until refresh', async () => {
     const f = fakes({ pages: { 'global:/en/x': file('a', '1') } });
     const loc = create(f);

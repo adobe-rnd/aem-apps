@@ -26,7 +26,7 @@ export const SYNC_ORDER = [
 
 const JOB_SYNC = { translating: 'translating', ready: 'ready to save' };
 
-const exists = (entry) => Boolean(entry?.facts?.exists);
+const exists = (entry) => Boolean(entry?.info?.exists);
 
 function findEffectiveSource(chain) {
   for (let i = 1; i < chain.length; i += 1) {
@@ -45,15 +45,15 @@ const result = (relationship, { sync = [], effectiveSource = null, reasons = [] 
 
 function flags(self, effective) {
   const sync = [];
-  if (self.facts?.needsReview) sync.push('needs review');
-  if (effective?.facts.needsReview) sync.push('blocked by source review');
-  const job = JOB_SYNC[self.facts?.job?.state];
+  if (self.info?.needsReview) sync.push('needs review');
+  if (effective?.info.needsReview) sync.push('blocked by source review');
+  const job = JOB_SYNC[self.info?.job?.state];
   if (job) sync.push(job);
   return sync;
 }
 
 function existingStatus(self, effective) {
-  const { base } = self.facts;
+  const { base } = self.info;
   const sync = flags(self, effective);
   const opts = { sync, effectiveSource: effective };
 
@@ -65,8 +65,8 @@ function existingStatus(self, effective) {
 
   if (!effective) {
     sync.push('source deleted');
-  } else if (base.sourceId !== effective.facts.id
-    || base.sourceVersion !== effective.facts.version) {
+  } else if (base.sourceId !== effective.info.id
+    || base.sourceVersion !== effective.info.version) {
     sync.push('behind source');
   } else {
     sync.push('current');
