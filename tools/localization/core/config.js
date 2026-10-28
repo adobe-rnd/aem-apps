@@ -95,6 +95,13 @@ function parseRow(fields, { scope, site: scopeSite, index }, issue) {
     return null;
   }
 
+  if (!SITE_PATTERN.test(site)) {
+    issue({
+      ...ctx, code: 'invalid-site', field: 'site', message: `Invalid site "${site}".`,
+    });
+    return null;
+  }
+
   const path = normalizePath(fields.path);
   if (!path) {
     issue({
@@ -140,7 +147,7 @@ function parseRow(fields, { scope, site: scopeSite, index }, issue) {
 
   const listField = (field, allowed, code) => {
     const values = toList(fields[field]);
-    if (!values.length) return DEFAULTS[field];
+    if (!values.length) return [...DEFAULTS[field]];
     const bad = values.filter((v) => !allowed.includes(v));
     if (bad.length) fail(code, field, `Unknown ${field}: ${bad.join(', ')}.`);
     return values.filter((v) => allowed.includes(v));

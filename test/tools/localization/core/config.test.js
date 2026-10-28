@@ -91,6 +91,22 @@ describe('parseConfig: locations', () => {
     assert.equal(model.locations.size, 0);
   });
 
+  it('errors on invalid site names and drops the row', () => {
+    const orgModel = parseConfig({
+      org: [row({ site: 'bad_site', path: '/en', language: 'en' })],
+      sites: {},
+    });
+    assert.deepEqual(codes(orgModel), ['invalid-site']);
+    assert.equal(orgModel.locations.size, 0);
+
+    const siteModel = parseConfig({
+      org: [],
+      sites: { 'bad site': [row({ path: '/en', language: 'en' })] },
+    });
+    assert.deepEqual(codes(siteModel), ['invalid-site']);
+    assert.equal(siteModel.locations.size, 0);
+  });
+
   it('skips blank rows', () => {
     const model = parseConfig({ org: [row({})], sites: {} });
     assert.equal(model.locations.size, 0);
@@ -197,6 +213,15 @@ describe('parseConfig: source', () => {
     assert.equal(loc.missingPages, 'none');
     assert.deepEqual(loc.conflictBehavior, ['merge']);
     assert.equal(loc.onComplete, 'none');
+  });
+
+  it('does not share default lists between locations or calls', () => {
+    const first = withSource('/en').locations.get('global:/uk');
+    first.actions.push('translate');
+    first.conflictBehavior.push('overwrite');
+    const second = withSource('/en').locations.get('global:/uk');
+    assert.deepEqual(second.actions, ['rollout']);
+    assert.deepEqual(second.conflictBehavior, ['merge']);
   });
 });
 
