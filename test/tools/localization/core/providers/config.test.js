@@ -16,8 +16,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import createConfigProvider from '../../../../../tools/localization/core/providers/config.js';
+import createLegacyApi from '../../../../../tools/localization/core/api/legacy.js';
 
 const DA_ORIGIN = 'https://admin.example';
+const apiOver = (fetch) => createLegacyApi({ fetch, daOrigin: DA_ORIGIN });
 
 function fakeFetch(routes) {
   const requests = [];
@@ -32,7 +34,7 @@ function fakeFetch(routes) {
 
 const providerFor = (routes) => {
   const { fetch, requests } = fakeFetch(routes);
-  return { provider: createConfigProvider({ org: 'acme', fetch, daOrigin: DA_ORIGIN }), requests };
+  return { provider: createConfigProvider({ org: 'acme', api: apiOver(fetch) }), requests };
 };
 
 describe('config provider: read', () => {
@@ -99,7 +101,7 @@ describe('config provider: listSites', () => {
       const headers = next ? { 'da-continuation-token': next } : {};
       return new Response(JSON.stringify(items), { status: 200, headers });
     };
-    const provider = createConfigProvider({ org: 'acme', fetch, daOrigin: DA_ORIGIN });
+    const provider = createConfigProvider({ org: 'acme', api: apiOver(fetch) });
     assert.deepEqual(await provider.listSites(), ['global', 'brand-b']);
     assert.equal(requests.length, 2);
   });

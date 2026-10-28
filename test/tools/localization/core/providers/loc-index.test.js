@@ -16,8 +16,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import createLocIndexProvider from '../../../../../tools/localization/core/providers/loc-index.js';
+import createLegacyApi from '../../../../../tools/localization/core/api/legacy.js';
 
 const DA_ORIGIN = 'https://admin.example';
+const apiOver = (fetch) => createLegacyApi({ fetch, daOrigin: DA_ORIGIN });
 const NESTED_URL = `${DA_ORIGIN}/source/acme/global/.da/loc/emea/es/index.json`;
 
 function createStore(files = {}) {
@@ -57,7 +59,7 @@ function createStore(files = {}) {
 }
 
 const providerFor = (store, extra = {}) => createLocIndexProvider({
-  org: 'acme', fetch: store.fetch, daOrigin: DA_ORIGIN, ...extra,
+  org: 'acme', api: apiOver(store.fetch), ...extra,
 });
 
 const EMPTY = { pages: {}, pending: {} };
@@ -87,7 +89,7 @@ describe('loc-index provider: read', () => {
 
   it('throws on other failures', async () => {
     const fetch = async () => new Response('', { status: 403 });
-    const provider = createLocIndexProvider({ org: 'acme', fetch, daOrigin: DA_ORIGIN });
+    const provider = createLocIndexProvider({ org: 'acme', api: apiOver(fetch) });
     await assert.rejects(provider.read('global:/emea/es'), /403/);
   });
 });
@@ -135,7 +137,7 @@ describe('loc-index provider: write', () => {
 
   it('throws on write failures', async () => {
     const fetch = async (url, options = {}) => new Response('', { status: options.method === 'POST' ? 500 : 404 });
-    const provider = createLocIndexProvider({ org: 'acme', fetch, daOrigin: DA_ORIGIN });
+    const provider = createLocIndexProvider({ org: 'acme', api: apiOver(fetch) });
     await assert.rejects(provider.write('global:/emea/es', { pages: {} }), /500/);
   });
 });

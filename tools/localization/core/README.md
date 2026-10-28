@@ -47,21 +47,22 @@ api.aem.preview / publish({ org, site, path })                 // AEM path (no .
 ```js
 createLocalization({
   org,
-  actions,                                               // DA SDK actions; actions.daFetch builds the default providers
-  daOrigin,                                              // default https://admin.da.live
+  actions,                                               // DA SDK actions; actions.daFetch builds the default legacy api
+  api,                                                   // optional backend api (e.g. nx api.js once public); wins over actions
+  daOrigin,                                              // default https://admin.da.live (legacy api only)
   providers: { config, pageInfo, index },                // optional overrides
   services: { copy, translationConnectors, publish },    // optional
 })
 ```
 
-Default providers are built from `actions.daFetch` and `daOrigin`. Any of them can be overridden, e.g. with fakes in tests. Without `actions.daFetch`, all three providers must be passed. No default services exist yet; `copy` will come from `actions.loc` (PR 801) when `execute()` is designed.
+Default providers are built from the `api` (by default, the legacy api over `actions.daFetch`). Any of them can be overridden, e.g. with fakes in tests. Without an `api` or `actions.daFetch`, all three providers must be passed. No default services exist yet; `copy` will come from `actions.loc` (PR 801) when `execute()` is designed.
 
 **Providers** supply data. The `index` provider also persists its own data.
 
 | Key | File | Methods |
 |---|---|---|
 | config | `providers/config.js` | `listSites() → [site]` (`GET /list/{org}`, paginated)<br>`read(site) → rows \| null`: the `locations` sheet of `GET /config/{org}/{site}`; `[]` when there's no config or no sheet; `null` on 401/403 (unreadable) |
-| pageInfo | `providers/page-info.js` | `get(site, path) → { exists, id, version }`: `HEAD /source/...`; `id` = `X-da-id`, `version` = `ETag` (changes on every save, including saves that don't create a version)<br>`needsReview(site, path) → bool`: fetches the content, parses it (`DOMParser`; `parseHtml` can be injected) and looks for `da-diff-*` / legacy `da-loc-*` elements or `da-diff-*` attributes<br>`list(site, folder) → [{ path, isFolder, lastModified? }]` (`GET /list/...`, paginated; no id/version) |
+| pageInfo | `providers/page-info.js` | `get(site, path) → { exists, id, version }`: `api.source.getMetadata`; `id` = `X-da-id` (legacy) or `doc-id` (Helix 6), `version` = `ETag` (changes on every save, including saves that don't create a version)<br>`needsReview(site, path) → bool`: fetches the content, parses it (`DOMParser`; `parseHtml` can be injected) and looks for `da-diff-*` / legacy `da-loc-*` elements or `da-diff-*` attributes<br>`list(site, folder) → [{ path, isFolder, lastModified? }]` (`GET /list/...`, paginated; no id/version) |
 | index | `providers/loc-index.js` | File: `/{site}/.da/loc{location path}/index.json` in the location's site (whole site: `/.da/loc/index.json`).<br>`read(locationId) → { pages: { [pageId]: { base, job, overrides } }, pending: { [path]: { job } } }` (`pending` covers pages that don't exist yet, e.g. a first translation). 404 → empty; other failures throw.<br>`write(locationId, changes) → index`: `changes` has the same shape, and a `null` entry deletes it. Read-modify-write guarded by `If-Match` (or `If-None-Match: *` when creating), retried on 412 up to `maxAttempts` (3). |
 
 **Services** perform operations.

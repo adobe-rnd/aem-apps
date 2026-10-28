@@ -24,26 +24,21 @@ const DIFF_SELECTOR = [
   '[da-diff-deleted]',
 ].join(', ');
 
+const ID_HEADERS = ['X-da-id', 'doc-id'];
+
 const browserParseHtml = (text) => new DOMParser().parseFromString(text, 'text/html');
 
-export default function createPageInfoProvider({
-  org, fetch, daOrigin, parseHtml = browserParseHtml,
-}) {
-  const sourceUrl = (site, path) => `${daOrigin}/source/${org}/${site}${path}`;
-
+export default function createPageInfoProvider({ org, api, parseHtml = browserParseHtml }) {
   async function get(site, path) {
-    const response = await fetch(sourceUrl(site, path), { method: 'HEAD', cache: 'no-store' });
+    const response = await api.source.getMetadata({ org, site, path });
     if (response.status === 404) return { exists: false };
     if (!response.ok) throw requestFailed(`Reading ${org}/${site}${path}`, response);
-    return {
-      exists: true,
-      id: response.headers.get('X-da-id'),
-      version: response.headers.get('ETag'),
-    };
+    const id = ID_HEADERS.map((header) => response.headers.get(header)).find(Boolean) ?? null;
+    return { exists: true, id, version: response.headers.get('ETag') };
   }
 
   async function needsReview(site, path) {
-    const response = await fetch(sourceUrl(site, path), { cache: 'no-store' });
+    const response = await api.source.get({ org, site, path });
     if (response.status === 404) return false;
     if (!response.ok) throw requestFailed(`Reading ${org}/${site}${path}`, response);
     const html = parseHtml(await response.text());
@@ -51,12 +46,11 @@ export default function createPageInfoProvider({
   }
 
   async function list(site, folder) {
-    const folderPath = folder === '/' ? '' : folder;
     const sitePrefix = `/${org}/${site}`;
     const items = await listAll(
-      fetch,
-      `${daOrigin}/list/${org}/${site}${folderPath}`,
-      `Listing ${org}/${site}${folderPath}`,
+      api,
+      { org, site, path: folder },
+      `Listing ${org}/${site}${folder}`,
     );
     return items.map((item) => {
       const entry = { path: item.path.slice(sitePrefix.length), isFolder: !item.ext };

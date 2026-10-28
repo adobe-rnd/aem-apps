@@ -273,6 +273,27 @@ describe('page: caching', () => {
     assert.deepEqual(requests, ['https://admin.example/source/acme/global/.da/loc/en/index.json']);
   });
 
+  it('prefers an explicit api over actions.daFetch', async () => {
+    const configRequests = [];
+    const api = {
+      isHlx6: async () => true,
+      config: {
+        get: async (target) => {
+          configRequests.push(target);
+          return new Response(JSON.stringify({ locations: { data: [{ path: '/en', language: 'en' }] } }));
+        },
+      },
+      source: {
+        getMetadata: async () => new Response(null, { status: 404 }),
+        get: async () => new Response('', { status: 404 }),
+      },
+    };
+    const daFetch = async () => { throw new Error('daFetch should not be used'); };
+    const localization = createLocalization({ org: 'acme', api, actions: { daFetch } });
+    await localization.page('global', '/en/x.html');
+    assert.deepEqual(configRequests, [{ org: 'acme', site: 'global' }]);
+  });
+
   it('requires SDK actions or every provider', () => {
     assert.throws(() => createLocalization({ org: 'acme' }), /daFetch|providers/);
   });

@@ -17,10 +17,12 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { DOMParser } from 'linkedom';
 import createPageInfoProvider from '../../../../../tools/localization/core/providers/page-info.js';
+import createLegacyApi from '../../../../../tools/localization/core/api/legacy.js';
 
 const DA_ORIGIN = 'https://admin.example';
 const SOURCE = `${DA_ORIGIN}/source/acme/global/en/x.html`;
 const parseHtml = (text) => new DOMParser().parseFromString(text, 'text/html');
+const apiOver = (fetch) => createLegacyApi({ fetch, daOrigin: DA_ORIGIN });
 
 function providerFor(routes) {
   const requests = [];
@@ -32,9 +34,7 @@ function providerFor(routes) {
     return new Response(route.body ?? '', { status: route.status ?? 200, headers: route.headers ?? {} });
   };
   return {
-    provider: createPageInfoProvider({
-      org: 'acme', fetch, daOrigin: DA_ORIGIN, parseHtml,
-    }),
+    provider: createPageInfoProvider({ org: 'acme', api: apiOver(fetch), parseHtml }),
     requests,
   };
 }
@@ -48,6 +48,18 @@ describe('page-info provider: get', () => {
       exists: true, id: 'page-1', version: '"etag-1"',
     });
     assert.equal(requests[0].options.cache, 'no-store');
+  });
+
+  it('falls back to the Helix 6 doc-id header', async () => {
+    const api = {
+      source: {
+        getMetadata: async () => new Response(null, { headers: { 'doc-id': 'page-6', ETag: '"e6"' } }),
+      },
+    };
+    const provider = createPageInfoProvider({ org: 'acme', api, parseHtml });
+    assert.deepEqual(await provider.get('global', '/en/x.html'), {
+      exists: true, id: 'page-6', version: '"e6"',
+    });
   });
 
   it('reports a missing page', async () => {
@@ -134,7 +146,7 @@ describe('page-info provider: list', () => {
       const headers = next ? { 'da-continuation-token': next } : {};
       return new Response(JSON.stringify(items), { status: 200, headers });
     };
-    const provider = createPageInfoProvider({ org: 'acme', fetch, daOrigin: DA_ORIGIN });
+    const provider = createPageInfoProvider({ org: 'acme', api: apiOver(fetch) });
     const items = await provider.list('global', '/en');
     assert.deepEqual(items.map((item) => item.path), ['/en/a.html', '/en/b.html']);
     assert.equal(requests.length, 2);

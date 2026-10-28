@@ -36,19 +36,17 @@ function applyChanges(index, changes) {
   return updated;
 }
 
-export default function createLocIndexProvider({
-  org, fetch, daOrigin, maxAttempts = 3,
-}) {
-  const indexUrl = (locationId) => {
+export default function createLocIndexProvider({ org, api, maxAttempts = 3 }) {
+  const indexTarget = (locationId) => {
     const separator = locationId.indexOf(':');
     const site = locationId.slice(0, separator);
     const path = locationId.slice(separator + 1);
     const folder = path === '/' ? '' : path;
-    return `${daOrigin}/source/${org}/${site}/.da/loc${folder}/index.json`;
+    return { org, site, path: `/.da/loc${folder}/index.json` };
   };
 
   async function readWithEtag(locationId) {
-    const response = await fetch(indexUrl(locationId), { cache: 'no-store' });
+    const response = await api.source.get(indexTarget(locationId));
     if (response.status === 404) return { index: emptyIndex(), etag: null };
     if (!response.ok) throw requestFailed(`Reading localization index for ${locationId}`, response);
     return { index: normalize(await response.json()), etag: response.headers.get('ETag') };
@@ -61,10 +59,10 @@ export default function createLocIndexProvider({
   async function write(locationId, changes, attempt = 1) {
     const { index, etag } = await readWithEtag(locationId);
     const updated = applyChanges(index, changes);
-    const body = new FormData();
-    body.append('data', new Blob([JSON.stringify(updated)], { type: 'application/json' }));
     const headers = etag ? { 'If-Match': etag } : { 'If-None-Match': '*' };
-    const response = await fetch(indexUrl(locationId), { method: 'POST', body, headers });
+    const response = await api.source.save({
+      ...indexTarget(locationId), body: JSON.stringify(updated), headers,
+    });
     if (response.status === CONFLICT) {
       if (attempt >= maxAttempts) {
         throw new Error(`Localization index for ${locationId} kept changing (conflict after ${attempt} attempts)`);

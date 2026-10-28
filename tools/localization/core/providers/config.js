@@ -18,9 +18,9 @@ import { listAll, requestFailed } from './da-admin.js';
 const LOCATIONS_SHEET = 'locations';
 const UNREADABLE = [401, 403];
 
-export default function createConfigProvider({ org, fetch, daOrigin }) {
+export default function createConfigProvider({ org, api }) {
   async function read(site) {
-    const response = await fetch(`${daOrigin}/config/${org}/${site}`, { cache: 'no-store' });
+    const response = await api.config.get({ org, site });
     if (response.status === 404) return [];
     if (UNREADABLE.includes(response.status)) return null;
     if (!response.ok) throw requestFailed(`Reading config for ${org}/${site}`, response);
@@ -29,7 +29,7 @@ export default function createConfigProvider({ org, fetch, daOrigin }) {
   }
 
   async function listSites() {
-    const items = await listAll(fetch, `${daOrigin}/list/${org}`, `Listing sites for ${org}`);
+    const items = await listAll(api, { org }, `Listing sites for ${org}`);
     return items.filter((item) => !item.ext).map((item) => item.name);
   }
 

@@ -14,15 +14,13 @@
  * limitations under the License.
  */
 
-const CONTINUATION_HEADER = 'da-continuation-token';
-
 export const requestFailed = (what, response) => new Error(`${what} failed with status ${response.status}`);
 
-export async function listAll(fetch, url, description, continuationToken = null, collected = []) {
-  const headers = continuationToken ? { [CONTINUATION_HEADER]: continuationToken } : {};
-  const response = await fetch(url, { cache: 'no-store', headers });
-  if (!response.ok) throw requestFailed(description, response);
-  const items = [...collected, ...await response.json()];
-  const nextToken = response.headers.get(CONTINUATION_HEADER);
-  return nextToken ? listAll(fetch, url, description, nextToken, items) : items;
+export async function listAll(api, target, description, continuationToken = null, collected = []) {
+  const result = await api.source.list({ ...target, continuationToken });
+  if (!result.ok) throw requestFailed(description, result);
+  const items = [...collected, ...result.items];
+  return result.continuationToken
+    ? listAll(api, target, description, result.continuationToken, items)
+    : items;
 }
