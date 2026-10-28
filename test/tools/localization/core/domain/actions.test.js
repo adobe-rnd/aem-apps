@@ -15,7 +15,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { availableActions } from '../../../../tools/localization/core/actions.js';
+import { availableActions } from '../../../../../tools/localization/core/domain/actions.js';
 
 const location = (overrides = {}) => ({
   id: 'global:/uk',

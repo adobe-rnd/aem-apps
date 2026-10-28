@@ -15,7 +15,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseConfig } from '../../../../tools/localization/core/config.js';
+import { parseConfig } from '../../../../../tools/localization/core/domain/config.js';
 
 const row = (fields) => ({
   site: '',

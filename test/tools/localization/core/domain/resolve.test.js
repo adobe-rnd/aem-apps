@@ -15,7 +15,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseConfig } from '../../../../tools/localization/core/config.js';
+import { parseConfig } from '../../../../../tools/localization/core/domain/config.js';
 import {
   findLocation,
   sourcePage,
@@ -23,7 +23,7 @@ import {
   targetPages,
   targetLocations,
   equivalentSites,
-} from '../../../../tools/localization/core/resolve.js';
+} from '../../../../../tools/localization/core/domain/resolve.js';
 
 const loc = (site, path, language, source = '', actions = '') => ({
   site, path, language, source, actions,

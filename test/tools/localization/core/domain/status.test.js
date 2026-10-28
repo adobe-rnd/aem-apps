@@ -15,9 +15,9 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseConfig } from '../../../../tools/localization/core/config.js';
-import { sourceChain } from '../../../../tools/localization/core/resolve.js';
-import { pageStatus } from '../../../../tools/localization/core/status.js';
+import { parseConfig } from '../../../../../tools/localization/core/domain/config.js';
+import { sourceChain } from '../../../../../tools/localization/core/domain/resolve.js';
+import { pageStatus } from '../../../../../tools/localization/core/domain/status.js';
 
 const loc = (site, path, language, source = '', actions = '', missingPages = '') => ({
   site, path, language, source, actions, missingPages,

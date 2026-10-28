@@ -21,7 +21,7 @@ import {
   isSameBaseLanguage,
   defaultRefreshAction,
   languageLabel,
-} from '../../../../tools/localization/core/language.js';
+} from '../../../../../tools/localization/core/domain/language.js';
 
 describe('parseLanguage', () => {
   it('parses a bare language', () => {
