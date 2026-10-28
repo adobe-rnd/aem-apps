@@ -11,14 +11,36 @@ core/
   index.js          public API: createLocalization + constants. The only import for app/plugin.
   localization.js   facade: composes domain + providers + services; caches; refresh()
   domain/           pure logic, no I/O
-  providers/        supply data: config, page-info, loc-index                                (planned)
-  services/         perform operations: copy, translation-connectors, publish               (planned)
+  api/              backend transport: DA + AEM admin; legacy adapter now, nx api.js later
+  providers/        supply data: config, page-info, loc-index
+  services/         perform operations: content, translation-connectors, publish             (planned)
 ```
 
 - UI layers import only `index.js`.
 - `domain/` never does I/O.
 - Providers and services are the only code that touches da-admin, nx, connectors, or the network.
 - `fetch` is supplied by the caller. The core never discovers IMS, following the `nx/public/loc` pattern (da-nx PR 801).
+
+## Backend api
+
+Providers and services never build URLs. They call an injected `api` that mirrors the surface of nx2's `api.js`, so the core works on both backends:
+
+| | Legacy | Helix 6 |
+|---|---|---|
+| source, list, config | `admin.da.live` | `api.aem.live/{org}/sites/{site}/...` |
+| preview, live | `admin.hlx.page/{preview\|live}/{org}/{site}/main{path}` | `api.aem.live/{org}/sites/{site}/{preview\|live}{path}` |
+
+```js
+api.isHlx6({ org, site })
+api.source.get / getMetadata / delete({ org, site, path })
+api.source.save({ org, site, path, body, headers })            // headers: If-Match / If-None-Match
+api.source.list({ org, site?, path?, continuationToken? })     // → { ok, status, items, continuationToken }
+api.config.get({ org, site })
+api.aem.preview / publish({ org, site, path })                 // AEM path (no .html)
+```
+
+- **Default today:** `api/legacy.js`, built from `actions.daFetch`. It's legacy only and reports `isHlx6 → false`.
+- **Later:** once da-nx makes `api.js` public, that becomes the default. Callers can pass it as `api` before then.
 
 ## Providers and services (draft contracts)
 
