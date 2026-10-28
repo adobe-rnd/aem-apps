@@ -76,14 +76,23 @@ export function targetPages(model, site, path) {
   const location = findLocation(model, site, path);
   if (!location) return [];
   return targetLocations(model, location.id)
+    .filter((target) => target.id !== location.id)
     .map((target) => mapInto(model, location, path, target))
     .filter(Boolean);
 }
 
+const LEGACY_HOST = /^[a-z0-9-]+$/;
+
+const siteFromHostname = (hostname) => {
+  const parts = String(hostname).trim().toLowerCase().split('.')[0].split('--');
+  if (parts.length !== 3 || !parts.every((p) => LEGACY_HOST.test(p))) return null;
+  return parts[1];
+};
+
 export function equivalentSites(model, hostnames = []) {
   const sites = new Set([...model.locations.values()].map((location) => location.site));
   hostnames.forEach((hostname) => {
-    const site = hostname.trim().split('--')[1]?.toLowerCase();
+    const site = siteFromHostname(hostname);
     if (site) sites.add(site);
   });
   return sites;

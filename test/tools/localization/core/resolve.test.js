@@ -199,6 +199,11 @@ describe('targetPages', () => {
     assert.deepEqual(targetPages(m, 'brand-b', '/es/x'), []);
     assert.deepEqual(targetPages(m, 'global', '/fr/x'), []);
   });
+
+  it('excludes self for a self-sourced location', () => {
+    const self = parseConfig({ org: [loc('global', '/en', 'en', '/en')], sites: {} });
+    assert.deepEqual(targetPages(self, 'global', '/en/x'), []);
+  });
 });
 
 describe('targetLocations', () => {
@@ -219,6 +224,13 @@ describe('equivalentSites', () => {
     assert.deepEqual(
       equivalentSites(m, ['main--brand-c--acme.aem.page', ' main--Global--acme.aem.live ', 'bogus']),
       new Set(['global', 'brand-b', 'brand-c']),
+    );
+  });
+
+  it('ignores hostnames that are not ref--site--org', () => {
+    assert.deepEqual(
+      equivalentSites(m, ['foo--unrelated.example', 'a--b--c--d.aem.page', '--x--y.aem.page', '']),
+      new Set(['global', 'brand-b']),
     );
   });
 });
