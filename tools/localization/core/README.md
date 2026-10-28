@@ -38,7 +38,7 @@ Defaults are built from `{ org, fetch, daOrigin }`. Any of them can be overridde
 |---|---|---|
 | config | `providers/config.js` | `listSites() → [site]` (`GET /list/{org}`, paginated)<br>`read(site) → rows \| null`: the `locations` sheet of `GET /config/{org}/{site}`; `[]` when there's no config or no sheet; `null` on 401/403 (unreadable) |
 | pageInfo | `providers/page-info.js` | `get(site, path) → { exists, id, version }`: `HEAD /source/...`; `id` = `X-da-id`, `version` = `ETag` (changes on every save, including saves that don't create a version)<br>`needsReview(site, path) → bool`: fetches the content, parses it (`DOMParser`; `parseHtml` can be injected) and looks for `da-diff-*` / legacy `da-loc-*` elements or `da-diff-*` attributes<br>`list(site, folder) → [{ path, isFolder, lastModified? }]` (`GET /list/...`, paginated; no id/version) |
-| index | `providers/loc-index.js` | `read(locationId) → { pages: { [pageId]: { base, job, overrides } }, pending: { [path]: { job } } }` (`pending` covers pages that don't exist yet, e.g. a first translation)<br>`write(locationId, changes)` |
+| index | `providers/loc-index.js` | File: `/{site}/.da/loc{location path}/index.json` in the location's site (whole site: `/.da/loc/index.json`).<br>`read(locationId) → { pages: { [pageId]: { base, job, overrides } }, pending: { [path]: { job } } }` (`pending` covers pages that don't exist yet, e.g. a first translation). 404 → empty; other failures throw.<br>`write(locationId, changes) → index`: `changes` has the same shape, and a `null` entry deletes it. Read-modify-write guarded by `If-Match` (or `If-None-Match: *` when creating), retried on 412 up to `maxAttempts` (3). |
 
 **Services** perform operations.
 
