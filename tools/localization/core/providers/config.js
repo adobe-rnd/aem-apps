@@ -29,12 +29,15 @@ export default function createConfigProvider({ org, fetch, daOrigin }) {
     return config?.[LOCATIONS_SHEET]?.data ?? [];
   }
 
-  async function listSites() {
-    const response = await fetch(`${daOrigin}/list/${org}`, { cache: 'no-store' });
+  async function listSites(continuationToken = null, names = []) {
+    const headers = continuationToken ? { 'da-continuation-token': continuationToken } : {};
+    const response = await fetch(`${daOrigin}/list/${org}`, { cache: 'no-store', headers });
     if (!response.ok) throw requestFailed(`Listing sites for ${org}`, response);
     const items = await response.json();
-    return items.filter((item) => !item.ext).map((item) => item.name);
+    const allNames = [...names, ...items.filter((item) => !item.ext).map((item) => item.name)];
+    const nextToken = response.headers.get('da-continuation-token');
+    return nextToken ? listSites(nextToken, allNames) : allNames;
   }
 
-  return { read, listSites };
+  return { read, listSites: () => listSites() };
 }

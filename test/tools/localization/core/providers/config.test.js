@@ -86,6 +86,24 @@ describe('config provider: listSites', () => {
     assert.deepEqual(await provider.listSites(), ['global', 'brand-b']);
   });
 
+  it('follows continuation tokens across pages', async () => {
+    const requests = [];
+    const pages = {
+      first: { items: [{ path: '/acme/global', name: 'global' }], next: 'token-2' },
+      'token-2': { items: [{ path: '/acme/brand-b', name: 'brand-b' }], next: null },
+    };
+    const fetch = async (url, options = {}) => {
+      requests.push({ url, options });
+      const token = options.headers?.['da-continuation-token'] ?? 'first';
+      const { items, next } = pages[token];
+      const headers = next ? { 'da-continuation-token': next } : {};
+      return new Response(JSON.stringify(items), { status: 200, headers });
+    };
+    const provider = createConfigProvider({ org: 'acme', fetch, daOrigin: DA_ORIGIN });
+    assert.deepEqual(await provider.listSites(), ['global', 'brand-b']);
+    assert.equal(requests.length, 2);
+  });
+
   it('throws when the org cannot be listed', async () => {
     const { provider } = providerFor({ [`${DA_ORIGIN}/list/acme`]: { status: 403 } });
     await assert.rejects(provider.listSites(), /403/);
