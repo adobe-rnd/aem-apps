@@ -13,7 +13,7 @@ core/
   domain/           pure logic, no I/O
   api/              backend transport: DA + AEM admin; legacy adapter now, nx api.js later
   providers/        supply data: config, page-info, loc-index
-  services/         perform operations: content, translation-connectors, publish             (planned)
+  services/         perform operations: content, translation-connectors (planned), publish
 ```
 
 - UI layers import only `index.js`.
@@ -51,11 +51,11 @@ createLocalization({
   api,                                                   // optional backend api (e.g. nx api.js once public); wins over actions
   daOrigin,                                              // default https://admin.da.live (legacy api only)
   providers: { config, pageInfo, index },                // optional overrides
-  services: { copy, translationConnectors, publish },    // optional
+  services: { content, translationConnectors, publish }, // optional
 })
 ```
 
-Default providers are built from the `api` (by default, the legacy api over `actions.daFetch`). Any of them can be overridden, e.g. with fakes in tests. Without an `api` or `actions.daFetch`, all three providers must be passed. No default services exist yet; `copy` will come from `actions.loc` (PR 801) when `execute()` is designed.
+Default providers are built from the `api` (by default, the legacy api over `actions.daFetch`). Any of them can be overridden, e.g. with fakes in tests. Without an `api` or `actions.daFetch`, all three providers must be passed. `content` and `publish` services exist (`content` copies via `actions.loc`, PR 801) but the facade doesn't wire them until `execute()` is built.
 
 **Providers** supply data. The `index` provider also persists its own data.
 
@@ -69,9 +69,9 @@ Default providers are built from the `api` (by default, the legacy api over `act
 
 | Key | File | Methods |
 |---|---|---|
-| copy | `services/copy.js` | `merge({ source, target, labels })`, `overwrite({ source, target })` (nx `createCopy`) |
-| translationConnectors | `services/translation-connectors.js` | `supports(srcLang, tgtLang)`, `send(job)`, `status(job)`, `save(job)`, `cancel(job)` |
-| publish | `services/publish.js` | `preview(paths)`, `publish(paths)` |
+| content | `services/content.js` | Pages are `{ site, path }` (DA paths).<br>`read(page) → html \| null`: `api.source.get`; 404 → `null`; other failures throw<br>`merge({ source, target, label, content? })`, `overwrite({ source, target, label, content? }) → { ok, status, error? }`: `actions.loc.mergeCopy` / `overwriteCopy` with `/{org}/{site}{path}` urls; `content` (e.g. a translation) replaces the source content; without `actions.loc` → `{ ok: false, error }`<br>`remove(page) → { ok, status }`: `api.source.delete` |
+| translationConnectors | `services/translation-connectors.js` | `supports(srcLang, tgtLang)`, `send(job)`, `status(job)`, `save(job)`, `cancel(job)` (planned) |
+| publish | `services/publish.js` | `preview(page)`, `publish(page) → { ok, status, error? }`: DA path → AEM path (`.html` stripped, `index.html` → folder; `toAemPath`). `publish` previews first and stops if that fails. `error` = `x-error` header. |
 
 ## Model
 
