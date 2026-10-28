@@ -2,22 +2,51 @@
 
 Shared core for Localization V2: translation, regional copies, and content shared within or across sites. It replaces the loc app (da-nx `nx/blocks/loc`) and MSM (`tools/apps/msm`, `tools/plugins/msm`).
 
-Status: draft. The domain layer is built; providers and the service layer are in design.
+Status: draft. The domain layer is built; providers, services and the facade are in design.
 
 ## Layers
 
 ```
 core/
-  index.js       public API (createLocalization + constants). The only import for app/plugin. (planned)
-  service.js     composes domain + providers; caches; refresh()          (planned)
-  domain/        pure logic, no I/O
-  providers/     I/O implementations built from { fetch, daOrigin }     (planned)
+  index.js          public API: createLocalization + constants. The only import for app/plugin. (planned)
+  localization.js   facade: composes domain + providers + services; caches; refresh()        (planned)
+  domain/           pure logic, no I/O
+  providers/        supply data: config, page-info, loc-index                                (planned)
+  services/         perform operations: copy, translation-connectors, publish               (planned)
 ```
 
 - UI layers import only `index.js`.
 - `domain/` never does I/O.
-- Providers are the only code that touches da-admin, nx, connectors, or the network.
+- Providers and services are the only code that touches da-admin, nx, connectors, or the network.
 - `fetch` is supplied by the caller. The core never discovers IMS, following the `nx/public/loc` pattern (da-nx PR 801).
+
+## Providers and services (draft contracts)
+
+```js
+createLocalization({
+  org, fetch, daOrigin,
+  providers: { config, pageInfo, index },                // optional overrides
+  services: { copy, translationConnectors, publish },    // optional overrides
+})
+```
+
+Defaults are built from `{ org, fetch, daOrigin }`. Any of them can be overridden, e.g. with fakes in tests.
+
+**Providers** supply data. The `index` provider also persists its own data.
+
+| Key | File | Methods |
+|---|---|---|
+| config | `providers/config.js` | `listSites() → [site]` (sites the user can read)<br>`read(site) → rows \| null` (`null` = unreadable) |
+| pageInfo | `providers/page-info.js` | `list(site, folder) → [{ path, exists, id, version }]`<br>`get(site, path) → { exists, id, version }`<br>`needsReview(site, path) → bool` (lazy: fetches content) |
+| index | `providers/loc-index.js` | `read(locationId) → { [pageId]: { base, job, overrides } }`<br>`write(locationId, changes)` |
+
+**Services** perform operations.
+
+| Key | File | Methods |
+|---|---|---|
+| copy | `services/copy.js` | `merge({ source, target, labels })`, `overwrite({ source, target })` (nx `createCopy`) |
+| translationConnectors | `services/translation-connectors.js` | `supports(srcLang, tgtLang)`, `send(job)`, `status(job)`, `save(job)`, `cancel(job)` |
+| publish | `services/publish.js` | `preview(paths)`, `publish(paths)` |
 
 ## Model
 
@@ -51,7 +80,7 @@ Each site has a `locations` sheet in its own config. **The target defines the re
 | onComplete | `none` · `preview` · `publish` | `none` |
 
 - Headers are matched case-insensitively, ignoring spaces, `-` and `_`.
-- Values are trimmed and lowercased.
+- Values are trimmed. Site names and the values of `actions`, `missingPages`, `conflictBehavior` and `onComplete` are lowercased; languages are canonicalized (`en-us` → `en-US`); paths and labels keep their case.
 - A root row must leave the relationship columns empty.
 - Translation service, env, DNT rules and per-target connector options stay in `translate.json`.
 
@@ -68,7 +97,7 @@ Validation produces issues as data (`{ level, code, site, row, id, field, messag
 
 ## Page state
 
-`pageStatus(chain)` → `{ relationship, sync, effectiveSource, reasons }`
+`pageStatus(chain)` → `{ relationship, sync, effectiveSource, reasons }`, or `null` when there's no page: an empty chain (no location), a missing root page, or a missing page with no content above it.
 
 - **relationship**: root · linked · local copy · translation · standalone · not created · unavailable · config error · unknown
 - **sync**, in urgency order: needs review · blocked by source review · source deleted · ready to save · translating · behind source · current
@@ -80,12 +109,11 @@ Validation produces issues as data (`{ level, code, site, row, id, field, messag
 
 Per-page facts come from providers:
 
-| Fact | Source |
+| Fact | Provider |
 |---|---|
-| exists, id, version | da-admin |
-| base | `/.da/loc` index |
-| needsReview | in-doc metadata (fetched lazily) |
-| job | translation jobs |
+| exists, id, version | pageInfo (da-admin) |
+| base, job | index (`/.da/loc`) |
+| needsReview | pageInfo.needsReview (in-doc metadata, fetched lazily) |
 
 ## Actions
 
@@ -125,7 +153,7 @@ Per-page facts come from providers:
 
 ## Open
 
-- Provider contracts and naming.
+- Provider/service contract details: index file layout, page-info batching, connector job shape.
 - Legacy config readers (`translate.json`, the org `msm` sheet).
 - Translation jobs and the connector interface (`supports()`, language-code mapping).
 - Rename, delete and re-parent behavior; path collisions with standalone pages.
