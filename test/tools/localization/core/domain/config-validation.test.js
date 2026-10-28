@@ -21,7 +21,14 @@ const loc = (site, path, language, source = '', actions = '') => ({
   site, path, language, source, actions,
 });
 
-const org = (...rows) => parseConfig({ org: rows, sites: {} });
+const org = (...rows) => {
+  const sites = {};
+  rows.forEach(({ site, ...rest }) => {
+    sites[site] ??= [];
+    sites[site].push(rest);
+  });
+  return parseConfig({ sites });
+};
 
 const issuesFor = (model, id) => model.issues.filter((i) => i.id === id);
 const codesFor = (model, id) => issuesFor(model, id).map((i) => i.code);
@@ -53,53 +60,39 @@ describe('validation: valid tree', () => {
 });
 
 describe('validation: sources', () => {
-  it('errors on an unknown source', () => {
+  it('errors on an unknown source in a loaded site', () => {
     const model = org(loc('global', '/uk', 'en-GB', '/en'));
     assert.deepEqual(codesFor(model, 'global:/uk'), ['unknown-source']);
     assert.equal(model.locations.get('global:/uk').valid, false);
   });
 
-  it('errors on a cross-site source in a site config', () => {
-    const model = parseConfig({
-      org: [loc('global', '/en', 'en')],
-      sites: { 'brand-b': [{ path: '/', language: 'en', source: 'global:/en' }] },
-    });
-    assert.deepEqual(codesFor(model, 'brand-b:/'), ['cross-site-source']);
-  });
-
-  it('allows a site config to use a same-site source defined in org config', () => {
-    const model = parseConfig({
-      org: [loc('global', '/en', 'en')],
-      sites: { global: [{ path: '/uk', language: 'en-GB', source: '/en' }] },
-    });
+  it('allows a cross-site source defined in the source site', () => {
+    const model = org(loc('global', '/en', 'en'), loc('brand-b', '/', 'en', 'global:/en'));
     assert.deepEqual(model.issues, []);
   });
 });
 
-describe('validation: incomplete config', () => {
-  const model = parseConfig({
-    org: null,
-    sites: {
-      global: [
-        { path: '/uk', language: 'en-GB', source: '/en' },
-        { path: '/ie', language: 'en-IE', source: '/uk' },
-      ],
-    },
-  });
+describe('validation: unresolved sources', () => {
+  [
+    ['not loaded', { 'brand-b': [{ path: '/', language: 'en', source: 'global:/en' }, { path: '/x', language: 'en', source: '/' }] }],
+    ['unreadable', { global: null, 'brand-b': [{ path: '/', language: 'en', source: 'global:/en' }, { path: '/x', language: 'en', source: '/' }] }],
+  ].forEach(([label, sites]) => {
+    const model = parseConfig({ sites });
 
-  it('warns and marks unresolved when a source may live in unreadable org config', () => {
-    const issues = issuesFor(model, 'global:/uk');
-    assert.deepEqual(issues.map((i) => [i.level, i.code]), [['warning', 'source-unresolved']]);
-    const uk = model.locations.get('global:/uk');
-    assert.equal(uk.valid, true);
-    assert.equal(uk.resolved, false);
-  });
+    it(`warns and marks unresolved when the source site is ${label}`, () => {
+      const issues = issuesFor(model, 'brand-b:/');
+      assert.deepEqual(issues.map((i) => [i.level, i.code]), [['warning', 'source-unresolved']]);
+      const location = model.locations.get('brand-b:/');
+      assert.equal(location.valid, true);
+      assert.equal(location.resolved, false);
+    });
 
-  it('propagates unresolved to descendants with a warning', () => {
-    const issues = issuesFor(model, 'global:/ie');
-    assert.deepEqual(issues.map((i) => [i.level, i.code]), [['warning', 'ancestor-unresolved']]);
-    assert.equal(model.locations.get('global:/ie').resolved, false);
-    assert.equal(model.locations.get('global:/ie').valid, true);
+    it(`propagates unresolved to descendants when the source site is ${label}`, () => {
+      const issues = issuesFor(model, 'brand-b:/x');
+      assert.deepEqual(issues.map((i) => [i.level, i.code]), [['warning', 'ancestor-unresolved']]);
+      assert.equal(model.locations.get('brand-b:/x').resolved, false);
+      assert.equal(model.locations.get('brand-b:/x').valid, true);
+    });
   });
 });
 

@@ -33,10 +33,8 @@ const DEFAULTS = {
 
 const RELATIONSHIP_FIELDS = ['actions', 'missingPages', 'conflictBehavior', 'onComplete'];
 
-const FIELDS = ['site', 'path', 'language', 'label', 'source', ...RELATIONSHIP_FIELDS];
+const FIELDS = ['path', 'language', 'label', 'source', ...RELATIONSHIP_FIELDS];
 const HEADER_MAP = Object.fromEntries(FIELDS.map((f) => [f.toLowerCase(), f]));
-
-const COMPARED_FIELDS = ['site', 'path', 'language', 'source', ...RELATIONSHIP_FIELDS];
 
 const SITE_PATTERN = /^[a-z0-9-]+$/;
 
@@ -81,30 +79,8 @@ const toList = (value) => [...new Set((value || '')
   .map((v) => v.trim().toLowerCase())
   .filter(Boolean))];
 
-function parseRow(fields, { scope, site: scopeSite, index }, issue) {
-  const ctx = { scope, row: index };
-  let site = (fields.site || '').toLowerCase();
-  if (scope === 'site') {
-    if (site && site !== scopeSite) {
-      issue({
-        ...ctx, code: 'site-mismatch', field: 'site', message: `Site "${site}" does not match site config "${scopeSite}".`,
-      });
-      return null;
-    }
-    site = scopeSite;
-  } else if (!site) {
-    issue({
-      ...ctx, code: 'missing-site', field: 'site', message: 'Org config rows need a site.',
-    });
-    return null;
-  }
-
-  if (!SITE_PATTERN.test(site)) {
-    issue({
-      ...ctx, code: 'invalid-site', field: 'site', message: `Invalid site "${site}".`,
-    });
-    return null;
-  }
+function parseRow(fields, { site, index }, issue) {
+  const ctx = { site, row: index };
 
   const path = normalizePath(fields.path);
   if (!path) {
@@ -134,7 +110,6 @@ function parseRow(fields, { scope, site: scopeSite, index }, issue) {
     missingPages: null,
     conflictBehavior: [],
     onComplete: null,
-    scope,
     valid: true,
     resolved: true,
   };
@@ -174,9 +149,6 @@ function parseRow(fields, { scope, site: scopeSite, index }, issue) {
   return location;
 }
 
-const sameDefinition = (a, b) => COMPARED_FIELDS
-  .every((f) => JSON.stringify(a[f]) === JSON.stringify(b[f]));
-
 const siteOf = (id) => id.slice(0, id.indexOf(':'));
 
 function findCycles(locations) {
@@ -211,26 +183,21 @@ function ancestorsOf(locations, location) {
   return result;
 }
 
-function validateGraph(locations, { incomplete, issue }) {
+function validateGraph(locations, { loadedSites, issue }) {
   const unresolved = new Set();
 
   locations.forEach((location) => {
     const { id, source } = location;
-    if (!source) return;
-    if (location.scope === 'site' && siteOf(source) !== location.site) {
-      issue({
-        id, code: 'cross-site-source', field: 'source', message: `Cross-site source ${source} must be configured in org config.`,
-      });
-    }
-    if (locations.has(source)) return;
-    if (incomplete) {
-      unresolved.add(id);
-      issue({
-        level: 'warning', id, code: 'source-unresolved', field: 'source', message: `Source ${source} not found; org config could not be read.`,
-      });
-    } else {
+    if (!source || locations.has(source)) return;
+    const sourceSite = siteOf(source);
+    if (loadedSites.has(sourceSite)) {
       issue({
         id, code: 'unknown-source', field: 'source', message: `Source ${source} is not a configured location.`,
+      });
+    } else {
+      unresolved.add(id);
+      issue({
+        level: 'warning', id, code: 'source-unresolved', field: 'source', message: `Source ${source} not found; config for site ${sourceSite} is not loaded or not readable.`,
       });
     }
   });
@@ -300,44 +267,37 @@ function propagate(locations, {
   });
 }
 
-export function parseConfig({ org, sites = {} } = {}) {
+export function parseConfig({ sites = {} } = {}) {
   const issues = [];
   const issue = (details) => issues.push({ level: 'error', ...details });
   const locations = new Map();
+  const loadedSites = new Set();
 
-  const addScope = (rows, scope, site) => {
-    const seen = new Set();
-    (rows || []).forEach((raw, index) => {
+  Object.entries(sites).forEach(([rawSite, rows]) => {
+    const site = rawSite.toLowerCase();
+    if (!SITE_PATTERN.test(site)) {
+      issue({ site: rawSite, code: 'invalid-site', message: `Invalid site "${rawSite}".` });
+      return;
+    }
+    if (!rows) return;
+    loadedSites.add(site);
+    rows.forEach((raw, index) => {
       const fields = normalizeRow(raw);
       if (!Object.values(fields).some(Boolean)) return;
-      const location = parseRow(fields, { scope, site, index }, issue);
+      const location = parseRow(fields, { site, index }, issue);
       if (!location) return;
       const { id } = location;
-      if (seen.has(id)) {
+      if (locations.has(id)) {
         issue({
-          scope, row: index, id, code: 'duplicate-location', message: `Location ${id} is defined more than once in ${scope} config.`,
+          site, row: index, id, code: 'duplicate-location', message: `Location ${id} is defined more than once.`,
         });
         return;
       }
-      seen.add(id);
-      const existing = locations.get(id);
-      if (!existing) {
-        locations.set(id, location);
-        return;
-      }
-      if (!sameDefinition(existing, location)) {
-        issue({
-          scope, row: index, id, code: 'scope-conflict', message: `Location ${id} is defined differently in org and site config.`,
-        });
-      }
+      locations.set(id, location);
     });
-  };
+  });
 
-  addScope(org, 'org');
-  Object.entries(sites).forEach(([site, rows]) => addScope(rows, 'site', site.toLowerCase()));
-
-  const incomplete = org === null;
-  const { unresolved, inCycle } = validateGraph(locations, { incomplete, issue });
+  const { unresolved, inCycle } = validateGraph(locations, { loadedSites, issue });
   propagate(locations, {
     issues, unresolved, inCycle, issue,
   });
@@ -348,5 +308,5 @@ export function parseConfig({ org, sites = {} } = {}) {
     if (location) location.valid = false;
   });
 
-  return { locations, issues, incomplete };
+  return { locations, issues };
 }

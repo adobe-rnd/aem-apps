@@ -15,7 +15,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseConfig } from '../../../../../tools/localization/core/domain/config.js';
+import { configFromRows, loc } from '../helpers.js';
 import {
   findLocation,
   sourcePage,
@@ -25,39 +25,29 @@ import {
   equivalentSites,
 } from '../../../../../tools/localization/core/domain/resolve.js';
 
-const loc = (site, path, language, source = '', actions = '') => ({
-  site, path, language, source, actions,
-});
-
 // global:/en          en-US   (root)
 // ├── global:/uk      en-GB
 // ├── global:/emea/en en
 // │   └── global:/emea/es  es-ES
 // │       └── brand-b:/es  es-ES
 // └── brand-b:/       en-US
-const m = parseConfig({
-  org: [
-    loc('global', '/en', 'en-US'),
-    loc('global', '/uk', 'en-GB', '/en', 'link, rollout, translate'),
-    loc('global', '/emea/en', 'en', '/en', 'link, rollout'),
-    loc('global', '/emea/es', 'es-ES', '/emea/en', 'rollout, translate'),
-    loc('brand-b', '/es', 'es-ES', 'global:/emea/es', 'link, rollout'),
-    loc('brand-b', '/', 'en-US', 'global:/en', 'link, rollout'),
-  ],
-  sites: {},
-});
+const m = configFromRows([
+  loc('global', '/en', 'en-US'),
+  loc('global', '/uk', 'en-GB', '/en', 'link, rollout, translate'),
+  loc('global', '/emea/en', 'en', '/en', 'link, rollout'),
+  loc('global', '/emea/es', 'es-ES', '/emea/en', 'rollout, translate'),
+  loc('brand-b', '/es', 'es-ES', 'global:/emea/es', 'link, rollout'),
+  loc('brand-b', '/', 'en-US', 'global:/en', 'link, rollout'),
+]);
 
 // global:/            en (root)
 // ├── global:/emea/en en   (nested inside its own source)
 // └── brand-b:/       en
-const nested = parseConfig({
-  org: [
-    loc('global', '/', 'en'),
-    loc('global', '/emea/en', 'en', '/'),
-    loc('brand-b', '/', 'en', 'global:/'),
-  ],
-  sites: {},
-});
+const nested = configFromRows([
+  loc('global', '/', 'en'),
+  loc('global', '/emea/en', 'en', '/'),
+  loc('brand-b', '/', 'en', 'global:/'),
+]);
 
 const ref = (r) => r && `${r.site}:${r.path}@${r.location.id}`;
 const refs = (list) => list.map(ref);
@@ -94,7 +84,7 @@ describe('findLocation', () => {
   });
 
   it('returns invalid locations too', () => {
-    const bad = parseConfig({ org: [loc('global', '/en', 'nope')], sites: {} });
+    const bad = configFromRows([loc('global', '/en', 'nope')]);
     assert.equal(findLocation(bad, 'global', '/en/x').valid, false);
   });
 });
@@ -129,10 +119,7 @@ describe('sourcePage', () => {
   });
 
   it('returns null when the source location is missing', () => {
-    const partial = parseConfig({
-      org: null,
-      sites: { global: [{ path: '/uk', language: 'en-GB', source: '/en' }] },
-    });
+    const partial = configFromRows([loc('global', '/uk', 'en-GB', 'other:/en')]);
     assert.equal(sourcePage(partial, 'global', '/uk/x'), null);
   });
 });
@@ -156,10 +143,7 @@ describe('sourceChain', () => {
   });
 
   it('stops on cycles', () => {
-    const cyclic = parseConfig({
-      org: [loc('global', '/a', 'en', '/b'), loc('global', '/b', 'en', '/a')],
-      sites: {},
-    });
+    const cyclic = configFromRows([loc('global', '/a', 'en', '/b'), loc('global', '/b', 'en', '/a')]);
     assert.deepEqual(refs(sourceChain(cyclic, 'global', '/a/x')), [
       'global:/a/x@global:/a',
       'global:/b/x@global:/b',
@@ -201,7 +185,7 @@ describe('targetPages', () => {
   });
 
   it('excludes self for a self-sourced location', () => {
-    const self = parseConfig({ org: [loc('global', '/en', 'en', '/en')], sites: {} });
+    const self = configFromRows([loc('global', '/en', 'en', '/en')]);
     assert.deepEqual(targetPages(self, 'global', '/en/x'), []);
   });
 });

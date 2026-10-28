@@ -15,13 +15,9 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseConfig } from '../../../../../tools/localization/core/domain/config.js';
+import { configFromRows, loc } from '../helpers.js';
 import { sourceChain } from '../../../../../tools/localization/core/domain/resolve.js';
 import { pageStatus } from '../../../../../tools/localization/core/domain/status.js';
-
-const loc = (site, path, language, source = '', actions = '', missingPages = '') => ({
-  site, path, language, source, actions, missingPages,
-});
 
 // global:/en  en-US (root)
 // ├── global:/uk  en-GB  linked
@@ -29,17 +25,14 @@ const loc = (site, path, language, source = '', actions = '', missingPages = '')
 // ├── global:/es  es     none
 // │   └── global:/mx  es-MX  linked
 // └── global:/bad (invalid language)
-const model = parseConfig({
-  org: [
-    loc('global', '/en', 'en-US'),
-    loc('global', '/uk', 'en-GB', '/en', 'link, rollout, translate', 'linked'),
-    loc('global', '/ie', 'en-IE', '/uk', 'link, rollout', 'linked'),
-    loc('global', '/es', 'es', '/en', 'rollout, translate', 'none'),
-    loc('global', '/mx', 'es-MX', '/es', 'link, rollout', 'linked'),
-    loc('global', '/bad', 'nope', '/en'),
-  ],
-  sites: {},
-});
+const model = configFromRows([
+  loc('global', '/en', 'en-US'),
+  loc('global', '/uk', 'en-GB', '/en', 'link, rollout, translate', 'linked'),
+  loc('global', '/ie', 'en-IE', '/uk', 'link, rollout', 'linked'),
+  loc('global', '/es', 'es', '/en', 'rollout, translate', 'none'),
+  loc('global', '/mx', 'es-MX', '/es', 'link, rollout', 'linked'),
+  loc('global', '/bad', 'nope', '/en'),
+]);
 
 const file = (id, version, extra = {}) => ({
   exists: true, id, version, ...extra,
@@ -74,10 +67,7 @@ describe('pageStatus: config', () => {
   });
 
   it('reports unknown for an unresolved location', () => {
-    const partial = parseConfig({
-      org: null,
-      sites: { global: [{ path: '/uk', language: 'en-GB', source: '/en' }] },
-    });
+    const partial = configFromRows([loc('global', '/uk', 'en-GB', 'other:/en')]);
     const s = status('/uk/x', { '/uk/x': file('b', '1') }, partial);
     assert.deepEqual(brief(s), { relationship: 'unknown', sync: [] });
     assert.deepEqual(s.reasons, ['unresolved-location']);

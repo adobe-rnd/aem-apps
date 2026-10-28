@@ -18,7 +18,6 @@ import assert from 'node:assert/strict';
 import { parseConfig } from '../../../../../tools/localization/core/domain/config.js';
 
 const row = (fields) => ({
-  site: '',
   path: '',
   language: '',
   label: '',
@@ -30,17 +29,14 @@ const row = (fields) => ({
   ...fields,
 });
 
+const global = (...rows) => parseConfig({ sites: { global: rows } });
+
 const codes = (model) => model.issues.map((i) => i.code);
 const issuesFor = (model, id) => model.issues.filter((i) => i.id === id).map((i) => i.code);
 
 describe('parseConfig: locations', () => {
-  it('parses an org config row into a location keyed by site:path', () => {
-    const model = parseConfig({
-      org: [row({
-        site: 'global', path: '/en', language: 'en-US', label: 'Global English',
-      })],
-      sites: {},
-    });
+  it('parses a site config row into a location keyed by site:path', () => {
+    const model = global(row({ path: '/en', language: 'en-US', label: 'Global English' }));
     assert.deepEqual(model.locations.get('global:/en'), {
       id: 'global:/en',
       site: 'global',
@@ -52,79 +48,61 @@ describe('parseConfig: locations', () => {
       missingPages: null,
       conflictBehavior: [],
       onComplete: null,
-      scope: 'org',
       valid: true,
       resolved: true,
     });
     assert.deepEqual(model.issues, []);
-    assert.equal(model.incomplete, false);
   });
 
-  it('implies site from the site config key', () => {
+  it('combines locations from several sites', () => {
     const model = parseConfig({
-      org: [],
-      sites: { global: [row({ path: '/en', language: 'en' })] },
+      sites: {
+        global: [row({ path: '/en', language: 'en' })],
+        'brand-b': [row({ path: '/', language: 'en' })],
+      },
     });
-    const loc = model.locations.get('global:/en');
-    assert.equal(loc.site, 'global');
-    assert.equal(loc.scope, 'site');
+    assert.deepEqual([...model.locations.keys()], ['global:/en', 'brand-b:/']);
   });
 
-  it('accepts a matching site column in a site config', () => {
-    const model = parseConfig({
-      org: [],
-      sites: { global: [row({ site: 'global', path: '/en', language: 'en' })] },
-    });
+  it('ignores a site column', () => {
+    const model = global(row({ site: 'other', path: '/en', language: 'en' }));
+    assert.ok(model.locations.has('global:/en'));
     assert.deepEqual(model.issues, []);
   });
 
-  it('errors on a mismatched site column in a site config', () => {
-    const model = parseConfig({
-      org: [],
-      sites: { global: [row({ site: 'other', path: '/en', language: 'en' })] },
-    });
-    assert.deepEqual(codes(model), ['site-mismatch']);
+  it('accepts unreadable sites as null', () => {
+    const model = parseConfig({ sites: { global: null } });
+    assert.equal(model.locations.size, 0);
+    assert.deepEqual(model.issues, []);
   });
 
-  it('errors on a missing site in org config', () => {
-    const model = parseConfig({ org: [row({ path: '/en', language: 'en' })], sites: {} });
-    assert.deepEqual(codes(model), ['missing-site']);
+  it('errors on invalid site names', () => {
+    const model = parseConfig({ sites: { 'bad site': [row({ path: '/en', language: 'en' })] } });
+    assert.deepEqual(codes(model), ['invalid-site']);
     assert.equal(model.locations.size, 0);
   });
 
-  it('errors on invalid site names and drops the row', () => {
-    const orgModel = parseConfig({
-      org: [row({ site: 'bad_site', path: '/en', language: 'en' })],
-      sites: {},
-    });
-    assert.deepEqual(codes(orgModel), ['invalid-site']);
-    assert.equal(orgModel.locations.size, 0);
-
-    const siteModel = parseConfig({
-      org: [],
-      sites: { 'bad site': [row({ path: '/en', language: 'en' })] },
-    });
-    assert.deepEqual(codes(siteModel), ['invalid-site']);
-    assert.equal(siteModel.locations.size, 0);
+  it('lowercases site names', () => {
+    const model = parseConfig({ sites: { 'Brand-B': [row({ path: '/', language: 'en' })] } });
+    assert.ok(model.locations.has('brand-b:/'));
   });
 
   it('skips blank rows', () => {
-    const model = parseConfig({ org: [row({})], sites: {} });
+    const model = global(row({}));
     assert.equal(model.locations.size, 0);
     assert.deepEqual(model.issues, []);
   });
 
-  it('marks incomplete when org config is unreadable', () => {
-    const model = parseConfig({ org: null, sites: {} });
-    assert.equal(model.incomplete, true);
+  it('errors on a duplicate location', () => {
+    const en = row({ path: '/en', language: 'en' });
+    const model = global(en, en);
+    assert.deepEqual(codes(model), ['duplicate-location']);
+    assert.equal(model.locations.get('global:/en').valid, false);
   });
 });
 
 describe('parseConfig: paths', () => {
-  const pathOf = (path) => parseConfig({
-    org: [row({ site: 'global', path, language: 'en' })],
-    sites: {},
-  });
+  const pathOf = (path) => global(row({ path, language: 'en' }));
 
   it('strips trailing slashes and whitespace', () => {
     assert.ok(pathOf(' /emea/en/ ').locations.has('global:/emea/en'));
@@ -143,55 +121,33 @@ describe('parseConfig: paths', () => {
       assert.deepEqual(codes(pathOf(p)), ['invalid-path'], p);
     });
   });
-
-  it('lowercases sites', () => {
-    const model = parseConfig({
-      org: [row({ site: 'Brand-B', path: '/', language: 'en' })],
-      sites: {},
-    });
-    assert.ok(model.locations.has('brand-b:/'));
-  });
 });
 
 describe('parseConfig: language and label', () => {
   it('canonicalizes the language', () => {
-    const model = parseConfig({
-      org: [row({ site: 'global', path: '/en', language: 'en-us' })],
-      sites: {},
-    });
-    assert.equal(model.locations.get('global:/en').language, 'en-US');
+    assert.equal(global(row({ path: '/en', language: 'en-us' })).locations.get('global:/en').language, 'en-US');
   });
 
   it('errors on an invalid or missing language and marks the location invalid', () => {
     ['', 'english'].forEach((language) => {
-      const model = parseConfig({
-        org: [row({ site: 'global', path: '/en', language })],
-        sites: {},
-      });
+      const model = global(row({ path: '/en', language }));
       assert.deepEqual(issuesFor(model, 'global:/en'), ['invalid-language'], language);
       assert.equal(model.locations.get('global:/en').valid, false);
     });
   });
 
   it('falls back to a generated label', () => {
-    const model = parseConfig({
-      org: [row({ site: 'global', path: '/mx', language: 'es-MX' })],
-      sites: {},
-    });
-    assert.equal(model.locations.get('global:/mx').label, 'Mexican Spanish');
+    assert.equal(global(row({ path: '/mx', language: 'es-MX' })).locations.get('global:/mx').label, 'Mexican Spanish');
   });
 });
 
 describe('parseConfig: source', () => {
-  const withSource = (source, extra = {}) => parseConfig({
-    org: [
-      row({ site: 'global', path: '/en', language: 'en-US' }),
-      row({
-        site: 'global', path: '/uk', language: 'en-GB', source, ...extra,
-      }),
-    ],
-    sites: {},
-  });
+  const withSource = (source, extra = {}) => global(
+    row({ path: '/en', language: 'en-US' }),
+    row({
+      path: '/uk', language: 'en-GB', source, ...extra,
+    }),
+  );
 
   it('parses site:/path', () => {
     assert.equal(withSource('brand-a:/en').locations.get('global:/uk').source, 'brand-a:/en');
@@ -230,15 +186,12 @@ describe('parseConfig: source', () => {
 });
 
 describe('parseConfig: relationship settings', () => {
-  const settings = (extra) => parseConfig({
-    org: [
-      row({ site: 'global', path: '/en', language: 'en-US' }),
-      row({
-        site: 'global', path: '/uk', language: 'en-GB', source: '/en', ...extra,
-      }),
-    ],
-    sites: {},
-  });
+  const settings = (extra) => global(
+    row({ path: '/en', language: 'en-US' }),
+    row({
+      path: '/uk', language: 'en-GB', source: '/en', ...extra,
+    }),
+  );
 
   it('parses actions as a trimmed, lowercased, deduped list', () => {
     const loc = settings({ actions: ' Link, rollout ,TRANSLATE, link' }).locations.get('global:/uk');
@@ -275,12 +228,7 @@ describe('parseConfig: relationship settings', () => {
   });
 
   it('errors when a root sets relationship settings', () => {
-    const model = parseConfig({
-      org: [row({
-        site: 'global', path: '/en', language: 'en', actions: 'link',
-      })],
-      sites: {},
-    });
+    const model = global(row({ path: '/en', language: 'en', actions: 'link' }));
     assert.deepEqual(codes(model), ['root-has-relationship-settings']);
     assert.equal(model.locations.get('global:/en').valid, false);
   });
@@ -288,9 +236,9 @@ describe('parseConfig: relationship settings', () => {
 
 describe('parseConfig: lenient headers', () => {
   it('matches headers ignoring case, spaces, dashes and underscores', () => {
-    const model = parseConfig({
-      org: [{
-        Site: 'global',
+    const model = global(
+      { Path: '/en', LANGUAGE: 'en' },
+      {
         PATH: '/uk',
         Language: 'en-GB',
         Source: '/en',
@@ -298,9 +246,8 @@ describe('parseConfig: lenient headers', () => {
         conflict_behavior: 'overwrite',
         'on-complete': 'preview',
         Actions: 'link',
-      }],
-      sites: {},
-    });
+      },
+    );
     const loc = model.locations.get('global:/uk');
     assert.equal(loc.missingPages, 'linked');
     assert.deepEqual(loc.conflictBehavior, ['overwrite']);
@@ -309,51 +256,14 @@ describe('parseConfig: lenient headers', () => {
   });
 });
 
-describe('parseConfig: merging scopes', () => {
-  const en = row({ site: 'global', path: '/en', language: 'en' });
-
-  it('errors on a duplicate location within one scope', () => {
-    const model = parseConfig({ org: [en, en], sites: {} });
-    assert.deepEqual(codes(model), ['duplicate-location']);
-    assert.equal(model.locations.get('global:/en').valid, false);
-  });
-
-  it('allows an identical definition in org and site config', () => {
-    const model = parseConfig({
-      org: [en],
-      sites: { global: [row({ path: '/en/', language: 'EN' })] },
-    });
-    assert.deepEqual(model.issues, []);
-    assert.equal(model.locations.get('global:/en').scope, 'org');
-  });
-
-  it('errors on a conflicting definition in org and site config', () => {
-    const model = parseConfig({
-      org: [en],
-      sites: { global: [row({ path: '/en', language: 'en-US' })] },
-    });
-    assert.deepEqual(codes(model), ['scope-conflict']);
-    assert.equal(model.locations.get('global:/en').valid, false);
-  });
-
-  it('ignores label differences when comparing scopes', () => {
-    const model = parseConfig({
-      org: [en],
-      sites: { global: [row({ path: '/en', language: 'en', label: 'English' })] },
-    });
-    assert.deepEqual(model.issues, []);
-  });
-});
-
 describe('parseConfig: issues', () => {
-  it('include level, code, id, field and message', () => {
-    const model = parseConfig({
-      org: [row({ site: 'global', path: '/en', language: 'nope' })],
-      sites: {},
-    });
+  it('include level, code, site, row, id, field and message', () => {
+    const model = global(row({ path: '/en', language: 'nope' }));
     const [issue] = model.issues;
     assert.equal(issue.level, 'error');
     assert.equal(issue.code, 'invalid-language');
+    assert.equal(issue.site, 'global');
+    assert.equal(issue.row, 0);
     assert.equal(issue.id, 'global:/en');
     assert.equal(issue.field, 'language');
     assert.equal(typeof issue.message, 'string');
