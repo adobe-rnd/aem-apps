@@ -25,6 +25,7 @@ export function parseLanguage(code) {
     return null;
   }
   if (!/^[a-z]{2,3}$/.test(locale.language)) return null;
+  if (locale.baseName !== locale.toString()) return null;
   return {
     tag: locale.toString(),
     language: locale.language,

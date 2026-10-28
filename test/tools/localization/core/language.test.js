@@ -49,7 +49,7 @@ describe('parseLanguage', () => {
   });
 
   it('returns null for invalid or empty codes', () => {
-    ['', undefined, null, 'english', 'en_US', 'e'].forEach((code) => {
+    ['', undefined, null, 'english', 'en_US', 'e', 'en-u-ca-gregory', 'de-x-foo'].forEach((code) => {
       assert.equal(parseLanguage(code), null, `expected null for ${code}`);
     });
   });
@@ -120,5 +120,7 @@ describe('languageLabel', () => {
 
   it('falls back to the raw code when invalid', () => {
     assert.equal(languageLabel('bogus'), 'bogus');
+    assert.equal(languageLabel('en-u-ca-gregory'), 'en-u-ca-gregory');
+    assert.equal(languageLabel('de-x-foo'), 'de-x-foo');
   });
 });
