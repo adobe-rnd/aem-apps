@@ -15,6 +15,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { DOMParser } from 'linkedom';
 import { createLocalization } from '../../../../tools/localization/core/index.js';
 
 // global:/en  en-US (root)
@@ -229,6 +230,53 @@ describe('page: actions', () => {
 });
 
 describe('page: caching', () => {
+  it('builds default da-admin providers from SDK actions', async () => {
+    const requests = [];
+    const daFetch = async (url, options = {}) => {
+      requests.push(`${options.method ?? 'GET'} ${url}`);
+      if (url === 'https://admin.da.live/config/acme/global') {
+        return new Response(JSON.stringify({ locations: { data: [{ path: '/en', language: 'en' }] } }));
+      }
+      if (url === 'https://admin.da.live/source/acme/global/en/x.html') {
+        return new Response(options.method === 'HEAD' ? null : '<main></main>', {
+          headers: { 'X-da-id': 'page-1', ETag: '"1"' },
+        });
+      }
+      return new Response('', { status: 404 });
+    };
+    const localization = createLocalization({ org: 'acme', actions: { daFetch } });
+    global.DOMParser = DOMParser;
+    try {
+      const result = await localization.page('global', '/en/x.html');
+      assert.equal(result.status.relationship, 'root');
+      assert.deepEqual(result.chain[0].info.id, 'page-1');
+    } finally {
+      delete global.DOMParser;
+    }
+    assert.ok(requests.includes('GET https://admin.da.live/source/acme/global/.da/loc/en/index.json'));
+  });
+
+  it('lets individual providers be overridden and honors a custom daOrigin', async () => {
+    const fixture = createFixture({ pages: { 'global:/en/x': file('a', '1') } });
+    const requests = [];
+    const daFetch = async (url) => {
+      requests.push(url);
+      return new Response('', { status: 404 });
+    };
+    const localization = createLocalization({
+      org: 'acme',
+      actions: { daFetch },
+      daOrigin: 'https://admin.example',
+      providers: { config: fixture.providers.config, pageInfo: fixture.providers.pageInfo },
+    });
+    await localization.page('global', '/en/x');
+    assert.deepEqual(requests, ['https://admin.example/source/acme/global/.da/loc/en/index.json']);
+  });
+
+  it('requires SDK actions or every provider', () => {
+    assert.throws(() => createLocalization({ org: 'acme' }), /daFetch|providers/);
+  });
+
   it('reuses configs, page info and index reads until refresh', async () => {
     const fixture = createFixture({ pages: { 'global:/en/x': file('a', '1') } });
     const localization = localizationFor(fixture);

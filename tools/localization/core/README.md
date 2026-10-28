@@ -24,13 +24,15 @@ core/
 
 ```js
 createLocalization({
-  org, fetch, daOrigin,
+  org,
+  actions,                                               // DA SDK actions; actions.daFetch builds the default providers
+  daOrigin,                                              // default https://admin.da.live
   providers: { config, pageInfo, index },                // optional overrides
-  services: { copy, translationConnectors, publish },    // optional overrides
+  services: { copy, translationConnectors, publish },    // optional
 })
 ```
 
-Defaults are built from `{ org, fetch, daOrigin }`. Any of them can be overridden, e.g. with fakes in tests.
+Default providers are built from `actions.daFetch` and `daOrigin`. Any of them can be overridden, e.g. with fakes in tests. Without `actions.daFetch`, all three providers must be passed. No default services exist yet; `copy` will come from `actions.loc` (PR 801) when `execute()` is designed.
 
 **Providers** supply data. The `index` provider also persists its own data.
 
@@ -133,7 +135,7 @@ Per-page info comes from providers:
 
 ```js
 import { createLocalization } from './core/index.js';
-const localization = createLocalization({ org, providers, services });
+const localization = createLocalization({ org, actions });
 await localization.page(site, path) // { location, chain: [{ ref, info }], status, actions }
 localization.refresh()              // clear all caches
 ```

@@ -17,6 +17,11 @@ import { parseConfig } from './domain/config.js';
 import { findLocation, sourceChain } from './domain/resolve.js';
 import { pageStatus } from './domain/status.js';
 import { availableActions } from './domain/actions.js';
+import createConfigProvider from './providers/config.js';
+import createPageInfoProvider from './providers/page-info.js';
+import createLocIndexProvider from './providers/loc-index.js';
+
+const DA_ORIGIN = 'https://admin.da.live';
 
 const siteOf = (id) => id.slice(0, id.indexOf(':'));
 
@@ -33,9 +38,22 @@ const cached = (cache, key, load) => {
   return cache.get(key);
 };
 
-export default function createLocalization({ org, providers, services = {} } = {}) {
-  if (!org || !providers?.config || !providers?.pageInfo || !providers?.index) {
-    throw new TypeError('createLocalization requires org and config, pageInfo and index providers');
+function defaultProviders({ org, actions, daOrigin }) {
+  const fetch = actions?.daFetch;
+  if (!fetch) return {};
+  return {
+    config: createConfigProvider({ org, fetch, daOrigin }),
+    pageInfo: createPageInfoProvider({ org, fetch, daOrigin }),
+    index: createLocIndexProvider({ org, fetch, daOrigin }),
+  };
+}
+
+export default function createLocalization({
+  org, actions, daOrigin = DA_ORIGIN, providers: providerOverrides = {}, services = {},
+} = {}) {
+  const providers = { ...defaultProviders({ org, actions, daOrigin }), ...providerOverrides };
+  if (!org || !providers.config || !providers.pageInfo || !providers.index) {
+    throw new TypeError('createLocalization requires org and either actions.daFetch or config, pageInfo and index providers');
   }
 
   let caches = newCaches();
@@ -114,13 +132,13 @@ export default function createLocalization({ org, providers, services = {} } = {
     }));
 
     const status = pageStatus(chain);
-    const actions = availableActions({
+    const pageActions = availableActions({
       status,
       location,
       translationSupported: await translationSupported(location, status),
     });
     return {
-      location, chain, status, actions,
+      location, chain, status, actions: pageActions,
     };
   }
 
