@@ -8,6 +8,7 @@
   "license": "license.txt",
   "ignore": [
     "node_modules/**",
+    ".thinkrail/**",
     "tools/deps/**",
     "**/*.css",
     "**/*.md",
