@@ -2,14 +2,14 @@
 
 Shared core for Localization V2: translation, regional copies, and content shared within or across sites. It replaces the loc app (da-nx `nx/blocks/loc`) and MSM (`tools/apps/msm`, `tools/plugins/msm`).
 
-Status: draft. The domain layer is built; providers, services and the facade are in design.
+Status: draft. The domain layer and the facade's `page()` are built; providers and services are in design.
 
 ## Layers
 
 ```
 core/
-  index.js          public API: createLocalization + constants. The only import for app/plugin. (planned)
-  localization.js   facade: composes domain + providers + services; caches; refresh()        (planned)
+  index.js          public API: createLocalization + constants. The only import for app/plugin.
+  localization.js   facade: composes domain + providers + services; caches; refresh()
   domain/           pure logic, no I/O
   providers/        supply data: config, page-info, loc-index                                (planned)
   services/         perform operations: copy, translation-connectors, publish               (planned)
@@ -38,7 +38,7 @@ Defaults are built from `{ org, fetch, daOrigin }`. Any of them can be overridde
 |---|---|---|
 | config | `providers/config.js` | `listSites() → [site]` (sites the user can read)<br>`read(site) → rows \| null` (`null` = unreadable) |
 | pageInfo | `providers/page-info.js` | `list(site, folder) → [{ path, exists, id, version }]`<br>`get(site, path) → { exists, id, version }`<br>`needsReview(site, path) → bool` (lazy: fetches content) |
-| index | `providers/loc-index.js` | `read(locationId) → { [pageId]: { base, job, overrides } }`<br>`write(locationId, changes)` |
+| index | `providers/loc-index.js` | `read(locationId) → { pages: { [pageId]: { base, job, overrides } }, pending: { [path]: { job } } }` (`pending` covers pages that don't exist yet, e.g. a first translation)<br>`write(locationId, changes)` |
 
 **Services** perform operations.
 
@@ -127,6 +127,24 @@ Per-page facts come from providers:
 
 - There's no detach action: rollout or translate on a linked page has `creates: true`, and the UI can call it "Detach".
 - Rollout and translate don't publish unless `onComplete` says so.
+
+## Facade API
+
+```js
+import { createLocalization } from './core/index.js';
+const loc = createLocalization({ org, providers, services });
+await loc.page(site, path) // { location, chain: [{ ref, facts }], status, actions }
+loc.refresh()              // clear all caches
+```
+
+`page()`:
+- Loads the page's site config, then each source site up the chain as it's discovered. It never scans the other sites.
+- Reads page info and index entries for every page in the chain.
+- Fetches `needsReview` only for the page itself (if it exists) and its effective source.
+- Asks `translationConnectors.supports()` only when the location allows translate.
+- Outside any location, it returns `{ location: null, chain: [], status: null, actions: [] }`.
+
+Configs, page info, index reads and review flags are cached per instance until `refresh()`.
 
 ## Domain API (internal)
 

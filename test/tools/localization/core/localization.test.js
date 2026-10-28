@@ -1,0 +1,218 @@
+/*
+ * Copyright 2026 Adobe Systems Incorporated
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { createLocalization } from '../../../../tools/localization/core/index.js';
+
+// global:/en  en-US (root)
+// ├── global:/uk     en-GB  linked, link/rollout/translate
+// └── brand-b:/es-en en-US  none, rollout   (cross-site)
+//     └── brand-c:/x en-US  linked          (cross-site, two hops)
+const CONFIGS = {
+  global: [
+    { path: '/en', language: 'en-US' },
+    {
+      path: '/uk', language: 'en-GB', source: '/en', actions: 'link, rollout, translate', missingPages: 'linked',
+    },
+  ],
+  'brand-b': [
+    { path: '/es-en', language: 'en-US', source: 'global:/en' },
+  ],
+  'brand-c': [
+    {
+      path: '/x', language: 'en-US', source: 'brand-b:/es-en', actions: 'link, rollout', missingPages: 'linked',
+    },
+  ],
+  unrelated: [{ path: '/', language: 'fr' }],
+};
+
+function fakes({
+  configs = CONFIGS, pages = {}, indexes = {}, review = [], supports = true,
+} = {}) {
+  const calls = {
+    config: [], pageInfo: [], needsReview: [], index: [], supports: [],
+  };
+  const providers = {
+    config: {
+      read: async (site) => {
+        calls.config.push(site);
+        return configs[site] ?? null;
+      },
+      listSites: async () => Object.keys(configs),
+    },
+    pageInfo: {
+      get: async (site, path) => {
+        calls.pageInfo.push(`${site}:${path}`);
+        return pages[`${site}:${path}`] ?? { exists: false };
+      },
+      needsReview: async (site, path) => {
+        calls.needsReview.push(`${site}:${path}`);
+        return review.includes(`${site}:${path}`);
+      },
+    },
+    index: {
+      read: async (locationId) => {
+        calls.index.push(locationId);
+        return indexes[locationId] ?? { pages: {}, pending: {} };
+      },
+    },
+  };
+  const services = {
+    translationConnectors: {
+      supports: async (src, tgt) => {
+        calls.supports.push(`${src}>${tgt}`);
+        return supports;
+      },
+    },
+  };
+  return { providers, services, calls };
+}
+
+const file = (id, version) => ({ exists: true, id, version });
+const base = (sourceId, sourceVersion, via = 'rollout') => ({ sourceId, sourceVersion, via });
+const create = (f) => createLocalization({ org: 'acme', providers: f.providers, services: f.services });
+const actionNames = (result) => result.actions.map((a) => a.action);
+
+describe('page: config loading', () => {
+  it('loads only the page site for a root page', async () => {
+    const f = fakes({ pages: { 'global:/en/x': file('a', '1') } });
+    const result = await create(f).page('global', '/en/x');
+    assert.deepEqual(f.calls.config, ['global']);
+    assert.equal(result.status.relationship, 'root');
+  });
+
+  it('walks up across sites, loading only sites in the chain', async () => {
+    const f = fakes({ pages: { 'global:/en/p': file('a', '1') } });
+    const result = await create(f).page('brand-c', '/x/p');
+    assert.deepEqual(f.calls.config, ['brand-c', 'brand-b', 'global']);
+    assert.deepEqual(result.chain.map((c) => `${c.ref.site}:${c.ref.path}`), [
+      'brand-c:/x/p', 'brand-b:/es-en/p', 'global:/en/p',
+    ]);
+    assert.equal(result.location.id, 'brand-c:/x');
+  });
+
+  it('reports unknown when a source site config is unreadable', async () => {
+    const f = fakes({ configs: { ...CONFIGS, global: null } });
+    const result = await create(f).page('brand-b', '/es-en/p');
+    assert.equal(result.status.relationship, 'unknown');
+    assert.deepEqual(result.actions, []);
+  });
+
+  it('returns an empty result outside any location', async () => {
+    const f = fakes();
+    const result = await create(f).page('global', '/fr/x');
+    assert.deepEqual(result, {
+      location: null, chain: [], status: null, actions: [],
+    });
+  });
+});
+
+describe('page: facts', () => {
+  it('combines page info and index entries keyed by page id', async () => {
+    const f = fakes({
+      pages: { 'global:/en/x': file('a', '1'), 'global:/uk/x': file('b', '7') },
+      indexes: { 'global:/uk': { pages: { b: { base: base('a', '1') } }, pending: {} } },
+    });
+    const result = await create(f).page('global', '/uk/x');
+    assert.deepEqual(result.chain[0].facts, {
+      exists: true, id: 'b', version: '7', base: base('a', '1'), job: null, needsReview: false,
+    });
+    assert.equal(result.status.relationship, 'local copy');
+    assert.deepEqual(result.status.sync, ['current']);
+  });
+
+  it('reads pending jobs by path for pages that do not exist yet', async () => {
+    const f = fakes({
+      pages: { 'global:/en/x': file('a', '1') },
+      indexes: { 'global:/uk': { pages: {}, pending: { '/uk/x': { job: { state: 'translating' } } } } },
+    });
+    const result = await create(f).page('global', '/uk/x');
+    assert.equal(result.status.relationship, 'linked');
+    assert.deepEqual(result.status.sync, ['translating']);
+  });
+
+  it('fetches needsReview only for the page and its effective source', async () => {
+    const f = fakes({
+      configs: {
+        ...CONFIGS,
+        global: [
+          ...CONFIGS.global,
+          {
+            path: '/ie', language: 'en-IE', source: '/uk', actions: 'rollout', missingPages: 'linked',
+          },
+        ],
+      },
+      pages: { 'global:/en/x': file('a', '1'), 'global:/ie/x': file('c', '1') },
+      indexes: { 'global:/ie': { pages: { c: { base: base('a', '1') } }, pending: {} } },
+      review: ['global:/en/x'],
+    });
+    const result = await create(f).page('global', '/ie/x');
+    assert.deepEqual(f.calls.needsReview.sort(), ['global:/en/x', 'global:/ie/x']);
+    assert.deepEqual(result.status.sync, ['blocked by source review', 'current']);
+  });
+
+  it('does not fetch needsReview for a page that does not exist', async () => {
+    const f = fakes({ pages: { 'global:/en/x': file('a', '1') } });
+    await create(f).page('global', '/uk/x');
+    assert.deepEqual(f.calls.needsReview, ['global:/en/x']);
+  });
+});
+
+describe('page: actions', () => {
+  it('derives available actions for the page', async () => {
+    const f = fakes({
+      pages: { 'global:/en/x': file('a', '1'), 'global:/uk/x': file('b', '7') },
+      indexes: { 'global:/uk': { pages: { b: { base: base('a', '1') } }, pending: {} } },
+    });
+    const result = await create(f).page('global', '/uk/x');
+    assert.deepEqual(actionNames(result), ['rollout', 'translate', 'reconnect']);
+  });
+
+  it('asks the connector whether the language pair is supported', async () => {
+    const f = fakes({
+      pages: { 'global:/en/x': file('a', '1'), 'global:/uk/x': file('b', '7') },
+      supports: false,
+    });
+    const result = await create(f).page('global', '/uk/x');
+    assert.deepEqual(f.calls.supports, ['en-US>en-GB']);
+    const translate = result.actions.find((a) => a.action === 'translate');
+    assert.deepEqual(translate.reasons, ['connector-unsupported']);
+  });
+
+  it('does not ask the connector when translate is not allowed', async () => {
+    const f = fakes({ pages: { 'global:/en/p': file('a', '1') } });
+    await create(f).page('brand-c', '/x/p');
+    assert.deepEqual(f.calls.supports, []);
+  });
+});
+
+describe('page: caching', () => {
+  it('reuses configs, page info and index reads until refresh', async () => {
+    const f = fakes({ pages: { 'global:/en/x': file('a', '1') } });
+    const loc = create(f);
+    await loc.page('global', '/uk/x');
+    await loc.page('global', '/uk/x');
+    assert.deepEqual(f.calls.config, ['global']);
+    assert.deepEqual(f.calls.pageInfo, ['global:/uk/x', 'global:/en/x']);
+    assert.deepEqual(f.calls.index, ['global:/uk', 'global:/en']);
+    assert.equal(f.calls.needsReview.length, 1);
+
+    loc.refresh();
+    await loc.page('global', '/uk/x');
+    assert.deepEqual(f.calls.config, ['global', 'global']);
+    assert.equal(f.calls.pageInfo.length, 4);
+  });
+});
