@@ -43,52 +43,43 @@ const result = (relationship, { sync = [], effectiveSource = null, reasons = [] 
   reasons,
 });
 
-function existingStatus(self, effective) {
-  const { base, needsReview } = self.facts;
+function flags(self, effective) {
   const sync = [];
-  const reasons = [];
-  let relationship;
+  if (self.facts?.needsReview) sync.push('needs review');
+  if (effective?.facts.needsReview) sync.push('blocked by source review');
+  const job = JOB_SYNC[self.facts?.job?.state];
+  if (job) sync.push(job);
+  return sync;
+}
 
-  if (base) {
-    relationship = base.via === 'translate' ? 'translation' : 'local copy';
-    if (!effective) {
-      sync.push('source deleted');
-    } else if (base.sourceId !== effective.facts.id
-      || base.sourceVersion !== effective.facts.version) {
-      sync.push('behind source');
-    } else {
-      sync.push('current');
-    }
-  } else if (effective) {
-    relationship = 'local copy';
+function existingStatus(self, effective) {
+  const { base } = self.facts;
+  const sync = flags(self, effective);
+  const opts = { sync, effectiveSource: effective };
+
+  if (!base) {
+    if (!effective) return result('standalone', opts);
     sync.push('behind source');
-    reasons.push('base-unknown');
-  } else {
-    return result('standalone');
+    return result('local copy', { ...opts, reasons: ['base-unknown'] });
   }
 
-  if (needsReview) sync.push('needs review');
-  if (effective?.facts.needsReview) sync.push('blocked by source review');
-  const job = JOB_SYNC[self.facts.job?.state];
-  if (job) sync.push(job);
-
-  return result(relationship, { sync, effectiveSource: effective, reasons });
+  if (!effective) {
+    sync.push('source deleted');
+  } else if (base.sourceId !== effective.facts.id
+    || base.sourceVersion !== effective.facts.version) {
+    sync.push('behind source');
+  } else {
+    sync.push('current');
+  }
+  return result(base.via === 'translate' ? 'translation' : 'local copy', opts);
 }
 
 function missingStatus(self, effective, chain) {
-  const sync = [];
-  const job = JOB_SYNC[self.facts?.job?.state];
-  if (job) sync.push(job);
-
-  if (self.ref.location.missingPages === 'linked') {
-    if (effective) {
-      if (effective.facts.needsReview) sync.push('blocked by source review');
-      return result('linked', { sync, effectiveSource: effective });
-    }
-    return chain.slice(1).some(exists) ? result('unavailable', { sync }) : null;
-  }
-
-  return effective ? result('not created', { sync, effectiveSource: effective }) : null;
+  const opts = { sync: flags(self, effective), effectiveSource: effective };
+  const linked = self.ref.location.missingPages === 'linked';
+  if (effective) return result(linked ? 'linked' : 'not created', opts);
+  if (linked && chain.slice(1).some(exists)) return result('unavailable', opts);
+  return null;
 }
 
 export function pageStatus(chain) {
@@ -99,7 +90,9 @@ export function pageStatus(chain) {
   if (!location.valid) return result('config error', { reasons: ['invalid-location'] });
   if (!location.resolved) return result('unknown', { reasons: ['unresolved-location'] });
 
-  if (!location.source) return exists(self) ? result('root') : null;
+  if (!location.source) {
+    return exists(self) ? result('root', { sync: flags(self, null) }) : null;
+  }
 
   const effective = findEffectiveSource(chain);
   return exists(self) ? existingStatus(self, effective) : missingStatus(self, effective, chain);

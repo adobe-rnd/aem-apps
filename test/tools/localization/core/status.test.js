@@ -124,6 +124,11 @@ describe('pageStatus: missing pages', () => {
     assert.deepEqual(brief(s), { relationship: 'linked', sync: ['blocked by source review'] });
   });
 
+  it('shows blocked by source review on a not created page', () => {
+    const s = status('/es/x', { '/en/x': file('a', '1', { needsReview: true }) });
+    assert.deepEqual(brief(s), { relationship: 'not created', sync: ['blocked by source review'] });
+  });
+
   it('shows job states on a page that does not exist yet', () => {
     assert.deepEqual(
       brief(status('/es/x', { '/en/x': file('a', '1'), '/es/x': { exists: false, job: { state: 'translating' } } })),
@@ -219,6 +224,16 @@ describe('pageStatus: existing pages', () => {
       '/uk/x': file('b', '7', { base: base('a', '1'), needsReview: true }),
     });
     assert.deepEqual(s.sync, ['needs review', 'current']);
+  });
+
+  it('shows own review and job state on a standalone page', () => {
+    const s = status('/uk/x', { '/uk/x': file('b', '7', { needsReview: true, job: { state: 'ready' } }) });
+    assert.deepEqual(brief(s), { relationship: 'standalone', sync: ['needs review', 'ready to save'] });
+  });
+
+  it('shows own review state on a root page', () => {
+    const s = status('/en/x', { '/en/x': file('a', '1', { needsReview: true }) });
+    assert.deepEqual(brief(s), { relationship: 'root', sync: ['needs review'] });
   });
 
   it('orders source deleted and ready to save', () => {
