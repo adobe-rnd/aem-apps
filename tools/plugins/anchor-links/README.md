@@ -1,12 +1,14 @@
 # Anchor Links Plugin
 
-An EW plugin for generating anchor links to headings on your page. Useful for building tables of contents, FAQ navigation, and quick-reference sections.
+A plugin for Experience Workspace (EW) for generating anchor links to headings on your page. Useful for building tables of contents, FAQ navigation, and quick-reference sections.
 
 ## How to Use
 
-1. Open the plugin and click **Scan Page Headings**.
-2. Check the headings you want to link to (optionally edit each link title).
-3. Click **Create Anchor Links** — the plugin inserts the HTML and closes.
+1. Open a page in EW, switch to **Content** view, and place the cursor where you want to insert the links.
+2. Open the plugin from the side panel dropdown by its configured title (for example, **Anchor Links**).
+3. Click **Scan Page Headings**.
+4. Check the headings you want to link to (optionally edit each link title).
+5. Click **Create Anchor Links** — the plugin inserts the HTML and closes.
 
 ## Output
 
@@ -16,10 +18,10 @@ An EW plugin for generating anchor links to headings on your page. Useful for bu
 
 ## Configuration
 
-Register in your DA site config:
+Add this row to the site's `library` tab (see [Registering a plugin](../README.md#registering-a-plugin)):
 
-| title         | path                                           | format   |
-| ------------- | ---------------------------------------------- | -------- |
+| title         | path                                           | experience |
+| ------------- | ---------------------------------------------- | ---------- |
 | `Anchor Links`  | `https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/anchor-links/anchor-links.html`    | `dialog` |
 
 ## Files
@@ -32,5 +34,9 @@ Register in your DA site config:
 
 ## Dependencies
 
-- [DA App SDK](https://da.live/nx/utils/sdk.js) — context and document actions
+- [App SDK](https://da.live/nx/utils/sdk.js) — context and document actions
 - No build step; plain ES modules
+
+## Troubleshooting
+
+- **Plugin does not open:** Check that `path` is the full `.html` URL shown above and `experience` is `dialog`.

@@ -1,25 +1,23 @@
 # Multi-site Manager (MSM) Plugin
 
-A DA Prepare-menu plugin for managing multi-site links from the page editor.
+A Prepare-menu plugin for managing multi-site links from the page editor in Experience Workspace (EW).
 Lets authors publish, sync, detach, and reconnect between a source site and the
-sites that link to it without leaving DA.
+sites that link to it without leaving EW.
 
-This plugin is a standalone fork of the OOTB `Multi-site Manager` action that
-ships in [`da-live`](https://github.com/adobe/da-live/tree/main/blocks/edit/da-prepare/actions/msm).
-The OOTB version is still available by default; sites that want to opt in to
-the plugin (e.g. to pin a specific version, or to use the plugin URL from any
-site config without copying code) can configure their `prepare` sheet as
-described below.
+This plugin is a standalone fork of the `Multi-site Manager` Prepare action on
+da-live's [`msm` branch](https://github.com/adobe/da-live/tree/msm/blocks/edit/da-prepare/actions/msm).
+da.live doesn't ship that action, so sites add this plugin to their `prepare`
+sheet as described below.
 
 ## How it works
 
-1. Authors open a page in DA, click the Prepare menu, and pick **Multi-site Manager**.
+1. Authors open a page in EW, click the Prepare menu, and pick **Multi-site Manager**.
 2. The plugin reads the org's `msm` config sheet to determine the page's role:
    - **As a source** — lists the sites that link to this one.
    - **As a linked site** — shows the source chain up to the root source.
    - **Dual role** — both, shown as separate **Source** and **Linked sites** sections.
 3. The author picks an action (publish to preview/live, detach, sync, reconnect,
-   etc.) and the plugin executes it via the DA Admin and AEM Admin APIs.
+   etc.) and the plugin executes it via the EW admin API (`admin.da.live`) and the AEM Admin API.
 
 The plugin uses [`DA_SDK`](https://da.live/nx/utils/sdk.js) so all admin calls
 are authenticated against the host page's signed-in user — no separate auth
@@ -50,9 +48,10 @@ describes one site:
 ### 2. `.da/config.json` — `prepare` sheet
 
 To make the plugin appear in the Prepare menu, add a row to the `prepare`
-sheet at either the org or site level. Either point at this repo's hosted
-plugin (no code copy needed) or use a relative path if you've vendored the
-plugin into your own repo:
+tab of the org or site config (see
+[Registering a plugin](../README.md#registering-a-plugin)). Either point at
+this repo's hosted plugin (no code copy needed) or use a relative path if
+you've vendored the plugin into your own repo:
 
 **Option A: use the hosted plugin (recommended)**
 
@@ -65,9 +64,6 @@ plugin into your own repo:
 | title              | path                              | icon                                                                  | experience |
 | ------------------ | --------------------------------- | --------------------------------------------------------------------- | ---------- |
 | Multi-site Manager | `/tools/plugins/msm/msm.html`     | `https://da.live/blocks/edit/img/S2_Icon_GlobeGrid_20_N.svg#S2_Icon_GlobeGrid` | dialog     |
-
-> The DA Prepare menu merges items by `title`, so using `Multi-site Manager`
-> as the title overrides the OOTB version when this row is present.
 
 ## Behavior matrix
 
@@ -96,13 +92,13 @@ descendants, the publish confirm shows scope chips for the whole subtree, so
 the action can run against every linked site below the selected one, not just
 the direct child.
 
-## Relationship to the OOTB version
+## Relationship to the da-live version
 
-This plugin began as a **fork-copy** of `blocks/edit/da-prepare/actions/msm/` in
-da-live and has since diverged (rewritten UI/logic over a shared `core/`). The
+This plugin began as a **fork-copy** of `blocks/edit/da-prepare/actions/msm/` on
+da-live's `msm` branch and has since diverged (rewritten UI/logic over a shared `core/`). The
 dependency wiring also differs:
 
-| Concern            | OOTB (da-live)                                  | Plugin (this repo)                                                 |
+| Concern            | da-live (`msm` branch)                          | Plugin (this repo)                                                 |
 | ------------------ | ----------------------------------------------- | ------------------------------------------------------------------ |
 | Lit                | `da-lit` resolved internally                    | `da-lit` resolved via importmap → `/tools/deps/lit/dist/index.js`  |
 | `daFetch`          | `blocks/shared/utils.js`                        | `DA_SDK.actions.daFetch`, plumbed in via `setSdkFetch`             |
@@ -124,3 +120,9 @@ tools/plugins/msm/
 ├── config.js   (re-exports core config: source/linked resolution)
 └── utils.js    (re-exports core operations: preview/publish/copy/delete/merge)
 ```
+
+## Troubleshooting
+
+- **Plugin does not open:** Check that `path` is the full hosted `.html` URL shown above, or the correct site-relative `.html` path for a vendored copy, and `experience` is `dialog`.
+- **Source or linked sites are missing:** Check the org-level `msm` sheet and its source/linked relationships as described above.
+- **An action fails:** Check the displayed error, your sign-in session, and access to the affected sites through the EW admin API and the AEM Admin API.

@@ -1,21 +1,23 @@
 # Media Library Plugin
 
-A DA plugin for browsing and inserting media from your site's media library index into documents. Provides a full-featured media browsing interface with search, filtering, and preview capabilities.
+A plugin for browsing and inserting media from your site's media library index into documents in Experience Workspace (EW). Provides a full-featured media browsing interface with search, filtering, and preview capabilities.
 
 ## How to Use
 
-1. Open the plugin from the DA library.
-2. **Browse** or **search** for media items (images, videos, documents, fragments, icons).
-3. Click a media item to see details and usage information.
-4. Click **Insert** to add the media to your document.
+1. Open a page in EW and switch to **Content** view.
+2. Place the cursor where you want to insert the media.
+3. Open the plugin from the side panel dropdown and select **Media Library** (or its configured title).
+4. **Browse** or **search** for media items (images, videos, documents, fragments, icons).
+5. Click a media item to see details and usage information.
+6. Click **Insert** to add the media to your document.
 
 ## Output
 
 The plugin inserts media references appropriate to the selected item type (image URLs, fragment links, etc.).
 
-## Configuration
+## Installation
 
-Register in your DA site config library sheet:
+Add this row to the site's `library` tab (see [Registering a plugin](../README.md#registering-a-plugin)):
 
 | title            | path                                                                                              | experience        |
 | ---------------- | ------------------------------------------------------------------------------------------------- | ----------------- |
@@ -25,7 +27,7 @@ Register in your DA site config library sheet:
 
 ## Features
 
-- **Full media browsing** powered by the DA media library app
+- **Full media browsing** powered by the media library app
 - **Search and filtering** by media type (images, videos, documents, fragments, icons)
 - **Folder navigation** and document-based filtering
 - **Media details** including dimensions, file size, and usage information
@@ -41,11 +43,17 @@ Register in your DA site config library sheet:
 
 ## Dependencies
 
-- [DA App SDK](https://da.live/nx/utils/sdk.js) — context and document actions
-- [DA Media Library App](https://da.live/nx/blocks/media-library/media-library.js) — full media browsing interface
+- [App SDK](https://da.live/nx/utils/sdk.js) — context and document actions
+- [Media Library App](https://da.live/nx/blocks/media-library/media-library.js) — full media browsing interface
 - The media library app internally uses nx2 APIs (`source.list`, `daFetch`)
 - No build step; plain ES modules
 
 ## Media Library Index
 
-The plugin reads from your site's media library index located at `/.milo/media-library.json`. This index is automatically maintained by the DA media library indexing system and includes all media assets across your site.
+The plugin reads your site's media index from the `/.da/media-insights/` folder (`index-meta.json` and the index files next to it). The media library app builds the index the first time it opens a site. Content created before February 2026 needs a bulk index from Adobe; see [Media Library](https://www.aem.live/docs/ew/administering/media-library).
+
+## Troubleshooting
+
+- **Plugin does not open:** Check that `path` is the full `.html` URL shown above and `experience` is `fullsize-dialog`.
+- **Authentication errors:** Use the `.aem.live` registration URL, not `.aem.page`, as noted above.
+- **Media items do not appear:** Check that the site's `/.da/media-insights/` folder has the index files and that you can write to it.
