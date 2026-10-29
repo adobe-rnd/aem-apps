@@ -15,7 +15,7 @@
  */
 /* eslint-disable import/no-unresolved, no-console */
 
-import { isHlx6, previewApiUrl } from './hlx6.js';
+import { isHlx6, previewApiUrl } from '../../shared/hlx6.js';
 
 const WORKER_URL = 'https://publish-requests.aem-poc-lab.workers.dev';
 const CI_WORKER_URL = 'https://publish-requests-ci.aem-poc-lab.workers.dev';

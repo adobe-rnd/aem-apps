@@ -16,8 +16,9 @@
 
 // Helix 6 sites keep their content in the AEM source bus and run the admin
 // API on api.aem.live. admin.hlx.page still answers for them, but its preview
-// can't read the source bus, so the plugin previews them on api.aem.live
+// can't read the source bus, so apps and plugins preview them on api.aem.live
 // (which sends CORS headers itself). Same detection as da-nx nx2 isHlx6.
+// Shared by the request-for-publish plugins and the publish-requests inboxes.
 
 const HLX_ADMIN = 'https://admin.hlx.page';
 const AEM_API = 'https://api.aem.live';

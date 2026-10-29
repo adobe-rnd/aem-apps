@@ -15,7 +15,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { isHlx6, previewApiUrl } from '../../../../tools/plugins/request-for-publish/hlx6.js';
+import { isHlx6, previewApiUrl } from '../../../tools/shared/hlx6.js';
 
 function pingFetch(headers = {}) {
   const calls = [];
