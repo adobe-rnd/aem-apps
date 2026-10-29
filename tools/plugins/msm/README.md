@@ -1,8 +1,8 @@
 # Multi-site Manager (MSM) Plugin
 
-A DA Prepare-menu plugin for managing multi-site links from the page editor.
+A Prepare-menu plugin for managing multi-site links from the page editor in Experience Workspace (EW).
 Lets authors publish, sync, detach, and reconnect between a source site and the
-sites that link to it without leaving DA.
+sites that link to it without leaving EW.
 
 This plugin is a standalone fork of the OOTB `Multi-site Manager` action that
 ships in [`da-live`](https://github.com/adobe/da-live/tree/main/blocks/edit/da-prepare/actions/msm).
@@ -13,13 +13,13 @@ described below.
 
 ## How it works
 
-1. Authors open a page in DA, click the Prepare menu, and pick **Multi-site Manager**.
+1. Authors open a page in EW, click the Prepare menu, and pick **Multi-site Manager**.
 2. The plugin reads the org's `msm` config sheet to determine the page's role:
    - **As a source** — lists the sites that link to this one.
    - **As a linked site** — shows the source chain up to the root source.
    - **Dual role** — both, shown as separate **Source** and **Linked sites** sections.
 3. The author picks an action (publish to preview/live, detach, sync, reconnect,
-   etc.) and the plugin executes it via the DA Admin and AEM Admin APIs.
+   etc.) and the plugin executes it via the authoring Admin API and AEM Admin API.
 
 The plugin uses [`DA_SDK`](https://da.live/nx/utils/sdk.js) so all admin calls
 are authenticated against the host page's signed-in user — no separate auth
@@ -66,8 +66,10 @@ plugin into your own repo:
 | ------------------ | --------------------------------- | --------------------------------------------------------------------- | ---------- |
 | Multi-site Manager | `/tools/plugins/msm/msm.html`     | `https://da.live/blocks/edit/img/S2_Icon_GlobeGrid_20_N.svg#S2_Icon_GlobeGrid` | dialog     |
 
-> The DA Prepare menu merges items by `title`, so using `Multi-site Manager`
+> The Prepare menu merges items by `title`, so using `Multi-site Manager`
 > as the title overrides the OOTB version when this row is present.
+
+Save the config and reload the EW canvas editor.
 
 ## Behavior matrix
 
@@ -124,3 +126,11 @@ tools/plugins/msm/
 ├── config.js   (re-exports core config: source/linked resolution)
 └── utils.js    (re-exports core operations: preview/publish/copy/delete/merge)
 ```
+
+## Troubleshooting
+
+- **Plugin missing from the Prepare menu:** Check that the org or site config's `prepare` sheet contains the registration row with the configured title. Save the config and reload the EW canvas editor.
+- **Plugin does not open:** Check that `path` is the full hosted `.html` URL shown above, or the correct site-relative `.html` path for a vendored copy, and `experience` is `dialog`.
+- **The built-in action opens instead of this plugin:** Use the exact title `Multi-site Manager` in the registration row to override the built-in action.
+- **Source or linked sites are missing:** Check the org-level `msm` sheet and its source/linked relationships as described above.
+- **An action fails:** Check the displayed error, your sign-in session, and access to the affected sites through the authoring Admin API and AEM Admin API.

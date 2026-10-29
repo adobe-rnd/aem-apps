@@ -1,19 +1,33 @@
 # Request for Plugin
 
-A DA (Document Authoring) plugin that enables content authors to submit publish requests for approval. This plugin is the **author-facing** side of the publish workflow, appearing as a dialog within the DA editing environment.
+A plugin for Experience Workspace (EW) that enables content authors to submit publish requests for approval. This plugin is the **author-facing** side of the publish workflow, appearing as a dialog within EW.
+
+## Prerequisites
+
+The site needs a `library` tab in its EW site config at `https://da.live/config#/{org}/{site}/`. Follow [Set up library](https://www.aem.live/docs/ew/administering/set-up-library#update-project-config-sheet) first. This guide assumes that setup is complete; the plugin only appears in EW when the library is configured and contains its registration row.
+
+The existing integration supports both dialog and panel modes (see **Plugin Modes**) but does not specify a registration row. Use registration settings appropriate to the intended mode rather than assuming the two modes use the same settings. The worker and workflow access requirements below must also be configured.
+
+After adding the registration row, save the config. Reload the EW canvas editor, then open the side panel dropdown and select the newly added plugin by its configured title.
+
+## How to Use
+
+1. Open the page you want to submit in EW.
+2. Open the plugin from the side panel dropdown by its configured title (for example, **Request Publish**).
+3. Review the approvers and content diff, add a note if needed, and click **Request Publish**.
 
 ## How It Works
 
 ### Overview
 
-When an author finishes editing content and wants to publish it, they open this plugin from the DA interface. The plugin automatically detects the current content path, identifies the appropriate approvers and CC recipients from the workflow configuration (including resolving distribution list groups), and lets the author submit a publish request with an optional note. The designated approvers then receive a notification (email) with CC recipients copied, along with a link to the [Publish Requests App](../../apps/publish-requests-inbox/) where they can review and approve or reject the request.
+When an author finishes editing content and wants to publish it, they open the plugin from the side panel dropdown in EW. The plugin automatically detects the current content path, identifies the appropriate approvers and CC recipients from the workflow configuration (including resolving distribution list groups), and lets the author submit a publish request with an optional note. The designated approvers then receive a notification (email) with CC recipients copied, along with a link to the [Publish Requests App](../../apps/publish-requests-inbox/) where they can review and approve or reject the request.
 
 ### Architecture
 
 The plugin is a **thin REST client of [`publish-requests-worker`](https://github.com/cloudadoption/publish-requests-worker)**. It no longer resolves approvers or reads/writes the requests sheet itself — the worker is the single source of truth for approver resolution (pattern matching + DL-group expansion), sheet I/O, and email.
 
 - **Web Component**: LitElement custom element (`<request-for-publish>`).
-- **DA SDK**: authentication, context (org, site, path), and dialog rendering.
+- **App SDK**: authentication, context (org, site, path), and dialog rendering.
 - **publish-requests-worker (REST)** — the plugin calls:
   - `GET /api/approvers` — resolved approvers + CC for the path
   - `GET /api/config` — workflow config (for display-only settings, e.g. comment requirements)
@@ -22,11 +36,11 @@ The plugin is a **thin REST client of [`publish-requests-worker`](https://github
   - `GET /api/requests?role=requester` — the author's own pending requests
 - **Helix Admin (client-side)**: previews the page under the user's session before submitting; the worker never calls Helix.
 - **Adobe IMS**: the user's IMS token is sent to the worker, which **derives the caller's identity from it** (the plugin never sends an email/approver list). The plugin also reads the user's email from the IMS profile for display.
-- **Dual Mode**: fullsize-dialog (HTML entry point) or DA panel plugin (exported `init`).
+- **Dual Mode**: fullsize-dialog (HTML entry point) or EW panel plugin (exported `init`).
 
 ### Initialization & submission flow
 
-1. The plugin reads the user's email (IMS profile, for display) and the content path from the DA SDK context.
+1. The plugin reads the user's email (IMS profile, for display) and the content path from the App SDK context.
 2. It calls `GET /api/config` (display settings) and `GET /api/approvers` (resolved approvers + CC). If the worker reports missing config or no matching rule, an error is shown and the form is hidden.
 3. It calls `GET /api/requests?role=requester` to detect an existing pending request by this user for this path; if found, a "Request Pending" state is shown instead of the form.
 4. The author optionally reviews the diff, adds a note, and clicks **Request Publish**.
@@ -42,7 +56,7 @@ Approver/CC resolution — specificity-based pattern matching against the `publi
 
 The primary use case. The author sees the content path, preview URL, resolved approvers and CC recipients (with DLs expanded), and a content diff link. They add a description/note (optional by default; mandatory when `request.comments.required` is `true` in `publish-workflow-settings`) and submit. This:
 - Sends the request via the Cloudflare Worker which emails the approvers (with CC recipients copied) with a review link
-- Records the pending request in the DA requests sheet (requester, approver, path, comment, status)
+- Records the pending request in the requests sheet (requester, approver, path, comment, status)
 - Shows a success confirmation with the list of notified approvers and CC'd recipients
 
 ### 2. Existing Pending Request Detection
@@ -69,9 +83,7 @@ The plugin clearly shows which approvers and CC recipients will receive the requ
 
 ### 6. Missing Configuration
 
-If the `publish-workflow-config` tab is not found in the DA config at either the site level (`/config/{org}/{site}/`) or the org level (`/config/{org}/`), the plugin displays an error:
-
-> *"Publish workflow configuration not found. Please ensure the "publish-workflow-config" tab exists in the DA config for site "{org}/{site}" or org "{org}"."*
+If the `publish-workflow-config` tab is not found in the EW config at either the site level (`/config/{org}/{site}/`) or the org level (`/config/{org}/`), the plugin displays a missing-workflow-configuration error. Ensure that the tab exists at one of those levels.
 
 Similarly, if the config exists but no rule matches the current content path, an error is shown:
 
@@ -91,16 +103,16 @@ If the request fails to submit (network error, worker error, etc.), an error mes
 
 | File | Description |
 |------|-------------|
-| `request-for-publish.html` | Entry HTML for fullsize-dialog mode; loads DA SDK and the plugin module |
+| `request-for-publish.html` | Entry HTML for fullsize-dialog mode; loads the App SDK and the plugin module |
 | `request-for-publish.js` | Main LitElement component with form, states, and event handlers; includes both dialog and panel mode initialization |
 | `request-for-publish.css` | Styles for all component states (form, pending, success, loading) |
 | `utils.js` | Thin REST client over `publish-requests-worker` (approvers/config fetch, submit/resend/withdraw, existing-request check) + client-side Helix preview + IMS profile fetch |
 
 ## Configuration
 
-### DA Config API (approver rules + groups)
+### Config API (approver rules + groups)
 
-The workflow configuration is read from the **DA Config API** as tabs within the root config:
+The workflow configuration is read from the **Config API** as tabs within the root config:
 
 - **Site-level** (primary): `GET https://admin.da.live/config/{org}/{site}/`
 - **Org-level** (fallback): `GET https://admin.da.live/config/{org}/`
@@ -129,23 +141,23 @@ The `publish-workflow-settings` tab holds key-value pairs that control optional 
 | `request.comments.required` | `true` |
 | `request.comments.length` | `25` |
 
-### `/.da/publish-workflow-requests.json` (DA Source API)
+### `/.da/publish-workflow-requests.json` (Source API)
 
 Tracks pending publish requests with columns: `requester`, `approver`, `path`, `comment`, `status`, `created`
 
 **Access requirements:** the worker reads and writes this sheet **on the author's behalf, using the author's forwarded IMS token** — so authors still need **write access** to `/{org}/{site}/.da/publish-workflow-requests.json` for the Request Publish workflow to work.
 
-Configure access in the DA config at `/config/{org}/` (or `/config/{org}/{site}/` if using site-level config). Grant the IMS group that contains your authors **write access** to the `/{org}/{site}/.da/publish-workflow-requests.json` sheet. Without this permission, the worker's write fails and the request is rejected.
+Configure access in the EW config at `/config/{org}/` (or `/config/{org}/{site}/` if using site-level config). Grant the IMS group that contains your authors **write access** to the `/{org}/{site}/.da/publish-workflow-requests.json` sheet. Without this permission, the worker's write fails and the request is rejected.
 
 ## Plugin Modes
 
 ### Fullsize Dialog Mode (Primary)
 
-The plugin runs as a standalone page loaded in a DA dialog. The HTML file bootstraps the DA SDK, and the component self-initializes by reading context from the SDK.
+The plugin runs as a standalone page loaded in an EW dialog. The HTML file bootstraps the App SDK, and the component self-initializes by reading context from the SDK.
 
 ### Panel / Sidekick Mode (Available)
 
-The plugin exports a default `init` function compatible with the DA plugin panel API. This allows it to be rendered in a sidebar panel, though the dialog mode is the primary usage pattern.
+The plugin exports a default `init` function compatible with the plugin panel API. This allows it to be rendered in a sidebar panel, though the dialog mode is the primary usage pattern.
 
 ```javascript
 export default async function init({ context, token }) {
@@ -168,3 +180,9 @@ The plugin renders one of these states at any time:
 | Form | No existing pending request; ready for submission |
 | Pending | An existing pending request for this path/user already exists |
 | Submitted | Request was successfully submitted |
+
+## Troubleshooting
+
+- **Plugin missing from the side panel dropdown:** Check that the site's `library` tab contains the registration row with the configured title. Save the config and reload the EW canvas editor.
+- **Plugin does not open:** Check that `path` points to the full hosted `.html` URL and that the registration settings match the intended dialog or panel mode described above.
+- **Submission is blocked:** Check the displayed error, workflow configuration, your sign-in session, and the requests-sheet access requirements above.

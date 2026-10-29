@@ -2,25 +2,44 @@
 
 This is the **v2** plugin. It lives at `tools/plugins/request-for-publish-v2/` beside the unchanged v1 plugin (`tools/plugins/request-for-publish/`), and talks only to the worker's `/api/v2/*` routes. Sites opt in by pointing their library entry at `/tools/plugins/request-for-publish-v2/request-for-publish-v2.html`; sites still on v1 are unaffected.
 
-One page-scoped DA/EW plugin showing a page's approval flow as an ordered list of steps. A request advances one step at a time; the page is published only when the last step is approved.
+One page-scoped plugin for Experience Workspace (EW) showing a page's approval flow as an ordered list of steps. A request advances one step at a time; the page is published only when the last step is approved.
 
 Every view renders the same stepper. Steps already approved show a check mark and the approver; the step awaiting a decision shows an inline **Approve** button when the caller may act on it; later steps are greyed out. Expanding a step reveals its detail — approval time for completed steps, the approver list for upcoming ones, and the request actions for the current one. All steps are collapsed by default.
 
 There is no role selector. When the caller is both the requester and an approver of the current step, the current step offers both sets of actions. A user with no stake in a pending request — including an approver of a later step — gets the same stepper read-only, so they can see the request's progress without being offered the submission form. Approver eligibility comes from the worker, not a client-side comparison of email addresses. The v2 inbox (`tools/apps/publish-requests-inbox-v2/`) remains available for queue and bulk work.
 
+## Prerequisites
+
+The site needs a `library` tab in its EW site config at `https://da.live/config#/{org}/{site}/`. Follow [Set up library](https://www.aem.live/docs/ew/administering/set-up-library#update-project-config-sheet) first. The installation instructions assume that setup is complete.
+
+This plugin uses a separately hosted publish-request backend. V2 approvals must be available on that backend, and your site must be registered with it. Authors also need access to the requests sheet, as described below.
+
+## How to use
+
+1. Open the page in EW.
+2. Open the plugin from the side panel dropdown by its configured title.
+3. Review the approval steps and use the actions available to you. Before submitting a request, review your changes and add any required note.
+
 ## Opting in
 
-V2 is opt-in: deploy a worker supporting the `/api/v2/` contract, register the
-site and its requests-sheet access, then point the inline library entry to
+V2 is opt-in: confirm the hosted backend is ready for your site as described
+under **Prerequisites**, then point the inline library entry to
 `/tools/plugins/request-for-publish-v2/request-for-publish-v2.html`. Use
 `/tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2` for the inbox and
 v2 email links. See the [v2 inbox setup](../../apps/publish-requests-inbox-v2/README.md#opting-in).
 The separate v1 plugin and inbox remain unchanged; deploying v2 code alone does
 not migrate existing site entries. Do not mix v1 clients with the v2 workflow.
 
+### Installation
+
+1. Go to `https://da.live/config#/{org}/{site}/`.
+2. Open the site configuration, then open or create the `library` tab.
+3. Update the intended library row's `path` to the full hosted `.html` URL, for example `https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/request-for-publish-v2/request-for-publish-v2.html`. Keep its configured title and use the documented `inline` experience for the side panel.
+4. Save the config. Reload the EW canvas editor, then open the side panel dropdown and select the newly added plugin by its configured title.
+
 ## Integration
 
-Use `request-for-publish-v2.html` as an **inline** library extension. The same entrypoint works in a fullsize dialog. The default JS export retains the panel `init({ context, token, actions })` contract.
+Use `request-for-publish-v2.html` as an **inline** library plugin. The same entrypoint works in a fullsize dialog. The default JS export retains the panel `init({ context, token, actions })` contract.
 
 Context accepts `org`, `site` (or legacy `repo`), and a site-relative page `path`. A path with an extension other than `.html` is accepted only from the media viewer (`view: 'media'`, e.g. a PDF opened in `/media` with the plugin in its Prepare menu). Missing or unsupported context blocks actions. The component reacts to new context properties and ignores superseded reads/actions. The EW iframe host must remount or provide new context on page navigation: the existing SDK only supplies an initial context snapshot.
 
@@ -59,7 +78,7 @@ Preview, publish, and page links use the validated SDK context content ref (lett
 
 ## Configuration
 
-At the site or org level (site config wins when it has a `publish-workflow-config` tab), the worker reads these DA config tabs:
+At the site or org level (site config wins when it has a `publish-workflow-config` tab), the worker reads these EW config tabs:
 
 | Tab | Columns / values |
 |---|---|
@@ -104,7 +123,7 @@ legal@example.com:1:2026-09-23T10:14:00Z, brand@example.com:2:2026-09-23T11:02:0
 
 The current step is derived by the worker, not stored: the highest approved step plus one, skipped forward over approver-less and already-logged steps. Concurrent approvals of the same step therefore collapse rather than advancing the request twice. Editing a workflow while requests are pending re-evaluates them against the new definition. Timestamps are ISO; no field may contain a comma.
 
-The worker requires site registration and the caller's DA access to the requests sheet (`/.da/publish-workflow-requests.json`). No registration or permission change is made by the plugin. The worker is authoritative for configuration, step resolution and comment validation.
+The worker requires site registration and the caller's access to the requests sheet (`/.da/publish-workflow-requests.json`). No registration or permission change is made by the plugin. The worker is authoritative for configuration, step resolution and comment validation.
 
 ## Local verification
 
@@ -114,7 +133,7 @@ Serve the repository over HTTP and open `/test/fixtures/request-for-publish.html
 
 Worker environments are fixed: localhost defaults to the local worker on port 8787; `?env=ci` selects CI and `?env=prod` explicitly selects production (including from a local plugin). Unknown environment values are rejected. Do not use a real worker for fixture tests.
 
-The production worker at this branch’s baseline does not allow localhost origins in CORS. `env=prod` cannot bypass that policy. Local testing can use `env=ci` after a CI worker with the exact localhost:3000 exception is deployed, or use plugin code served from an allowed HTTPS origin. CI is not a data sandbox: it can access real DA content and send notifications. Local fixtures remain backend-free.
+The production worker at this branch’s baseline does not allow localhost origins in CORS. `env=prod` cannot bypass that policy. Local testing can use `env=ci` after a CI worker with the exact localhost:3000 exception is deployed, or use plugin code served from an allowed HTTPS origin. CI is not a data sandbox: it can access real authored content and send notifications. Local fixtures remain backend-free.
 
 ## Native comparison integration verification
 
@@ -123,3 +142,10 @@ This consumer does not contain the EW comparison implementation or depend on MSM
 `test/fixtures/comparison-plugin.html` and `test/fixtures/comparison-plugin.js` mount the real panel and workflow client with an SDK supplied by a separate integration harness. `test/fixtures/comparison-panel-tests.html` runs the panel browser assertions when that harness serves this checkout under `/plugin` and supplies its local Lit dependency and host styles. The standalone panel assertions remain at `/test/fixtures/request-for-publish.html`.
 
 The integration harness is managed outside this repository; use its provided local URL rather than a retired showcase server. Workflow operations in these fixtures are in memory: no notifications or remote content mutations. They validate interaction and sequencing, not authenticated publication.
+
+## Troubleshooting
+
+- **Plugin missing from the side panel dropdown:** Check that the site's `library` tab contains the registration row with the configured title. Save the config and reload the EW canvas editor.
+- **Plugin does not open:** Check that `path` is the full `.html` URL shown above and `experience` is `inline` for the side panel.
+- **Requests fail:** Check v2 availability on the backend, site registration, workflow configuration, and requests-sheet access.
+- **Comparison is unavailable or saving blocks submission:** Check the host and SDK integrations described above. Missing comparison or confirmed-save actions are not fixed by changing the library row.

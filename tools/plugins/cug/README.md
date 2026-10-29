@@ -1,14 +1,14 @@
 # CUG — Page Access (Closed User Groups)
 
-A DA Prepare-menu plugin that applies or removes [Closed User Group](https://main--helix-website--adobe.aem.page/drafts/jkautzma/closed-user-groups) (CUG) access restrictions for a site, based on a `closed-user-groups` sheet authored in DA.
+A Prepare-menu plugin that applies or removes [Closed User Group](https://main--helix-website--adobe.aem.page/drafts/jkautzma/closed-user-groups) (CUG) access restrictions for a site, based on a `closed-user-groups` sheet authored in Experience Workspace (EW).
 
 ## Overview
 
-Closed User Groups restrict access to pages at the CDN edge using headers on the site's Config Service (`headers.json`). On AEM Sites this is handled automatically when the sheet is published, but Document Authoring sites have no equivalent, so this tool reads the authored sheet and posts the resulting header configuration to the Config Service.
+Closed User Groups restrict access to pages at the CDN edge using headers on the site's Config Service (`headers.json`). On AEM Sites this is handled automatically when the sheet is published, but sites authored in EW have no equivalent, so this tool reads the authored sheet and posts the resulting header configuration to the Config Service.
 
 ## How It Works
 
-1. Fetches the site's `closed-user-groups.json` sheet from DA (`/source/{org}/{site}/closed-user-groups.json`).
+1. Fetches the site's `closed-user-groups.json` sheet from the source API (`/source/{org}/{site}/closed-user-groups.json`).
 2. Converts each row into the `x-aem-cug-required`, `x-aem-cug-groups`, and `x-aem-cug-login-path` headers, keyed by the row's `url` path. See the linked docs for the sheet's column format and header semantics.
 3. Reads the site's existing `headers.json` config and strips out any previously-applied CUG headers, preserving all other (non-CUG) header entries.
 4. Merges the fresh CUG headers with the preserved non-CUG headers and POSTs the combined config back to `headers.json`.
@@ -32,7 +32,7 @@ tools/plugins/cug/
 
 | Dependency | Source | Purpose |
 |---|---|---|
-| DA SDK | `https://da.live/nx/utils/sdk.js` | Provides auth context (org, site) and token |
+| App SDK | `https://da.live/nx/utils/sdk.js` | Provides auth context (org, site) and token |
 
 ### APIs
 
@@ -44,16 +44,24 @@ tools/plugins/cug/
 
 ## Configuration
 
-Register in your DA site config's `prepare` sheet:
+Register in your EW site config's `prepare` sheet:
 
 | title         | path                                                                          | format   |
 | ------------- | ------------------------------------------------------------------------------ | -------- |
 | `Page Access` | `https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/cug/cug.html`         | `dialog` |
 
+Save the config and reload the EW canvas editor.
+
 The plugin uses [`DA_SDK`](https://da.live/nx/utils/sdk.js) to read the org/site of whichever page is open when it's launched from the Prepare menu — the CUG sheet and headers it manages are site-wide, not page-specific.
 
 ## Usage
 
-1. Author a `closed-user-groups` sheet at the site root in DA (see the [docs](https://main--helix-website--adobe.aem.page/drafts/jkautzma/closed-user-groups) for the column format).
-2. Open any page in that site in DA and pick **Page Access** from the Prepare menu.
+1. Author a `closed-user-groups` sheet at the site root in EW (see the [docs](https://main--helix-website--adobe.aem.page/drafts/jkautzma/closed-user-groups) for the column format).
+2. Open any page in that site in EW and pick **Page Access** from the Prepare menu.
 3. Click **Apply Page Access** to push the sheet's restrictions live, or **Remove Page Access** to clear all CUG headers for the site.
+
+## Troubleshooting
+
+- **Plugin missing from the Prepare menu:** Check that the site's `prepare` sheet contains the registration row with the configured title. Save the config and reload the EW canvas editor.
+- **Plugin does not open:** Check that `path` is the full `.html` URL shown above. This Prepare-menu registration documents `format: dialog`; do not substitute library registration settings.
+- **Page access cannot be applied or removed:** Check the displayed error, your sign-in session, and access to the source sheet and Config Service endpoints listed above. To apply restrictions, the `closed-user-groups` sheet must exist and follow the linked column format.
