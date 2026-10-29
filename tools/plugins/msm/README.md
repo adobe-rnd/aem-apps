@@ -4,12 +4,10 @@ A Prepare-menu plugin for managing multi-site links from the page editor in Expe
 Lets authors publish, sync, detach, and reconnect between a source site and the
 sites that link to it without leaving EW.
 
-This plugin is a standalone fork of the OOTB `Multi-site Manager` action that
-ships in [`da-live`](https://github.com/adobe/da-live/tree/main/blocks/edit/da-prepare/actions/msm).
-The OOTB version is still available by default; sites that want to opt in to
-the plugin (e.g. to pin a specific version, or to use the plugin URL from any
-site config without copying code) can configure their `prepare` sheet as
-described below.
+This plugin is a standalone fork of the `Multi-site Manager` Prepare action on
+da-live's [`msm` branch](https://github.com/adobe/da-live/tree/msm/blocks/edit/da-prepare/actions/msm).
+da.live doesn't ship that action, so sites add this plugin to their `prepare`
+sheet as described below.
 
 ## How it works
 
@@ -66,9 +64,6 @@ plugin into your own repo:
 | ------------------ | --------------------------------- | --------------------------------------------------------------------- | ---------- |
 | Multi-site Manager | `/tools/plugins/msm/msm.html`     | `https://da.live/blocks/edit/img/S2_Icon_GlobeGrid_20_N.svg#S2_Icon_GlobeGrid` | dialog     |
 
-> The Prepare menu merges items by `title`, so using `Multi-site Manager`
-> as the title overrides the OOTB version when this row is present.
-
 Save the config and reload the EW canvas editor.
 
 ## Behavior matrix
@@ -98,13 +93,13 @@ descendants, the publish confirm shows scope chips for the whole subtree, so
 the action can run against every linked site below the selected one, not just
 the direct child.
 
-## Relationship to the OOTB version
+## Relationship to the da-live version
 
-This plugin began as a **fork-copy** of `blocks/edit/da-prepare/actions/msm/` in
-da-live and has since diverged (rewritten UI/logic over a shared `core/`). The
+This plugin began as a **fork-copy** of `blocks/edit/da-prepare/actions/msm/` on
+da-live's `msm` branch and has since diverged (rewritten UI/logic over a shared `core/`). The
 dependency wiring also differs:
 
-| Concern            | OOTB (da-live)                                  | Plugin (this repo)                                                 |
+| Concern            | da-live (`msm` branch)                          | Plugin (this repo)                                                 |
 | ------------------ | ----------------------------------------------- | ------------------------------------------------------------------ |
 | Lit                | `da-lit` resolved internally                    | `da-lit` resolved via importmap → `/tools/deps/lit/dist/index.js`  |
 | `daFetch`          | `blocks/shared/utils.js`                        | `DA_SDK.actions.daFetch`, plumbed in via `setSdkFetch`             |
@@ -131,6 +126,5 @@ tools/plugins/msm/
 
 - **Plugin missing from the Prepare menu:** Check that the org or site config's `prepare` sheet contains the registration row with the configured title. Save the config and reload the EW canvas editor.
 - **Plugin does not open:** Check that `path` is the full hosted `.html` URL shown above, or the correct site-relative `.html` path for a vendored copy, and `experience` is `dialog`.
-- **The built-in action opens instead of this plugin:** Use the exact title `Multi-site Manager` in the registration row to override the built-in action.
 - **Source or linked sites are missing:** Check the org-level `msm` sheet and its source/linked relationships as described above.
 - **An action fails:** Check the displayed error, your sign-in session, and access to the affected sites through the EW admin API and the AEM Admin API.
