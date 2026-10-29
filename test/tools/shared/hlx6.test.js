@@ -15,7 +15,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { adminUrl, isHlx6 } from '../../../tools/shared/hlx6.js';
+import { adminUrl, isAemApiUrl, isHlx6 } from '../../../tools/shared/hlx6.js';
 
 function pingFetch(headers = {}) {
   const calls = [];
@@ -79,5 +79,14 @@ describe('adminUrl', () => {
   it('adds a leading slash', () => {
     assert.equal(adminUrl('preview', { ...page, path: 'drafts/x' }, true), 'https://api.aem.live/org/sites/site/preview/drafts/x');
     assert.equal(adminUrl('preview', { ...page, path: 'drafts/x' }, false), 'https://admin.hlx.page/preview/org/site/main/drafts/x');
+  });
+});
+
+describe('isAemApiUrl', () => {
+  it('recognizes api.aem.live links only', () => {
+    assert.equal(isAemApiUrl('https://api.aem.live/org/sites/site/jobs/publish/job-1'), true);
+    assert.equal(isAemApiUrl('https://admin.hlx.page/job/org/site/main/publish/job-1'), false);
+    assert.equal(isAemApiUrl('https://api.aem.live.example.com/x'), false);
+    assert.equal(isAemApiUrl('not a url'), false);
   });
 });
