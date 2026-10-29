@@ -16,7 +16,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  PROBE_TARGET,
+  PROBE_TARGETS,
+  getProbeTarget,
   PROBE_MARKER,
   createProbeRequest,
   getProbeBlockReason,
@@ -28,6 +29,7 @@ import {
   saveProbePointer,
 } from '../../../../tools/apps/block-library-generator/jobs.js';
 
+const PROBE_TARGET = PROBE_TARGETS.stage;
 const jobId = 'c564c3f9-f55e-4e5b-b4be-c5c054677f7f';
 const createdAt = '2026-10-21T16:30:00.000Z';
 const request = () => createProbeRequest({ jobId, createdAt });
@@ -254,5 +256,138 @@ describe('probe resume and chat prompt', () => {
     assert.match(prompt, /current.*document/i);
     assert.match(prompt, /cannot.*Stage/i);
     assert.doesNotMatch(prompt, /Bearer|accessToken|analyse.*cards/i);
+  });
+});
+
+describe('explicit production probe isolation', () => {
+  const productionRequest = () => createProbeRequest({ jobId, createdAt, environment: 'prod' });
+
+  it('keeps Stage as the default and resolves only allowlisted environments', () => {
+    assert.equal(request().target.environment, 'stage');
+    assert.deepEqual(productionRequest().target, PROBE_TARGETS.prod);
+    assert.equal(getProbeTarget('prod').adminOrigin, 'https://admin.da.live');
+    ['production', 'https://admin.da.live', '__proto__', '', undefined].forEach((environment) => {
+      assert.throws(() => getProbeTarget(environment), /environment/i);
+    });
+    assert.throws(() => createProbeRequest({ environment: 'unknown' }), /environment/i);
+  });
+
+  it('blocks a supplied host origin that differs from the selected environment', () => {
+    const productionHost = {
+      ...host(),
+      context: { ...host().context, daOrigin: 'https://admin.da.live' },
+    };
+    assert.notEqual(getProbeBlockReason(productionHost), '');
+    assert.equal(getProbeBlockReason({ ...productionHost, environment: 'prod' }), '');
+    assert.notEqual(getProbeBlockReason({
+      ...host(),
+      context: { ...host().context, daOrigin: 'https://stage-admin.da.live' },
+      environment: 'prod',
+    }), '');
+    assert.notEqual(getProbeBlockReason({
+      ...productionHost,
+      context: { ...productionHost.context, site: 'boiler' },
+      environment: 'prod',
+    }), '');
+  });
+
+  it('writes and reads production requests only through the production origin', async () => {
+    const value = productionRequest();
+    const calls = [];
+    const fetcher = async (url, options) => {
+      calls.push({ url, options });
+      if (calls.length === 1) return new Response(null, { status: 404 });
+      if (options.method === 'PUT') return new Response(null, { status: 201 });
+      return jsonResponse(value);
+    };
+    assert.deepEqual(await persistProbeRequest(fetcher, value), value);
+    assert.deepEqual(calls.map(({ options }) => options.method), ['GET', 'PUT', 'GET']);
+    assert.ok(calls.every(({ url }) => url === `https://admin.da.live/source/msagolj/ew${value.requestPath}`));
+  });
+
+  it('keeps Stage and production resume pointers separate, including legacy Stage keys', () => {
+    const local = storage();
+    const stagePointer = { jobId, handoffRequested: true };
+    local.setItem('block-library-generator:probe:v1:stage:msagolj:ew:main', JSON.stringify(stagePointer));
+    assert.deepEqual(loadProbePointer(local), stagePointer);
+    assert.equal(loadProbePointer(local, 'prod'), null);
+    const value = createProbeRequest({
+      environment: 'prod', jobId: 'a564c3f9-f55e-4e5b-b4be-c5c054677f7f', createdAt,
+    });
+    saveProbePointer(local, value);
+    assert.deepEqual(loadProbePointer(local), stagePointer);
+    assert.deepEqual(loadProbePointer(local, 'prod'), {
+      jobId: value.jobId, handoffRequested: false,
+    });
+  });
+
+  it('rejects a request loaded from another environment', async () => {
+    await assert.rejects(
+      readProbeRequest(async () => jsonResponse(request()), jobId, { environment: 'prod' }),
+      /identity|target/i,
+    );
+    await assert.rejects(
+      readProbeRequest(async () => jsonResponse(productionRequest()), jobId),
+      /identity|target/i,
+    );
+  });
+
+  it('rejects production results carrying a Stage target, even for the same job ID', async () => {
+    await assert.rejects(
+      readProbeResult(async () => jsonResponse(result()), productionRequest()),
+      /identity|target/i,
+    );
+    const value = { ...result(), target: { ...PROBE_TARGETS.prod } };
+    const calls = [];
+    assert.deepEqual(await readProbeResult(async (url) => {
+      calls.push(url);
+      return jsonResponse(value);
+    }, productionRequest()), value);
+    assert.equal(calls[0], `https://admin.da.live/source/msagolj/ew${productionRequest().resultPath}`);
+  });
+
+  it('rejects forged targets before issuing an authenticated request', async () => {
+    let calls = 0;
+    const fetcher = async () => {
+      calls += 1;
+      return jsonResponse({});
+    };
+    await assert.rejects(persistProbeRequest(fetcher, {
+      ...productionRequest(),
+      target: { ...PROBE_TARGETS.prod, adminOrigin: 'https://untrusted.example' },
+    }), /target/i);
+    await assert.rejects(readProbeResult(fetcher, {
+      ...productionRequest(),
+      target: { ...PROBE_TARGETS.prod, environment: 'unexpected' },
+    }), /environment/i);
+    assert.equal(calls, 0);
+  });
+
+  it('never retries a failed production request against Stage', async () => {
+    const calls = [];
+    await assert.rejects(persistProbeRequest(async (url) => {
+      calls.push(url);
+      return new Response(null, { status: 403 });
+    }, productionRequest()), /403/);
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].startsWith('https://admin.da.live/source/msagolj/ew/'));
+  });
+
+  it('makes both prompts use slash-free content-tool paths and exact environment JSON', () => {
+    [request(), productionRequest()].forEach((value) => {
+      const prompt = createProbePrompt(value);
+      assert.equal(prompt.match(/^path: (.+)$/m)[1], value.resultPath.slice(1));
+      assert.match(prompt, /contentType: application\/json/);
+      assert.match(prompt, /404/);
+      assert.match(prompt, /400.*not.*absence/i);
+      const finalJSON = JSON.parse(prompt.split('RESULT JSON\n\n')[1]);
+      assert.deepEqual(finalJSON.target, value.target);
+      assert.equal(finalJSON.jobId, value.jobId);
+    });
+    const productionPrompt = createProbePrompt(productionRequest());
+    assert.match(productionPrompt, /production-bound/i);
+    assert.doesNotMatch(productionPrompt, /stage-admin\.da\.live/);
+    assert.match(productionPrompt, /Do not.*Stage/i);
+    assert.match(createProbePrompt(request()), /Do not.*production/i);
   });
 });

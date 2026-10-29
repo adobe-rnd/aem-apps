@@ -88,6 +88,13 @@ Examples:
 - Heading followed by picture remains separate direct children.
 - An existing paragraph containing picture and text remains unchanged.
 
+For CSS that treats an image-only first paragraph as the background, a bare
+picture followed by text would group the foreground into that background too.
+Author an explicit picture-only paragraph followed by separate heading/paragraph
+foreground siblings when the implementation requires those roles.
+Do not apply this shape universally: trace the particular block's selectors and
+normalized DOM before deciding that its content remains visible and interactive.
+
 Evaluate child counts, direct-child selectors, first-child access, and
 picture-detection conditions against this normalized structure, then trace
 any further changes made by the block. A single element child containing a
@@ -107,6 +114,9 @@ ANALYSIS RULES
 
    Do not turn familiar block conventions into claimed requirements.
    Do not claim runtime verification unless the behavior was actually tested.
+   When numbered source lines are supplied, verify each cited line contains the
+   operation or declaration claimed. Cite the whole source ID if exact lines
+   cannot be established; do not guess a plausible nearby range.
 
 2. Identify author-selected block options.
 
@@ -121,6 +131,11 @@ ANALYSIS RULES
 
    Follow relevant assignments and helpers to determine whether a class is
    authored, generated, or copied from another source.
+
+   Configuration-row keys are body fields, not block options. A key read by
+   readBlockConfig does not become a header option because it is hyphenated or
+   normalized like a CSS class name. Record its values in contentRules; only an
+   independent condition on authored block classes establishes a block option.
 
    If complete analysed sources consume no additional authored block classes,
    report "no supported block options found".
@@ -141,6 +156,9 @@ ANALYSIS RULES
 
    Descendant or generated classes are not automatically block options.
    Trace their origin before classifying them.
+   Do not assign an ancestor class to a particular element type unless the
+   selector, code or supplied contract establishes it. For example, ".home .cards"
+   alone does not establish that "home" belongs specifically on the body.
 
    Interpret :is(), :where(), :not(), attribute selectors, and combined
    selectors according to their actual conditions.
@@ -160,6 +178,11 @@ ANALYSIS RULES
    - Whether cell order changes the result.
    - Whether particular dimensions cause errors or unsupported output.
 
+   Distinguish moving whole cells within a row from rearranging elements INSIDE
+   a cell. If a cell predicate reads content rather than position, moving the
+   cell changes output sequence, not its content-derived role. Within-cell order
+   can change normalization and therefore the predicate result.
+
    Separate:
    - Editor constraints.
    - Implementation requirements.
@@ -171,9 +194,18 @@ ANALYSIS RULES
    Do not infer minimums, maximums, or supported counts unless evidence
    establishes them. Where counts are unbounded, propose representative
    examples rather than every possible count.
+   If no branch, selector or validation enforces a count, say "no enforced count
+   limit found", not "only one/two cells are supported". A common example count
+   is a recommendation. Untested layouts are not known-broken layouts.
 
    An empty JavaScript module can represent a CSS-only block; do not treat
    the absence of a decorator as an error by itself.
+   Verify that the default export can actually accept the block element under
+   the framework call contract. A programmatic factory requiring an iterable of
+   nodes or incompatible arguments is not automatically an authored decorator.
+   If no table layout can satisfy that invocation contract, block working
+   generation and describe the API-only limitation. Do not decide this from the
+   function name alone.
 
 5. Extract cell-content behavior.
 
@@ -189,6 +221,9 @@ ANALYSIS RULES
    Describe the exact detection condition.
    For example, "one element child containing a picture" is not equivalent
    to "contains only an image".
+   For each content-dependent classification, include a compact normalized DOM,
+   predicate, result trace in the existing explanation. Check it against the
+   source before describing an editable control or naming an example.
 
    Do not invent named fields such as title, description, or CTA unless
    the implementation identifies those fields.
@@ -213,6 +248,13 @@ ANALYSIS RULES
 
    Separate values preserved from input from values overwritten or
    regenerated during decoration.
+   Values read before clearing or replacing the DOM can remain author-controlled
+   when passed into a renderer, component, template, or later operation.
+   Trace that data flow before declaring authored cells ignored. Losing the
+   original DOM is not the same as discarding every value read from it.
+   Appending content alone does not remove existing authored cells. Trace the
+   actual clearing, replacement, removal or move operation before claiming
+   authored content is discarded; append/appendChild by itself preserves it.
 
 7. Use only relevant shared context.
 
@@ -256,6 +298,15 @@ ANALYSIS RULES
    Reuse examples where one example can demonstrate several behaviors.
    Do not generate a full Cartesian product of all options and content choices.
    Do not create separate examples for different wording alone.
+   Fewer rows or shorter copy alone are not distinct behaviors. Merge such
+   examples into baseline guidance unless a source condition changes. Do not
+   call a chosen heading, link or amount of copy a required minimum.
+
+   Examples share one library page. If fixed-position instances would overlap at the same coordinates,
+   keep one useful baseline and record alternatives as guidance instead of an
+   overlapping gallery. Do not treat a landscape image as a small icon unless
+   the block constrains it appropriately; use the supported image-free baseline
+   when no suitable icon input or sizing mechanism is supplied.
 
    Each example must:
    - Have a descriptive name.
@@ -266,11 +317,59 @@ ANALYSIS RULES
    - Identify any assumptions.
    - Specify relevant viewport or interaction conditions.
 
+   Verify that its description matches its actual recipe, including heading
+   levels, content types, options, row counts and demonstrated conditions.
+   Do not invent intrinsic image dimensions; omit width/height attributes unless
+   supplied evidence establishes them or the block requires author-chosen values.
+
    Do not claim unsupported controls or use unavailable assets as though
    they exist. Mark placeholder content and image references explicitly.
+   Use supplied approved link destinations when provided. Do not invent working
+   site pages or equate an HTTP 200 preview response with an existing destination.
+   If no destinations are supplied, omit links or explicitly report the missing
+   input rather than inventing one.
+   Do not populate a route/resource field with an approved but unsuitable URL.
+   Omit optional overrides and preserve the implementation's defaults when no
+   suitable destination is supplied. Approved links are not interchangeable.
+   Use neutral illustrative copy, not fabricated commercial policies or promises.
+   Do not invent segment, group or rule identifiers to demonstrate targeting.
+   A freeform local grouping label is different from an identifier that must
+   match backend/index data. Known empty or nonmatching data does not become a
+   useful example merely because the parser accepts the string.
+   Equivalent link markup does not establish primary versus secondary styling.
+   Only name those styles when source and supplied conversion contracts prove
+   that the authored markup actually selects them.
 
    Keep known-broken structures out of the normal example set.
    Report them as warnings or negative-test candidates.
+
+   Distinguish proposing an authored example from proving it works at runtime.
+   A module import is not itself a missing author input. If supplied code and
+   helper contracts establish a useful structure and the consumed values, propose
+   that structure with the runtime/dependency limitations recorded explicitly.
+   This does not prove that the rendered result works.
+   Do not reinterpret observed missing required assets or known-broken output
+   as merely untested.
+   If an unresolved dependency is essential to determining valid structure or
+   values, report that specific gap instead of inventing a contract.
+   A required reference to real external content cannot be replaced with a
+   fabricated path merely because a renderer accepts a string.
+   A block with no authored values can still have an empty-cell baseline that
+   demonstrates a source-supported automatic/default state. Do not invent fields
+   or block solely because there are no editable values. Required missing
+   resources, essential unknown contracts and known failures still block.
+   For an isolated library page, do not assume companion blocks, page metadata,
+   route/query values or index-backed identifiers that are not supplied and
+   cannot be set by the recipe. A parser accepting a string does not establish
+   that a matching index entry or required context exists.
+   When a baseline needs no authored values, use a literal empty string cell,
+   not an ignored label, zero-width character or filler.
+   Known-empty output is not an unverified renderer. For example, supplied code
+   that removes the block/section when external provider data is absent cannot
+   make a useful isolated example when that data is not supplied. Block that case.
+   By contrast, local mock data or a fixed visible title can establish a useful
+   default without authored values. No authored inputs does not force either
+   verdict: trace whether the supplied default/context supports meaningful output.
 
 10. Preserve uncertainty.
 
@@ -280,6 +379,9 @@ ANALYSIS RULES
 
     Report visual risks, such as text/background contrast, as risks unless
     they were measured.
+    A fluid grid with a minimum track size does not prove support at any width.
+    State the minimum track and leave narrower-container behavior for rendering
+    tests instead of claiming universal responsiveness.
     Label all proposed examples as unverified until rendered and tested.
 
 OUTPUT

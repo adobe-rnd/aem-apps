@@ -26,9 +26,12 @@
   </head>
   <body class="block-library-generator-page">
     <block-library-generator-app>
-      <main>
-        <h1>Block Library Generator</h1>
-        <p role="status">Starting</p>
+      <main aria-busy="true">
+        <header class="app-header"><h1>Block Library Generator</h1></header>
+        <div class="startup-loading" role="status">
+          <span class="startup-spinner" aria-hidden="true"></span>
+          <p>Connecting to DA...</p>
+        </div>
       </main>
     </block-library-generator-app>
   </body>
