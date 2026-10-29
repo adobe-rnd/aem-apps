@@ -17,6 +17,7 @@ import { it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import * as hlx6 from '../../../../tools/shared/hlx6.js';
 
 const source = readFileSync(new URL('../../../../tools/plugins/request-for-publish-v2/request-for-publish-v2.js', import.meta.url), 'utf8');
 const makePanelSource = source.slice(source.indexOf('function makePanel('), source.indexOf('export default'));
@@ -31,6 +32,8 @@ function loadPanel(overrides = {}) {
     workerOrigin: () => 'https://worker.example.com',
     createWorkspaceActions: () => ({ save: async () => {} }),
     createClient: (options) => options,
+    adminUrl: hlx6.adminUrl,
+    isHlx6: async () => false,
     ...overrides,
   });
 }
@@ -125,6 +128,50 @@ it('retains host DA fetch for Admin preview and live calls', async () => {
       new URL(calls[index][0]).searchParams.get('url'),
       `https://admin.hlx.page/${operation}/example/website/main/drafts/page`,
     );
+    // Legacy sites keep the exact request they sent before Helix 6 support.
+    assert.equal(
+      calls[index][0],
+      `https://da-etc.adobeaem.workers.dev/cors?url=${encodeURIComponent(`https://admin.hlx.page/${operation}/example/website/main/drafts/page`)}`,
+    );
     assert.equal(calls[index][1].method, 'POST');
   });
+});
+
+it('previews and publishes Helix 6 pages on api.aem.live without the proxy', async () => {
+  const calls = [];
+  const pinged = [];
+  const makePanel = loadPanel({
+    isHlx6: async (org, site) => { pinged.push(`${org}/${site}`); return true; },
+    daFetch: () => assert.fail('Host DA fetch should take precedence for Admin'),
+    fetch: () => assert.fail('Admin calls must not use plain worker fetch'),
+  });
+  const panel = makePanel({
+    context: {},
+    token: 'sdk-token',
+    actions: { daFetch: async (...args) => calls.push(args) },
+  });
+  const page = {
+    org: 'example', site: 'website', path: '/drafts/page', ref: 'release-42',
+  };
+  await panel.client.preview(page);
+  await panel.client.publish(page);
+  // api.aem.live has no ref in the path; the ref only picks the aem.page host.
+  assert.deepEqual(calls.map(([href, options]) => [href, options.method]), [
+    ['https://api.aem.live/example/sites/website/preview/drafts/page', 'POST'],
+    ['https://api.aem.live/example/sites/website/live/drafts/page', 'POST'],
+  ]);
+  assert.deepEqual(pinged, ['example/website', 'example/website']);
+});
+
+it('previews a Helix 6 /media file with its extension', async () => {
+  const calls = [];
+  const makePanel = loadPanel({
+    isHlx6: async () => true,
+    daFetch: async (...args) => calls.push(args),
+  });
+  const panel = makePanel({ context: {}, token: 'sdk-token', actions: {} });
+  await panel.client.preview({
+    org: 'example', site: 'website', path: '/docs/guide.pdf', ref: 'main', file: true,
+  });
+  assert.equal(calls[0][0], 'https://api.aem.live/example/sites/website/preview/docs/guide.pdf');
 });
