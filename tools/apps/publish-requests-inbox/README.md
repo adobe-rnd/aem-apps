@@ -14,7 +14,7 @@ The app is a **thin REST client of [`publish-requests-worker`](https://github.co
 
 - **Web Component**: LitElement custom element (`<publish-requests-inbox>`).
 - **DA SDK**: authentication and context.
-- **Helix Admin (client-side)**: publishes content — single `POST /live/{org}/{site}/main/{path}` or [bulk publish](https://www.aem.live/docs/admin.html#tag/publish/operation/bulkPublish) `POST /live/{org}/{site}/main/*` (Approve All) — under the approver's session.
+- **Helix Admin (client-side)**: publishes content — single `POST /live/{org}/{site}/main/{path}` or [bulk publish](https://www.aem.live/docs/admin.html#tag/publish/operation/bulkPublish) `POST /live/{org}/{site}/main/*` (Approve All) — under the approver's session. Helix 6 sites use `https://api.aem.live/{org}/sites/{site}/live/...` instead.
 - **DA Admin (client-side)**: after a confirmed publish, the inbox creates an **Approved & Published** version for an existing DA page or JSON sheet. It skips media files. The approver needs DA read and write access to the source. If the source check or version fails, the inbox shows a warning without undoing the publish. The version captures the current DA source, not the published preview. Creating this version updates the source's last-modified time. DA versioning in this inbox does not support Helix 6 sites (content in the AEM source bus).
 - **publish-requests-worker (REST)** — the app calls:
   - `GET /api/requests` — pending requests the caller can approve; `?role=requester` for the caller's own
@@ -70,7 +70,7 @@ The landing page when no `path` is specified. Displays a list of all pending pub
 From the inbox, the approver can click **"Approve All"** to bulk-publish all visible pending requests in a single operation using the [AEM Admin bulk publish API](https://www.aem.live/docs/admin.html#tag/publish/operation/bulkPublish).
 
 **How it works:**
-1. The inbox sends the pending paths in one `POST` to `https://admin.hlx.page/live/{org}/{site}/main/*`.
+1. The inbox sends the pending paths in one `POST` to `https://admin.hlx.page/live/{org}/{site}/main/*` (Helix 6: `https://api.aem.live/{org}/sites/{site}/live/` with `forceAsync: true`).
 2. The API returns a job. The inbox polls it every 2 seconds, for up to 60 seconds.
 3. The inbox sends one `POST /api/requests/approve` for the confirmed paths. The **worker** removes those pending rows and emails the authors. Unconfirmed paths remain in the inbox.
 4. The inbox then tries to create an **Approved & Published** DA version for each confirmed page or sheet.

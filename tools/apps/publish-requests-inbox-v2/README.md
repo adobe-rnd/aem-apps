@@ -103,6 +103,9 @@ single approval promotes the current preview with
 `POST /live/{org}/{site}/main/*`, polls the job, and records final approvals only
 for paths with confirmed success. Intermediate approvals perform no Helix content
 operation. Review links compare preview versus live in the Page Status diff tool.
+On Helix 6 sites (the admin ping announces `x-api-upgrade-available`) the same
+calls go to `https://api.aem.live/{org}/sites/{site}/live/...` instead of
+admin.hlx.page; bulk publication sends `forceAsync: true` so there is a job to poll.
 
 After a final publish is confirmed, the inbox sends the workflow approval to the
 worker before it tries to create an **Approved & Published** DA version for each

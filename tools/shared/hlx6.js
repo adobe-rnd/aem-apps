@@ -19,7 +19,7 @@
 // can't read the source bus, so apps and plugins preview and publish them on
 // api.aem.live (which sends CORS headers itself), like da.live's nx2 `aem`
 // helpers. Same detection as da-nx nx2 isHlx6.
-// Shared by the request-for-publish plugins.
+// Shared by the request-for-publish plugins and the publish-requests inboxes.
 
 const HLX_ADMIN = 'https://admin.hlx.page';
 const AEM_API = 'https://api.aem.live';
@@ -68,4 +68,18 @@ export function adminUrl(operation, {
   return hlx6
     ? `${AEM_API}/${org}/sites/${site}/${operation}${pathForUrl}`
     : `${HLX_ADMIN}/${operation}/${org}/${site}/${ref}${pathForUrl}`;
+}
+
+/**
+ * Whether a URL (e.g. a job link from a bulk response) points at api.aem.live,
+ * which answers browsers directly, unlike admin.hlx.page.
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function isAemApiUrl(url) {
+  try {
+    return new URL(url).origin === AEM_API;
+  } catch {
+    return false;
+  }
 }
