@@ -83,7 +83,11 @@ The plugin clearly shows which approvers and CC recipients will receive the requ
 
 ### 6. Missing Configuration
 
-If the `publish-workflow-config` tab is not found in the EW config at either the site level (`/config/{org}/{site}/`) or the org level (`/config/{org}/`), the plugin displays a missing-workflow-configuration error. Ensure that the tab exists at one of those levels.
+If the `publish-workflow-config` tab is not found in the EW config at either the site level (`/config/{org}/{site}/`) or the org level (`/config/{org}/`), the plugin displays an error:
+
+> *"Publish workflow configuration not found for this site or org."*
+
+Add the tab at one of those levels.
 
 Similarly, if the config exists but no rule matches the current content path, an error is shown:
 
@@ -110,9 +114,9 @@ If the request fails to submit (network error, worker error, etc.), an error mes
 
 ## Configuration
 
-### Config API (approver rules + groups)
+### EW config API (approver rules + groups)
 
-The workflow configuration is read from the **Config API** as tabs within the root config:
+The workflow configuration is read from the **EW config API** as tabs within the root config:
 
 - **Site-level** (primary): `GET https://admin.da.live/config/{org}/{site}/`
 - **Org-level** (fallback): `GET https://admin.da.live/config/{org}/`
@@ -141,7 +145,7 @@ The `publish-workflow-settings` tab holds key-value pairs that control optional 
 | `request.comments.required` | `true` |
 | `request.comments.length` | `25` |
 
-### `/.da/publish-workflow-requests.json` (Source API)
+### `/.da/publish-workflow-requests.json` (EW source API)
 
 Tracks pending publish requests with columns: `requester`, `approver`, `path`, `comment`, `status`, `created`
 

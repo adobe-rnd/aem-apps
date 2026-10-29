@@ -12,7 +12,7 @@ There is no role selector. When the caller is both the requester and an approver
 
 The site needs a `library` tab in its EW site config at `https://da.live/config#/{org}/{site}/`. Follow [Set up library](https://www.aem.live/docs/ew/administering/set-up-library#update-project-config-sheet) first. The installation instructions assume that setup is complete.
 
-This plugin uses a separately hosted publish-request backend. V2 approvals must be available on that backend, and your site must be registered with it. Authors also need access to the requests sheet, as described below.
+This plugin uses a separately hosted publish-request backend. Your Adobe contact registers the site for v2 approvals on that backend. Authors also need access to the requests sheet, as described below.
 
 ## How to use
 
@@ -34,8 +34,8 @@ not migrate existing site entries. Do not mix v1 clients with the v2 workflow.
 
 1. Go to `https://da.live/config#/{org}/{site}/`.
 2. Open the site configuration, then open or create the `library` tab.
-3. Update the intended library row's `path` to the full hosted `.html` URL, for example `https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/request-for-publish-v2/request-for-publish-v2.html`. Keep its configured title and use the documented `inline` experience for the side panel.
-4. Save the config. Reload the EW canvas editor, then open the side panel dropdown and select the newly added plugin by its configured title.
+3. Add a row, or change the `path` of the site's existing Request Publish row, to the full hosted `.html` URL, for example `https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/request-for-publish-v2/request-for-publish-v2.html`, with `experience` set to `inline`.
+4. Save the config. Reload the EW canvas editor, then open the side panel dropdown and select the plugin by its configured title.
 
 ## Integration
 
@@ -147,5 +147,5 @@ The integration harness is managed outside this repository; use its provided loc
 
 - **Plugin missing from the side panel dropdown:** Check that the site's `library` tab contains the registration row with the configured title. Save the config and reload the EW canvas editor.
 - **Plugin does not open:** Check that `path` is the full `.html` URL shown above and `experience` is `inline` for the side panel.
-- **Requests fail:** Check v2 availability on the backend, site registration, workflow configuration, and requests-sheet access.
+- **Requests fail:** Check the workflow configuration and requests-sheet access. If both are set up, ask your Adobe contact whether the site is registered for v2 approvals.
 - **Comparison is unavailable or saving blocks submission:** Check the host and SDK integrations described above. Missing comparison or confirmed-save actions are not fixed by changing the library row.

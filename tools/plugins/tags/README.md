@@ -8,7 +8,7 @@ or to find which pages already carry a given tag, see the companion
 Ported from
 [scdemos/demo's `tools/plugins/tags`](https://github.com/scdemos/demo/tree/main/tools/plugins/tags),
 adapted for a flat `Namespace`/`Category`/`Tag`/`Description` taxonomy
-sheet (fetched from the source API rather than a `docs/library/*.json`
+sheet (fetched from the EW source API rather than a `docs/library/*.json`
 file), and generalized to work across orgs/sites and to let each site
 configure where its taxonomy sheet lives.
 
@@ -51,7 +51,7 @@ elsewhere with a `taxonomy` query param on the plugin URL, set in the
 
 - A path within the site's own authored source, e.g.
   `/tools/plugins/tags/tags.html?taxonomy=/config/taxonomy.json`
-- A full source API URL, to share one taxonomy sheet across multiple
+- A full EW source API URL, to share one taxonomy sheet across multiple
   sites/orgs, e.g.
   `/tools/plugins/tags/tags.html?taxonomy=https://admin.da.live/source/{org}/{site}/taxonomy.json`
 

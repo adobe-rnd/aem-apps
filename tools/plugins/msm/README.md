@@ -19,7 +19,7 @@ described below.
    - **As a linked site** — shows the source chain up to the root source.
    - **Dual role** — both, shown as separate **Source** and **Linked sites** sections.
 3. The author picks an action (publish to preview/live, detach, sync, reconnect,
-   etc.) and the plugin executes it via the authoring Admin API and AEM Admin API.
+   etc.) and the plugin executes it via the EW admin API (`admin.da.live`) and the AEM Admin API.
 
 The plugin uses [`DA_SDK`](https://da.live/nx/utils/sdk.js) so all admin calls
 are authenticated against the host page's signed-in user — no separate auth
@@ -133,4 +133,4 @@ tools/plugins/msm/
 - **Plugin does not open:** Check that `path` is the full hosted `.html` URL shown above, or the correct site-relative `.html` path for a vendored copy, and `experience` is `dialog`.
 - **The built-in action opens instead of this plugin:** Use the exact title `Multi-site Manager` in the registration row to override the built-in action.
 - **Source or linked sites are missing:** Check the org-level `msm` sheet and its source/linked relationships as described above.
-- **An action fails:** Check the displayed error, your sign-in session, and access to the affected sites through the authoring Admin API and AEM Admin API.
+- **An action fails:** Check the displayed error, your sign-in session, and access to the affected sites through the EW admin API and the AEM Admin API.

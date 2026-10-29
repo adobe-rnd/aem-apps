@@ -18,7 +18,7 @@ The site needs a `library` tab in its EW site config at `https://da.live/config#
 
 4. Save the config. Reload the EW canvas editor, then open the side panel dropdown and select the newly added plugin by its configured title.
 
-The `title` value determines the name shown in the side panel dropdown. With the configuration above, look for **Fragment Picker**. If your site uses **Fragments** as the title, that is the name you will see instead.
+The `title` value is the name shown in the side panel dropdown.
 
 ## How to Use
 
@@ -26,7 +26,7 @@ The `title` value determines the name shown in the side panel dropdown. With the
 2. Place the cursor where you want the fragment link inserted.
 3. Open the right-hand tools panel if it is collapsed.
 4. Open the dropdown at the top of the panel, which may currently show **Outline**.
-5. Select the **Fragment Picker** plugin, or the name configured for your site. In UIs that group plugins under **Extensions**, look in that section.
+5. Select **Fragment Picker** (or the title configured for your site) under **Extensions**.
 6. **Browse** the fragment tree or **search** by fragment name.
 7. Click a fragment to see its live preview.
 8. Click **Insert** to add the fragment link to your document.
@@ -68,5 +68,5 @@ By default, the plugin looks for fragments in `/fragments` within your repositor
 
 ## Troubleshooting
 
-- **Plugin missing from the side panel dropdown:** Check that the site's `library` tab contains the registration row with the configured title. Make sure you are editing a page in the same site where the plugin was configured. In UIs that group plugins under **Extensions**, check that section of the dropdown. Save the config and reload the EW canvas editor.
+- **Plugin missing from the side panel dropdown:** Check that the site's `library` tab contains the registration row with the configured title. Make sure you are editing a page in the same site where the plugin was configured, and look under **Extensions** in the dropdown. Save the config and reload the EW canvas editor.
 - **Plugin does not open:** Check that `path` is the full `.html` URL shown above and `experience` is `fullsize-dialog`.

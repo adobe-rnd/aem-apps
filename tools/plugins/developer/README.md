@@ -49,5 +49,5 @@ Save the config. Reload the EW canvas editor, then open the side panel dropdown 
 ## Troubleshooting
 
 - **Plugin missing from the side panel dropdown:** Check that the site's `library` tab contains the registration row with the configured title. Save the config and reload the EW canvas editor.
-- **Plugin does not open:** Check that `path` is the full `.html` URL shown above. Match the registration example, which specifies only `title` and `path`.
+- **Plugin does not open:** Check that `path` is the full `.html` URL shown above.
 - **Branch list does not load:** Check the inline status message, your sign-in session, and access to the site's EDS admin API.

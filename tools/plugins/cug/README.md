@@ -8,7 +8,7 @@ Closed User Groups restrict access to pages at the CDN edge using headers on the
 
 ## How It Works
 
-1. Fetches the site's `closed-user-groups.json` sheet from the source API (`/source/{org}/{site}/closed-user-groups.json`).
+1. Fetches the site's `closed-user-groups.json` sheet from the EW source API (`https://admin.da.live/source/{org}/{site}/closed-user-groups.json`).
 2. Converts each row into the `x-aem-cug-required`, `x-aem-cug-groups`, and `x-aem-cug-login-path` headers, keyed by the row's `url` path. See the linked docs for the sheet's column format and header semantics.
 3. Reads the site's existing `headers.json` config and strips out any previously-applied CUG headers, preserving all other (non-CUG) header entries.
 4. Merges the fresh CUG headers with the preserved non-CUG headers and POSTs the combined config back to `headers.json`.
