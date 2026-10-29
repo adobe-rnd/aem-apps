@@ -1,19 +1,28 @@
-# Request for Plugin
+# Request for Publish Plugin
 
 A plugin for Experience Workspace (EW) that enables content authors to submit publish requests for approval. This plugin is the **author-facing** side of the publish workflow, appearing as a dialog within EW.
 
 ## Prerequisites
 
-The site needs a `library` tab in its EW site config at `https://da.live/config#/{org}/{site}/`. Follow [Set up library](https://www.aem.live/docs/ew/administering/set-up-library#update-project-config-sheet) first. This guide assumes that setup is complete; the plugin only appears in EW when the library is configured and contains its registration row.
+Your Adobe contact onboards the org and site for the publish workflow (see [Get onboarded](https://www.aem.live/docs/ew/administering/request-publish#step-1-get-onboarded)). The workflow configuration and requests-sheet access described under **Configuration** must also be set up.
 
-The existing integration supports both dialog and panel modes (see **Plugin Modes**) but does not specify a registration row. Use registration settings appropriate to the intended mode rather than assuming the two modes use the same settings. The worker and workflow access requirements below must also be configured.
+## Installation
 
-After adding the registration row, save the config. Reload the EW canvas editor, then open the side panel dropdown and select the newly added plugin by its configured title.
+Add this row to the `prepare` tab or the `library` tab of the site config at `https://da.live/config#/{org}/{site}/`:
+
+| title             | path                                                                                                    | icon                                                                                                   | experience        |
+| ----------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------- |
+| `Request Publish` | `https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/request-for-publish/request-for-publish.html` | `https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/request-for-publish/request-for-publish.svg` | `fullsize-dialog` |
+
+- In the `prepare` tab, authors open it from the Prepare menu, for pages and for media such as PDFs.
+- In the `library` tab, authors open it from the side panel dropdown, for pages only.
+
+Add it to both tabs only if you want it in both places. Save the config and reload the EW canvas editor.
 
 ## How to Use
 
 1. Open the page you want to submit in EW.
-2. Open the plugin from the side panel dropdown by its configured title (for example, **Request Publish**).
+2. Open **Request Publish** from the Prepare menu or the side panel dropdown, depending on where it is registered.
 3. Review the approvers and content diff, add a note if needed, and click **Request Publish**.
 
 ## How It Works
@@ -187,6 +196,6 @@ The plugin renders one of these states at any time:
 
 ## Troubleshooting
 
-- **Plugin missing from the side panel dropdown:** Check that the site's `library` tab contains the registration row with the configured title. Save the config and reload the EW canvas editor.
-- **Plugin does not open:** Check that `path` points to the full hosted `.html` URL and that the registration settings match the intended dialog or panel mode described above.
+- **Plugin missing from the Prepare menu or the side panel dropdown:** Check that the site's `prepare` or `library` tab contains the registration row. Save the config and reload the EW canvas editor.
+- **Plugin does not open:** Check that `path` is the full `.html` URL shown above and `experience` is `fullsize-dialog`.
 - **Submission is blocked:** Check the displayed error, workflow configuration, your sign-in session, and the requests-sheet access requirements above.

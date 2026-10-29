@@ -63,11 +63,11 @@ EW discovers the plugin via a row in the site's config `library` tab, not a file
 
 1. Go to `https://da.live/config#/{org}/{site}/`.
 2. Open the site configuration, then open or create the `library` tab.
-3. Verify the `experience` value before adding the row below: the existing example marks `dialog` as uncertain. The hosted URLs also use the `tags` branch; confirm that this is the deployment you intend to use.
+3. Add the following row:
 
-| title  | path                                                                                                    | icon                                                                                                    | experience |
-| ------ | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------- |
-| `Tags` | `https://tags--aem-apps--adobe-rnd.aem.live/tools/plugins/tags/tags.html`                                | `https://tags--aem-apps--adobe-rnd.aem.live/tools/plugins/tags/classification.svg`                         | `dialog`?  |
+| title  | path                                                                      | icon                                                                                | experience |
+| ------ | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------- |
+| `Tags` | `https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/tags/tags.html` | `https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/tags/classification.svg` | `dialog`   |
 
 Append `?taxonomy=...` to the `path` for sites that keep `taxonomy.json`
 somewhere other than the default location (see **Taxonomy location**
@@ -85,5 +85,5 @@ are shared with the [Tags app](../../apps/tags/README.md) via
 ## Troubleshooting
 
 - **Plugin missing from the side panel dropdown:** Check that the site's `library` tab contains the registration row with the configured title. Save the config and reload the EW canvas editor.
-- **Plugin does not open:** Check that `path` is the full `.html` URL shown above, keeping any `taxonomy` query parameter, and verify the `experience` value. The example marks `dialog` as uncertain; do not copy the question mark as a configuration value. Check that the URL uses the intended deployment branch.
+- **Plugin does not open:** Check that `path` is the full `.html` URL shown above, keeping any `taxonomy` query parameter.
 - **Tags do not appear:** Check that the taxonomy sheet exists at the configured location and that you can read it.

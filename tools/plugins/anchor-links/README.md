@@ -28,8 +28,6 @@ Register in your EW site config's `library` tab:
 | ------------- | ---------------------------------------------- | ---------- |
 | `Anchor Links`  | `https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/anchor-links/anchor-links.html`    | `dialog` |
 
-The `experience` column controls how the plugin opens. We recommend `dialog` for this plugin. For library setup, see [Set up library](https://www.aem.live/docs/ew/administering/set-up-library#update-project-config-sheet) at `https://da.live/config#/{org}/{site}/`.
-
 Save the config. Reload the EW canvas editor, then open the side panel dropdown and select the newly added plugin by its configured title.
 
 ## Files

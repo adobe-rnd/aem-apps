@@ -46,9 +46,9 @@ tools/plugins/cug/
 
 Register in your EW site config's `prepare` sheet:
 
-| title         | path                                                                          | format   |
-| ------------- | ------------------------------------------------------------------------------ | -------- |
-| `Page Access` | `https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/cug/cug.html`         | `dialog` |
+| title         | path                                                                    |
+| ------------- | ----------------------------------------------------------------------- |
+| `Page Access` | `https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/cug/cug.html` |
 
 Save the config and reload the EW canvas editor.
 
@@ -63,5 +63,5 @@ The plugin uses [`DA_SDK`](https://da.live/nx/utils/sdk.js) to read the org/site
 ## Troubleshooting
 
 - **Plugin missing from the Prepare menu:** Check that the site's `prepare` sheet contains the registration row with the configured title. Save the config and reload the EW canvas editor.
-- **Plugin does not open:** Check that `path` is the full `.html` URL shown above. This Prepare-menu registration documents `format: dialog`; do not substitute library registration settings.
+- **Plugin does not open:** Check that `path` is the full `.html` URL shown above.
 - **Page access cannot be applied or removed:** Check the displayed error, your sign-in session, and access to the source sheet and Config Service endpoints listed above. To apply restrictions, the `closed-user-groups` sheet must exist and follow the linked column format.
