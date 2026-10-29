@@ -58,13 +58,15 @@ The `title` value is the name shown in the side panel dropdown.
 ## Dependencies
 
 - [App SDK](https://da.live/nx/utils/sdk.js) — context and document actions
-- [Tree Utility](https://da.live/nx/public/utils/tree.js) — fragment crawling
+- [Tree Utility](https://da.live/nx/public/utils/tree.js) — fragment crawling on sites that aren't on Helix 6
 - [nx2 Spectrum Styles](https://da.live/nx2/styles/styles.css) — design system
 - No build step; plain ES modules
 
 ## Fragment Location
 
-By default, the plugin looks for fragments in `/fragments` within your repository. All `document` files in this folder and its subfolders will be available for insertion.
+The plugin looks for `fragments` folders at three levels: `/fragments`, `/{folder}/fragments` and `/{folder}/{subfolder}/fragments` (for example `/en/fragments` or `/us/en/fragments`), skipping `drafts` folders. Each folder it finds is a separate section in the tree, and all `.html` documents in it and its subfolders can be inserted. If it finds none, it uses `/fragments`.
+
+On Helix 6 sites the plugin lists content from the source bus (`api.aem.live`) instead of `admin.da.live`.
 
 ## Troubleshooting
 
