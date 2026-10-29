@@ -1,9 +1,9 @@
 # Tags plugin
 
-A multi-select, searchable tag picker for authors, backed by a site's tag
-taxonomy sheet (`/taxonomy.json` by default). To create or edit that sheet,
-or to find which pages already carry a given tag, see the companion
-[Tags app](../../apps/tags/README.md).
+A multi-select, searchable tag picker for authors in Experience Workspace
+(EW), backed by a site's tag taxonomy sheet (`/taxonomy.json` by default).
+To create or edit that sheet, or to find which pages already carry a given
+tag, see the companion [Tags app](../../apps/tags/README.md).
 
 Ported from
 [scdemos/demo's `tools/plugins/tags`](https://github.com/scdemos/demo/tree/main/tools/plugins/tags),
@@ -14,7 +14,7 @@ configure where its taxonomy sheet lives.
 
 ## Prerequisites
 
-The site needs a `library` tab in its Experience Workspace (EW) site config at `https://da.live/config#/{org}/{site}/`. Follow [Set up library](https://www.aem.live/docs/ew/administering/set-up-library#update-project-config-sheet) first. The installation instructions assume that setup is complete and that you can edit the config. The taxonomy sheet must also exist at the configured location.
+The taxonomy sheet must exist at the configured location (see **Taxonomy location**).
 
 ## How to use
 
@@ -57,13 +57,7 @@ elsewhere with a `taxonomy` query param on the plugin URL, set in the
 
 ## Registration
 
-EW discovers the plugin via a row in the site's config `library` tab, not a file in this repo.
-
-### Installation
-
-1. Go to `https://da.live/config#/{org}/{site}/`.
-2. Open the site configuration, then open or create the `library` tab.
-3. Add the following row:
+Add this row to the site's `library` tab (see [Registering a plugin](../README.md#registering-a-plugin)):
 
 | title  | path                                                                      | icon                                                                                | experience |
 | ------ | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------- |
@@ -72,8 +66,6 @@ EW discovers the plugin via a row in the site's config `library` tab, not a file
 Append `?taxonomy=...` to the `path` for sites that keep `taxonomy.json`
 somewhere other than the default location (see **Taxonomy location**
 above).
-
-4. Save the config. Reload the EW canvas editor, then open the side panel dropdown and select the newly added plugin by its configured title.
 
 ## Dependencies
 
@@ -84,6 +76,5 @@ are shared with the [Tags app](../../apps/tags/README.md) via
 
 ## Troubleshooting
 
-- **Plugin missing from the side panel dropdown:** Check that the site's `library` tab contains the registration row with the configured title. Save the config and reload the EW canvas editor.
 - **Plugin does not open:** Check that `path` is the full `.html` URL shown above, keeping any `taxonomy` query parameter.
 - **Tags do not appear:** Check that the taxonomy sheet exists at the configured location and that you can read it.

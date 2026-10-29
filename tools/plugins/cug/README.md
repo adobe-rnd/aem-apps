@@ -44,13 +44,11 @@ tools/plugins/cug/
 
 ## Configuration
 
-Register in your EW site config's `prepare` sheet:
+Add this row to the site's `prepare` tab (see [Registering a plugin](../README.md#registering-a-plugin)):
 
 | title         | path                                                                    |
 | ------------- | ----------------------------------------------------------------------- |
 | `Page Access` | `https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/cug/cug.html` |
-
-Save the config and reload the EW canvas editor.
 
 The plugin uses [`DA_SDK`](https://da.live/nx/utils/sdk.js) to read the org/site of whichever page is open when it's launched from the Prepare menu — the CUG sheet and headers it manages are site-wide, not page-specific.
 
@@ -62,6 +60,5 @@ The plugin uses [`DA_SDK`](https://da.live/nx/utils/sdk.js) to read the org/site
 
 ## Troubleshooting
 
-- **Plugin missing from the Prepare menu:** Check that the site's `prepare` sheet contains the registration row with the configured title. Save the config and reload the EW canvas editor.
 - **Plugin does not open:** Check that `path` is the full `.html` URL shown above.
 - **Page access cannot be applied or removed:** Check the displayed error, your sign-in session, and access to the source sheet and Config Service endpoints listed above. To apply restrictions, the `closed-user-groups` sheet must exist and follow the linked column format.

@@ -2,10 +2,6 @@
 
 A plugin for browsing and inserting media from your site's media library index into documents in Experience Workspace (EW). Provides a full-featured media browsing interface with search, filtering, and preview capabilities.
 
-## Prerequisites
-
-The site needs a `library` tab in its EW site config at `https://da.live/config#/{org}/{site}/`. Follow [Set up library](https://www.aem.live/docs/ew/administering/set-up-library#update-project-config-sheet) first. This guide assumes that setup is complete; the plugin only appears when its library registration is configured.
-
 ## How to Use
 
 1. Open a page in EW and switch to **Content** view.
@@ -21,15 +17,11 @@ The plugin inserts media references appropriate to the selected item type (image
 
 ## Installation
 
-1. Go to `https://da.live/config#/{org}/{site}/`.
-2. Open the site configuration, then open or create the `library` tab.
-3. Add the following row:
+Add this row to the site's `library` tab (see [Registering a plugin](../README.md#registering-a-plugin)):
 
 | title            | path                                                                                              | experience        |
 | ---------------- | ------------------------------------------------------------------------------------------------- | ----------------- |
 | `Media Library`  | `https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/media-library/media-library.html` | `fullsize-dialog` |
-
-4. Save the config. Reload the EW canvas editor, then open the side panel dropdown and select the newly added plugin by its configured title.
 
 **Important:** Always use `.aem.live` URLs for plugin registration, NOT `.aem.page`. The `.aem.page` domain will cause the plugin to use stage environment instead of production, resulting in authentication errors.
 
@@ -62,7 +54,6 @@ The plugin reads your site's media index from the `/.da/media-insights/` folder 
 
 ## Troubleshooting
 
-- **Plugin missing from the side panel dropdown:** Check that the site's `library` tab contains the registration row with the configured title. Save the config and reload the EW canvas editor.
 - **Plugin does not open:** Check that `path` is the full `.html` URL shown above and `experience` is `fullsize-dialog`.
 - **Authentication errors:** Use the `.aem.live` registration URL, not `.aem.page`, as noted above.
 - **Media items do not appear:** Check that the site's `/.da/media-insights/` folder has the index files and that you can write to it.

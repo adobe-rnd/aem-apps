@@ -2,23 +2,13 @@
 
 A plugin for browsing, previewing, and inserting fragment links into your documents in Experience Workspace (EW). Provides a split-pane interface with a searchable folder tree on the left and live preview on the right.
 
-## Prerequisites
-
-The site needs a `library` tab in its EW site config at `https://da.live/config#/{org}/{site}/`. Follow [Set up library](https://www.aem.live/docs/ew/administering/set-up-library#update-project-config-sheet) first. This guide assumes that setup is complete; the plugin only appears in EW when the library is configured and contains its registration row.
-
 ## Installation
 
-1. Go to `https://da.live/config#/{org}/{site}/`, replacing `{org}` and `{site}` with your org and site values.
-2. Open the site configuration, then open or create the `library` tab.
-3. Add the following row, preserving any existing library entries:
+Add this row to the site's `library` tab (see [Registering a plugin](../README.md#registering-a-plugin)):
 
 | title             | path                                        | experience        |
 | ----------------- | ------------------------------------------- | ----------------- |
 | `Fragment Picker` | `https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/fragments/fragments.html`   | `fullsize-dialog` |
-
-4. Save the config. Reload the EW canvas editor, then open the side panel dropdown and select the newly added plugin by its configured title.
-
-The `title` value is the name shown in the side panel dropdown.
 
 ## How to Use
 
@@ -70,5 +60,4 @@ On Helix 6 sites the plugin lists content from the source bus (`api.aem.live`) i
 
 ## Troubleshooting
 
-- **Plugin missing from the side panel dropdown:** Check that the site's `library` tab contains the registration row with the configured title. Make sure you are editing a page in the same site where the plugin was configured, and look under **Extensions** in the dropdown. Save the config and reload the EW canvas editor.
 - **Plugin does not open:** Check that `path` is the full `.html` URL shown above and `experience` is `fullsize-dialog`.

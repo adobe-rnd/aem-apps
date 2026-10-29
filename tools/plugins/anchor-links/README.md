@@ -2,10 +2,6 @@
 
 A plugin for Experience Workspace (EW) for generating anchor links to headings on your page. Useful for building tables of contents, FAQ navigation, and quick-reference sections.
 
-## Prerequisites
-
-The site needs a `library` tab in its EW site config at `https://da.live/config#/{org}/{site}/`. Follow [Set up library](https://www.aem.live/docs/ew/administering/set-up-library#update-project-config-sheet) first. This guide assumes that setup is complete; the plugin only appears in EW when the library is configured and contains its registration row.
-
 ## How to Use
 
 1. Open a page in EW, switch to **Content** view, and place the cursor where you want to insert the links.
@@ -22,13 +18,11 @@ The site needs a `library` tab in its EW site config at `https://da.live/config#
 
 ## Configuration
 
-Register in your EW site config's `library` tab:
+Add this row to the site's `library` tab (see [Registering a plugin](../README.md#registering-a-plugin)):
 
 | title         | path                                           | experience |
 | ------------- | ---------------------------------------------- | ---------- |
 | `Anchor Links`  | `https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/anchor-links/anchor-links.html`    | `dialog` |
-
-Save the config. Reload the EW canvas editor, then open the side panel dropdown and select the newly added plugin by its configured title.
 
 ## Files
 
@@ -45,5 +39,4 @@ Save the config. Reload the EW canvas editor, then open the side panel dropdown 
 
 ## Troubleshooting
 
-- **Plugin missing from the side panel dropdown:** Check that the site's `library` tab contains the registration row with the configured title. Save the config and reload the EW canvas editor.
 - **Plugin does not open:** Check that `path` is the full `.html` URL shown above and `experience` is `dialog`.

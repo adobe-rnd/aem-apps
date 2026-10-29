@@ -48,9 +48,10 @@ describes one site:
 ### 2. `.da/config.json` — `prepare` sheet
 
 To make the plugin appear in the Prepare menu, add a row to the `prepare`
-sheet at either the org or site level. Either point at this repo's hosted
-plugin (no code copy needed) or use a relative path if you've vendored the
-plugin into your own repo:
+tab of the org or site config (see
+[Registering a plugin](../README.md#registering-a-plugin)). Either point at
+this repo's hosted plugin (no code copy needed) or use a relative path if
+you've vendored the plugin into your own repo:
 
 **Option A: use the hosted plugin (recommended)**
 
@@ -63,8 +64,6 @@ plugin into your own repo:
 | title              | path                              | icon                                                                  | experience |
 | ------------------ | --------------------------------- | --------------------------------------------------------------------- | ---------- |
 | Multi-site Manager | `/tools/plugins/msm/msm.html`     | `https://da.live/blocks/edit/img/S2_Icon_GlobeGrid_20_N.svg#S2_Icon_GlobeGrid` | dialog     |
-
-Save the config and reload the EW canvas editor.
 
 ## Behavior matrix
 
@@ -124,7 +123,6 @@ tools/plugins/msm/
 
 ## Troubleshooting
 
-- **Plugin missing from the Prepare menu:** Check that the org or site config's `prepare` sheet contains the registration row with the configured title. Save the config and reload the EW canvas editor.
 - **Plugin does not open:** Check that `path` is the full hosted `.html` URL shown above, or the correct site-relative `.html` path for a vendored copy, and `experience` is `dialog`.
 - **Source or linked sites are missing:** Check the org-level `msm` sheet and its source/linked relationships as described above.
 - **An action fails:** Check the displayed error, your sign-in session, and access to the affected sites through the EW admin API and the AEM Admin API.

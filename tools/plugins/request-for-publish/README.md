@@ -8,7 +8,7 @@ Your Adobe contact onboards the org and site for the publish workflow (see [Get 
 
 ## Installation
 
-Add this row to the `prepare` tab or the `library` tab of the site config at `https://da.live/config#/{org}/{site}/`:
+Add this row to the site's `prepare` tab or `library` tab (see [Registering a plugin](../README.md#registering-a-plugin)):
 
 | title             | path                                                                                                    | icon                                                                                                   | experience        |
 | ----------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------- |
@@ -17,7 +17,7 @@ Add this row to the `prepare` tab or the `library` tab of the site config at `ht
 - In the `prepare` tab, authors open it from the Prepare menu, for pages and for media such as PDFs.
 - In the `library` tab, authors open it from the side panel dropdown, for pages only.
 
-Add it to both tabs only if you want it in both places. Save the config and reload the EW canvas editor.
+Add it to both tabs only if you want it in both places.
 
 ## How to Use
 
@@ -196,6 +196,5 @@ The plugin renders one of these states at any time:
 
 ## Troubleshooting
 
-- **Plugin missing from the Prepare menu or the side panel dropdown:** Check that the site's `prepare` or `library` tab contains the registration row. Save the config and reload the EW canvas editor.
 - **Plugin does not open:** Check that `path` is the full `.html` URL shown above and `experience` is `fullsize-dialog`.
 - **Submission is blocked:** Check the displayed error, workflow configuration, your sign-in session, and the requests-sheet access requirements above.
