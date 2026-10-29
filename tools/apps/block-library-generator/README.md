@@ -21,7 +21,43 @@ The document supplies the authenticated host context, not example content or
 images. Apps-only generation is deferred until the host supports chat handoff
 and responses; both launch routes remain available in V1.
 
+## Try the hosted branch (no local setup)
+
+Once `blocklibgen` has been pushed and AEM Code Sync has made the branch available,
+testers can use it without cloning the repository, installing tools or running
+localhost. These URLs are for that branch, not the current `main` version.
+
+Sign in to Production DA with access to the target site's code, source files,
+configuration and Preview operations. Generation also requires the editor's
+supported chat and content-tool integration.
+
+### Generate through the editor
+
+Add this row to the target site's DA configuration **library** sheet:
+
+| title | path | experience |
+| --- | --- | --- |
+| Block Library Generator | https://blocklibgen--aem-apps--adobe-rnd.aem.live/tools/apps/block-library-generator/block-library-generator.html | fullsize-dialog |
+
+Reload the editor, open a document in the target site, then choose
+**Outline > Block Library Generator**. Follow [Use the generator](#use-the-generator)
+below to initialize the library and create examples.
+
+### Inspect or manage through Apps
+
+Open the [hosted branch in DA Apps](https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator?ref=blocklibgen&da-admin=prod),
+choose the content organization/site, then choose **Use site**. Optionally append
+`#organization/site` to select the content target automatically.
+
+Apps supports inspection, setup, Open and Delete in V1; use the editor for
+Create/Recreate. An Apps-index tile can point to this same shell URL.
+
+`ref=blocklibgen` selects the **generator's code branch**, not the target site's
+block-code branch. The editor supplies the latter; Apps uses the target's `main`.
+
 ## Run locally
+
+For development, use the same authenticated launch modes with a local server.
 
 Prerequisites:
 
@@ -52,10 +88,6 @@ Add this row to the target site's DA configuration **library** sheet:
 Reload the editor after changing its configuration, then open a document in that
 site and choose **Outline > Block Library Generator**.
 
-For a deployed extension, replace the localhost path with the deployed app's HTML
-entry URL and keep `fullsize-dialog`. The app's deployment branch is separate from
-the target site's code branch.
-
 ### Apps
 
 Open the [local app through the authenticated Apps shell](https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator?ref=local&da-admin=prod),
@@ -71,9 +103,10 @@ https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-
 `#/organization/site` is also accepted. A valid fragment selects the site after
 authentication; without one, remembered fields are prefilled but not applied.
 Editor launches always retain their own authoritative site and branch.
-For a deployed Apps launch, omit `ref=local`. An Apps-index tile uses the shell
-URL, not the raw localhost URL. Allow the browser's local-network access prompt
-if required for local development.
+For hosted branch testing, use `ref=blocklibgen` as shown above instead of
+`ref=local`; omitting `ref` loads `main`. An Apps-index tile uses the shell URL,
+not the raw localhost URL. Allow the browser's local-network access prompt if
+required for local development.
 
 Opening the HTML entry directly does not provide DA authentication or chat.
 Use one of the authenticated launch routes above.
@@ -205,6 +238,20 @@ bulk generation, publishing or block-code modification.
   in site CSS, not its surrounding section, which may contain the actual example.
   Preview caches can briefly show an older index or a cached 404; reload after
   cache expiry rather than regenerating the page.
+
+## Planned after V1
+
+Move to **Apps-only use** once both host capabilities are available:
+
+- Chat turn-completion events tracked in
+  [adobe/da-live#1507](https://github.com/adobe/da-live/issues/1507).
+- Apps chat handoff through the SDK in
+  [adobe/da-nx#895](https://github.com/adobe/da-nx/pull/895).
+
+After that work is completed, merged and deployed, integrate and verify the
+supported Apps chat/response flow, then retire the editor-extension route.
+V1 does not enable Apps generation automatically when those host changes land;
+until that follow-up, generation remains editor-only.
 
 ## Development checks
 
