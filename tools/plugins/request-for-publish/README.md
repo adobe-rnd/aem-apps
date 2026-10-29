@@ -20,7 +20,7 @@ The plugin is a **thin REST client of [`publish-requests-worker`](https://github
   - `POST /api/requests` — submit a request (worker resolves approvers, records the row, emails approvers + CC)
   - `POST /api/requests/withdraw` — cancel the author's own pending request
   - `GET /api/requests?role=requester` — the author's own pending requests
-- **Helix Admin (client-side)**: previews the page under the user's session before submitting; the worker never calls Helix.
+- **Helix Admin (client-side)**: previews the page under the user's session before submitting (admin.hlx.page, or api.aem.live on Helix 6 sites); the worker never calls Helix.
 - **Adobe IMS**: the user's IMS token is sent to the worker, which **derives the caller's identity from it** (the plugin never sends an email/approver list). The plugin also reads the user's email from the IMS profile for display.
 - **Dual Mode**: fullsize-dialog (HTML entry point) or DA panel plugin (exported `init`).
 

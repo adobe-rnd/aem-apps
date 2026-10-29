@@ -15,7 +15,7 @@
  */
 /* eslint-disable import/no-unresolved, no-console */
 
-import { isHlx6, previewApiUrl } from '../../shared/hlx6.js';
+import { adminUrl, isHlx6 } from '../../shared/hlx6.js';
 
 const WORKER_URL = 'https://publish-requests.aem-poc-lab.workers.dev';
 const CI_WORKER_URL = 'https://publish-requests-ci.aem-poc-lab.workers.dev';
@@ -196,7 +196,7 @@ export async function resolveWorkflowConfig(path, org, site, token) {
 export async function previewContent(org, site, path) {
   try {
     const hlx6 = await isHlx6(org, site);
-    const target = previewApiUrl(org, site, path, hlx6);
+    const target = adminUrl('preview', { org, site, path }, hlx6);
     // api.aem.live sends CORS headers itself; admin.hlx.page needs the proxy.
     const url = hlx6 ? target : `${CORS_PROXY}?url=${encodeURIComponent(target)}`;
     const resp = await daFetch(url, { method: 'POST' });

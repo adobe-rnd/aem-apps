@@ -17,6 +17,7 @@
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { daFetch, setImsDetails } from 'https://da.live/nx/utils/daFetch.js';
 import { createClient, workerOrigin, createWorkspaceActions } from './workflow.js';
+import { adminUrl, isHlx6 } from '../../shared/hlx6.js';
 import './panel.js';
 
 function makePanel({ context, token, actions }) {
@@ -27,11 +28,16 @@ function makePanel({ context, token, actions }) {
     return fetch(href, { ...options, headers });
   };
   const contentRequest = actions?.daFetch || daFetch;
-  const content = (operation) => (page) => {
+  const content = (operation) => async (page) => {
     const {
       org, site, path, ref,
     } = page;
-    const { href } = new URL(`https://admin.hlx.page/${operation}/${org}/${site}/${ref}${path}`);
+    const hlx6 = await isHlx6(org, site);
+    const { href } = new URL(adminUrl(operation, {
+      org, site, path, ref,
+    }, hlx6));
+    // api.aem.live sends CORS headers itself; admin.hlx.page needs the proxy.
+    if (hlx6) return contentRequest(href, { method: 'POST' });
     return contentRequest(`https://da-etc.adobeaem.workers.dev/cors?url=${encodeURIComponent(href)}`, { method: 'POST' });
   };
   const panel = document.createElement('request-for-publish');

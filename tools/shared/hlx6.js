@@ -16,41 +16,56 @@
 
 // Helix 6 sites keep their content in the AEM source bus and run the admin
 // API on api.aem.live. admin.hlx.page still answers for them, but its preview
-// can't read the source bus, so apps and plugins preview them on api.aem.live
-// (which sends CORS headers itself). Same detection as da-nx nx2 isHlx6.
-// Shared by the request-for-publish plugins and the publish-requests inboxes.
+// can't read the source bus, so apps and plugins preview and publish them on
+// api.aem.live (which sends CORS headers itself), like da.live's nx2 `aem`
+// helpers. Same detection as da-nx nx2 isHlx6.
+// Shared by the request-for-publish plugins.
 
 const HLX_ADMIN = 'https://admin.hlx.page';
 const AEM_API = 'https://api.aem.live';
 
+const answers = new Map();
+
 /**
  * Whether the site runs on Helix 6. The admin ping answers every site and
- * adds the X-API-Upgrade-Available header for Helix 6 sites.
+ * adds the X-API-Upgrade-Available header for Helix 6 sites. Each site is
+ * pinged once per page load; a failed ping counts as legacy and is retried
+ * on the next call.
  * @param {string} org
  * @param {string} site
  * @param {Function} [fetchFn]
  * @returns {Promise<boolean>}
  */
-export async function isHlx6(org, site, fetchFn = fetch) {
-  try {
-    const resp = await fetchFn(`${HLX_ADMIN}/ping/${org}/${site}`);
-    return resp.headers.get('x-api-upgrade-available') !== null;
-  } catch {
-    return false;
+export function isHlx6(org, site, fetchFn = fetch) {
+  const key = `${org}/${site}`;
+  if (!answers.has(key)) {
+    const answer = Promise.resolve()
+      .then(() => fetchFn(`${HLX_ADMIN}/ping/${org}/${site}`))
+      .then((resp) => resp.headers.get('x-api-upgrade-available') !== null)
+      .catch(() => {
+        answers.delete(key);
+        return false;
+      });
+    answers.set(key, answer);
   }
+  return answers.get(key);
 }
 
 /**
- * Admin API URL that previews a page.
- * @param {string} org
- * @param {string} site
- * @param {string} path - content path, e.g. /drafts/page
+ * Admin API URL for a preview or live operation on a page. Bulk operations
+ * use path `/*` on admin.hlx.page but `/` (the resource root) on
+ * api.aem.live, which rejects `/*`. api.aem.live paths have no ref (it works
+ * on main), so for Helix 6 the ref only picks the aem.page / aem.live host.
+ * @param {'preview'|'live'} operation
+ * @param {{org: string, site: string, path: string, ref?: string}} page
  * @param {boolean} hlx6
  * @returns {string}
  */
-export function previewApiUrl(org, site, path, hlx6) {
+export function adminUrl(operation, {
+  org, site, path, ref = 'main',
+}, hlx6) {
   const pathForUrl = path.startsWith('/') ? path : `/${path}`;
   return hlx6
-    ? `${AEM_API}/${org}/sites/${site}/preview${pathForUrl}`
-    : `${HLX_ADMIN}/preview/${org}/${site}/main${pathForUrl}`;
+    ? `${AEM_API}/${org}/sites/${site}/${operation}${pathForUrl}`
+    : `${HLX_ADMIN}/${operation}/${org}/${site}/${ref}${pathForUrl}`;
 }
