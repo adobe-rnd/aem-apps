@@ -1,37 +1,41 @@
-# Fragment Picker Plugin
+# Fragment Picker
 
-A plugin for browsing and inserting fragments into your documents in Experience Workspace (EW). Provides a split-pane interface with a searchable folder tree on the left and live preview on the right.
+A plugin for browsing, previewing, and inserting fragment links into your documents in Experience Workspace (EW). Provides a split-pane interface with a searchable folder tree on the left and live preview on the right.
 
 ## Prerequisites
 
 The site needs a `library` tab in its EW site config at `https://da.live/config#/{org}/{site}/`. Follow [Set up library](https://www.aem.live/docs/ew/administering/set-up-library#update-project-config-sheet) first. This guide assumes that setup is complete; the plugin only appears in EW when the library is configured and contains its registration row.
 
-## How to Use
-
-1. Open a page in EW and switch to **Content** view.
-2. Place the cursor where you want to insert the fragment.
-3. Open the plugin from the side panel dropdown and select **Fragment Picker** (or the title configured during installation).
-4. **Browse** the fragment tree or **search** by fragment name.
-5. Click a fragment to see its live preview.
-6. Click **Insert** to add the fragment link to your document.
-
-## Output
-
-```html
-<a href="https://main--{repo}--{org}.aem.page/fragments/fragment-name" class="fragment">https://main--{repo}--{org}.aem.page/fragments/fragment-name</a>
-```
-
 ## Installation
 
-1. Go to `https://da.live/config#/{org}/{site}/`.
+1. Go to `https://da.live/config#/{org}/{site}/`, replacing `{org}` and `{site}` with your org and site values.
 2. Open the site configuration, then open or create the `library` tab.
-3. Add the following row:
+3. Add the following row, preserving any existing library entries:
 
 | title             | path                                        | experience        |
 | ----------------- | ------------------------------------------- | ----------------- |
 | `Fragment Picker` | `https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/fragments/fragments.html`   | `fullsize-dialog` |
 
 4. Save the config. Reload the EW canvas editor, then open the side panel dropdown and select the newly added plugin by its configured title.
+
+The `title` value determines the name shown in the side panel dropdown. With the configuration above, look for **Fragment Picker**. If your site uses **Fragments** as the title, that is the name you will see instead.
+
+## How to Use
+
+1. Open a page in your site using the EW canvas editor and switch to **Content** view.
+2. Place the cursor where you want the fragment link inserted.
+3. Open the right-hand tools panel if it is collapsed.
+4. Open the dropdown at the top of the panel, which may currently show **Outline**.
+5. Select the **Fragment Picker** plugin, or the name configured for your site. In UIs that group plugins under **Extensions**, look in that section.
+6. **Browse** the fragment tree or **search** by fragment name.
+7. Click a fragment to see its live preview.
+8. Click **Insert** to add the fragment link to your document.
+
+## Output
+
+```html
+<a href="https://main--{repo}--{org}.aem.page/fragments/fragment-name" class="fragment">https://main--{repo}--{org}.aem.page/fragments/fragment-name</a>
+```
 
 ## Features
 
@@ -64,5 +68,5 @@ By default, the plugin looks for fragments in `/fragments` within your repositor
 
 ## Troubleshooting
 
-- **Plugin missing from the side panel dropdown:** Check that the site's `library` tab contains the registration row with the configured title. Save the config and reload the EW canvas editor.
+- **Plugin missing from the side panel dropdown:** Check that the site's `library` tab contains the registration row with the configured title. Make sure you are editing a page in the same site where the plugin was configured. In UIs that group plugins under **Extensions**, check that section of the dropdown. Save the config and reload the EW canvas editor.
 - **Plugin does not open:** Check that `path` is the full `.html` URL shown above and `experience` is `fullsize-dialog`.
