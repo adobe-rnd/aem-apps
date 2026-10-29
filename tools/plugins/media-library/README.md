@@ -58,11 +58,11 @@ The plugin inserts media references appropriate to the selected item type (image
 
 ## Media Library Index
 
-The plugin reads from your site's media library index located at `/.milo/media-library.json`. This index is automatically maintained by the media library indexing system and includes all media assets across your site.
+The plugin reads your site's media index from the `/.da/media-insights/` folder (`index-meta.json` and the index files next to it). The media library app builds the index the first time it opens a site. Content created before February 2026 needs a bulk index from Adobe; see [Media Library](https://www.aem.live/docs/ew/administering/media-library).
 
 ## Troubleshooting
 
 - **Plugin missing from the side panel dropdown:** Check that the site's `library` tab contains the registration row with the configured title. Save the config and reload the EW canvas editor.
 - **Plugin does not open:** Check that `path` is the full `.html` URL shown above and `experience` is `fullsize-dialog`.
 - **Authentication errors:** Use the `.aem.live` registration URL, not `.aem.page`, as noted above.
-- **Media items do not appear:** Check that the site's `/.milo/media-library.json` index exists and is accessible.
+- **Media items do not appear:** Check that the site's `/.da/media-insights/` folder has the index files and that you can write to it.
