@@ -99,8 +99,8 @@ tools/apps/msm/
 |---|---|---|
 | Lit (via `da-lit`) | `/tools/deps/lit/dist/index.js` | Web component framework |
 | DA SDK | `https://da.live/nx/utils/sdk.js` | Provides auth context and token |
-| DA Fetch | `https://da.live/nx/utils/daFetch.js` | Authenticated requests to DA APIs |
-| NX Merge | `https://da.live/nx/blocks/loc/project/index.js` | `mergeCopy` for content merging |
+| DA Fetch | `DA_SDK.actions.daFetch` | Authenticated requests to DA APIs |
+| NX Merge | `DA_SDK.actions.loc.mergeCopy` | Lazy merge action; SDK supplies transport and origin |
 | Shoelace components | `https://da.live/nx/public/sl/components.js` | UI primitives (`sl-input`, `sl-button`, etc.) |
 | NX Styles | `https://da.live/nx/styles/` and `https://da.live/nx/public/sl/styles.css` | Shared design tokens and component styles |
 

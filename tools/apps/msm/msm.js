@@ -16,6 +16,8 @@
 /* eslint-disable no-underscore-dangle, import/no-unresolved, no-console, class-methods-use-this */
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from 'da-lit';
+import { setDaFetch } from './core/fetch.js';
+import { setMergeCopy } from './core/operations.js';
 import { fetchMsmConfig, clearMsmCache } from './helpers/api.js';
 import 'https://da.live/nx/public/sl/components.js';
 import './helpers/column-browser.js';
@@ -243,7 +245,9 @@ customElements.define('msm-app', MsmApp);
 
 (async function init() {
   const deepLink = parseDeepLink();
-  const { context, token } = await DA_SDK;
+  const { context, token, actions } = await DA_SDK;
+  setDaFetch(actions.daFetch);
+  setMergeCopy(actions.loc.mergeCopy);
   const cmp = document.createElement('msm-app');
   cmp.context = context;
   cmp.token = token;
