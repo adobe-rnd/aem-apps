@@ -19,9 +19,9 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import {
   getMatchContext, createSearchRegex, createHTMLSearchRegex, formatHTML,
-} from '../../../../tools/apps/search/search-utils.js';
+} from '../../../../tools/apps/findreplace/findreplace-utils.js';
 
-const source = readFileSync(new URL('../../../../tools/apps/search/search.js', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../../../../tools/apps/findreplace/findreplace.js', import.meta.url), 'utf8');
 
 function loadContent(options = {}) {
   const definitions = [

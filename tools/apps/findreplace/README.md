@@ -1,11 +1,14 @@
 # FindReplace Pro
 
-A standalone DA (Document Authoring) app for searching site content, replacing
+A standalone Experience Workspace (EW) app for searching site content, replacing
 matches in bulk, and previewing, publishing, or unpublishing selected files.
 Supports text, regular expressions, HTML blocks, and element discovery, with
 version backups before content changes. JSON search is read-only.
 
 ## How to Use
+
+Open **FindReplace Pro** in Experience Workspace, then configure the content
+organization and site you want to work with.
 
 ### 1. Configure
 1. Enter **Organization/Site** in `/org/site` format.
@@ -51,23 +54,27 @@ version backups before content changes. JSON search is read-only.
 2. Enter a **Search For** term (supports Contains, Exact Match, and Regular Expression with case sensitivity).
 3. Click **Scan & Preview**.
 4. Review results; replacement is disabled in JSON mode.
-5. Click a JSON result to open the resource in DA Sheets (e.g., `https://da.live/sheet#/org/site/path`).
+5. Click a JSON result to open the resource in the sheet editor (e.g., `https://da.live/sheet#/org/site/path`).
 
 ## Configuration
 
-Register the app in a site's DA config sheet, **apps** tab (`title` /
-`description` / `image` / `path` columns):
+Register the app for Experience Workspace in a site's DA config sheet,
+**apps** tab (`title` / `description` / `image` / `path` columns):
 
 | title | description | image | path |
 | --- | --- | --- | --- |
-| `FindReplace Pro` | Bulk find and replace with publishing workflow | `https://main--aem-apps--adobe-rnd.aem.page/tools/apps/search/icons/search.svg` | `/app/adobe-rnd/aem-apps/tools/apps/search/search` |
+| `FindReplace Pro` | Bulk find and replace with publishing workflow | `https://main--aem-apps--adobe-rnd.aem.page/tools/apps/findreplace/icons/search.svg` | `/app/adobe-rnd/aem-apps/tools/apps/findreplace/findreplace` |
+
+For existing app registrations, update the apps-tab path and image URL to the
+values above after deploying the renamed app.
 
 Enter the content organization and site in the app's **Organization/Site**
-field. The DA SDK provides session context and authentication, but the app
+field. The DA App SDK provides the Experience Workspace session context and
+authentication, but the app
 does not automatically populate this field from that context. Valid org/site
 input is cached in memory for the current app session.
 
-The app entry point is `/tools/apps/search/search.html`. Keep its HTML,
+The app entry point is `/tools/apps/findreplace/findreplace.html`. Keep its HTML,
 JavaScript, stylesheet, and icons together: static assets use sibling paths,
 and dynamically generated icons resolve relative to the JavaScript module.
 
@@ -92,7 +99,7 @@ and dynamically generated icons resolve relative to the JavaScript module.
   filters. Content search can exclude URLs and attributes (`href`, `src`,
   `srcset`, `data-*`, etc.).
 - **JSON discovery and search** — detect JSON by parsing after minimal
-  normalization, then search its raw text. JSON results open in DA Sheets;
+  normalization, then search its raw text. JSON results open in the sheet editor;
   replacement is disabled.
 
 ### Content Management and Safety
@@ -161,7 +168,7 @@ of each resource.
 - **Advanced Filters**: Enable **Find JSON files**
 - **Search Type**: Regular Expression
 - **Search For**: `"status":\s*"draft"`
-- **Result**: Lists JSON files containing the property; edit in DA Sheets if needed
+- **Result**: Lists JSON files containing the property; edit in the sheet editor if needed
 
 ### Filter and bulk publish
 1. Search for content
@@ -172,18 +179,17 @@ of each resource.
 
 | File | Purpose |
 | --- | --- |
-| `search.html` | App shell, search configuration, results, and action controls |
-| `search.js` | DA SDK initialization, search, bulk operations, versioning, and UI behavior |
-| `search-utils.js` | Dependency-free matching, context, empty-page, and legacy formatting helpers |
-| `search.css` | Spectrum-token app layout, native controls, themes, and icon styles |
+| `findreplace.html` | App shell, search configuration, results, and action controls |
+| `findreplace.js` | DA SDK initialization, search, bulk operations, versioning, and UI behavior |
+| `findreplace-utils.js` | Dependency-free matching, context, empty-page, and legacy formatting helpers |
+| `findreplace.css` | Spectrum-token app layout, native controls, themes, and icon styles |
 | `icons/` | SVG assets for static and dynamically generated UI |
-| `findreplace-app.png` | Example UI screenshot used in this README |
 | `README.md` | App setup, usage, and technical documentation |
 
 ## Dependencies
 
-- [DA App SDK](https://da.live/nx/utils/sdk.js) — session context and token for
-  authenticated access to DA Source and List APIs
+- [DA App SDK](https://da.live/nx/utils/sdk.js) — Experience Workspace integration,
+  session context, and token for authenticated access to DA Source and List APIs
 - [DA Tree Utility](https://da.live/nx/public/utils/tree.js) — folder crawling
 - [nx2 Spectrum Styles](https://da.live/nx2/styles/styles.css) — shared typography
   and light/dark design tokens
@@ -198,9 +204,9 @@ of each resource.
 Run from the repository root with Node.js available:
 
 ```sh
-node --test test/tools/apps/search/*.test.js
-npx eslint tools/apps/search/*.js test/tools/apps/search/*.test.js
-npx stylelint tools/apps/search/search.css
+node --test test/tools/apps/findreplace/*.test.js
+npx eslint tools/apps/findreplace/*.js test/tools/apps/findreplace/*.test.js
+npx stylelint tools/apps/findreplace/findreplace.css
 ```
 
 The focused suite covers the main search and replacement workflows, read-only

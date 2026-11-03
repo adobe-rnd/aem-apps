@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-const source = readFileSync(new URL('../../../../tools/apps/search/search.js', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../../../../tools/apps/findreplace/findreplace.js', import.meta.url), 'utf8');
 const operationsSource = source.slice(
   source.indexOf('async function handleSingleFileOperation('),
   source.indexOf('async function copySelectedUrlsFromBulk('),

@@ -24,7 +24,7 @@ import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { crawl } from 'https://da.live/nx/public/utils/tree.js';
 import {
   isPageEmpty, getMatchContext, createSearchRegex, createHTMLSearchRegex, formatHTML,
-} from './search-utils.js';
+} from './findreplace-utils.js';
 
 // CONFIGURATION - Easily configurable settings
 const CONFIG = {
