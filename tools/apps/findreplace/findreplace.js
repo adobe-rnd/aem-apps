@@ -22,6 +22,7 @@
 
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { crawl } from 'https://da.live/nx/public/utils/tree.js';
+import { getColorScheme } from 'https://da.live/nx2/scripts/nx.js';
 import {
   isPageEmpty, getMatchContext, createSearchRegex, createHTMLSearchRegex, formatHTML,
 } from './findreplace-utils.js';
@@ -39,7 +40,10 @@ const app = {
   selectedFiles: new Set(),
   fileCache: new Map(),
   availablePaths: [],
-  orgSiteCache: null, // Cache for org/site configuration
+  orgSiteCache: null, // Committed target; editing the toolbar does not switch sites.
+  loadingSite: false,
+  activeOperation: false,
+  folderTreeLoaded: false,
   searchPaths: [], // Array to store multiple search paths
   pagination: {
     currentPage: 1,
@@ -115,7 +119,7 @@ function renderPathTags() {
     tag.innerHTML = `
       <span class="tag-text"></span>
       <button type="button" class="tag-remove">
-        <img src="${new URL('./icons/close.svg', import.meta.url).href}" alt="Remove" class="icon icon-sm">
+        <img src="${new URL('./icons/close.svg', import.meta.url).href}" alt="" aria-hidden="true" class="icon icon-sm">
       </button>
     `;
 
@@ -153,38 +157,151 @@ function updatePathInfo() {
   }
 }
 
+function parseOrgSitePath(raw) {
+  const parts = raw.trim().replace(/^\/+|\/+$/g, '').split('/');
+  if (parts.length !== 2 || parts.some((part) => !part || /[\s?#\\]/.test(part))) {
+    return null;
+  }
+  return { org: parts[0], site: parts[1] };
+}
+
 function parseOrgSite() {
-  // Check if user has entered something in the input
-  const orgSitePath = document.getElementById('org-site-path')?.value?.trim();
-  if (orgSitePath) {
-    // Parse /org/site format
-    const cleanPath = orgSitePath.startsWith('/') ? orgSitePath.slice(1) : orgSitePath;
-    const parts = cleanPath.split('/').filter((part) => part.length > 0);
-
-    if (parts.length >= 2) {
-      const result = { org: parts[0], site: parts[1] };
-      // Cache the user's valid input in memory
-      app.orgSiteCache = result;
-      return result;
-    }
-  }
-
-  // Fallback to cached value from previous valid input
-  if (app.orgSiteCache) {
-    return app.orgSiteCache;
-  }
-
-  // No valid input and no cache - return null to trigger error
-  return null;
+  return app.orgSiteCache;
 }
 
 function validateOrgSite() {
   const result = parseOrgSite();
   if (!result) {
-    showMessage('Please enter your organization and site in format: /org/site (e.g., /myorg/mysite)', 'error');
+    showMessage('Enter an organization and site as /org/site, then select Load.', 'error');
     return false;
   }
   return true;
+}
+
+function updateSiteUrl({ org, site }) {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('org', org);
+    url.searchParams.set('site', site);
+    window.history.replaceState(null, '', url);
+  } catch (error) {
+    console.warn('Could not update the loaded site in the URL:', error);
+  }
+}
+
+function updateSiteToolbar() {
+  const busy = app.loadingSite || app.activeOperation;
+  const workspace = document.getElementById('app-workspace');
+  const loading = document.getElementById('site-loading');
+  const input = document.getElementById('org-site-path');
+  const loadButton = document.getElementById('load-site-btn');
+  const scanButton = document.getElementById('scan-btn');
+  const pathInput = document.getElementById('search-path-input');
+  if (workspace) workspace.hidden = !app.orgSiteCache || app.loadingSite;
+  if (loading) loading.hidden = !app.loadingSite;
+  if (input) input.disabled = busy;
+  if (loadButton) {
+    loadButton.disabled = busy || !app.token;
+    loadButton.textContent = app.loadingSite ? 'Loading...' : 'Load';
+  }
+  if (scanButton) scanButton.disabled = busy || !app.orgSiteCache;
+  if (pathInput) pathInput.disabled = busy || !app.orgSiteCache;
+  updateActionButtons();
+}
+
+async function loadSite(event) {
+  event?.preventDefault();
+  if (app.loadingSite || app.activeOperation) return;
+  if (!app.token) {
+    showMessage('Authentication is not ready. Reload the app and try again.', 'error');
+    return;
+  }
+
+  const input = document.getElementById('org-site-path');
+  const status = document.getElementById('org-site-hint');
+  const target = parseOrgSitePath(input.value);
+  if (!target) {
+    input.setAttribute('aria-invalid', 'true');
+    const current = app.orgSiteCache;
+    status.textContent = `Enter organization and site as /org/site.${current ? ` Still using /${current.org}/${current.site}.` : ''}`;
+    status.classList.add('is-error');
+    input.focus();
+    return;
+  }
+
+  app.loadingSite = true;
+  input.removeAttribute('aria-invalid');
+  status.classList.remove('is-error');
+  status.textContent = `Loading /${target.org}/${target.site}...`;
+  updateSiteToolbar();
+
+  try {
+    const response = await fetch(`${API.LIST}/${target.org}/${target.site}/`, {
+      headers: { Authorization: `Bearer ${app.token}` },
+    });
+    if (!response.ok) {
+      throw new Error(`Site access failed (HTTP ${response.status}). Check the path and your permissions.`);
+    }
+    const items = await response.json();
+    if (!Array.isArray(items)) throw new Error('The site returned an invalid folder listing.');
+
+    app.orgSiteCache = target;
+    app.results = [];
+    app.selectedFiles.clear();
+    app.fileCache.clear();
+    app.availablePaths = [];
+    app.searchPaths = [];
+    app.folderTreeLoaded = false;
+    resetPagination();
+    renderPathTags();
+    updatePathInfo();
+    document.getElementById('results-list')?.replaceChildren();
+    const resultsContainer = document.querySelector('.results-container');
+    if (resultsContainer) resultsContainer.style.display = 'none';
+    const suggestions = document.getElementById('suggestions-list');
+    if (suggestions) {
+      suggestions.replaceChildren();
+      suggestions.style.display = 'none';
+    }
+    ['search-path-input', 'filter-results'].forEach((id) => {
+      const field = document.getElementById(id);
+      if (field) field.value = '';
+    });
+    ['files-scanned', 'matches-found', 'files-affected'].forEach((id) => {
+      const count = document.getElementById(id);
+      if (count) count.textContent = '0';
+    });
+    const revertText = document.getElementById('revert-btn-text');
+    if (revertText) revertText.textContent = 'Revert Selected';
+    hideSearchPathsLoader();
+    hideSearchPathsMessage();
+    updateProgress(0, '');
+    setAccordionExpanded('config-content', true);
+    input.value = `/${target.org}/${target.site}`;
+    status.textContent = `Loaded /${target.org}/${target.site}`;
+    updateSiteUrl(target);
+  } catch (error) {
+    console.error('Site loading failed:', target, error);
+    const current = app.orgSiteCache;
+    status.textContent = `${error.message}${current ? ` Still using /${current.org}/${current.site}.` : ''}`;
+    status.classList.add('is-error');
+    input.setAttribute('aria-invalid', 'true');
+  } finally {
+    app.loadingSite = false;
+    updateSiteToolbar();
+  }
+}
+
+async function runSiteOperation(operation) {
+  if (app.loadingSite || app.activeOperation || !validateOrgSite()) return;
+  app.activeOperation = true;
+  updateSiteToolbar();
+  try {
+    await operation();
+  } finally {
+    app.activeOperation = false;
+    updateSiteToolbar();
+  }
 }
 
 function showMessage(text, type = 'info') {
@@ -206,7 +323,6 @@ function showMessage(text, type = 'info') {
   };
 
   iconImg.src = new URL(iconPaths[type] || iconPaths.info, import.meta.url).href;
-  iconImg.alt = type.charAt(0).toUpperCase() + type.slice(1);
 
   // Update toast classes
   toast.className = `toast ${type}`;
@@ -1260,10 +1376,12 @@ function escapeHtml(text) {
 }
 
 function updateActionButtons() {
-  const hasSelected = app.selectedFiles.size > 0;
+  const hasSelected = app.selectedFiles.size > 0 && app.orgSiteCache
+    && !app.loadingSite && !app.activeOperation;
   const executeBtn = document.getElementById('execute-btn');
   const exportBtn = document.getElementById('export-btn');
   const bulkPublishBtn = document.getElementById('bulk-publish-btn');
+  const revertBtn = document.getElementById('revert-btn');
 
   const findBlankPages = document.getElementById('find-blank-pages')?.checked || false;
   const findJsonFiles = document.getElementById('find-json-files')?.checked || false;
@@ -1271,6 +1389,7 @@ function updateActionButtons() {
   if (executeBtn) executeBtn.disabled = !hasSelected || findBlankPages || findJsonFiles;
   if (exportBtn) exportBtn.disabled = !hasSelected;
   if (bulkPublishBtn) bulkPublishBtn.disabled = !hasSelected;
+  if (revertBtn) revertBtn.disabled = !hasSelected;
 
   // Update button text with count
   updateBulkButtonText();
@@ -2166,6 +2285,7 @@ function triggerPathSuggestions() {
 
 async function loadFolderTree() {
   let timeoutId;
+  const orgSite = parseOrgSite();
   try {
     const { token } = app;
     if (!token) {
@@ -2174,7 +2294,6 @@ async function loadFolderTree() {
     }
 
     // Use user's org/site configuration instead of DA context
-    const orgSite = parseOrgSite();
     if (!orgSite) {
       showSearchPathsMessage();
       return;
@@ -2215,6 +2334,7 @@ async function loadFolderTree() {
     });
 
     await Promise.race([results, timeoutPromise]);
+    if (orgSite !== app.orgSiteCache) return;
 
     app.availablePaths = Array.from(folders)
       .sort();
@@ -2224,12 +2344,14 @@ async function loadFolderTree() {
     setupPathAutocomplete();
 
     // Automatically show suggestions after loading completes
-    triggerPathSuggestions();
+    if (!app.loadingSite) triggerPathSuggestions();
   } catch (error) {
+    if (orgSite !== app.orgSiteCache) return;
     console.error('Folder autocomplete failed:', error);
     hideSearchPathsLoader();
     showMessage('Could not load folder structure for autocomplete', 'error');
     app.availablePaths = [];
+    app.folderTreeLoaded = false;
   } finally {
     clearTimeout(timeoutId);
   }
@@ -2889,11 +3011,26 @@ function setupEventListeners() {
   const expandAll = document.getElementById('expand-all');
   const collapseAll = document.getElementById('collapse-all');
 
-  if (scanBtn) scanBtn.addEventListener('click', scanFiles);
-  if (executeBtn) executeBtn.addEventListener('click', executeReplace);
-  if (exportBtn) exportBtn.addEventListener('click', exportResults);
-  if (revertBtn) revertBtn.addEventListener('click', bulkRevertLastReplacement);
-  if (bulkPublishBtn) bulkPublishBtn.addEventListener('click', bulkOperation);
+  if (scanBtn) scanBtn.addEventListener('click', () => runSiteOperation(scanFiles));
+  if (executeBtn) executeBtn.addEventListener('click', () => runSiteOperation(executeReplace));
+  if (exportBtn) exportBtn.addEventListener('click', () => runSiteOperation(exportResults));
+  if (revertBtn) revertBtn.addEventListener('click', () => runSiteOperation(bulkRevertLastReplacement));
+  if (bulkPublishBtn) bulkPublishBtn.addEventListener('click', () => runSiteOperation(bulkOperation));
+
+  const siteForm = document.getElementById('site-form');
+  if (siteForm) siteForm.addEventListener('submit', loadSite);
+  const orgSiteInput = document.getElementById('org-site-path');
+  if (orgSiteInput) {
+    orgSiteInput.addEventListener('input', () => {
+      orgSiteInput.removeAttribute('aria-invalid');
+      const status = document.getElementById('org-site-hint');
+      status.classList.remove('is-error');
+      const current = app.orgSiteCache;
+      status.textContent = current
+        ? `Loaded /${current.org}/${current.site}. Select Load to apply changes.`
+        : 'Enter an organization and site, then select Load.';
+    });
+  }
 
   // Update button text when dropdown changes
   const bulkOperationSelect = document.getElementById('bulk-operation-type');
@@ -3083,47 +3220,14 @@ function setupEventListeners() {
   // Load folder tree on-demand when user focuses on base path field
   const searchPathInput = document.getElementById('search-path-input');
   if (searchPathInput) {
-    let folderTreeLoaded = false;
     searchPathInput.addEventListener('focus', () => {
-      if (!folderTreeLoaded) {
-        folderTreeLoaded = true;
+      if (!app.folderTreeLoaded && !app.loadingSite && parseOrgSite()) {
+        app.folderTreeLoaded = true;
         loadFolderTree().catch((error) => {
           console.error('Folder autocomplete initialization failed:', error);
         });
       }
     });
-
-    // Also reload folder tree when org/site changes
-    const orgSiteInput = document.getElementById('org-site-path');
-    if (orgSiteInput) {
-      orgSiteInput.addEventListener('blur', () => {
-        // Reset flag so tree reloads with new org/site
-        folderTreeLoaded = false;
-        // Check if we should show the message
-        const orgSite = parseOrgSite();
-        if (!orgSite) {
-          showSearchPathsMessage();
-        } else {
-          hideSearchPathsMessage();
-          // Enable search paths input immediately when valid org/site is entered
-          const pathInput = document.getElementById('search-path-input');
-          if (pathInput) pathInput.disabled = false;
-        }
-      });
-
-      orgSiteInput.addEventListener('input', () => {
-        // Real-time validation as user types
-        const orgSite = parseOrgSite();
-        if (!orgSite) {
-          showSearchPathsMessage();
-        } else {
-          hideSearchPathsMessage();
-          // Enable search paths input immediately when valid org/site is entered
-          const pathInput = document.getElementById('search-path-input');
-          if (pathInput) pathInput.disabled = false;
-        }
-      });
-    }
   }
 
   if (toggleAll) {
@@ -3344,6 +3448,10 @@ function setupEventListeners() {
 
 async function init() {
   try {
+    const colorScheme = getColorScheme() === 'dark-scheme' ? 'dark' : 'light';
+    document.documentElement.style.colorScheme = colorScheme;
+    document.documentElement.dataset.colorScheme = colorScheme;
+
     const { context, token, actions } = await DA_SDK;
 
     app.context = context;
@@ -3358,11 +3466,15 @@ async function init() {
 
     // Show message for search paths since org/site won't be configured initially
     showSearchPathsMessage();
+    updateSiteToolbar();
 
-    // Show ready message
-    showMessage('FindReplace Pro is ready! Enter your org/site to get started.', 'success');
-
-    // Folder tree will be loaded on-demand when user focuses on base path field
+    const params = new URLSearchParams(window.location.search);
+    const org = params.get('org') || '';
+    const site = params.get('site') || '';
+    if (org || site) {
+      document.getElementById('org-site-path').value = `/${org}/${site}`;
+      await loadSite();
+    }
   } catch (error) {
     console.error('FindReplace Pro initialization failed:', error);
     showMessage('Failed to initialize app', 'error');

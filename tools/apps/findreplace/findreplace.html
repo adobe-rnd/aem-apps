@@ -16,6 +16,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <meta charset="utf-8">
     <title>FindReplace Pro</title>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <meta name="description" content="Bulk find & replace tool with publishing workflow for content teams and authors">
@@ -32,36 +33,41 @@
       <header class="app-header">
         <div class="header-content">
           <div class="header-main">
-            <div class="app-icon">
-              <img src="./icons/search.svg" alt="Search" class="icon">
-            </div>
             <div class="header-text">
               <h1>FindReplace Pro</h1>
               <p class="subtitle">Bulk find & replace with publishing workflow</p>
             </div>
           </div>
         </div>
-        <div class="site-toolbar">
-          <label for="org-site-path" class="input-label">
-            <span class="label-text">Organization/Site</span>
-          </label>
-          <input type="text" id="org-site-path" class="input-field" placeholder="/org/mysite" value="" aria-describedby="org-site-hint">
-          <p id="org-site-hint" class="input-help">Enter the content organization and site to search.</p>
-        </div>
+        <form id="site-form" class="site-toolbar" novalidate>
+          <div class="site-toolbar-field">
+            <label for="org-site-path" class="input-label">
+              <span class="label-text">Organization / Site</span>
+            </label>
+            <input type="text" id="org-site-path" class="input-field" placeholder="/org/site" value="" autocomplete="off" spellcheck="false" aria-describedby="org-site-hint">
+          </div>
+          <button id="load-site-btn" class="btn btn-primary" type="submit" disabled>Load</button>
+        </form>
+        <p id="org-site-hint" class="input-help site-status" role="status">Enter an organization and site, then select Load.</p>
       </header>
 
-      <main class="app-main">
+      <div id="site-loading" class="site-loading" hidden aria-hidden="true">
+        <span class="site-loading-spinner"></span>
+        <span>Loading site...</span>
+      </div>
+
+      <main id="app-workspace" class="app-main" hidden>
         <!-- Configuration Accordion -->
         <div class="config-accordion accordion-card expanded" id="config-accordion">
           <div class="config-accordion-header accordion-header" data-accordion-target="config-content" role="button" tabindex="0" aria-label="Search criteria" aria-controls="config-content" aria-expanded="true">
             <div class="accordion-header-content">
               <div class="card-icon">
-                <img src="./icons/replace.svg" alt="Config" class="icon">
+                <img src="./icons/replace.svg" alt="" aria-hidden="true" class="icon">
               </div>
               <h2>Search Criteria</h2>
             </div>
             <div class="accordion-toggle">
-              <img src="./icons/chevron-down.svg" alt="Toggle" class="icon accordion-icon">
+              <img src="./icons/chevron-down.svg" alt="" aria-hidden="true" class="icon accordion-icon">
             </div>
           </div>
           
@@ -82,12 +88,12 @@
                   <input type="text" id="search-path-input" class="input-field path-input" placeholder="Type to search folders (e.g., /drafts, /fragments)">
                   <div id="search-paths-loader" class="search-paths-loader" style="display: none;">
                     <div class="loader-content">
-                      <img src="./icons/loading.svg" alt="Loading" class="icon icon-sm loader-icon">
+                      <img src="./icons/loading.svg" alt="" aria-hidden="true" class="icon icon-sm loader-icon">
                       <span class="loader-text">Loading folder structure...</span>
                     </div>
                   </div>
                   <div id="search-paths-message" class="search-paths-message" style="display: none;">
-                    <span class="message-text">Enter org and site first to browse folders</span>
+                    <span class="message-text">Load an organization and site to browse folders</span>
                   </div>
                   <div class="path-tags" id="path-tags">
                     <!-- Path tags will be added here -->
@@ -172,13 +178,13 @@
           <div class="config-card accordion-card">
             <div class="card-header accordion-header" data-accordion-target="file-filters" role="button" tabindex="0" aria-label="Advanced filters" aria-controls="file-filters" aria-expanded="false">
               <div class="card-icon">
-                <img src="./icons/filter.svg" alt="Advanced Filters" class="icon">
+                <img src="./icons/filter.svg" alt="" aria-hidden="true" class="icon">
               </div>
               <div class="header-text">
                 <h2>Advanced Filters</h2>
               </div>
               <div class="accordion-toggle">
-                <img src="./icons/chevron-down.svg" alt="Toggle" class="icon accordion-icon">
+                <img src="./icons/chevron-down.svg" alt="" aria-hidden="true" class="icon accordion-icon">
               </div>
             </div>
             
@@ -259,25 +265,25 @@
         <!-- Action Bar -->
         <div class="action-bar">
           <div class="primary-actions">
-            <button id="scan-btn" class="btn btn-primary">
-              <img src="./icons/search.svg" alt="Scan" class="icon">
+            <button id="scan-btn" class="btn btn-primary" disabled>
+              <img src="./icons/search.svg" alt="" aria-hidden="true" class="icon">
               <span>Scan & Preview</span>
             </button>
           </div>
           
           <div class="secondary-actions">
             <button id="execute-btn" class="btn btn-primary" disabled>
-              <img src="./icons/replace.svg" alt="Execute" class="icon">
+              <img src="./icons/replace.svg" alt="" aria-hidden="true" class="icon">
               <span>Execute Replace</span>
             </button>
             
             <button id="export-btn" class="btn btn-outline" disabled>
-              <img src="./icons/download.svg" alt="Export" class="icon">
+              <img src="./icons/download.svg" alt="" aria-hidden="true" class="icon">
               <span id="export-btn-text">Export Files</span>
             </button>
             
             <button id="revert-btn" class="btn btn-warning" disabled>
-              <img src="./icons/revert.svg" alt="Revert" class="icon">
+              <img src="./icons/revert.svg" alt="" aria-hidden="true" class="icon">
               <span id="revert-btn-text">Revert Selected</span>
             </button>
             
@@ -289,7 +295,7 @@
                 <option value="unpublish">Unpublish</option>
               </select>
               <button id="bulk-publish-btn" class="btn btn-secondary" disabled>
-                <img src="./icons/preview.svg" alt="Bulk Operation" class="icon">
+                <img src="./icons/preview.svg" alt="" aria-hidden="true" class="icon">
                 <span id="bulk-btn-text">Preview Selected</span>
               </button>
             </div>
@@ -301,7 +307,7 @@
           <div class="progress-card">
             <div class="progress-content">
               <div class="progress-icon">
-                <img src="./icons/loading.svg" alt="Progress" class="icon">
+                <img src="./icons/loading.svg" alt="" aria-hidden="true" class="icon">
               </div>
               <div class="progress-info">
                 <div class="progress-text" role="status" aria-live="polite">Scanning files...</div>
@@ -317,7 +323,7 @@
         <div class="results-container accordion-card" style="display: none;">
           <div class="card-header accordion-header" data-accordion-target="search-results" role="button" tabindex="0" aria-label="Search results" aria-controls="search-results" aria-expanded="false">
             <div class="card-icon">
-              <img src="./icons/check.svg" alt="Search Results" class="icon">
+              <img src="./icons/check.svg" alt="" aria-hidden="true" class="icon">
             </div>
             <div class="header-text">
               <h2>Search Results</h2>
@@ -337,7 +343,7 @@
               </div>
             </div>
             <div class="accordion-toggle">
-              <img src="./icons/chevron-down.svg" alt="Toggle Results" class="icon accordion-icon">
+              <img src="./icons/chevron-down.svg" alt="" aria-hidden="true" class="icon accordion-icon">
             </div>
           </div>
           
@@ -351,7 +357,7 @@
               </div>
               <div class="filter-controls">
                 <div class="search-input">
-                  <img src="./icons/search.svg" alt="Search" class="icon search-icon">
+                  <img src="./icons/search.svg" alt="" aria-hidden="true" class="icon search-icon">
                   <input type="text" id="filter-results" placeholder="Filter by file path or content..." class="filter-input" aria-label="Filter results">
                 </div>
               </div>
@@ -369,7 +375,7 @@
                 </div>
                 <div class="pagination-controls">
                   <button id="prev-page" class="pagination-btn" disabled>
-                    <img src="./icons/chevron-left.svg" alt="Previous" class="icon icon-sm">
+                    <img src="./icons/chevron-left.svg" alt="" aria-hidden="true" class="icon icon-sm">
                     Previous
                   </button>
                   
@@ -379,7 +385,7 @@
                   
                   <button id="next-page" class="pagination-btn">
                     Next
-                    <img src="./icons/chevron-right.svg" alt="Next" class="icon icon-sm">
+                    <img src="./icons/chevron-right.svg" alt="" aria-hidden="true" class="icon icon-sm">
                   </button>
                 </div>
               </div>
@@ -387,21 +393,22 @@
           </div>
         </div>
 
-        <!-- Toast Messages -->
-        <div class="toast-container">
-          <div class="toast hidden" id="toast">
-            <div class="toast-content">
-              <div class="toast-icon">
-                <img src="./icons/check.svg" alt="Success" class="icon">
-              </div>
-              <div class="toast-message" role="status" aria-live="polite" aria-atomic="true"></div>
-              <button class="toast-close" aria-label="Close notification">
-                <img src="./icons/close.svg" alt="Close" class="icon icon-sm">
-              </button>
+      </main>
+
+      <!-- Toast Messages -->
+      <div class="toast-container">
+        <div class="toast hidden" id="toast">
+          <div class="toast-content">
+            <div class="toast-icon">
+              <img src="./icons/check.svg" alt="" aria-hidden="true" class="icon">
             </div>
+            <div class="toast-message" role="status" aria-live="polite" aria-atomic="true"></div>
+            <button class="toast-close" aria-label="Close notification">
+              <img src="./icons/close.svg" alt="" aria-hidden="true" class="icon icon-sm">
+            </button>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   </body>
 </html>

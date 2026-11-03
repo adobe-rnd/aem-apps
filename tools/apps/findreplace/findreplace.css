@@ -11,7 +11,7 @@
   --color-warning: var(--s2-orange-800, #b14c00);
   --color-success: var(--s2-green-800, #12805c);
   
-  /* Neutrals (DA-ish) */
+  /* Shared Spectrum neutrals */
   --color-gray-50: var(--s2-gray-50, light-dark(#fafafa, #1d1d1d));
   --color-gray-100: var(--s2-gray-100, light-dark(#f5f5f5, #222));
   --color-gray-200: var(--s2-gray-200, light-dark(#e1e1e1, #393939));
@@ -42,16 +42,16 @@
   --spacing-2xl: var(--s2-spacing-600, 40px);
   
   /* Typography (only used ones) */
-  --font-size-xs: var(--s2-font-size-75, 12px);
-  --font-size-sm: var(--s2-font-size-100, 14px);
-  --font-size-base: var(--s2-font-size-100, 14px);
-  --font-size-lg: var(--s2-font-size-200, 16px);
-  --font-size-xl: var(--s2-font-size-300, 18px);
+  --font-size-xs: var(--s2-body-size-xs, 12px);
+  --font-size-sm: var(--s2-body-size-s, 14px);
+  --font-size-base: var(--s2-component-m-regular-font-size, 14px);
+  --font-size-lg: var(--s2-body-size-m, 16px);
+  --font-size-xl: var(--s2-body-size-l, 18px);
   --font-size-2xl: var(--s2-heading-size-m, 24px);
   --font-size-3xl: var(--s2-heading-size-xl, 32px);
   --font-weight-semibold: 600;
   
-  /* Shadows (DA-ish) */
+  /* Shadows */
   --shadow-sm: none;
   --shadow-md: 0 2px 8px rgb(0 0 0 / 8%);
   --shadow-lg: 0 4px 12px rgb(0 0 0 / 12%);
@@ -59,9 +59,9 @@
   
   /* Borders */
   --border-radius-sm: var(--s2-corner-radius-100, 4px);
-  --border-radius-md: var(--s2-corner-radius-100, 4px);
-  --border-radius-lg: var(--s2-corner-radius-200, 8px);
-  --border-radius-xl: var(--s2-corner-radius-200, 8px);
+  --border-radius-md: var(--s2-corner-radius-500, 8px);
+  --border-radius-lg: var(--s2-corner-radius-700, 10px);
+  --border-radius-xl: var(--s2-corner-radius-800, 16px);
   --border-radius: var(--border-radius-md);
 
   
@@ -73,8 +73,13 @@
   /* Icon Filters */
   --icon-filter-light: brightness(0) saturate(100%) invert(0%);
   --icon-filter-dark: brightness(0) saturate(100%) invert(100%);
+  --icon-filter: var(--icon-filter-light);
   --icon-filter-red: brightness(0) saturate(100%) invert(17%) sepia(100%) saturate(7395%) hue-rotate(2deg) brightness(97%) contrast(115%);
   --icon-filter-orange: brightness(0) saturate(100%) invert(58%) sepia(96%) saturate(1017%) hue-rotate(6deg) brightness(101%) contrast(107%);
+}
+
+:root[data-color-scheme="dark"] {
+  --icon-filter: var(--icon-filter-dark);
 }
 
 /* Reset and Base Styles */
@@ -132,18 +137,11 @@ a:focus-visible {
   width: 20px;
   height: 20px;
   display: block;
-  filter: var(--icon-filter-light);
+  filter: var(--icon-filter);
   transition: filter 0.2s ease;
   flex-shrink: 0;
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
-}
-
-/* Dark theme adaptation */
-@media (prefers-color-scheme: dark) {
-  .icon {
-    filter: var(--icon-filter-dark);
-  }
 }
 
 /* Filled action icons keep a white foreground in both themes. */
@@ -154,28 +152,13 @@ a:focus-visible {
 }
 
 .btn-outline .icon {
-  filter: var(--icon-filter-light); /* Always dark in light backgrounds */
-}
-
-@media (prefers-color-scheme: dark) {
-  .btn-outline .icon {
-    filter: var(--icon-filter-dark); /* White in dark mode */
-  }
+  filter: var(--icon-filter);
 }
 
 .clear-selection .icon,
 .toast-close .icon,
 .tag-remove .icon {
-  filter: var(--icon-filter-light); /* Use standard dark icon */
-}
-
-@media (prefers-color-scheme: dark) {
-  .app-icon .icon,
-  .clear-selection .icon,
-  .toast-close .icon,
-  .tag-remove .icon {
-    filter: var(--icon-filter-dark);
-  }
+  filter: var(--icon-filter);
 }
 
 /* Button and header icon sizing (before highest specificity selectors) */
@@ -183,11 +166,6 @@ a:focus-visible {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-}
-
-.app-header .icon {
-  width: 22px;
-  height: 22px;
 }
 
 /* Toast icons (highest specificity) */
@@ -227,14 +205,6 @@ a:focus-visible {
 }
 
 /* Moved to after general .result-preview for proper specificity */
-
-/* Dark theme support for match items */
-@media (prefers-color-scheme: dark) {
-  .match-item {
-    border-color: var(--color-gray-700);
-    background: var(--color-gray-800);
-  }
-}
 
 /* Multi-Path Container Styling */
 .multi-path-container {
@@ -483,11 +453,9 @@ a:focus-visible {
   display: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  .suggestion-item:hover,
-  .suggestion-item.selected {
-    background: var(--color-background-secondary);
-  }
+:root[data-color-scheme="dark"] .suggestion-item:hover,
+:root[data-color-scheme="dark"] .suggestion-item.selected {
+  background: var(--color-background-secondary);
 }
 
 
@@ -516,7 +484,7 @@ a:focus-visible {
 /* App Container */
 .app-container {
   width: 100%;
-  margin: var(--spacing-xl) auto;
+  margin: var(--s2-spacing-800, 64px) auto;
   padding: 0 var(--spacing-md);
   background: var(--color-background);
 }
@@ -540,21 +508,6 @@ a:focus-visible {
   gap: var(--spacing-lg);
 }
 
-.app-icon {
-  width: 48px;
-  height: 48px;
-  background: var(--color-gray-100);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.app-icon svg {
-  width: 24px;
-  height: 24px;
-}
-
 .header-text h1 {
   font-size: var(--font-size-3xl);
   font-weight: 700;
@@ -572,7 +525,35 @@ a:focus-visible {
 
 .site-toolbar {
   margin-top: var(--spacing-lg);
-  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--spacing-md);
+}
+
+.site-toolbar-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.site-status {
+  min-height: 18px;
+}
+
+.site-status.is-error {
+  color: var(--color-danger);
+}
+
+.site-toolbar .input-field[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+
+@media (width >= 600px) {
+  .site-toolbar {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: var(--spacing-lg);
+  }
 }
 
 /* Main Content */
@@ -580,6 +561,42 @@ a:focus-visible {
   padding: 0;
   display: flex;
   flex-direction: column;
+}
+
+.site-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  min-height: 240px;
+  color: var(--color-text-secondary);
+}
+
+.app-main[hidden],
+.site-loading[hidden] {
+  display: none;
+}
+
+.site-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--color-border-subtle);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: site-loading-spin 0.85s linear infinite;
+}
+
+@keyframes site-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-loading-spinner {
+    animation: none;
+  }
 }
 
 /* Configuration Container - Sidebar Layout */
@@ -611,7 +628,7 @@ a:focus-visible {
 @media (width >= 900px) {
   .app-container {
     max-width: var(--se-grid-container-width, 1200px);
-    padding: 0 var(--spacing-lg);
+    padding: 0;
   }
 
   .config-container {
@@ -706,6 +723,10 @@ a:focus-visible {
   margin-bottom: var(--spacing-sm);
 }
 
+.site-toolbar .input-label {
+  margin-bottom: var(--spacing-xs);
+}
+
 .label-text {
   font-size: var(--font-size-sm);
   font-weight: 600;
@@ -723,23 +744,24 @@ a:focus-visible {
 .input-field,
 .select-field {
   width: 100%;
-  padding: var(--spacing-sm) var(--spacing-md);
-  min-height: 40px;
-  border: 1px solid var(--color-border);
+  padding: 0 12px;
+  min-height: 32px;
+  line-height: 28px;
+  border: 2px solid var(--color-border-subtle);
   border-radius: var(--border-radius-md);
   font-size: var(--font-size-base);
   transition: var(--transition-fast);
-  background: var(--color-background);
+  background: var(--color-gray-50);
 }
 
 .textarea-field {
   width: 100%;
   padding: var(--spacing-md);
-  border: 1px solid var(--color-border);
+  border: 2px solid var(--color-border-subtle);
   border-radius: var(--border-radius-md);
   font-size: var(--font-size-base);
   transition: var(--transition-fast);
-  background: var(--color-background);
+  background: var(--color-gray-50);
   resize: vertical;
   min-height: 90px;
   box-sizing: border-box;
@@ -749,9 +771,17 @@ a:focus-visible {
 .input-field:focus,
 .select-field:focus,
 .textarea-field:focus {
-  outline: none;
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.input-field:disabled,
+.select-field:disabled,
+.textarea-field:disabled {
+  background: var(--s2-gray-75, var(--color-gray-100));
+  color: var(--color-text-muted);
+  cursor: not-allowed;
 }
 
 .checkbox-option {
@@ -1009,17 +1039,19 @@ a:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border: 1px solid transparent;
-  border-radius: 999px;
+  padding: 5px 14px;
+  border: 2px solid transparent;
+  border-radius: var(--border-radius-xl);
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: 700;
+  line-height: 18px;
+  justify-content: center;
   text-decoration: none;
   cursor: pointer;
   transition: var(--transition-fast);
   white-space: nowrap;
   min-width: 0;
-  min-height: 40px;
+  min-height: 32px;
 }
 
 .btn:disabled {
@@ -1058,7 +1090,7 @@ a:focus-visible {
 .btn-outline {
   background: var(--color-background);
   color: var(--color-text-primary);
-  border: 1px solid var(--color-border);
+  border-color: var(--color-border);
 }
 
 .btn-outline:not(:disabled):hover {
@@ -1078,37 +1110,37 @@ a:focus-visible {
 }
 
 .btn-sm {
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: 5px 12px;
   font-size: var(--font-size-sm);
 }
 
 /* Bulk Operations */
 .bulk-operations {
   display: flex;
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  padding: 2px;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .operation-select {
-  padding: var(--spacing-sm);
+  padding: 0 12px;
   color: var(--color-text-primary);
-  border: none;
-  background: var(--color-background);
+  border: 2px solid var(--color-border-subtle);
+  border-radius: var(--border-radius-md);
+  background: var(--color-gray-50);
   font-size: var(--font-size-sm);
-  border-right: 1px solid var(--color-border);
   min-width: 120px;
-  min-height: 40px;
+  min-height: 32px;
   box-sizing: border-box;
 }
 
 .operation-select:focus {
-  outline: none;
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
   background: var(--color-gray-50);
 }
 
 .bulk-operations .btn {
-  border-radius: 999px;
+  border-radius: var(--border-radius-xl);
 }
 
 /* Progress */
@@ -1591,10 +1623,6 @@ a:focus-visible {
     flex-direction: column;
   }
 
-  .operation-select {
-    border-right: none;
-    border-bottom: 1px solid var(--color-border);
-  }
 }
 
 /* Pagination Styles */
