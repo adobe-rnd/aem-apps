@@ -14,7 +14,7 @@ A collection of Adobe owned apps & plugins for Experience Workspace & Document A
 | **Tags** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/tags/tags | `tools/apps/tags` `tools/plugins/tags` | Manage tag taxonomy, publish it, and bulk-search pages by tag; pick tags while authoring  | App & Plugin |
 | **Developer** |https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/developer/developer.html | `tools/plugins/developer` | Switch the preview branch (`?ref=`) for the current page  | Plugin |
 | **CUG** |https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/cug/cug.html | `tools/plugins/cug` | Apply or remove closed user group (page access) restrictions  | Plugin |
-| **FindReplace Pro** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/findreplace/findreplace | [FindReplace Pro](tools/apps/findreplace/README.md) | Search site content, bulk-replace matches with version backups, and preview, publish, or unpublish selected files | App |
+| **FindReplace Pro** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/findreplace-pro/findreplace-pro | [FindReplace Pro](tools/apps/findreplace-pro/README.md) | Search site content, bulk-replace matches with version backups, and preview, publish, or unpublish selected files | App |
 
 ## Developing
 

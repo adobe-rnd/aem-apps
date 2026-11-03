@@ -25,7 +25,7 @@ import { crawl } from 'https://da.live/nx/public/utils/tree.js';
 import { getColorScheme } from 'https://da.live/nx2/scripts/nx.js';
 import {
   isPageEmpty, getMatchContext, createSearchRegex, createHTMLSearchRegex, formatHTML,
-} from './findreplace-utils.js';
+} from './findreplace-pro-utils.js';
 
 // CONFIGURATION - Easily configurable settings
 const CONFIG = {

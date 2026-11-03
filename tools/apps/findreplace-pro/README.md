@@ -63,7 +63,7 @@ Register the app for Experience Workspace in a site's DA config sheet,
 
 | title | description | image | path |
 | --- | --- | --- | --- |
-| `FindReplace Pro` | Bulk find and replace with publishing workflow | `https://main--aem-apps--adobe-rnd.aem.page/tools/apps/findreplace/icons/search.svg` | `/app/adobe-rnd/aem-apps/tools/apps/findreplace/findreplace` |
+| `FindReplace Pro` | Bulk find and replace with publishing workflow | `https://main--aem-apps--adobe-rnd.aem.page/tools/apps/findreplace-pro/icons/search.svg` | `/app/adobe-rnd/aem-apps/tools/apps/findreplace-pro/findreplace-pro` |
 
 For existing app registrations, update the apps-tab path and image URL to the
 values above after deploying the renamed app.
@@ -74,7 +74,7 @@ authentication, but the app
 does not automatically populate this field from that context. Valid org/site
 input is cached in memory for the current app session.
 
-The app entry point is `/tools/apps/findreplace/findreplace.html`. Keep its HTML,
+The app entry point is `/tools/apps/findreplace-pro/findreplace-pro.html`. Keep its HTML,
 JavaScript, stylesheet, and icons together: static assets use sibling paths,
 and dynamically generated icons resolve relative to the JavaScript module.
 
@@ -179,10 +179,10 @@ of each resource.
 
 | File | Purpose |
 | --- | --- |
-| `findreplace.html` | App shell, search configuration, results, and action controls |
-| `findreplace.js` | DA SDK initialization, search, bulk operations, versioning, and UI behavior |
-| `findreplace-utils.js` | Dependency-free matching, context, empty-page, and legacy formatting helpers |
-| `findreplace.css` | Spectrum-token app layout, native controls, themes, and icon styles |
+| `findreplace-pro.html` | App shell, search configuration, results, and action controls |
+| `findreplace-pro.js` | DA SDK initialization, search, bulk operations, versioning, and UI behavior |
+| `findreplace-pro-utils.js` | Dependency-free matching, context, empty-page, and legacy formatting helpers |
+| `findreplace-pro.css` | Spectrum-token app layout, native controls, themes, and icon styles |
 | `icons/` | SVG assets for static and dynamically generated UI |
 | `README.md` | App setup, usage, and technical documentation |
 
@@ -204,9 +204,9 @@ of each resource.
 Run from the repository root with Node.js available:
 
 ```sh
-node --test test/tools/apps/findreplace/*.test.js
-npx eslint tools/apps/findreplace/*.js test/tools/apps/findreplace/*.test.js
-npx stylelint tools/apps/findreplace/findreplace.css
+node --test test/tools/apps/findreplace-pro/*.test.js
+npx eslint tools/apps/findreplace-pro/*.js test/tools/apps/findreplace-pro/*.test.js
+npx stylelint tools/apps/findreplace-pro/findreplace-pro.css
 ```
 
 The focused suite covers the main search and replacement workflows, read-only
