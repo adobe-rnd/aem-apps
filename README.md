@@ -5,6 +5,7 @@ A collection of Adobe owned apps & plugins for Experience Workspace & Document A
 
 | App | Path | Entry point | Description | Type |
 |-----------|------|-------------|-------------|-------------|
+| **Block Library Generator** | [Usage and setup](tools/apps/block-library-generator/README.md) | `tools/apps/block-library-generator` | Apps-only block-library generation with reviewed chat and Preview | App |
 | **DA Permissions** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/da-permissions/da-permissions | `tools/apps/da-permissions` | Manage DA Permissions and configuration access  | App |
 | **MSM** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/msm/msm | `tools/apps/msm` `tools/plugins/msm` | Manage multi-site manager for your org/site  | App & Plugin |
 | **Request Publish (v1)** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox | [Inbox](tools/apps/publish-requests-inbox/README.md), [Plugin](tools/plugins/request-for-publish/README.md) | Existing v1 publish approvals | App & Plugin |
@@ -33,6 +34,15 @@ npm i
 ```sh
 npm run lint
 ```
+
+## Testing
+
+```sh
+npm test
+npm run test:watch
+```
+
+The test scripts enable Node VM modules for component tests; no extra environment variable is needed.
 
 ## License Headers
 
