@@ -5,7 +5,7 @@ A collection of Adobe owned apps & plugins for Experience Workspace & Document A
 
 | App | Path | Entry point | Description | Type |
 |-----------|------|-------------|-------------|-------------|
-| **Block Library Generator** | [Usage and setup](tools/apps/block-library-generator/README.md) | `tools/apps/block-library-generator` | Block-library generation through Apps chat; editor extension retained during transition | App & Plugin |
+| **Block Library Generator** | [Usage and setup](tools/apps/block-library-generator/README.md) | `tools/apps/block-library-generator` | Apps-only block-library generation with reviewed chat and Preview | App |
 | **DA Permissions** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/da-permissions/da-permissions | `tools/apps/da-permissions` | Manage DA Permissions and configuration access  | App |
 | **MSM** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/msm/msm | `tools/apps/msm` `tools/plugins/msm` | Manage multi-site manager for your org/site  | App & Plugin |
 | **Request Publish** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-request-inbox | `tools/apps/publish-reqquest-inbox` `tools/plugins/publish-reqquest-inbox` | Manage request publish approvals, etc  | App & Plugin |

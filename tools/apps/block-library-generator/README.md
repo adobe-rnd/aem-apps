@@ -6,22 +6,18 @@ and saves a library page that authors can review and edit in DA.
 
 **V1 supports Production DA only. Nothing is published.**
 
-## Supported launch modes
+## Supported launch
 
-| Capability | DA editor extension | DA Apps |
-| --- | --- | --- |
-| Select site | Uses the editor's site and code branch | Choose a site; code branch is `main` |
-| Discover blocks and inspect the library | Yes | Yes |
-| Initialize the library | Yes | Yes |
-| Open or delete an example page | Yes | Yes |
-| Create or recreate examples through chat | Yes | Yes, with nx2 chat support enabled |
+Use **DA Apps** for discovery, library setup, generation and page management.
+Choose the content organization/site; its block-code branch is `main`.
 
 Apps generation does not require an open document. It uses the nx2 shell
 (`nxver=2`) and the target site's enabled Experience Workspace chat. The generator
 checks the host's advertised completion-event capability, not just SDK method
 names. Unsupported hosts still allow authorized library management.
-The editor route remains available while the Apps-only transition is validated;
-its document supplies host context, not example content or images.
+The editor extension is retired. Direct HTML and editor-extension launches are
+rejected; there is no alternate editor entry or migration launch screen.
+The HTML entry file remains an internal iframe resource used by the Apps shell.
 
 ## Try the hosted branch (no local setup)
 
@@ -31,7 +27,7 @@ localhost. These URLs are for that branch, not the current `main` version.
 
 Sign in to Production DA with access to the target site's code, source files,
 configuration and Preview operations. Generation requires supported chat and
-content-tool integration in the chosen host.
+content-tool integration in Apps.
 
 ### Generate through Apps
 
@@ -58,24 +54,9 @@ If the host does not advertise support, generation stays disabled with an
 explanation. `ref=blocklibgen` selects the generator's code branch; Apps reads the
 content site's block code on `main`.
 
-### Existing editor extension
-
-Add this row to the target site's DA configuration **library** sheet:
-
-| title | path | experience |
-| --- | --- | --- |
-| Block Library Generator | https://blocklibgen--aem-apps--adobe-rnd.aem.live/tools/apps/block-library-generator/block-library-generator.html | fullsize-dialog |
-
-Reload the editor, open a document in the target site, then choose
-**Outline > Block Library Generator**. Follow [Use the generator](#use-the-generator)
-below to initialize the library and create examples.
-
-The editor supplies its content site and block-code branch independently of the
-generator deployment branch.
-
 ## Run locally
 
-For development, use the same authenticated launch modes with a local server.
+For development, use the authenticated Apps shell with a local server.
 
 Prerequisites:
 
@@ -92,19 +73,8 @@ npm ci
 aem up --port 3000 --stop-other=false --no-open
 ```
 
-There is no build step. Both launch modes use the same local server on port 3000.
+There is no build step. The local app server runs on port 3000.
 If that port is occupied, do not stop another project's server.
-
-### Editor extension
-
-Add this row to the target site's DA configuration **library** sheet:
-
-| title | path | experience |
-| --- | --- | --- |
-| Block Library Generator | http://localhost:3000/tools/apps/block-library-generator/block-library-generator.html | fullsize-dialog |
-
-Reload the editor after changing its configuration, then open a document in that
-site and choose **Outline > Block Library Generator**.
 
 ### Apps
 
@@ -120,7 +90,6 @@ https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-
 
 The canonical fragment selects the site after authentication; without one,
 remembered fields are prefilled but not applied.
-Editor launches always retain their own authoritative site and branch.
 For hosted branch testing, use `ref=blocklibgen` as shown above instead of
 `ref=local`; omitting `ref` loads `main`. An Apps-index tile uses the shell URL,
 not the raw localhost URL. Allow the browser's local-network access prompt if
@@ -132,8 +101,8 @@ generator on port 3000 alone does not provide a connected chat. Use the hosted
 branch for production-agent testing if no local agent is configured; do not
 silently override the host's backend selection.
 
-Opening the HTML entry directly does not provide DA authentication or chat.
-Use one of the authenticated launch routes above.
+Opening the internal HTML entry directly is not supported. Use an authenticated
+Apps URL above.
 
 ## Use the generator
 
@@ -166,9 +135,8 @@ locations. Invalid, inaccessible or ambiguous setup is reported instead of reset
    folder at this step.
 3. Review and send the prompt in chat. Approve the analysis-result write
    when requested.
-4. In Apps, the generator stays beside chat and checks the pending saved analysis
-   when a relevant chat turn ends. **Check result** remains available. In the
-   editor, reopen the generator and select the block after chat finishes.
+4. The generator stays beside chat and checks the pending saved analysis when a
+   relevant chat turn ends. **Check result** remains available.
 5. If the result is ready, choose **Confirm create page**. This separately
    authorizes saving the page and its index entry.
 6. Use **Open** to review and edit the saved page in DA.
@@ -273,7 +241,7 @@ bulk generation, publishing or block-code modification.
   Preview caches can briefly show an older index or a cached 404; reload after
   cache expiry rather than regenerating the page.
 
-## Planned after V1
+## Host support
 
 The host changes for Apps chat are available:
 
@@ -282,10 +250,8 @@ The host changes for Apps chat are available:
 - Apps chat handoff through the SDK in
   [adobe/da-nx#895](https://github.com/adobe/da-nx/pull/895).
 
-Phase 2 wires the supported Apps handoff and completion-triggered result checks.
-The next step is a focused end-to-end generation/save/recovery pilot, then retiring
-the editor-extension route in favor of Apps-only use. Existing site registrations
-are not removed automatically.
+The generator uses the supported SDK handoff and completion subscription, not a
+custom chat protocol. Existing site registrations are not removed automatically.
 
 ## Development checks
 

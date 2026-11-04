@@ -315,10 +315,6 @@ class BlockLibraryGeneratorApp extends LitElement {
       this.restoreLibrarySetupReceipt();
       if (useAppsLinkTarget) {
         await this.applySiteTarget({ fromLink: true });
-      } else if (this.isEditorContext) {
-        this.updateComplete?.then(() => {
-          if (this.isConnected && !this.discoveryBlockReason) this.refreshWorkspace();
-        });
       }
     } catch (error) {
       if (this.isConnected) {
@@ -2876,20 +2872,12 @@ class BlockLibraryGeneratorApp extends LitElement {
   }
 
   renderSiteTarget() {
-    if (window.parent === window) {
+    if (window.parent !== window && this.connectionState !== 'ready') return '';
+    if (window.parent === window || !this.isAppsContext) {
       return html`
         <section class="launch-notice" aria-labelledby="launch-notice-heading">
-          <h2 id="launch-notice-heading">Open through DA</h2>
-          <p>This page was opened directly. It needs a DA host to provide an
-            authenticated session; entering a site here cannot sign you in.</p>
-          <ol>
-            <li>Open <a href="https://da.live/" target="_blank" rel="noopener noreferrer">DA</a>
-              and sign in.</li>
-            <li>Open a document on your target site.</li>
-            <li>Choose <strong>Outline</strong>, then <strong>Block Library Generator</strong>.</li>
-          </ol>
-          <p>For local development, launch the configured editor extension pointing to this app URL.
-            You can also use DA Apps when this app version is registered there.</p>
+          <h2 id="launch-notice-heading">DA Apps required</h2>
+          <p>This app can only be opened from DA Apps.</p>
         </section>
       `;
     }
@@ -3218,6 +3206,14 @@ class BlockLibraryGeneratorApp extends LitElement {
             <span class="startup-spinner" aria-hidden="true"></span>
             <p>Connecting to DA...</p>
           </div>
+        </main>
+      `;
+    }
+    if (window.parent === window || (!this.isAppsContext && this.connectionState === 'ready')) {
+      return html`
+        <main>
+          <header class="app-header"><h1>Block Library Generator</h1></header>
+          ${this.renderSiteTarget()}
         </main>
       `;
     }

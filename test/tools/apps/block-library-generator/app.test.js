@@ -119,6 +119,7 @@ function fixtures() {
 
 async function harness(data, {
   embedded = true, sdkFails = false, wide = true, hash = '',
+  href = 'http://localhost:3000/tools/apps/block-library-generator/block-library-generator.html',
 } = {}) {
   let App;
   let resolveSdk;
@@ -127,7 +128,7 @@ async function harness(data, {
   const navigations = [];
   const window = {
     localStorage: data.storage,
-    location: { hash },
+    location: { hash, hostname: new URL(href).hostname },
     open: (url, target) => { navigations.push({ url, target }); return {}; },
     matchMedia: () => ({ matches: wide }),
     fetch: async (url, options) => {
@@ -679,6 +680,51 @@ describe('Apps docked chat and scoped completion checks', () => {
   });
 });
 
+describe('Apps-only launch restrictions', () => {
+  const markup = (value) => {
+    if (Array.isArray(value)) return value.map(markup).join(' ');
+    if (value?.strings) return value.strings.join(' ') + value.values.map(markup).join(' ');
+    return typeof value === 'string' ? value : '';
+  };
+
+  it('rejects old editor registrations without a migration screen or workspace', async () => {
+    const data = fixtures();
+    const h = await harness(data);
+    let refreshed = 0;
+    h.app.refreshWorkspace = async () => { refreshed += 1; };
+    h.app.updateComplete = Promise.resolve();
+    await h.connect();
+    const view = markup(h.app.render());
+    assert.match(view, /DA Apps required/);
+    assert.match(view, /only be opened from DA Apps/);
+    assert.doesNotMatch(view, /Open in Apps|href=|editor extension|editor launch/i);
+    assert.doesNotMatch(view, /block-workspace|block-nav-item|Continue in chat|Initialize library/);
+    assert.equal(data.calls.length, 0);
+    assert.equal(refreshed, 0);
+  });
+
+  it('rejects a hosted direct entry without offering an alternate launch URL', async () => {
+    const data = fixtures();
+    const h = await harness(data, {
+      embedded: false,
+      href: 'https://blocklibgen--aem-apps--adobe-rnd.aem.live/tools/apps/block-library-generator/block-library-generator.html',
+    });
+    const view = markup(h.app.render());
+    assert.match(view, /DA Apps required/);
+    assert.doesNotMatch(view, /Outline|Open a document|href=|Open in Apps/);
+    assert.equal(data.calls.length, 0);
+  });
+
+  it('rejects a local direct entry without authentication, redirects or content reads', async () => {
+    const data = fixtures();
+    const h = await harness(data, { embedded: false });
+    assert.match(markup(h.app.render()), /only be opened from DA Apps/);
+    assert.equal(h.navigations.length, 0);
+    assert.equal(h.timers.size, 0);
+    assert.equal(data.calls.length, 0);
+  });
+});
+
 describe('Cache-first opening with unchanged library-page checks', () => {
   const codeRoot = 'https://api.aem.live/msagolj/repos/ew/code/main/blocks/';
   const prefix = '/msagolj/repos/ew/code/main/blocks/';
@@ -786,8 +832,8 @@ describe('General site UI and lifecycle', () => {
     assert.equal(data.calls.length, 0);
     await h.connect();
     assert.doesNotMatch(text(h.app.render()), /Connecting to DA|startup-spinner|Choose a site/);
-    assert.match(text(h.app.renderSiteTarget()), /msagolj\/ew/);
-    assert.equal(refreshed, 1);
+    assert.match(text(h.app.renderSiteTarget()), /DA Apps required/);
+    assert.equal(refreshed, 0);
     assert.equal(data.prompts.length, 0);
   });
 
@@ -828,13 +874,14 @@ describe('General site UI and lifecycle', () => {
     assert.equal(h.app.probeTarget.org, 'example-org');
     assert.equal(h.app.probeTarget.branch, 'release');
     assert.equal(h.app.cardsBlockReason, '');
-    assert.equal(refreshed, 1);
+    assert.equal(refreshed, 0);
     assert.doesNotMatch(text(h.app.render()), /Stage \(default\)|Environment\s/);
   });
 
   it('keeps connected and fixed service/branch details out of the main header', async () => {
     const h = await harness(fixtures());
     await h.connect();
+    h.app.hostContext = { ...h.app.hostContext, view: 'fullscreen', hash: '#/msagolj/ew' };
     const view = h.app.render();
     const markup = h.app.renderSiteTarget().strings.join('');
     const targetBar = markup.match(/<section class="target-bar"[\s\S]*?<\/section>/)?.[0];
@@ -867,10 +914,9 @@ describe('General site UI and lifecycle', () => {
     const data = fixtures();
     const h = await harness(data, { embedded: false });
     const view = text(h.app.render());
-    assert.match(view, /Open through DA/);
-    assert.match(view, /https:\/\/da\.live\//);
-    assert.match(view, /Outline/);
-    assert.match(view, /authenticated session/);
+    assert.match(view, /DA Apps required/);
+    assert.doesNotMatch(view, /Outline/);
+    assert.match(view, /only be opened from DA Apps/);
     assert.doesNotMatch(view, /Choose a site|Use site|target-org|Refresh blocks|connection-status/);
     assert.equal(h.app.renderSiteChooser(), '');
     assert.equal(h.timers.size, 0);
@@ -1061,7 +1107,7 @@ describe('General site UI and lifecycle', () => {
     await h.connect();
     h.app.beginSiteSelection();
     assert.equal(h.app.choosingSite, false);
-    assert.match(text(h.app.renderSiteTarget()), /class="target-bar"/);
+    assert.match(text(h.app.renderSiteTarget()), /DA Apps required/);
     assert.doesNotMatch(text(h.app.renderSiteTarget()), /Change site|class="site-chooser"/);
   });
 
@@ -1498,6 +1544,9 @@ describe('Block-list/detail workflow', () => {
   };
   function configure(app) {
     app.selectProbeEnvironment('prod');
+    app.hostContext = { ...app.hostContext, view: 'fullscreen', hash: '#/msagolj/ew' };
+    app.chatTurnSupported = true;
+    app.connectChatNotifications();
     app.discoveryResult = {
       provider: 'code-bus',
       diagnostics: [],
