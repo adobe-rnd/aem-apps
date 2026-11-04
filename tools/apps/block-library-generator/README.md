@@ -211,7 +211,10 @@ does not cancel chat or delete its saved analysis.
 - **Source collection:** captures block JS/CSS, shared styles and bounded local
   imports, with relevant framework-helper contracts. Project preprocessing is
   outside scope. Unresolved dependencies are recorded; supplied code is not
-  executed during analysis.
+  executed during analysis. Delivery code uses credential-free browser GETs;
+  DA content/configuration access still uses the authenticated SDK. A protected
+  or unreadable code asset stops preparation; there is no alternate-origin or
+  authenticated fallback to bypass access restrictions.
 - **Analysis:** the [analysis prompt](./block-analysis-prompt.txt) distinguishes
   author-selected block classes, body rows/cells, editable rich content,
   configuration-row values and generated runtime behavior. Recipes must be

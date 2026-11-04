@@ -183,7 +183,7 @@ function importPaths(content, source, origin) {
 
 export async function collectAnalysisInput({
   target: selectedTarget, environment = selectedTarget?.environment,
-  blockName, entryPaths, sourcePage = null, daFetch, fetchLocal, signal,
+  blockName, entryPaths, sourcePage = null, daFetch, fetchLocal, fetchCode, signal,
   parseHTML = parseInertHTML, includeImports = true,
 }) {
   assertBlockName(blockName);
@@ -197,6 +197,8 @@ export async function collectAnalysisInput({
   const page = sourcePage === null ? null : sourcePagePath(sourcePage);
   const previewDomain = environment === 'prod' ? 'preview.da.live' : 'stage-preview.da.live';
   const codeOrigin = `https://${target.branch}--${target.site}--${target.org}.${previewDomain}`;
+  const codeFetcher = fetchCode
+    ? (url, options) => fetchCode(url, { ...options, credentials: 'omit' }) : daFetch;
   const sourceOrigin = `${target.adminOrigin}/source/${target.org}/${target.site}`;
   const pageRead = page === null ? Promise.resolve('')
     : readText(daFetch, `${sourceOrigin}${page}`, signal, /text\/html/);
@@ -209,7 +211,7 @@ export async function collectAnalysisInput({
     Promise.all([...entryPaths, ...CARDS_SOURCE_PATHS.slice(2)].map(async (id) => ({
       id,
       content: await readText(
-        daFetch,
+        codeFetcher,
         `${codeOrigin}${id}`,
         signal,
         id.endsWith('.css') ? /text\/css/ : /(?:java|ecma)script/,
@@ -253,7 +255,7 @@ export async function collectAnalysisInput({
       }
       try {
         const content = await readText(
-          daFetch,
+          codeFetcher,
           `${codeOrigin}${id}`,
           signal,
           id.endsWith('.css') ? /text\/css/ : /(?:java|ecma)script/,

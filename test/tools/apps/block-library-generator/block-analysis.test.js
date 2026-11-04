@@ -377,6 +377,45 @@ describe('Discovered source collection', () => {
     assert.ok(createAnalysisPrompt(saved).includes('blockName must be hero.'));
   });
 
+  it('uses the supplied public reader for code and imports without attaching DA credentials', async () => {
+    const f = options('footer');
+    f.contents.set(sourcePath('footer'), "import { loadFragment } from '../fragment/fragment.js';");
+    f.contents.set('/blocks/fragment/fragment.js', '');
+    const codeCalls = [];
+    const original = f.args.daFetch;
+    const value = await collectAnalysisInput({
+      ...f.args,
+      daFetch: (url, opts) => {
+        assert.equal(new URL(url).origin, 'https://admin.da.live');
+        return original(url, opts);
+      },
+      fetchCode: (url, opts) => {
+        codeCalls.push({ url, opts });
+        assert.equal(opts.credentials, 'omit');
+        assert.equal(opts.headers, undefined);
+        return original(url, opts);
+      },
+    });
+    assert.equal(codeCalls.length, 5);
+    assert.ok(value.sources.some((source) => source.id === '/blocks/fragment/fragment.js'));
+    assert.ok(codeCalls.every(({ url }) => url.startsWith('https://main--ew--msagolj.preview.da.live/')));
+  });
+
+  it('never retries denied public code through authenticated or alternative endpoints', async () => {
+    const f = options('hero');
+    const reads = [];
+    await assert.rejects(collectAnalysisInput({
+      ...f.args,
+      daFetch: (url, opts) => {
+        reads.push(url);
+        assert.equal(new URL(url).origin, 'https://admin.da.live');
+        return f.args.daFetch(url, opts);
+      },
+      fetchCode: async () => new Response(null, { status: 403 }),
+    }), /Source read failed.*403/);
+    assert.ok(reads.every((url) => url.endsWith('/index.html')));
+  });
+
   it('captures relevant local imports and framework summaries without reading preprocessing or executing code', async () => {
     const f = options('footer');
     f.contents.set(sourcePath('footer'), "import { getMetadata } from '../../scripts/aem.js';\nimport { loadFragment } from '../fragment/fragment.js';");

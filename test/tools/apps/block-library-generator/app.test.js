@@ -44,6 +44,7 @@ function fixtures() {
   const prompts = [];
   const closed = [];
   const publicCalls = [];
+  const codeCalls = [];
   const turnSubscribers = new Set();
   const subscriptions = [];
   return {
@@ -52,6 +53,7 @@ function fixtures() {
     prompts,
     closed,
     publicCalls,
+    codeCalls,
     turnSubscribers,
     subscriptions,
     async emitTurn(detail) {
@@ -132,6 +134,10 @@ async function harness(data, {
       if (url instanceof URL && url.protocol === 'file:'
         && placeholderImages.PLACEHOLDER_IMAGES.some((asset) => url.pathname.endsWith(`/assets/${asset.file}`))) {
         return new Response(await readFile(url), { headers: { 'Content-Type': 'image/png' } });
+      }
+      if (typeof url === 'string' && /^https:\/\/[^/]+\.preview\.da\.live\/(?:blocks|styles|scripts)\//.test(url)) {
+        data.codeCalls.push({ url, options });
+        return data.actions.daFetch(url, options);
       }
       return data.fetchPublic(url, options);
     },
@@ -1122,6 +1128,8 @@ describe('General site UI and lifecycle', () => {
     assert.equal(h.app.cardsState, 'prepared');
     assert.equal(h.app.cardsRequest.target.org, 'example-org');
     assert.ok(data.calls.every((call) => !call.url.includes('msagolj')));
+    assert.equal(data.codeCalls.length, 4);
+    assert.ok(data.codeCalls.every(({ options }) => options.credentials === 'omit' && !options.headers));
   });
 
   it('reports a corrupt remembered Apps site without losing the authenticated site chooser', async () => {

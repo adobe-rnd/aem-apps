@@ -2142,6 +2142,7 @@ class BlockLibraryGeneratorApp extends LitElement {
         target: this.probeTarget,
         daFetch: this.hostActions.daFetch,
         fetchLocal: (url, options) => window.fetch(url, options),
+        fetchCode: (url, options) => window.fetch(url, options),
         signal,
       });
       input.images = await ensurePlaceholderImages({
