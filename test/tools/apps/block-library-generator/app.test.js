@@ -3871,13 +3871,16 @@ describe('app connection regressions', () => {
       const h = await harness(data);
       await h.connect();
       configure(data, h.app);
-      let finishPrompt;
-      data.fetchPublic = () => new Promise((resolve) => { finishPrompt = resolve; });
+      let finishSource;
+      const readSource = data.actions.daFetch;
+      data.actions.daFetch = (url, options) => (url.endsWith('/blocks/cards/cards.js')
+        ? new Promise((resolve) => { finishSource = () => resolve(readSource(url, options)); })
+        : readSource(url, options));
       h.app.selectProbeEnvironment('prod');
       h.app.cardsConfirmed = true;
       const pending = h.app.prepareCardsAnalysis();
       h.app.selectProbeEnvironment('stage');
-      finishPrompt(new Response('Saved prompt.', { headers: { 'Content-Type': 'text/plain' } }));
+      finishSource();
       await pending;
       assert.equal(h.app.cardsRequest, null);
       assert.equal(h.app.cardsConfirmed, false);

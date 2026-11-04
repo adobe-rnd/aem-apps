@@ -215,10 +215,12 @@ does not cancel chat or delete its saved analysis.
   DA content/configuration access still uses the authenticated SDK. A protected
   or unreadable code asset stops preparation; there is no alternate-origin or
   authenticated fallback to bypass access restrictions.
-- **Analysis:** the [analysis prompt](./block-analysis-prompt.txt) distinguishes
+- **Analysis:** the [packaged analysis prompt](./block-analysis-prompt.js) distinguishes
   author-selected block classes, body rows/cells, editable rich content,
   configuration-row values and generated runtime behavior. Recipes must be
   rectangular and pass HTML, option, evidence and approved-resource validation.
+  The semantic text is imported as a code module, not requested through a
+  protected hosted `.txt` content route.
 - **Images and links:** new analyses always use three bundled 640x360 PNG
   placeholders, not images from the launch document. Identical site copies are
   reused; conflicting files are never overwritten. `/index` is the verified

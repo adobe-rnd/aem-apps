@@ -2141,7 +2141,6 @@ class BlockLibraryGeneratorApp extends LitElement {
         environment: this.probeEnvironment,
         target: this.probeTarget,
         daFetch: this.hostActions.daFetch,
-        fetchLocal: (url, options) => window.fetch(url, options),
         fetchCode: (url, options) => window.fetch(url, options),
         signal,
       });

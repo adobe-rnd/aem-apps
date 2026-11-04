@@ -199,7 +199,7 @@ describe('Current-site generic block contracts', () => {
     assert.match(prompt, /essential.*valid authoring structure or input/);
     assert.match(prompt, /Do not ignore observed dependency failures or known-broken output/);
     const semanticPrompt = await readFile(new URL(
-      '../../../../tools/apps/block-library-generator/block-analysis-prompt.txt',
+      '../../../../tools/apps/block-library-generator/block-analysis-prompt.js',
       import.meta.url,
     ), 'utf8');
     assert.match(semanticPrompt, /Values read before clearing or replacing the DOM/);
@@ -416,6 +416,21 @@ describe('Discovered source collection', () => {
     assert.ok(reads.every((url) => url.endsWith('/index.html')));
   });
 
+  it('uses the packaged semantic prompt without fetching a protected text-content route', async () => {
+    const f = options('hero');
+    let fetchedText = false;
+    const value = await collectAnalysisInput({
+      ...f.args,
+      fetchLocal: async () => {
+        fetchedText = true;
+        throw new Error('Text delivery route is protected');
+      },
+    });
+    assert.equal(fetchedText, false);
+    assert.ok(value.prompt.startsWith('You analyse Edge Delivery Services blocks'));
+    assert.match(value.prompt, /CENTRAL QUESTION/);
+  });
+
   it('captures relevant local imports and framework summaries without reading preprocessing or executing code', async () => {
     const f = options('footer');
     f.contents.set(sourcePath('footer'), "import { getMetadata } from '../../scripts/aem.js';\nimport { loadFragment } from '../fragment/fragment.js';");
@@ -432,7 +447,7 @@ describe('Discovered source collection', () => {
     assert.match(prompt, /Only author-selected classes on the block belong in supportedOptions/);
     assert.match(prompt, /Configuration-row keys belong in contentRules/);
     const semanticPrompt = await readFile(new URL(
-      '../../../../tools/apps/block-library-generator/block-analysis-prompt.txt',
+      '../../../../tools/apps/block-library-generator/block-analysis-prompt.js',
       import.meta.url,
     ), 'utf8');
     assert.match(semanticPrompt, /Configuration-row keys.*not block options/);
@@ -446,7 +461,7 @@ describe('Discovered source collection', () => {
     assert.match(prompt, /No editable body values alone is not a reason to block/);
     assert.match(prompt, /omit optional route\/resource overrides/);
     const semanticPrompt = await readFile(new URL(
-      '../../../../tools/apps/block-library-generator/block-analysis-prompt.txt',
+      '../../../../tools/apps/block-library-generator/block-analysis-prompt.js',
       import.meta.url,
     ), 'utf8');
     assert.match(semanticPrompt, /Appending content alone does not remove existing authored cells/);
@@ -465,7 +480,7 @@ describe('Discovered source collection', () => {
 
   it('distinguishes visible defaults from known-empty guards, API factories and background grouping', async () => {
     const semanticPrompt = await readFile(new URL(
-      '../../../../tools/apps/block-library-generator/block-analysis-prompt.txt',
+      '../../../../tools/apps/block-library-generator/block-analysis-prompt.js',
       import.meta.url,
     ), 'utf8');
     assert.match(semanticPrompt, /Verify that the default export can actually accept the block element/);
@@ -483,7 +498,7 @@ describe('Discovered source collection', () => {
     assert.match(prompt, /Required media, fragment and indexed business references/);
     assert.match(prompt, /A homepage is not a video manifest, form definition or fragment/);
     const semanticPrompt = await readFile(new URL(
-      '../../../../tools/apps/block-library-generator/block-analysis-prompt.txt',
+      '../../../../tools/apps/block-library-generator/block-analysis-prompt.js',
       import.meta.url,
     ), 'utf8');
     assert.match(semanticPrompt, /fixed-position instances would overlap at the same coordinates/);

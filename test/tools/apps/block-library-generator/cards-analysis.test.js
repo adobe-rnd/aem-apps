@@ -16,6 +16,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import ANALYSIS_PROMPT from '../../../../tools/apps/block-library-generator/block-analysis-prompt.js';
 import {
   CARDS_SOURCE_PATHS, createCardsRequest, createCardsPrompt, validateCardsAnalysis,
   collectCardsInput, validateCellHTML,
@@ -159,7 +160,7 @@ describe('Cards analysis protocol', () => {
   });
 
   it('includes general reasoning checks for all six reviewed semantic failures', async () => {
-    const promptURL = new URL('../../../../tools/apps/block-library-generator/block-analysis-prompt.txt', import.meta.url);
+    const promptURL = new URL('../../../../tools/apps/block-library-generator/block-analysis-prompt.js', import.meta.url);
     const semanticPrompt = await readFile(promptURL, 'utf8');
     assert.match(semanticPrompt, /moving whole cells/i);
     assert.match(semanticPrompt, /normalized DOM,\s+predicate, result trace/i);
@@ -271,7 +272,7 @@ describe('HTML element policy', () => {
     it('retains empty source files, exact image URLs and the original saved prompt', async () => {
       const value = await collectCardsInput(options());
       assert.equal(value.sourcePage, '/index.html');
-      assert.equal(value.prompt, 'Saved prompt.');
+      assert.equal(value.prompt, ANALYSIS_PROMPT);
       assert.ok(value.sources.every((source) => source.content === ''));
       assert.equal(value.images[0].src, image);
       assert.deepEqual(value.links, [{ href: '/index', label: 'Test site home' }]);

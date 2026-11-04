@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import ANALYSIS_PROMPT from './block-analysis-prompt.js';
 import {
   createJobRequest, getProbeTarget, validateJobRequest, assertBlockName, requestBlockName,
 } from './jobs.js';
@@ -183,7 +184,7 @@ function importPaths(content, source, origin) {
 
 export async function collectAnalysisInput({
   target: selectedTarget, environment = selectedTarget?.environment,
-  blockName, entryPaths, sourcePage = null, daFetch, fetchLocal, fetchCode, signal,
+  blockName, entryPaths, sourcePage = null, daFetch, fetchCode, signal,
   parseHTML = parseInertHTML, includeImports = true,
 }) {
   assertBlockName(blockName);
@@ -205,7 +206,7 @@ export async function collectAnalysisInput({
   const linkPageRead = page === '/index.html' ? pageRead
     : readText(daFetch, `${sourceOrigin}/index.html`, signal, /text\/html/);
   const [prompt, pageHTML, linkHTML, sources] = await Promise.all([
-    readText(fetchLocal, './block-analysis-prompt.txt', signal, /text\/plain/),
+    Promise.resolve(ANALYSIS_PROMPT),
     pageRead,
     linkPageRead,
     Promise.all([...entryPaths, ...CARDS_SOURCE_PATHS.slice(2)].map(async (id) => ({
@@ -284,14 +285,13 @@ export async function collectAnalysisInput({
 }
 
 export async function collectCardsInput({
-  environment, sourcePage, daFetch, fetchLocal, signal, parseHTML = parseInertHTML,
+  environment, sourcePage, daFetch, signal, parseHTML = parseInertHTML,
 }) {
   const page = sourcePagePath(sourcePage);
   const input = await collectAnalysisInput({
     environment,
     sourcePage: page,
     daFetch,
-    fetchLocal,
     signal,
     parseHTML,
     blockName: 'cards',
