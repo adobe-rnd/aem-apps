@@ -35,6 +35,15 @@ npm i
 npm run lint
 ```
 
+## Testing
+
+```sh
+npm test
+npm run test:watch
+```
+
+The test scripts enable Node VM modules for component tests; no extra environment variable is needed.
+
 ## License Headers
 
 All source files must include Apache License 2.0 headers. This is enforced automatically via pre-commit hooks.
