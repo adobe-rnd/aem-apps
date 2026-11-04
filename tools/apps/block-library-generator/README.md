@@ -88,9 +88,11 @@ silently become default pages.
 ## Manage existing pages
 
 - **Open** opens the current page in DA for normal authoring.
-- **Recreate** runs a fresh analysis. Confirming the result replaces the
-  **entire page, including any author edits**. If analysis is blocked, you can
-  separately confirm replacement with a default page instead.
+- **Recreate** asks you to confirm replacement of the **entire page, including
+  any author edits**, up front. It then automatically analyses the block,
+  submits the prompt, validates the result, replaces the page and previews it.
+  If analysis is blocked, the existing page stays unchanged; replacing it with
+  an unfinished default page requires separate confirmation.
 - **Delete** removes the example page and its Blocks-index entry. It does not
   delete block code, shared images or unrelated pages.
 
@@ -156,7 +158,7 @@ source does not unpublish an existing delivery copy.
   reported file in DA and choose **Preview**.
 - If chat ends without a result, check for pending approvals and use
   **Recovery options > Check result**. Reopening checks a pending analysis and
-  can finish its authorized Create, but does not resend the prompt.
+  can finish its authorized Create or Recreate, but does not resend the prompt.
 - If generation is unavailable, check `nxver=2`, site access and EW/chat
   availability. Authorized library management can still be used without chat.
 

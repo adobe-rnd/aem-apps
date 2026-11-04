@@ -385,7 +385,9 @@ describe('Apps docked chat and scoped completion checks', () => {
   }
   const noWrites = (data) => assert.ok(data.calls.every(({ method }) => method === 'GET'));
 
-  function automaticInputs(data, h, { failIndex = false, registered = false } = {}) {
+  function automaticInputs(data, h, {
+    failIndex = false, registered = false, existing = false, etag = true,
+  } = {}) {
     const root = 'https://admin.da.live/source/example-org/demo';
     const pageURL = `${root}/docs/library/blocks/hero.html`;
     const indexURL = `${root}/docs/library/blocks.json`;
@@ -410,7 +412,12 @@ describe('Apps docked chat and scoped completion checks', () => {
     data.files.set(indexURL, Response.json({
       ':type': 'sheet', total: rows.length, limit: rows.length, offset: 0, data: rows,
     }, { headers: { ETag: '"auto-index1"' } }));
-    if (registered) h.app.libraryOverview.blocks.hero.status = 'missing-page';
+    if (existing) {
+      h.app.libraryOverview.blocks.hero.status = registered ? 'existing' : 'unregistered';
+      data.files.set(pageURL, new Response('<body>Author edits</body>', {
+        headers: { 'Content-Type': 'text/html', ...(etag ? { ETag: '"auto-page1"' } : {}) },
+      }));
+    } else if (registered) h.app.libraryOverview.blocks.hero.status = 'missing-page';
     const original = h.app.hostActions.daFetch;
     h.app.hostActions.daFetch = async (url, options) => {
       if (options.method === 'GET' && url === pageURL && data.files.get(url) instanceof Response) {
@@ -424,10 +431,17 @@ describe('Apps docked chat and scoped completion checks', () => {
       }
       data.calls.push({ url, method: options.method });
       if (url === pageURL) {
-        assert.equal(options.headers['If-None-Match'], '*');
-        if (data.files.has(url)) return new Response(null, { status: 412 });
+        if (existing) {
+          assert.equal(options.headers['If-Match'], etag ? '"auto-page1"' : undefined);
+          if (etag && data.files.get(url)?.headers.get('ETag') !== options.headers['If-Match']) {
+            return new Response(null, { status: 412 });
+          }
+        } else {
+          assert.equal(options.headers['If-None-Match'], '*');
+          if (data.files.has(url)) return new Response(null, { status: 412 });
+        }
         data.files.set(url, new Response(await options.body.get('data').text(), {
-          headers: { 'Content-Type': 'text/html', ETag: '"auto-page1"' },
+          headers: { 'Content-Type': 'text/html', ETag: existing ? '"auto-page2"' : '"auto-page1"' },
         }));
       } else {
         assert.equal(options.headers['If-Match'], '"auto-index1"');
@@ -753,17 +767,264 @@ describe('Apps docked chat and scoped completion checks', () => {
     noWrites(data);
   });
 
-  it('keeps Apps Recreate manual, with a fresh analysis and explicit whole-page replacement', async () => {
+  it('asks for upfront Recreate consent without submitting chat or changing the page', async () => {
     const { data, h } = await setup();
-    const paths = automaticInputs(data, h, { registered: true });
-    h.app.libraryOverview.blocks.hero = { status: 'existing', pagePath: '/docs/library/blocks/hero.html' };
-    data.files.set(paths.pageURL, new Response('<body>Author edits</body>', {
-      headers: { 'Content-Type': 'text/html', ETag: '"author1"' },
-    }));
+    const paths = automaticInputs(data, h, { registered: true, existing: true });
     await h.app.beginPageAction('recreate');
     assert.equal(h.app.pageFlow.status, 'confirm');
     assert.equal(h.app.pageFlow.autoCreate, undefined);
+    assert.equal(h.app.pageFlow.autoRecreate, false);
     assert.equal(data.prompts.length, 0);
+    assert.match(JSON.stringify(h.app.renderPageAction()), /Confirm replace entire page/);
+    assert.doesNotMatch(JSON.stringify(h.app.renderPageAction()), /Continue in chat/);
+    await h.app.generatePageSuggestions();
+    assert.match(h.app.libraryError, /confirm.*replace|confirm.*recreat/i);
+    assert.equal(data.calls.filter(({ method }) => method === 'PUT').length, 0);
+    assert.equal(await data.files.get(paths.pageURL).clone().text(), '<body>Author edits</body>');
+  });
+
+  it('automatically analyses, replaces, previews and cleans Recreate after upfront consent', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h, { registered: true, existing: true });
+    await h.app.beginPageAction('recreate');
+    await h.app.confirmAutomaticRecreate();
+    assert.equal(h.app.pageFlow.status, 'waiting');
+    assert.equal(h.app.pageFlow.autoRecreate, true);
+    assert.equal(data.prompts.length, 1);
+    assert.equal(data.prompts[0].options.autoSend, true);
+    assert.doesNotMatch(JSON.stringify(h.app.renderPageAction()), /Continue in chat|Confirm replace entire page/);
+    const request = h.app.cardsRequest;
+    result(data, request);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow, null);
+    assert.equal(h.app.libraryError, '');
+    assert.match(h.app.notice, /recreated/);
+    assert.match(await data.files.get(paths.pageURL).clone().text(), /Hero baseline/);
+    assert.equal((await data.files.get(paths.indexURL).clone().json()).data.length, 1);
+    assert.equal(data.calls.filter(({ method, url }) => method === 'PUT' && url === paths.pageURL).length, 1);
+    assert.ok(data.calls.some(({ url }) => url.endsWith('/docs/library/blocks/hero')
+      && url.startsWith('https://admin.hlx.page/preview/')));
+    assert.ok(data.calls.some(({ url }) => url.endsWith('/docs/library/blocks.json')
+      && url.startsWith('https://admin.hlx.page/preview/')));
+    assert.equal(data.files.has(`${paths.root}${request.requestPath}`), false);
+    assert.equal(data.files.has(`${paths.root}${request.resultPath}`), false);
+  });
+
+  it('retains existing content when Recreate is blocked and asks separately before saving a starter', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h, { registered: true, existing: true });
+    await h.app.beginPageAction('recreate');
+    await h.app.confirmAutomaticRecreate();
+    const request = h.app.cardsRequest;
+    result(data, request, 'blocked');
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow.status, 'blocked');
+    assert.equal(h.app.pageFlow.autoRecreate, false);
+    assert.equal(await data.files.get(paths.pageURL).clone().text(), '<body>Author edits</body>');
+    assert.match(JSON.stringify(h.app.renderPageAction()), /Replace with a default example page/);
+    await h.app.prepareDefaultExample();
+    assert.equal(h.app.pageFlow.status, 'ready');
+    assert.equal(h.app.pageFlow.starter, true);
+    assert.equal(await data.files.get(paths.pageURL).clone().text(), '<body>Author edits</body>');
+    assert.match(JSON.stringify(h.app.renderPageAction()), /Confirm replace with starter page/);
+    await h.app.commitPageAction();
+    assert.equal(h.app.pageFlow, null);
+    assert.match(await data.files.get(paths.pageURL).clone().text(), /starter/i);
+    assert.equal(data.files.has(`${paths.root}${request.requestPath}`), true);
+    assert.equal(data.files.has(`${paths.root}${request.resultPath}`), true);
+  });
+
+  it('discloses hash-check replacement up front when Recreate has no page ETag', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h, { registered: true, existing: true, etag: false });
+    await h.app.beginPageAction('recreate');
+    assert.equal(h.app.pageFlow.snapshot.pageETag, null);
+    assert.match(JSON.stringify(h.app.renderPageAction()), /not atomic/);
+    assert.equal(data.prompts.length, 0);
+    await h.app.confirmAutomaticRecreate();
+    result(data, h.app.cardsRequest);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow, null);
+    assert.equal(h.app.libraryError, '');
+    assert.match(await data.files.get(paths.pageURL).clone().text(), /Hero baseline/);
+  });
+
+  it('stops automatic Recreate if the page, index or registration changes during analysis', async () => {
+    await Promise.all(['page', 'index', 'registration'].map(async (change) => {
+      const { data, h } = await setup();
+      const paths = automaticInputs(data, h, { registered: true, existing: true });
+      await h.app.beginPageAction('recreate');
+      await h.app.confirmAutomaticRecreate();
+      result(data, h.app.cardsRequest);
+      if (change === 'page') {
+        data.files.set(paths.pageURL, new Response('<body>New author edits</body>', {
+          headers: { 'Content-Type': 'text/html', ETag: '"author2"' },
+        }));
+      } else if (change === 'index') {
+        data.files.set(paths.indexURL, Response.json({
+          ':type': 'sheet',
+          total: 1,
+          limit: 1,
+          offset: 0,
+          data: [{ name: 'Author label', path: paths.heroURL }],
+        }, { headers: { ETag: '"index2"' } }));
+      } else {
+        data.files.set('https://admin.da.live/config/example-org/demo', {
+          library: { data: [{ title: 'Blocks', path: 'https://content.da.live/example-org/demo/another/blocks.json' }] },
+        });
+      }
+      await data.emitTurn(turn());
+      assert.equal(h.app.pageFlow.status, 'failed');
+      assert.match(h.app.libraryError, /changed/i);
+      assert.equal(data.calls.filter(({ method, url }) => (
+        method === 'PUT' && [paths.pageURL, paths.indexURL].includes(url)
+      )).length, 0);
+      assert.equal(
+        await data.files.get(paths.pageURL).clone().text(),
+        change === 'page' ? '<body>New author edits</body>' : '<body>Author edits</body>',
+      );
+      h.disconnect();
+    }));
+  });
+
+  it('does not turn a confirmed Recreate into Create if its page disappears', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h, { registered: true, existing: true });
+    await h.app.beginPageAction('recreate');
+    await h.app.confirmAutomaticRecreate();
+    data.files.delete(paths.pageURL);
+    h.app.libraryOverview.blocks.hero.status = 'missing-page';
+    result(data, h.app.cardsRequest);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow.mode, 'recreate');
+    assert.equal(h.app.pageFlow.status, 'failed');
+    assert.equal(data.files.has(paths.pageURL), false);
+  });
+
+  it('cancels a confirmed Recreate and does not replace the page from a late result', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h, { registered: true, existing: true });
+    await h.app.beginPageAction('recreate');
+    await h.app.confirmAutomaticRecreate();
+    const request = h.app.cardsRequest;
+    await h.app.selectBlock('columns');
+    assert.equal(h.app.selectedBlock, 'hero');
+    h.app.cancelPageAction();
+    result(data, request);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow, null);
+    assert.equal(await data.files.get(paths.pageURL).clone().text(), '<body>Author edits</body>');
+    assert.equal(data.files.has(`${paths.root}${request.requestPath}`), true);
+  });
+
+  it('restores an unconfirmed Recreate as a confirmation, not permission to submit chat', async () => {
+    const { data, h } = await setup();
+    automaticInputs(data, h, { registered: true, existing: true });
+    await h.app.beginPageAction('recreate');
+    h.app.restorePageFlow();
+    assert.equal(h.app.pageFlow.status, 'confirm');
+    assert.equal(h.app.pageFlow.autoRecreate, false);
+    assert.equal(data.prompts.length, 0);
+    assert.match(JSON.stringify(h.app.renderPageAction()), /Confirm replace entire page/);
+  });
+
+  it('resumes confirmed waiting Recreate after reopening without resending the prompt', async () => {
+    const { data, h } = await setup();
+    automaticInputs(data, h, { registered: true, existing: true });
+    await h.app.beginPageAction('recreate');
+    await h.app.confirmAutomaticRecreate();
+    result(data, h.app.cardsRequest);
+    h.disconnect();
+    const reopened = await harness(data, { hash: appsContext.hash });
+    reopened.app.refreshWorkspace = async () => {};
+    await reopened.connect({ context: appsContext, capabilities: { chatTurnCompleted: 1 } });
+    reopened.app.discoveryResult = {
+      complete: true, blocks: [{ name: 'hero', files: [{ path: '/blocks/hero/hero.js' }] }],
+    };
+    reopened.app.libraryOverview = { blocks: { hero: { status: 'existing' } } };
+    reopened.app.selectedBlock = 'hero';
+    reopened.app.parseAnalysisHTML = h.app.parseAnalysisHTML;
+    const paths = automaticInputs(data, reopened, { registered: true, existing: true });
+    await reopened.app.loadPageGeneration();
+    assert.equal(reopened.app.pageFlow, null);
+    assert.equal(data.prompts.length, 1);
+    assert.match(await data.files.get(paths.pageURL).clone().text(), /Hero baseline/);
+  });
+
+  it('does not retry partial Recreate index repair after a successful page replacement', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h, { existing: true, failIndex: true });
+    await h.app.beginPageAction('recreate');
+    await h.app.confirmAutomaticRecreate();
+    result(data, h.app.cardsRequest);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow.status, 'partial');
+    assert.equal(h.app.pageFlow.autoSaveStarted, true);
+    assert.match(await data.files.get(paths.pageURL).clone().text(), /Hero baseline/);
+    const writes = data.calls.filter(({ method }) => method === 'PUT').length;
+    await data.emitTurn(turn({ turnId: 'later-turn' }));
+    h.app.restorePageFlow();
+    assert.equal(h.app.pageFlow.status, 'partial');
+    assert.equal(data.calls.filter(({ method }) => method === 'PUT').length, writes);
+  });
+
+  it('treats an interrupted confirmed Recreate preparation or save as recovery, never a retry', async () => {
+    await Promise.all([false, true].map(async (saving) => {
+      const { data, h } = await setup();
+      automaticInputs(data, h, { registered: true, existing: true });
+      await h.app.beginPageAction('recreate');
+      let flow = { ...h.app.pageFlow, autoRecreate: true };
+      if (saving) {
+        const request = waiting(data, h.app);
+        flow = {
+          ...flow, jobId: request.jobId, jobKind: 'analysis', autoSaveStarted: true, status: 'pending',
+        };
+      }
+      h.app.savePageFlow(flow);
+      h.app.restorePageFlow();
+      assert.equal(h.app.pageFlow.status, saving ? 'partial' : 'failed');
+      assert.match(h.app.pageFlow.error, /interrupted/);
+      assert.equal(data.prompts.length, 0);
+      assert.equal(data.calls.filter(({ method }) => method === 'PUT').length, 0);
+      h.disconnect();
+    }));
+  });
+
+  it('does not dispatch Recreate when upfront consent cannot be persisted', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h, { registered: true, existing: true });
+    await h.app.beginPageAction('recreate');
+    data.storage.setItem = () => { throw new Error('Storage unavailable'); };
+    await h.app.confirmAutomaticRecreate();
+    assert.equal(h.app.pageFlow.autoRecreate, false);
+    assert.match(h.app.libraryError, /Storage unavailable/);
+    assert.equal(data.prompts.length, 0);
+    assert.equal(await data.files.get(paths.pageURL).clone().text(), '<body>Author edits</body>');
+  });
+
+  it('rejects invalid saved automatic Recreate consent instead of authorizing a replacement', async () => {
+    await Promise.all([{ snapshot: null }, { starter: true }, { autoRecreate: 'true' }].map(async (invalid) => {
+      const { data, h } = await setup();
+      automaticInputs(data, h, { registered: true, existing: true });
+      await h.app.beginPageAction('recreate');
+      data.storage.setItem(h.app.pageFlowKey(), JSON.stringify({
+        ...h.app.pageFlow, autoRecreate: true, ...invalid,
+      }));
+      h.app.restorePageFlow();
+      assert.equal(h.app.pageFlow, null);
+      assert.match(h.app.libraryError, /Invalid saved automatic/);
+      assert.equal(data.prompts.length, 0);
+      assert.equal(data.calls.filter(({ method }) => method === 'PUT').length, 0);
+      h.disconnect();
+    }));
+  });
+
+  it('keeps previously saved manual Recreate actions manual instead of adopting automatic consent', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h, { registered: true, existing: true });
+    await h.app.beginPageAction('recreate');
+    h.app.savePageFlow({ ...h.app.pageFlow, autoRecreate: undefined });
+    h.app.restorePageFlow();
     await h.app.generatePageSuggestions();
     assert.equal(data.prompts[0].options.autoSend, false);
     result(data, h.app.cardsRequest);
