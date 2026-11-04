@@ -170,7 +170,8 @@ describe('Current-site generic block contracts', () => {
       const prompt = createAnalysisPrompt(value);
       const completion = prompt.slice(prompt.indexOf('CHAT COMPLETION'));
       assert.match(completion, /Only after.*saved.*read back.*confirmed/);
-      assert.ok(completion.includes(`Analysis finished. Please reopen Block Library Generator from Outline in ${value.target.org}/${value.target.site}, select ${name}, and continue.`));
+      assert.ok(completion.includes(`Analysis finished. Return to Block Library Generator in ${value.target.org}/${value.target.site}, select ${name}, and review the result before saving.`));
+      assert.doesNotMatch(completion, /reopen.*Outline/);
       assert.match(completion, /blocked.*more input is needed/);
       assert.match(completion, /fails.*report the actual problem/);
       assert.match(completion, /Do not claim success/);

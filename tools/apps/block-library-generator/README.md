@@ -14,12 +14,14 @@ and saves a library page that authors can review and edit in DA.
 | Discover blocks and inspect the library | Yes | Yes |
 | Initialize the library | Yes | Yes |
 | Open or delete an example page | Yes | Yes |
-| Create or recreate examples through chat | Yes | Not yet supported by the Apps host |
+| Create or recreate examples through chat | Yes | Yes, with nx2 chat support enabled |
 
-Generation currently requires an open document in the supported DA editor.
-The document supplies the authenticated host context, not example content or
-images. Apps-only generation is deferred until the host supports chat handoff
-and responses; both launch routes remain available in V1.
+Apps generation does not require an open document. It uses the nx2 shell
+(`nxver=2`) and the target site's enabled Experience Workspace chat. The generator
+checks the host's advertised completion-event capability, not just SDK method
+names. Unsupported hosts still allow authorized library management.
+The editor route remains available while the Apps-only transition is validated;
+its document supplies host context, not example content or images.
 
 ## Try the hosted branch (no local setup)
 
@@ -28,10 +30,35 @@ testers can use it without cloning the repository, installing tools or running
 localhost. These URLs are for that branch, not the current `main` version.
 
 Sign in to Production DA with access to the target site's code, source files,
-configuration and Preview operations. Generation also requires the editor's
-supported chat and content-tool integration.
+configuration and Preview operations. Generation requires supported chat and
+content-tool integration in the chosen host.
 
-### Generate through the editor
+### Generate through Apps
+
+Open the [hosted branch in DA Apps](https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator?nxver=2&ref=blocklibgen&da-admin=prod),
+choose the content organization/site, then choose **Use site**. This navigates the
+Apps wrapper to the selected site so the generator and chat share the same target.
+An Apps-index tile can use the same shell URL.
+
+Site-specific example:
+
+```text
+https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator?nxver=2&ref=blocklibgen&da-admin=prod#/organization/site
+```
+
+Use the canonical `#/organization/site` hash. Older `#organization/site` links can
+still inspect/manage that site, but must use **Open this site in Apps for chat**
+before generation. The app-hosting repository is never the default content target.
+**Change site** also navigates the wrapper and obtains a fresh host connection;
+finish or cancel any pending action first.
+
+The target site must enable EW/chat, or the browser must already have the supported
+EW opt-in. The app does not change those preferences or override disabled chat.
+If the host does not advertise support, generation stays disabled with an
+explanation. `ref=blocklibgen` selects the generator's code branch; Apps reads the
+content site's block code on `main`.
+
+### Existing editor extension
 
 Add this row to the target site's DA configuration **library** sheet:
 
@@ -43,17 +70,8 @@ Reload the editor, open a document in the target site, then choose
 **Outline > Block Library Generator**. Follow [Use the generator](#use-the-generator)
 below to initialize the library and create examples.
 
-### Inspect or manage through Apps
-
-Open the [hosted branch in DA Apps](https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator?ref=blocklibgen&da-admin=prod),
-choose the content organization/site, then choose **Use site**. Optionally append
-`#organization/site` to select the content target automatically.
-
-Apps supports inspection, setup, Open and Delete in V1; use the editor for
-Create/Recreate. An Apps-index tile can point to this same shell URL.
-
-`ref=blocklibgen` selects the **generator's code branch**, not the target site's
-block-code branch. The editor supplies the latter; Apps uses the target's `main`.
+The editor supplies its content site and block-code branch independently of the
+generator deployment branch.
 
 ## Run locally
 
@@ -65,7 +83,7 @@ Prerequisites:
 - The [AEM CLI](https://github.com/adobe/helix-cli) (`aem`).
 - A Production DA login with access to the target site's code, source files,
   configuration and Preview operations.
-- An editor with the supported chat and content-tool integration for generation.
+- Supported chat and content-tool integration for generation.
 
 From the repository root:
 
@@ -90,23 +108,29 @@ site and choose **Outline > Block Library Generator**.
 
 ### Apps
 
-Open the [local app through the authenticated Apps shell](https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator?ref=local&da-admin=prod),
+Open the [local app through the authenticated Apps shell](https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator?nxver=2&ref=local&da-admin=prod),
 enter the content **Organization** and **Site**, then choose **Use site**.
 The app-hosting repository is not automatically the content target.
 
-For a site-specific Apps link, append `#organization/site` after the query:
+For a site-specific Apps link, append `#/organization/site` after the query:
 
 ```text
-https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator?ref=local&da-admin=prod#organization/site
+https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator?nxver=2&ref=local&da-admin=prod#/organization/site
 ```
 
-`#/organization/site` is also accepted. A valid fragment selects the site after
-authentication; without one, remembered fields are prefilled but not applied.
+The canonical fragment selects the site after authentication; without one,
+remembered fields are prefilled but not applied.
 Editor launches always retain their own authoritative site and branch.
 For hosted branch testing, use `ref=blocklibgen` as shown above instead of
 `ref=local`; omitting `ref` loads `main`. An Apps-index tile uses the shell URL,
 not the raw localhost URL. Allow the browser's local-network access prompt if
 required for local development.
+
+**Apps local chat also requires a local agent on `http://localhost:4002/chat`.**
+The host uses `ref=local` for both the app iframe and chat backend. A running
+generator on port 3000 alone does not provide a connected chat. Use the hosted
+branch for production-agent testing if no local agent is configured; do not
+silently override the host's backend selection.
 
 Opening the HTML entry directly does not provide DA authentication or chat.
 Use one of the authenticated launch routes above.
@@ -140,16 +164,21 @@ locations. Invalid, inaccessible or ambiguous setup is reported instead of reset
 2. Choose **Continue in chat** to collect fresh sources and prepare the prompt.
    Missing bundled placeholder images are added to the site's library media
    folder at this step.
-3. Review and send the prompt in editor chat. Approve the analysis-result write
+3. Review and send the prompt in chat. Approve the analysis-result write
    when requested.
-4. When chat finishes, reopen **Block Library Generator**, select the block and
-   choose **Check result** if needed.
+4. In Apps, the generator stays beside chat and checks the pending saved analysis
+   when a relevant chat turn ends. **Check result** remains available. In the
+   editor, reopen the generator and select the block after chat finishes.
 5. If the result is ready, choose **Confirm create page**. This separately
    authorizes saving the page and its index entry.
 6. Use **Open** to review and edit the saved page in DA.
 
-Preparing a prompt does not submit chat or create a library page. The generator
-does not automatically poll or reopen itself when chat finishes.
+Preparing a prompt does not submit chat or create a library page. Completion
+events are only a signal to validate the owned job's saved result: an unrelated,
+aborted or failed turn does not prove that analysis succeeded or failed.
+If another block is selected, the app offers **Resume** rather than switching
+selection or focus. Reopening checks a pending action once; there is no polling
+or automatic redispatch. Final page saving always needs separate confirmation.
 
 If working examples cannot be proposed, either **Retry analysis** after updating
 the block's code or choose **Create a default example page**. The separately
@@ -241,17 +270,17 @@ bulk generation, publishing or block-code modification.
 
 ## Planned after V1
 
-Move to **Apps-only use** once both host capabilities are available:
+The host changes for Apps chat are available:
 
 - Chat turn-completion events tracked in
   [adobe/da-live#1507](https://github.com/adobe/da-live/issues/1507).
 - Apps chat handoff through the SDK in
   [adobe/da-nx#895](https://github.com/adobe/da-nx/pull/895).
 
-After that work is completed, merged and deployed, integrate and verify the
-supported Apps chat/response flow, then retire the editor-extension route.
-V1 does not enable Apps generation automatically when those host changes land;
-until that follow-up, generation remains editor-only.
+Phase 2 wires the supported Apps handoff and completion-triggered result checks.
+The next step is a focused end-to-end generation/save/recovery pilot, then retiring
+the editor-extension route in favor of Apps-only use. Existing site registrations
+are not removed automatically.
 
 ## Development checks
 

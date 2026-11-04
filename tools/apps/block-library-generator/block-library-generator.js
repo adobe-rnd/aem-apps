@@ -138,6 +138,8 @@ class BlockLibraryGeneratorApp extends LitElement {
     libraryPreviewReceipts: { state: true },
     libraryPreviewError: { state: true },
     libraryPreviewing: { state: true },
+    chatNotice: { state: true },
+    chatError: { state: true },
   };
 
   constructor() {
@@ -195,6 +197,13 @@ class BlockLibraryGeneratorApp extends LitElement {
     this.libraryPreviewReceipts = [];
     this.libraryPreviewError = '';
     this.libraryPreviewing = false;
+    this.chatNotice = '';
+    this.chatError = '';
+    this.chatTurnSupported = false;
+    this.chatSubscriptionVersion = 0;
+    this.chatTurnIds = new Set();
+    this.pendingChatCheck = null;
+    this.chatCheckPromise = null;
   }
 
   createRenderRoot() {
@@ -217,6 +226,7 @@ class BlockLibraryGeneratorApp extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    this.stopChatNotifications();
     window.clearTimeout(this.connectionTimer);
     this.probeController?.abort();
     this.discoveryController?.abort();
@@ -224,13 +234,21 @@ class BlockLibraryGeneratorApp extends LitElement {
     this.resetCardsAnalysis();
   }
 
+  updated() {
+    this.flushChatResultCheck();
+  }
+
   async initialize() {
     try {
       const sdkOrigin = 'https://da.live/nx';
       const { default: sdk } = await import(`${sdkOrigin}/utils/sdk.js`);
-      const { context, token, actions } = await sdk;
+      const {
+        context, token, actions, capabilities,
+      } = await sdk;
       if (!this.isConnected) return;
 
+      this.stopChatNotifications();
+      this.chatTurnSupported = capabilities?.chatTurnCompleted === 1;
       const site = context?.site || context?.repo;
       this.hasToken = Boolean(token);
       this.hostContext = {
@@ -239,11 +257,13 @@ class BlockLibraryGeneratorApp extends LitElement {
         daOrigin: typeof context?.daOrigin === 'string' ? context.daOrigin : '',
         editorOrg: typeof context?.org === 'string' ? context.org : '',
         editorSite: typeof site === 'string' ? site : '',
+        hash: typeof context?.hash === 'string' ? context.hash : '',
       };
       this.hostActions = {
         daFetch: actions?.daFetch,
         setPrompt: actions?.setPrompt,
         closeLibrary: actions?.closeLibrary,
+        subscribeChatTurnCompleted: actions?.subscribeChatTurnCompleted,
       };
       if (this.hostContext.daOrigin && this.hostContext.daOrigin !== 'https://admin.da.live') {
         throw new Error('This release supports Production DA only. No request was redirected to another service.');
@@ -294,7 +314,7 @@ class BlockLibraryGeneratorApp extends LitElement {
       this.restorePageFlow();
       this.restoreLibrarySetupReceipt();
       if (useAppsLinkTarget) {
-        await this.applySiteTarget();
+        await this.applySiteTarget({ fromLink: true });
       } else if (this.isEditorContext) {
         this.updateComplete?.then(() => {
           if (this.isConnected && !this.discoveryBlockReason) this.refreshWorkspace();
@@ -318,6 +338,26 @@ class BlockLibraryGeneratorApp extends LitElement {
   get isEditorContext() {
     return ['edit', 'canvas'].includes(this.hostContext.view)
       && Boolean(this.hostContext.editorOrg && this.hostContext.editorSite);
+  }
+
+  get isAppsContext() {
+    return ['fullscreen', 'apps'].includes(this.hostContext.view);
+  }
+
+  appsTargetMatches(target = this.probeTarget) {
+    return Boolean(target && this.hostContext.hash === `#/${target.org}/${target.site}`);
+  }
+
+  appsSiteURL(target = this.probeTarget) {
+    const checked = getProbeTarget(target);
+    const ref = this.context.ref || 'main';
+    getProbeTarget('prod', { org: checked.org, site: checked.site, branch: ref });
+    const url = new URL('https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator');
+    url.searchParams.set('nxver', '2');
+    url.searchParams.set('ref', ref);
+    url.searchParams.set('da-admin', 'prod');
+    url.hash = `/${checked.org}/${checked.site}`;
+    return url.href;
   }
 
   isCurrentTarget(target) {
@@ -346,7 +386,7 @@ class BlockLibraryGeneratorApp extends LitElement {
     this.updateComplete?.then(() => this.querySelector('.target-change')?.focus());
   }
 
-  async applySiteTarget() {
+  async applySiteTarget({ fromLink = false } = {}) {
     if (this.workflowBusy || this.discoveryBusy || this.libraryOverviewBusy
       || this.pageFlow || this.librarySetupProposal) {
       this.targetError = 'Finish or cancel the pending action before changing sites.';
@@ -361,6 +401,13 @@ class BlockLibraryGeneratorApp extends LitElement {
       const target = getProbeTarget('prod', {
         org: this.manualOrg.trim(), site: this.manualSite.trim(), branch: 'main',
       });
+      if (this.isAppsContext && !fromLink && !this.appsTargetMatches(target)) {
+        const url = this.appsSiteURL(target);
+        window.localStorage.setItem('block-library-generator:last-site:prod', JSON.stringify(target));
+        if (!window.open(url, '_top')) throw new Error('The Apps site could not be opened. Use the site link to continue.');
+        return;
+      }
+      this.stopChatNotifications();
       this.resetDiscovery();
       this.resetCardsAnalysis();
       this.libraryCreationReceipt = null;
@@ -375,10 +422,114 @@ class BlockLibraryGeneratorApp extends LitElement {
       this.choosingSite = false;
       this.restorePageFlow();
       this.restoreLibrarySetupReceipt();
+      this.connectChatNotifications();
       await this.refreshWorkspace();
     } catch (error) {
       this.targetError = error instanceof Error ? error.message : String(error);
     }
+  }
+
+  stopChatNotifications() {
+    this.chatSubscriptionVersion += 1;
+    this.chatUnsubscribe?.();
+    this.chatUnsubscribe = null;
+    this.pendingChatCheck = null;
+    this.chatTurnIds.clear();
+    this.chatNotice = '';
+    this.chatError = '';
+  }
+
+  connectChatNotifications() {
+    if (this.chatUnsubscribe || !this.isAppsContext
+      || this.discoveryBlockReason || !this.appsTargetMatches()
+      || !this.chatTurnSupported || typeof this.hostActions.setPrompt !== 'function'
+      || typeof this.hostActions.subscribeChatTurnCompleted !== 'function') return;
+    const version = this.chatSubscriptionVersion;
+    const target = { ...this.probeTarget };
+    try {
+      const unsubscribe = this.hostActions.subscribeChatTurnCompleted((detail) => {
+        if (!this.isConnected || version !== this.chatSubscriptionVersion
+          || !this.isCurrentTarget(target)) return undefined;
+        return this.handleChatTurnCompleted(detail);
+      });
+      if (typeof unsubscribe !== 'function') throw new Error('The host did not return a chat unsubscribe function.');
+      this.chatUnsubscribe = unsubscribe;
+    } catch (error) {
+      this.chatError = `Chat notifications are unavailable: ${error.message}`;
+    }
+  }
+
+  handleChatTurnCompleted(detail) {
+    try {
+      const flow = this.pageFlow;
+      if (!this.isAppsContext || !flow?.jobId || flow.status !== 'waiting'
+        || !this.isCurrentTarget(flow.target) || !this.appsTargetMatches()
+        || detail?.org !== flow.target.org || detail?.site !== flow.target.site
+        || !['completed', 'aborted', 'error'].includes(detail?.status)) return undefined;
+      const kind = flow.jobKind || 'analysis';
+      const pointer = loadJobPointer(window.localStorage, this.probeTarget, kind, flow.name);
+      if (pointer?.jobId !== flow.jobId || !pointer.handoffRequested) return undefined;
+      if (typeof detail.sessionId === 'string' && typeof detail.turnId === 'string') {
+        const key = JSON.stringify([detail.sessionId, detail.turnId]);
+        if (this.chatTurnIds.has(key)) return undefined;
+        this.chatTurnIds.add(key);
+        if (this.chatTurnIds.size > 50) {
+          this.chatTurnIds.delete(this.chatTurnIds.values().next().value);
+        }
+      }
+      this.pendingChatCheck = {
+        jobId: flow.jobId,
+        name: flow.name,
+        target: flow.target,
+        status: detail.status,
+        version: this.chatSubscriptionVersion,
+      };
+      this.chatNotice = flow.name === this.selectedBlock
+        ? 'A chat turn ended. Checking the saved analysis.'
+        : `A chat turn ended for ${readableLabel(flow.name)}. Resume that action to check its saved analysis.`;
+      return this.flushChatResultCheck();
+    } catch (error) {
+      this.chatError = `The chat notification could not be processed: ${error.message}`;
+      return undefined;
+    }
+  }
+
+  flushChatResultCheck() {
+    const pending = this.pendingChatCheck;
+    if (!pending || this.chatCheckPromise) return undefined;
+    const flow = this.pageFlow;
+    if (!this.isConnected || flow?.jobId !== pending.jobId || flow.status !== 'waiting'
+      || pending.version !== this.chatSubscriptionVersion
+      || !this.isCurrentTarget(pending.target)) {
+      this.pendingChatCheck = null;
+      return undefined;
+    }
+    if (flow.name !== this.selectedBlock || this.workflowBusy
+      || this.discoveryBusy || this.libraryOverviewBusy) return undefined;
+    this.pendingChatCheck = null;
+    const check = this.loadPageGeneration().then(() => {
+      if (!this.isConnected || this.pageFlow?.jobId !== pending.jobId
+        || pending.version !== this.chatSubscriptionVersion
+        || !this.isCurrentTarget(pending.target)) return;
+      if (this.pageFlow.status !== 'waiting' || this.cardsError) {
+        this.chatNotice = '';
+      } else if (this.selectedBlock !== pending.name) {
+        this.chatNotice = `A chat turn ended for ${readableLabel(pending.name)}. Resume to check its saved analysis.`;
+      } else if (this.cardsState === 'pending') {
+        this.chatNotice = `A chat turn ended (${pending.status}). No saved result is available yet. Review chat or use Check result.`;
+      }
+    }).catch((error) => {
+      if (this.isConnected && this.pageFlow?.jobId === pending.jobId
+        && pending.version === this.chatSubscriptionVersion
+        && this.isCurrentTarget(pending.target)) {
+        this.chatError = `The saved analysis could not be checked: ${error.message}`;
+      }
+    }).finally(() => {
+      if (this.chatCheckPromise === check) this.chatCheckPromise = null;
+      this.flushChatResultCheck();
+    });
+    this.chatCheckPromise = check;
+    return check;
   }
 
   get probeEnvironmentLabel() {
@@ -903,7 +1054,14 @@ class BlockLibraryGeneratorApp extends LitElement {
     const environment = flow?.environment || this.probeEnvironment;
     const value = flow ? { ...flow, target: flow.target || { ...this.probeTarget } } : null;
     window.localStorage.setItem(this.pageFlowKey(environment), JSON.stringify(value));
-    if (environment === this.probeEnvironment) this.pageFlow = value;
+    if (environment === this.probeEnvironment) {
+      if (value?.jobId !== this.pageFlow?.jobId) {
+        this.pendingChatCheck = null;
+        this.chatNotice = '';
+        this.chatError = '';
+      }
+      this.pageFlow = value;
+    }
   }
 
   restorePageFlow() {
@@ -1196,6 +1354,8 @@ class BlockLibraryGeneratorApp extends LitElement {
     const flow = this.pageFlow;
     if (!flow?.jobId || !['waiting', 'ready', 'blocked'].includes(flow.status)
       || flow.name !== this.selectedBlock || this.workflowBusy) return;
+    if (this.pendingChatCheck?.jobId === flow.jobId) this.pendingChatCheck = null;
+    this.chatNotice = '';
     await this.runCardsOperation(async (signal) => {
       const request = validateCardsRequest(await readJobRequest(
         this.hostActions.daFetch,
@@ -1211,6 +1371,8 @@ class BlockLibraryGeneratorApp extends LitElement {
       const result = await this.readCardsAnalysisResult(request, signal);
       return { request, result };
     }, ({ request, result }) => {
+      if (this.pageFlow !== flow || this.selectedBlock !== flow.name
+        || (flow.target && !this.isCurrentTarget(flow.target))) return;
       this.cardsRequest = request;
       this.acceptCardsAnalysisResult(result);
       if (result?.status === 'completed') {
@@ -1397,7 +1559,7 @@ class BlockLibraryGeneratorApp extends LitElement {
           </div>
         ` : ''}
         ${!this.workflowBusy && flow.status === 'confirm' ? html`
-          <p>Prepare a prompt from this block's code. In the editor chat, review and send it,
+          <p>Prepare a prompt from this block's code. In ${this.isAppsContext ? 'the adjacent' : 'editor'} chat, review and send it,
             then approve the analysis result. Return here when it finishes.</p>
           <p>Examples use three bundled placeholder images. Missing placeholders will be
             added to this site's library media folder. Existing files are never overwritten.</p>
@@ -1409,8 +1571,10 @@ class BlockLibraryGeneratorApp extends LitElement {
           </div>
         ` : ''}
         ${!this.workflowBusy && flow.status === 'waiting' ? html`
-          <p>Review and send the prepared prompt in the editor chat, then approve the analysis
-            result. When chat finishes, reopen the generator and choose Check result.</p>
+          <p>Review and send the prepared prompt in chat, then approve the analysis result.
+            ${this.isAppsContext
+    ? 'The app checks the saved analysis when a chat turn ends. You can also choose Check result.'
+    : 'When chat finishes, reopen the generator and choose Check result.'}</p>
           ${this.cardsState === 'pending' ? html`
             <p role="status">No result yet. Let chat finish, approve any pending result write,
               then check again.</p>
@@ -1509,7 +1673,9 @@ class BlockLibraryGeneratorApp extends LitElement {
         ` : ''}
         ${flow.status === 'waiting' ? html`
           <p>Chat handoff requested. Review and submit the prompt in chat, then approve the result
-            write. Reopen this app to check it. No library page has been changed.
+            write. ${this.isAppsContext
+    ? 'The app checks the saved result after a chat turn ends.'
+    : 'Reopen this app to check it.'} No library page has been changed.
             Cancelling this action does not stop chat.</p>
           <button type="button" ?disabled=${disabled} @click=${this.loadPageGeneration}>Check result</button>
           <button type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Cancel page action</button>
@@ -1674,6 +1840,17 @@ class BlockLibraryGeneratorApp extends LitElement {
 
   get cardsBlockReason() {
     if (this.discoveryBlockReason) return this.discoveryBlockReason;
+    if (this.isAppsContext) {
+      if (!this.appsTargetMatches()) {
+        return 'Open the selected site with its canonical Apps link to align the generator and chat targets.';
+      }
+      if (!this.chatTurnSupported || typeof this.hostActions.setPrompt !== 'function'
+        || typeof this.hostActions.subscribeChatTurnCompleted !== 'function') {
+        return 'Apps chat is unavailable. Use the nx2 Apps shell (nxver=2) with Experience Workspace chat enabled for this site.';
+      }
+      if (!this.chatUnsubscribe) return this.chatError || 'Apps chat notifications are not connected. Reload the app.';
+      return '';
+    }
     if (!this.isEditorContext) {
       return this.hostContext.view === 'fullscreen'
         ? 'Create and Recreate require the editor extension. Chat integration is not available in Apps yet.'
@@ -2073,7 +2250,7 @@ class BlockLibraryGeneratorApp extends LitElement {
       this.cardsState = 'requested';
       this.cardsError = '';
       this.hostActions.setPrompt(prompt, { autoSend: false });
-      this.hostActions.closeLibrary();
+      if (this.isEditorContext) this.hostActions.closeLibrary();
     } catch (error) {
       this.cardsError = error instanceof Error ? error.message : String(error);
     }
@@ -2729,6 +2906,9 @@ class BlockLibraryGeneratorApp extends LitElement {
               || Boolean(this.librarySetupProposal) || refreshing}
             @click=${this.beginSiteSelection}>Change site</button>
         ` : ''}
+        ${this.isAppsContext && this.context.org && !this.appsTargetMatches() ? html`
+          <a href=${this.appsSiteURL()} target="_top">Open this site in Apps for chat</a>
+        ` : ''}
         <button class="target-refresh primary-action" type="button"
           ?disabled=${Boolean(this.discoveryBlockReason) || refreshing || this.workflowBusy}
           @click=${this.refreshBlocks}>${refreshing ? 'Refreshing...' : 'Refresh blocks'}</button>
@@ -3071,6 +3251,8 @@ class BlockLibraryGeneratorApp extends LitElement {
             ${this.notice ? html`<p class="success-notice" role="status">${this.notice}
               ${this.libraryOverview?.blocks[this.selectedBlock]?.status === 'existing'
     ? 'Open the page to review and edit it.' : ''}</p>` : ''}
+            ${this.chatNotice ? html`<p class="probe-notice" role="status">${this.chatNotice}</p>` : ''}
+            ${renderProblem(this.chatError, 'Chat could not be connected or its result checked. Review the details.')}
             ${this.renderJobCleanupWarning()}
             ${this.renderLibraryPreviewWarning()}
             ${this.renderPendingAction()}

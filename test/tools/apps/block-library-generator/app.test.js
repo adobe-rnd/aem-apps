@@ -44,12 +44,19 @@ function fixtures() {
   const prompts = [];
   const closed = [];
   const publicCalls = [];
+  const turnSubscribers = new Set();
+  const subscriptions = [];
   return {
     files,
     calls,
     prompts,
     closed,
     publicCalls,
+    turnSubscribers,
+    subscriptions,
+    async emitTurn(detail) {
+      await Promise.all([...turnSubscribers].map((callback) => callback(detail)));
+    },
     async fetchPublic(url, options) {
       publicCalls.push({ url, options });
       return new Response(null, { status: 404 });
@@ -95,6 +102,15 @@ function fixtures() {
       },
       setPrompt: (text, options) => prompts.push({ text, options }),
       closeLibrary: () => closed.push(true),
+      subscribeChatTurnCompleted(callback) {
+        turnSubscribers.add(callback);
+        const subscription = { callback, unsubscribed: false };
+        subscriptions.push(subscription);
+        return () => {
+          subscription.unsubscribed = true;
+          turnSubscribers.delete(callback);
+        };
+      },
     },
   };
 }
@@ -106,9 +122,11 @@ async function harness(data, {
   let resolveSdk;
   const sdkPromise = new Promise((resolve) => { resolveSdk = resolve; });
   const timers = new Map();
+  const navigations = [];
   const window = {
     localStorage: data.storage,
     location: { hash },
+    open: (url, target) => { navigations.push({ url, target }); return {}; },
     matchMedia: () => ({ matches: wide }),
     fetch: async (url, options) => {
       if (url instanceof URL && url.protocol === 'file:'
@@ -138,6 +156,8 @@ async function harness(data, {
     window,
     AbortController,
     TextEncoder,
+    URL,
+    URLSearchParams,
     customElements: {
       define(name, component) {
         assert.equal(name, 'block-library-generator-app');
@@ -224,6 +244,7 @@ async function harness(data, {
   return {
     app,
     timers,
+    navigations,
     async connect(overrides = {}) {
       resolveSdk({
         context: {
@@ -241,6 +262,416 @@ async function harness(data, {
     },
   };
 }
+
+describe('Apps docked chat and scoped completion checks', () => {
+  const appsContext = {
+    view: 'fullscreen',
+    org: 'adobe-rnd',
+    repo: 'aem-apps',
+    ref: 'blocklibgen',
+    path: 'tools/apps/block-library-generator/block-library-generator',
+    hash: '#/example-org/demo',
+    daOrigin: 'https://admin.da.live',
+  };
+  const turn = (values = {}) => ({
+    org: 'example-org',
+    site: 'demo',
+    path: null,
+    sessionId: 'session-one',
+    turnId: 'turn-one',
+    status: 'completed',
+    ...values,
+  });
+  async function setup({
+    context = appsContext, capabilities = { chatTurnCompleted: 1 }, actions,
+  } = {}) {
+    const data = fixtures();
+    const h = await harness(data, { hash: context.hash || '#/example-org/demo' });
+    h.app.refreshWorkspace = async () => {};
+    await h.connect({ context, capabilities, ...(actions ? { actions } : {}) });
+    h.app.discoveryResult = {
+      complete: true,
+      blocks: ['hero', 'columns'].map((name) => ({ name, files: [{ path: `/blocks/${name}/${name}.js` }] })),
+    };
+    h.app.libraryOverview = { blocks: { hero: { status: 'absent' }, columns: { status: 'absent' } } };
+    h.app.selectedBlock = 'hero';
+    const p = {
+      nodeType: 1, tagName: 'P', attributes: [], childNodes: [{ nodeType: 3, textContent: 'Sample' }],
+    };
+    h.app.parseAnalysisHTML = () => ({
+      childNodes: [p], children: [p], textContent: 'Sample', querySelectorAll: () => [p],
+    });
+    return { data, h };
+  }
+  function waiting(data, app, { handoff = true } = {}) {
+    const request = blockAnalysis.createAnalysisRequest({
+      environment: 'prod',
+      target: app.probeTarget,
+      input: {
+        blockName: 'hero',
+        entryPaths: ['/blocks/hero/hero.js'],
+        prompt: 'Source-based analysis.',
+        sourcePage: null,
+        images: [],
+        links: [{ href: '/index', label: 'Home' }],
+        sources: ['/blocks/hero/hero.js', '/styles/styles.css', '/styles/lazy-styles.css']
+          .map((id) => ({ id, content: '' })),
+      },
+    });
+    data.files.set(`https://admin.da.live/source/example-org/demo${request.requestPath}`, request);
+    jobs.saveJobPointer(data.storage, request, handoff);
+    app.savePageFlow({
+      name: 'hero',
+      mode: 'create',
+      status: 'waiting',
+      environment: 'prod',
+      target: request.target,
+      jobId: request.jobId,
+      jobKind: 'analysis',
+      startedAt: request.createdAt,
+    });
+    app.cardsRequest = request;
+    app.cardsConfirmed = true;
+    return request;
+  }
+  function result(data, request, status = 'ready') {
+    const value = {
+      schemaVersion: 1,
+      jobId: request.jobId,
+      kind: request.kind,
+      target: request.target,
+      status: 'completed',
+      payload: {
+        analysis: {
+          blockName: 'hero',
+          generation: { status, reason: status === 'blocked' ? 'A real resource is needed.' : '' },
+          analysisScope: {},
+          structure: {},
+          contentRules: {},
+          derivedBehavior: {},
+          sharedBehavior: {},
+          optionAnalysis: { status: 'none-found', supportedOptions: [] },
+          warnings: [],
+          unknowns: [],
+          examples: status === 'blocked' ? [] : [{
+            id: 'baseline',
+            name: 'Hero baseline',
+            description: 'Unverified example.',
+            options: [],
+            body: [['<p>Sample</p>']],
+            evidence: ['/blocks/hero/hero.js'],
+            assumptions: [],
+          }],
+        },
+      },
+    };
+    data.files.set(`https://admin.da.live/source/example-org/demo${request.resultPath}`, value);
+    return value;
+  }
+  const noWrites = (data) => assert.ok(data.calls.every(({ method }) => method === 'GET'));
+
+  it('allows supported Apps generation without a document path or closeLibrary action', async () => {
+    const { data, h } = await setup();
+    assert.equal(h.app.cardsBlockReason, '');
+    assert.equal(h.app.context.path, '');
+    assert.equal(data.subscriptions.length, 1);
+    delete h.app.hostActions.closeLibrary;
+    assert.equal(h.app.cardsBlockReason, '');
+    noWrites(data);
+  });
+
+  it('blocks unsupported Apps before source collection but keeps management available', async () => {
+    const { data, h } = await setup({ capabilities: {} });
+    assert.equal(h.app.discoveryBlockReason, '');
+    assert.match(h.app.cardsBlockReason, /chat|nx2/i);
+    h.app.cardsConfirmed = true;
+    await h.app.prepareCardsAnalysis();
+    assert.match(h.app.cardsError, /chat|nx2/i);
+    assert.equal(data.calls.length, 0);
+    assert.equal(data.subscriptions.length, 0);
+  });
+
+  it('requires the parent canonical hash, not merely a selected iframe target', async () => {
+    const { data, h } = await setup({ context: { ...appsContext, hash: undefined } });
+    assert.match(h.app.cardsBlockReason, /site|Apps/i);
+    assert.equal(data.subscriptions.length, 0);
+    await h.app.applySiteTarget();
+    assert.equal(h.navigations.length, 1);
+    const url = new URL(h.navigations[0].url);
+    assert.equal(url.hash, '#/example-org/demo');
+    assert.equal(url.searchParams.get('nxver'), '2');
+    assert.equal(h.navigations[0].target, '_top');
+  });
+
+  it('changes the wrapper site while preserving the generator ref and production/nx2 selection', async () => {
+    const { data, h } = await setup({ context: { ...appsContext, ref: 'local' } });
+    h.app.manualOrg = 'another-org';
+    h.app.manualSite = 'another-site';
+    await h.app.applySiteTarget();
+    const url = new URL(h.navigations[0].url);
+    assert.equal(url.origin, 'https://da.live');
+    assert.equal(url.hash, '#/another-org/another-site');
+    assert.equal(url.searchParams.get('ref'), 'local');
+    assert.equal(url.searchParams.get('nxver'), '2');
+    assert.equal(url.searchParams.get('da-admin'), 'prod');
+    assert.equal(h.app.context.site, 'demo');
+    assert.equal(data.calls.length, 0);
+  });
+
+  it('prefills once, stays open and subscribes before dispatch without auto-sending', async () => {
+    const { data, h } = await setup();
+    const request = waiting(data, h.app, { handoff: false });
+    h.app.cardsState = 'prepared';
+    h.app.sendCardsAnalysis();
+    assert.equal(h.app.cardsError, '');
+    assert.equal(data.prompts.length, 1);
+    assert.equal(data.prompts[0].options.autoSend, false);
+    assert.equal(data.closed.length, 0);
+    assert.equal(data.turnSubscribers.size, 1);
+    assert.equal(jobs.loadJobPointer(data.storage, request.target, 'analysis', 'hero').handoffRequested, true);
+    h.app.sendCardsAnalysis();
+    assert.equal(data.prompts.length, 1);
+    assert.match(h.app.cardsError, /already requested/i);
+    noWrites(data);
+  });
+
+  it('checks only the owned result on a matching turn, never saves a ready page', async () => {
+    const { data, h } = await setup();
+    const request = waiting(data, h.app);
+    result(data, request);
+    await data.emitTurn(turn({ site: 'other' }));
+    await data.emitTurn(turn({ org: 'other' }));
+    assert.equal(data.calls.length, 0);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow.status, 'ready');
+    assert.equal(h.app.cardsResult.jobId, request.jobId);
+    noWrites(data);
+    assert.equal(data.files.has(`https://admin.da.live/source/example-org/demo${request.requestPath}`), true);
+    const count = data.calls.length;
+    await data.emitTurn(turn({ turnId: 'later-unrelated' }));
+    assert.equal(data.calls.length, count);
+    assert.equal(h.app.pageFlow.status, 'ready');
+  });
+
+  it('retains a blocked verdict and scratch files without creating the fallback automatically', async () => {
+    const { data, h } = await setup();
+    const request = waiting(data, h.app);
+    result(data, request, 'blocked');
+    await data.emitTurn(turn({ status: 'error' }));
+    assert.equal(h.app.pageFlow.status, 'blocked');
+    assert.equal(h.app.pageFlow.starter, undefined);
+    assert.equal(data.files.has(`https://admin.da.live/source/example-org/demo${request.resultPath}`), true);
+    noWrites(data);
+  });
+
+  it('does not equate completed, aborted or error turns with analysis success or failure', async () => {
+    await Promise.all(['completed', 'aborted', 'error'].map(async (status) => {
+      const { data, h } = await setup();
+      waiting(data, h.app);
+      await data.emitTurn(turn({ status }));
+      assert.equal(h.app.pageFlow.status, 'waiting');
+      assert.equal(h.app.cardsState, 'pending');
+      assert.match(h.app.chatNotice, /No result|no saved|not.*available/i);
+      noWrites(data);
+    }));
+  });
+
+  it('rejects malformed matching results rather than displaying readiness', async () => {
+    const { data, h } = await setup();
+    const request = waiting(data, h.app);
+    const value = result(data, request);
+    value.jobId = crypto.randomUUID();
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow.status, 'waiting');
+    assert.equal(h.app.cardsResult, null);
+    assert.match(h.app.cardsError, /identity|match/i);
+    noWrites(data);
+  });
+
+  it('coalesces duplicate and in-flight notifications without repeated ready-state reads', async () => {
+    const { data, h } = await setup();
+    const request = waiting(data, h.app);
+    result(data, request);
+    const original = h.app.hostActions.daFetch;
+    let finish;
+    h.app.hostActions.daFetch = async (url, options) => {
+      if (url.endsWith(request.resultPath)) await new Promise((resolve) => { finish = resolve; });
+      return original(url, options);
+    };
+    const first = data.emitTurn(turn());
+    await settle();
+    await data.emitTurn(turn());
+    await data.emitTurn(turn({ turnId: 'next-turn' }));
+    finish();
+    await first;
+    await settle();
+    assert.equal(data.calls.filter(({ url }) => url.endsWith(request.resultPath)).length, 1);
+    assert.equal(h.app.pageFlow.status, 'ready');
+    assert.equal(h.app.chatNotice, '');
+  });
+
+  it('defers checks while busy, then drains once without polling', async () => {
+    const { data, h } = await setup();
+    const request = waiting(data, h.app);
+    result(data, request);
+    h.app.libraryBusy = true;
+    await data.emitTurn(turn());
+    assert.equal(data.calls.length, 0);
+    h.app.libraryBusy = false;
+    h.app.updated();
+    await h.app.chatCheckPromise;
+    assert.equal(h.app.pageFlow.status, 'ready');
+  });
+
+  it('does not change block selection or focus when another block owns the pending analysis', async () => {
+    const { data, h } = await setup();
+    const request = waiting(data, h.app);
+    result(data, request);
+    h.app.selectedBlock = 'columns';
+    await data.emitTurn(turn());
+    assert.equal(h.app.selectedBlock, 'columns');
+    assert.equal(data.calls.length, 0);
+    assert.match(h.app.chatNotice, /Resume|resume/);
+    await h.app.selectBlock('hero');
+    assert.equal(h.app.pageFlow.status, 'ready');
+    noWrites(data);
+  });
+
+  it('discards late result checks after the pending action is cancelled', async () => {
+    const { data, h } = await setup();
+    const request = waiting(data, h.app);
+    result(data, request);
+    const original = h.app.hostActions.daFetch;
+    let finish;
+    h.app.hostActions.daFetch = async (url, options) => {
+      if (url.endsWith(request.resultPath)) await new Promise((resolve) => { finish = resolve; });
+      return original(url, options);
+    };
+    const pending = data.emitTurn(turn());
+    await settle();
+    h.app.savePageFlow(null);
+    finish();
+    await pending;
+    assert.equal(h.app.pageFlow, null);
+    assert.equal(h.app.cardsResult, null);
+    noWrites(data);
+  });
+
+  it('unsubscribes on disconnect and ignores stale callbacks', async () => {
+    const { data, h } = await setup();
+    const request = waiting(data, h.app);
+    result(data, request);
+    const { callback } = data.subscriptions[0];
+    h.disconnect();
+    assert.equal(data.turnSubscribers.size, 0);
+    await callback(turn());
+    assert.equal(data.calls.length, 0);
+    assert.equal(h.app.cardsResult, null);
+  });
+
+  it('does not read results for a prepared but never dispatched job or a changed target', async () => {
+    const { data, h } = await setup();
+    waiting(data, h.app, { handoff: false });
+    await data.emitTurn(turn());
+    assert.equal(data.calls.length, 0);
+    h.app.context = { ...h.app.context, site: 'other' };
+    await data.emitTurn(turn({ site: 'other', turnId: 'other-site' }));
+    assert.equal(data.calls.length, 0);
+  });
+
+  it('surfaces subscription and asynchronous callback failures without unhandled rejections', async () => {
+    const data = fixtures();
+    const { h } = await setup({
+      actions: { ...data.actions, subscribeChatTurnCompleted() { throw new Error('Port disconnected'); } },
+    });
+    assert.equal(h.app.discoveryBlockReason, '');
+    assert.match(h.app.chatError, /Port disconnected/);
+    assert.match(h.app.cardsBlockReason, /Port disconnected/);
+    const second = await setup();
+    waiting(second.data, second.h.app);
+    second.h.app.loadPageGeneration = async () => { throw new Error('Read callback failed'); };
+    await second.data.emitTurn(turn());
+    assert.match(second.h.app.chatError, /Read callback failed/);
+  });
+
+  it('requires both advertised capability and subscription support, not exported method names alone', async () => {
+    const data = fixtures();
+    const actions = { ...data.actions };
+    delete actions.subscribeChatTurnCompleted;
+    const { h } = await setup({ actions });
+    assert.match(h.app.cardsBlockReason, /Apps chat|nx2/);
+    assert.equal(h.app.chatUnsubscribe, null);
+  });
+
+  it('restores and checks a pending owned job once without waiting for a replayed notification', async () => {
+    const { data, h } = await setup();
+    const request = waiting(data, h.app);
+    result(data, request);
+    h.disconnect();
+    const reopened = await harness(data, { hash: appsContext.hash });
+    reopened.app.parseAnalysisHTML = h.app.parseAnalysisHTML;
+    reopened.app.discoverInventory = async () => {
+      reopened.app.discoveryResult = {
+        complete: true, blocks: [{ name: 'hero', files: [{ path: '/blocks/hero/hero.js' }] }],
+      };
+    };
+    reopened.app.refreshLibraryOverview = async () => {
+      reopened.app.libraryOverview = { blocks: { hero: { status: 'absent' } } };
+      reopened.app.chooseInitialBlock();
+    };
+    await reopened.connect({ context: appsContext, capabilities: { chatTurnCompleted: 1 } });
+    await settle();
+    assert.equal(reopened.app.pageFlow.status, 'ready');
+    assert.equal(data.calls.filter(({ url }) => url.endsWith(request.resultPath)).length, 1);
+    assert.equal(data.prompts.length, 0);
+    noWrites(data);
+  });
+
+  it('ignores callbacks from a replaced host subscription', async () => {
+    const { data, h } = await setup();
+    const request = waiting(data, h.app);
+    result(data, request);
+    const old = data.subscriptions[0].callback;
+    h.app.stopChatNotifications();
+    h.app.connectChatNotifications();
+    assert.equal(data.turnSubscribers.size, 1);
+    await old(turn());
+    assert.equal(data.calls.length, 0);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow.status, 'ready');
+  });
+
+  it('shows an explicit event error for a malformed stored pointer without reading any content', async () => {
+    const { data, h } = await setup();
+    waiting(data, h.app);
+    const original = data.storage.getItem;
+    data.storage.getItem = (key) => (key.includes(':analysis:') ? '{invalid' : original(key));
+    await data.emitTurn(turn());
+    assert.match(h.app.chatError, /notification|pointer|JSON/i);
+    assert.equal(data.calls.length, 0);
+  });
+
+  it('handles valid events without optional turn identifiers and rejects malformed event statuses', async () => {
+    const { data, h } = await setup();
+    const request = waiting(data, h.app);
+    result(data, request);
+    await data.emitTurn({ org: 'example-org', site: 'demo', status: 'running' });
+    assert.equal(data.calls.length, 0);
+    await data.emitTurn({ org: 'example-org', site: 'demo', status: 'completed' });
+    assert.equal(h.app.pageFlow.status, 'ready');
+    noWrites(data);
+  });
+
+  it('does not navigate the wrapper away from an active page confirmation', async () => {
+    const { data, h } = await setup();
+    waiting(data, h.app);
+    h.app.manualSite = 'other';
+    await h.app.applySiteTarget();
+    assert.match(h.app.targetError, /Finish or cancel/);
+    assert.equal(h.navigations.length, 0);
+    assert.equal(h.app.context.site, 'demo');
+  });
+});
 
 describe('Cache-first opening with unchanged library-page checks', () => {
   const codeRoot = 'https://api.aem.live/msagolj/repos/ew/code/main/blocks/';
@@ -474,11 +905,10 @@ describe('General site UI and lifecycle', () => {
     h.app.manualOrg = 'example-org';
     h.app.manualSite = 'demo';
     await h.app.applySiteTarget();
-    assert.equal(h.app.probeTarget.site, 'demo');
-    assert.equal(h.app.discoveryBlockReason, '');
-    assert.match(h.app.cardsBlockReason, /editor/);
-    assert.equal(refreshed, 1);
-    assert.equal(h.app.context.org, 'example-org');
+    assert.equal(h.app.probeTarget, null);
+    assert.equal(new URL(h.navigations[0].url).hash, '#/example-org/demo');
+    assert.equal(refreshed, 0);
+    assert.equal(h.app.context.org, '');
   });
 
   it('shows only the site chooser before an Apps target is selected', async () => {
@@ -520,7 +950,7 @@ describe('General site UI and lifecycle', () => {
     assert.equal(targets.length, 1);
     assert.equal(targets[0].site, 'frescopa');
     assert.equal(h.app.isEditorContext, false);
-    assert.match(h.app.cardsBlockReason, /editor/);
+    assert.match(h.app.cardsBlockReason, /canonical Apps/);
     assert.match(text(h.app.renderSiteTarget()), /Change site/);
     assert.equal(JSON.parse(data.storage.getItem('block-library-generator:last-site:prod')).site, 'frescopa');
     assert.equal(data.calls.length, 0);
@@ -582,7 +1012,9 @@ describe('General site UI and lifecycle', () => {
   it('switches between site summary and form, and cancels without changing or reloading the site', async () => {
     const data = fixtures();
     const h = await harness(data);
-    await h.connect({ context: { view: 'fullscreen', daOrigin: 'https://admin.da.live' } });
+    await h.connect({
+      context: { view: 'fullscreen', daOrigin: 'https://admin.da.live', hash: '#/example-org/demo' },
+    });
     let refreshed = 0;
     h.app.refreshWorkspace = async () => { refreshed += 1; };
     h.app.manualOrg = 'example-org';
@@ -891,7 +1323,9 @@ describe('Confirmed library initialization UI', () => {
   async function initial({ apps = false, registered = true, indexed = false } = {}) {
     const data = fixtures();
     const h = await harness(data);
-    await h.connect(apps ? { context: { view: 'fullscreen', daOrigin: 'https://admin.da.live' } } : {});
+    await h.connect(apps ? {
+      context: { view: 'fullscreen', daOrigin: 'https://admin.da.live', hash: '#/msagolj/ew' },
+    } : {});
     if (apps) {
       h.app.manualOrg = 'msagolj';
       h.app.manualSite = 'ew';
@@ -965,7 +1399,7 @@ describe('Confirmed library initialization UI', () => {
     assert.equal(h.app.libraryOverview.setup.status, 'ready');
     assert.equal(JSON.stringify(data.files.get(indexURL)), before);
     assert.deepEqual(data.calls.filter((call) => call.method !== 'GET').map((call) => call.method), ['POST', 'POST']);
-    assert.match(h.app.cardsBlockReason, /editor/);
+    assert.match(h.app.cardsBlockReason, /Apps chat|nx2/);
     assert.equal(data.prompts.length, 0);
   });
 
