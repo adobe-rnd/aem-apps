@@ -10,7 +10,7 @@ When an author finishes editing content and wants to publish it, they open this 
 
 ### Architecture
 
-The plugin is a **thin REST client of [`publish-requests-worker`](https://github.com/adobe-rnd/publish-requests-worker)**. It no longer resolves approvers or reads/writes the requests sheet itself — the worker is the single source of truth for approver resolution (pattern matching + DL-group expansion), sheet I/O, and email.
+The plugin is a **thin REST client of [`publish-requests-worker`](https://github.com/cloudadoption/publish-requests-worker)**. It no longer resolves approvers or reads/writes the requests sheet itself — the worker is the single source of truth for approver resolution (pattern matching + DL-group expansion), sheet I/O, and email.
 
 - **Web Component**: LitElement custom element (`<request-for-publish>`).
 - **DA SDK**: authentication, context (org, site, path), and dialog rendering.

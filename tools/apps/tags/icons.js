@@ -13,15 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+/* eslint-disable import/no-unresolved */
+import { html } from 'da-lit';
 
-// da-nx's nx2 daFetch (nx2/utils/api.js) resolves its IMS module via
-// `${window.location.origin}/scripts/utils.js`'s getNx() before falling back
-// to bootstrapping its own IMS session. MSM's merge action uses this hook to
-// point at a local shim (scripts/nx-shim/utils/ims.js) that hands nx2 a token
-// we already have, instead of an IMS session that gets CORS-blocked outside
-// da.live's own origin. Nothing else on this domain calls nx2's daFetch, so
-// this has no effect elsewhere.
+const ICON_DIR = new URL('./img/', import.meta.url).href;
+
 // eslint-disable-next-line import/prefer-default-export
-export function getNx() {
-  return `${window.location.origin}/scripts/nx-shim`;
-}
+export const icon = (name, w = 16, h = 16, vb = '0 0 20 20') => html`
+  <svg width=${w} height=${h} viewBox="${vb}" style="--iconPrimary: currentColor" aria-hidden="true">
+    <use href="${ICON_DIR}${name}.svg#${name}"/>
+  </svg>`;

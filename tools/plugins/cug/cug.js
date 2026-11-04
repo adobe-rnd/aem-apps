@@ -113,18 +113,21 @@ function mergeHeaders(nonCugHeaders, cugHeaders) {
 
 async function postHeaders(org, site, headersConfig, token) {
   const url = `${ADMIN_API_BASE}/config/${org}/sites/${site}/headers.json`;
+  // The Config Service rejects an empty headers map with 400; use DELETE to clear it instead.
+  const isEmpty = Object.keys(headersConfig).length === 0;
   const resp = await fetch(url, {
-    method: 'POST',
+    method: isEmpty ? 'DELETE' : 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify(headersConfig),
+    ...(isEmpty ? {} : { body: JSON.stringify(headersConfig) }),
   });
 
-  if (!resp.ok) {
+  if (!resp.ok && resp.status !== 404) {
     const body = await resp.text().catch(() => '');
-    throw new Error(`Config Service POST failed: ${resp.status} ${resp.statusText} — ${body}`);
+    const method = isEmpty ? 'DELETE' : 'POST';
+    throw new Error(`Config Service ${method} failed: ${resp.status} ${resp.statusText} — ${body}`);
   }
 }
 

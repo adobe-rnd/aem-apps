@@ -1,5 +1,5 @@
 # AEM Apps
-A collection of Adobe owned apps & plugins for Experience Workspace & Document Authoring.g
+A collection of Adobe owned apps & plugins for Experience Workspace & Document Authoring.
 
 ## Apps & Plugins
 
@@ -8,11 +8,14 @@ A collection of Adobe owned apps & plugins for Experience Workspace & Document A
 | **Block Library Generator** | [Usage and setup](tools/apps/block-library-generator/README.md) | `tools/apps/block-library-generator` | Apps-only block-library generation with reviewed chat and Preview | App |
 | **DA Permissions** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/da-permissions/da-permissions | `tools/apps/da-permissions` | Manage DA Permissions and configuration access  | App |
 | **MSM** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/msm/msm | `tools/apps/msm` `tools/plugins/msm` | Manage multi-site manager for your org/site  | App & Plugin |
-| **Request Publish** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-request-inbox | `tools/apps/publish-reqquest-inbox` `tools/plugins/publish-reqquest-inbox` | Manage request publish approvals, etc  | App & Plugin |
+| **Request Publish (v1)** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox | [Inbox](tools/apps/publish-requests-inbox/README.md), [Plugin](tools/plugins/request-for-publish/README.md) | Existing v1 publish approvals | App & Plugin |
+| **Request Publish (v2, opt-in)** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2 | [Inbox](tools/apps/publish-requests-inbox-v2/README.md), [Plugin and opt-in setup](tools/plugins/request-for-publish-v2/README.md#opting-in) | Multi-step approvals; requires the v2 plugin, worker API and inbox | App & Plugin |
 | **Anchor Links** |https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/anchor-links/anchor-links.html | `tools/plugins/anchor-links` | Lightweight plugin to create anchor links  | Plugin |
 | **Fragment Picker** |https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/fragments/fragments.html | `tools/plugins/fragments` | Browse and insert fragments with live preview  | Plugin |
+| **Tags** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/tags/tags | `tools/apps/tags` `tools/plugins/tags` | Manage tag taxonomy, publish it, and bulk-search pages by tag; pick tags while authoring  | App & Plugin |
 | **Developer** |https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/developer/developer.html | `tools/plugins/developer` | Switch the preview branch (`?ref=`) for the current page  | Plugin |
 | **CUG** |https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/cug/cug.html | `tools/plugins/cug` | Apply or remove closed user group (page access) restrictions  | Plugin |
+| **FindReplace Pro** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/findreplace-pro/findreplace-pro | [FindReplace Pro](tools/apps/findreplace-pro/README.md) | Search site content, bulk-replace matches with version backups, and preview, publish, or unpublish selected files | App |
 
 ## Developing
 
