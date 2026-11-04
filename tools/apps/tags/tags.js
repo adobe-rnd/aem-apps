@@ -1,3 +1,18 @@
+/*
+ * Copyright 2026 Adobe Systems Incorporated
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 /* eslint-disable no-underscore-dangle, import/no-unresolved, no-console, class-methods-use-this */
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from 'da-lit';
@@ -16,6 +31,7 @@ import {
   hasTaxonomySchema,
   isLegacyTagList,
   convertLegacyTagList,
+  parseDaSourceUrl,
 } from './taxonomy.js';
 import { icon } from './icons.js';
 
@@ -77,6 +93,10 @@ class TaggerApp extends LitElement {
     _org: { state: true },
     _site: { state: true },
     _taxonomyLocation: { state: true },
+    // True once the sheet exists in DA source (loaded, or saved here) — the
+    // Open sheet link stays hidden until then, since anything entered in a
+    // brand-new sheet would be overwritten by the app's first Save.
+    _sheetExists: { state: true },
     _tree: { state: true },
     _dirty: { state: true },
     _saving: { state: true },
@@ -127,6 +147,7 @@ class TaggerApp extends LitElement {
     this._org = '';
     this._site = '';
     this._taxonomyLocation = null;
+    this._sheetExists = false;
     this._tree = { namespaces: [] };
     this._dirty = false;
     this._saving = false;
@@ -214,6 +235,7 @@ class TaggerApp extends LitElement {
 
     const location = resolveTaxonomyLocation(org, site, taxonomyPath);
     this._taxonomyLocation = location;
+    this._sheetExists = false;
     this._org = org;
     this._site = site;
     this._orgValue = org;
@@ -240,6 +262,7 @@ class TaggerApp extends LitElement {
     }
 
     this._tree = parseTaxonomyTree(Array.isArray(sheet?.data) ? sheet.data : []);
+    this._sheetExists = ok;
     this._state = 'loaded';
     if (!ok) {
       this._message = {
@@ -272,6 +295,7 @@ class TaggerApp extends LitElement {
 
     this._saving = false;
     if (result.success) {
+      this._sheetExists = true;
       this._dirty = false;
       this._dirtyNodes = new Set();
       this._message = { type: 'success', text: 'Saved.' };
@@ -281,7 +305,7 @@ class TaggerApp extends LitElement {
   }
 
   async handlePublish() {
-    if (this._publishing || this._dirty) return;
+    if (this._publishing || this._dirty || !this.canPublish()) return;
     this._publishing = true;
     this._message = null;
 
@@ -298,6 +322,12 @@ class TaggerApp extends LitElement {
     this._message = live.success
       ? { type: 'success', text: 'Published.' }
       : { type: 'error', text: `Publish failed (${live.status || live.error}).` };
+  }
+
+  // Preview/publish need a site to run on, which a taxonomy URL outside DA
+  // source doesn't have (see `resolveTaxonomyLocation`).
+  canPublish() {
+    return !!this._taxonomyLocation?.org;
   }
 
   // ---- Tree editing ----
@@ -632,6 +662,7 @@ class TaggerApp extends LitElement {
 
     const { rows } = this._legacyConvert;
     this._taxonomyLocation = location;
+    this._sheetExists = false;
     this._taxonomyPathValue = location.path;
     this._tree = convertLegacyTagList(rows, name);
     this._dirty = true;
@@ -650,6 +681,40 @@ class TaggerApp extends LitElement {
   editUrl(path) {
     const clean = path.replace(/\.html$/, '');
     return `https://da.live/edit#/${this._org}/${this._site}${clean}`;
+  }
+
+  // DA's sheet editor for the loaded taxonomy, for columns this app doesn't
+  // edit. Built from the URL the app loads and saves, which may be a sheet
+  // shared from another site; `null` when that isn't a DA source URL.
+  sheetUrl() {
+    const source = parseDaSourceUrl(this._taxonomyLocation?.sourceUrl);
+    if (!source) return null;
+    const { org, repo, path } = source;
+    return `https://da.live/sheet#/${org}/${repo}${path.replace(/\.json$/, '')}`;
+  }
+
+  // Hidden until the sheet exists. While there are unsaved changes the link
+  // is disabled, so edits made in the sheet aren't overwritten by the Save
+  // still to come. The tooltip shows on hover and on keyboard focus.
+  renderSheetLink() {
+    const url = this.sheetUrl();
+    if (!url || !this._sheetExists) return nothing;
+    const link = this._dirty
+      ? html`<span class="sheet-link is-disabled" aria-disabled="true"
+          aria-describedby="sheet-link-tip">Open sheet</span>`
+      : html`<a class="sheet-link" href=${url} target="_blank" rel="noopener"
+          aria-describedby="sheet-link-tip">Open sheet</a>`;
+    const tip = this._dirty
+      ? 'Save before editing the sheet.'
+      : 'Edit extra columns in the sheet. Reload this app before saving again.';
+    return html`
+      <span class="sheet-link-group">
+        ${link}
+        <button type="button" class="sheet-link-info" aria-label="About Open sheet"
+          aria-describedby="sheet-link-tip">i</button>
+        <span class="sheet-link-tip" id="sheet-link-tip" role="tooltip">${tip}</span>
+      </span>
+    `;
   }
 
   previewUrl(path) {
@@ -726,11 +791,13 @@ class TaggerApp extends LitElement {
             ${this._saving ? 'Saving…' : 'Save'}
           </sl-button>
           <sl-button class="pw-quiet-secondary" @click=${() => this.handlePublish()}
-            ?disabled=${this._publishing || this._dirty}>
+            ?disabled=${this._publishing || this._dirty || !this.canPublish()}>
             ${this._publishing ? 'Publishing…' : 'Publish'}
           </sl-button>
           ${this._dirty ? html`<span class="dirty-hint">Unsaved changes (dots mark what changed) — publish is disabled until you save.</span>` : nothing}
+          ${this.canPublish() ? nothing : html`<span class="dirty-hint">Publish is only available for taxonomies in DA source.</span>`}
           ${this.renderMessage()}
+          ${this.renderSheetLink()}
         </div>
         <div class="miller-panel">
           ${this.renderItemToolbar()}

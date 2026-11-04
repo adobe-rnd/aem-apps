@@ -1,0 +1,521 @@
+/*
+ * Spectrum-compatible, page-scoped publish workflow panel.
+ */
+:host {
+  display: block;
+  min-width: 0;
+  height: 100%;
+  overflow: auto;
+  color: var(--s2-gray-900, light-dark(#202020, #f2f2f2));
+  background: var(--s2-gray-50, light-dark(#fff, #222));
+  font: 14px/1.5 var(--s2-font-family, "Adobe Clean", sans-serif);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+
+.panel {
+  padding: 20px;
+}
+
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.page-header > div {
+  min-width: 0;
+}
+
+.eyebrow {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--s2-gray-700, #777);
+}
+
+.page-path {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+h2 {
+  font-size: 22px;
+  line-height: 1.25;
+  margin: 12px 0 8px;
+  letter-spacing: -0.3px;
+}
+
+h3 {
+  font-size: 15px;
+  margin: 0 0 8px;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--pw-accent, var(--s2-blue-900, light-dark(#0265dc, #8cb4ff)));
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.summary {
+  margin: 26px 0 22px;
+}
+
+.summary > p {
+  color: var(--s2-gray-700, light-dark(#595959, #b9b9b9));
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--s2-gray-500, #888);
+}
+
+.status.pending::before {
+  background: var(--s2-orange-900, #b65a00);
+}
+
+.metadata {
+  margin: 0 0 20px;
+}
+
+.metadata > div {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 8px;
+  margin: 8px 0;
+}
+
+dt, .hint {
+  color: var(--s2-gray-700, light-dark(#646464, #bbb));
+}
+
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.detail {
+  margin-bottom: 20px;
+}
+
+.label, label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.people {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.people li + li {
+  margin-top: 4px;
+}
+
+.note {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.guidance {
+  margin: 0 0 20px;
+}
+
+.guidance h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.guidance-items {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guidance-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 6px 0;
+}
+
+.guidance-marker {
+  flex: none;
+  min-width: 22px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--pw-accent, var(--s2-blue-900, light-dark(#0265dc, #8cb4ff)));
+  background: var(--s2-gray-100, light-dark(#f3f3f3, #333));
+}
+
+.support-note {
+  margin: 16px 0 0;
+}
+
+.review-links {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 16px 0;
+  margin-bottom: 16px;
+  border-top: 1px solid var(--s2-gray-200, #ddd);
+  border-bottom: 1px solid var(--s2-gray-200, #ddd);
+}
+
+.steps {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+}
+
+.step {
+  position: relative;
+  padding-left: 30px;
+}
+
+/* Connector between markers, stopping short of the last one. */
+.step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 24px;
+  bottom: 0;
+  width: 2px;
+  background: var(--s2-gray-300, #ccc);
+}
+
+.step-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.step-toggle {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  font-weight: 400;
+}
+
+.step-toggle:hover:not(:disabled) {
+  background: transparent;
+  text-decoration: underline;
+  text-decoration-color: var(--s2-gray-300, #ccc);
+  text-underline-offset: 3px;
+}
+
+.marker {
+  position: absolute;
+  left: 0;
+  top: 13px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--s2-gray-300, #ccc);
+  background: var(--s2-gray-50, light-dark(#fff, #222));
+}
+
+.marker::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 6px;
+  width: 8px;
+  height: 4px;
+  border-left: 2px solid var(--s2-gray-400, #999);
+  border-bottom: 2px solid var(--s2-gray-400, #999);
+  transform: rotate(-45deg);
+}
+
+.step.current .marker {
+  border-color: var(--s2-orange-900, #b65a00);
+}
+
+.step.current .marker::after {
+  display: none;
+}
+
+.step.approved .marker {
+  border-color: var(--s2-green-900, #12805c);
+  background: var(--s2-green-900, #12805c);
+}
+
+.step.approved .marker::after {
+  border-color: light-dark(#fff, #111);
+}
+
+.step-text {
+  display: block;
+  min-width: 0;
+}
+
+.step-title {
+  display: block;
+  font-weight: 600;
+}
+
+.step.upcoming .step-title,
+.step.skipped .step-title {
+  color: var(--s2-gray-700, light-dark(#646464, #bbb));
+}
+
+.step-description,
+.step-meta {
+  display: block;
+  font-size: 12px;
+  color: var(--s2-gray-700, light-dark(#646464, #bbb));
+}
+
+.step-meta {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.step-action {
+  flex: none;
+}
+
+.step-body {
+  padding: 4px 0 18px;
+}
+
+.step-body .detail:last-child,
+.step-body .metadata {
+  margin-bottom: 0;
+}
+
+.review-link {
+  font-weight: 600;
+}
+
+.hint {
+  font-size: 12px;
+  font-weight: 400;
+}
+
+textarea + .hint {
+  margin-top: 6px;
+}
+
+.review-links .hint {
+  flex-basis: 100%;
+}
+
+textarea {
+  display: block;
+  width: 100%;
+  min-height: 92px;
+  padding: 10px 12px;
+  resize: vertical;
+  border: 1px solid var(--s2-gray-400, #888);
+  border-radius: 8px;
+  background: var(--s2-gray-50, light-dark(white, #222));
+  color: inherit;
+  font: inherit;
+}
+
+textarea[aria-invalid="true"] {
+  border-color: var(--s2-red-900, #d31510);
+}
+
+
+button {
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 1px solid var(--s2-gray-400, #888);
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button:focus-visible, a:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--pw-accent, var(--s2-blue-900, #0265dc));
+  outline-offset: 3px;
+}
+
+button:hover:not(:disabled) {
+  background: var(--s2-gray-100, light-dark(#f3f3f3, #333));
+}
+
+button.primary {
+  color: light-dark(white, #111);
+  background: var(--pw-accent, var(--s2-blue-900, #0265dc));
+  border-color: transparent;
+}
+
+/* A configured brand accent is one colour in both schemes, so keep white text on it. */
+:host([themed]) button.primary {
+  color: white;
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--pw-accent-hover, var(--s2-blue-1000, #0054b6));
+}
+
+button.negative {
+  color: light-dark(white, #111);
+  background: var(--s2-red-900, #c9252d);
+  border-color: transparent;
+}
+
+button.negative:hover:not(:disabled) {
+  background: var(--s2-red-1000, #a51c30);
+}
+
+button.quiet {
+  border-color: transparent;
+}
+
+
+button.refresh {
+  padding: 4px 6px;
+  min-height: 28px;
+  font-size: 12px;
+}
+
+
+.decision-actions, .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.decision-actions .primary {
+  flex-basis: 100%;
+  margin-bottom: 4px;
+}
+
+.decision-actions .quiet {
+  padding-left: 0;
+  padding-right: 12px;
+  font-size: 13px;
+}
+
+.request-form .primary {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.field-error {
+  font-size: 12px;
+  color: var(--s2-red-900, #c9252d);
+  margin-top: 6px;
+}
+
+.field-error:empty {
+  display: none;
+}
+
+.confirmation {
+  padding: 16px;
+  border: 1px solid var(--s2-gray-300, #ccc);
+  border-radius: 10px;
+}
+
+.confirmation .actions {
+  margin-top: 16px;
+}
+
+.notice, .receipt {
+  padding: 12px;
+  border-radius: 8px;
+  margin-top: 16px;
+  background: var(--s2-gray-100, light-dark(#f3f3f3, #333));
+  overflow-wrap: anywhere;
+}
+
+.notice.error {
+  border-left: 3px solid var(--s2-red-900, #d31510);
+}
+
+.notice.success {
+  border-left: 3px solid var(--s2-green-900, #12805c);
+}
+
+.receipt {
+  border-left: 3px solid var(--s2-orange-900, #b65a00);
+}
+
+.receipt a {
+  display: block;
+  margin: 12px 0;
+}
+
+.progress, .loading {
+  padding: 16px 0;
+  color: var(--s2-gray-700, light-dark(#646464, #bbb));
+}
+
+.empty {
+  margin: 24px 0;
+}
+
+.empty h2 {
+  font-size: 18px;
+}
+
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--s2-gray-200, #ddd);
+  font-size: 13px;
+}
+
+
+@media (width >= 600px) {
+  .panel {
+    max-width: 600px;
+    margin-inline: auto;
+    padding: 28px;
+  }
+
+}
