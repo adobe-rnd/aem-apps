@@ -43,7 +43,9 @@ import {
   validateAnalysisRequest as validateCardsRequest,
   validateBlockAnalysis as validateCardsAnalysis,
 } from './block-analysis.js';
-import { prepareCardsLibraryDryRun, buildCardsPage, buildBlockStarterPage } from './library-dry-run.js';
+import {
+  prepareCardsLibraryDryRun, buildCardsPage, buildBlockStarterPage, getBlockLibraryPaths,
+} from './library-dry-run.js';
 import inspectBlockLibrary from './library-inventory.js';
 import {
   prepareLibraryAction, deleteLibraryPage, replaceLibraryPage,
@@ -64,6 +66,11 @@ import {
 function readableLabel(value) {
   const words = value.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]/g, ' ');
   return words.charAt(0).toUpperCase() + words.slice(1).toLowerCase();
+}
+
+function sameDestinations(expected, actual) {
+  return Boolean(expected && Object.keys(expected).length === Object.keys(actual).length
+    && Object.entries(actual).every(([key, value]) => expected[key] === value));
 }
 
 function renderProblem(message, summary) {
@@ -713,6 +720,11 @@ class BlockLibraryGeneratorApp extends LitElement {
     return this.cardsBusy || this.probeBusy || this.libraryBusy;
   }
 
+  get automaticCreateActive() {
+    return this.pageFlow?.autoCreate === true && this.pageFlow.mode === 'create'
+      && ['confirm', 'waiting', 'ready', 'blocked'].includes(this.pageFlow.status);
+  }
+
   get blockItems() {
     const found = new Map((this.discoveryResult?.blocks || []).map((block) => [block.name, block]));
     Object.keys(this.libraryOverview?.blocks || {}).forEach((name) => {
@@ -758,6 +770,10 @@ class BlockLibraryGeneratorApp extends LitElement {
   }
 
   async selectBlock(name) {
+    if (this.automaticCreateActive) {
+      this.chatNotice = 'Wait for Create to finish, or cancel creation before selecting another block.';
+      return;
+    }
     if (this.libraryCreating) {
       this.libraryError = 'Wait for library creation to finish before changing blocks.';
       return;
@@ -1090,6 +1106,12 @@ class BlockLibraryGeneratorApp extends LitElement {
         || (flow.starter && !['create', 'recreate'].includes(flow.mode))) {
         throw new Error('Invalid saved starter-page action.');
       }
+      if ((flow.autoCreate !== undefined && typeof flow.autoCreate !== 'boolean')
+        || (flow.autoCreate && flow.mode !== 'create')
+        || (flow.autoSaveStarted !== undefined && typeof flow.autoSaveStarted !== 'boolean')
+        || (flow.autoSaveStarted && (!flow.autoCreate || !flow.jobId))) {
+        throw new Error('Invalid saved automatic Create action.');
+      }
       if ((!flow.target && !legacy) || (flow.target && !this.isCurrentTarget(flow.target))) {
         throw new Error('The saved page action belongs to another site or branch.');
       }
@@ -1100,9 +1122,24 @@ class BlockLibraryGeneratorApp extends LitElement {
       if (flow.jobKind && !['cards', 'analysis'].includes(flow.jobKind)) {
         throw new Error('Invalid saved analysis job kind.');
       }
+      if (flow.autoCreate) {
+        const expected = getBlockLibraryPaths({
+          library: { data: [{ title: 'Blocks', path: flow.createDestinations?.indexURL }] },
+        }, target, flow.name);
+        if (!sameDestinations(flow.createDestinations, expected)) {
+          throw new Error('Invalid saved automatic Create destinations.');
+        }
+      }
       if (flow.status === 'completed') {
         this.savePageFlow(null);
       } else {
+        if (flow.autoCreate && flow.status === 'confirm') {
+          flow.status = 'failed';
+          flow.error = 'Create was interrupted before chat was sent. Cancel creation and choose Create again.';
+        } else if (flow.autoCreate && flow.autoSaveStarted && flow.status === 'ready') {
+          flow.status = 'partial';
+          flow.error = 'Create was interrupted during saving. Refresh and inspect the page and index before another action.';
+        }
         this.pageFlow = { ...flow, target: flow.target || { ...target } };
       }
     } catch (error) {
@@ -1132,6 +1169,7 @@ class BlockLibraryGeneratorApp extends LitElement {
     this.libraryController = controller;
     this.libraryBusy = true;
     this.libraryError = '';
+    let preparedFlow;
     try {
       this.assertPageActionContext();
       if (!['create', 'delete', 'recreate'].includes(mode) || !entry || entry.status === 'error') {
@@ -1160,6 +1198,13 @@ class BlockLibraryGeneratorApp extends LitElement {
       if (this.pageFlow && this.pageFlow.status !== 'completed' && !blockedRetry) {
         throw new Error('Finish or cancel the pending page action first. No work has been replaced.');
       }
+      const autoCreate = mode === 'create' && this.isAppsContext;
+      const createDestinations = autoCreate ? getBlockLibraryPaths({
+        library: { data: [{ title: 'Blocks', path: this.libraryOverview.paths?.indexURL }] },
+      }, this.probeTarget, name) : null;
+      if (autoCreate && entry.pagePath !== createDestinations.pagePath) {
+        throw new Error('The Create destination does not match the verified library. Refresh its status first.');
+      }
       this.notice = '';
       const snapshot = mode === 'create' ? null : await prepareLibraryAction({
         daFetch: this.hostActions.daFetch,
@@ -1177,7 +1222,9 @@ class BlockLibraryGeneratorApp extends LitElement {
           startedAt: new Date().toISOString(),
           snapshot,
           error: '',
+          ...(autoCreate ? { autoCreate: true, createDestinations } : {}),
         });
+        preparedFlow = this.pageFlow;
       }
     } catch (error) {
       if (this.libraryController === controller && !controller.signal.aborted) {
@@ -1189,15 +1236,25 @@ class BlockLibraryGeneratorApp extends LitElement {
         this.libraryController = null;
       }
     }
+    if (preparedFlow?.autoCreate && this.pageFlow === preparedFlow) {
+      await this.generatePageSuggestions();
+    }
   }
 
   cancelPageAction() {
-    if (this.workflowBusy) return;
+    const cancellableCreate = this.pageFlow?.autoCreate === true
+      && this.pageFlow.mode === 'create' && !this.pageFlow.autoSaveStarted && !this.libraryCreating;
+    if (this.workflowBusy && !cancellableCreate) return;
     try {
+      if (cancellableCreate) this.resetCardsAnalysis();
       this.savePageFlow(null);
       this.libraryError = '';
     } catch (error) {
       this.libraryError = `Cannot clear the saved page action: ${error.message}`;
+      if (cancellableCreate) {
+        this.pageFlow = null;
+        this.libraryError += ' This tab has stopped creation, but the saved action may resume if reopened.';
+      }
     }
   }
 
@@ -1337,8 +1394,16 @@ class BlockLibraryGeneratorApp extends LitElement {
     this.cardsConfirmed = true;
     this.cardsNewConfirmed = true;
     await this.prepareCardsAnalysis();
-    if (this.cardsState !== 'prepared' || !this.cardsRequest) return;
+    if (!this.isConnected || this.pageFlow !== flow) return;
     try {
+      if (this.cardsState !== 'prepared' || !this.cardsRequest) {
+        if (flow.autoCreate) {
+          this.savePageFlow({
+            ...flow, status: 'failed', error: this.cardsError || 'The analysis request could not be prepared.',
+          });
+        }
+        return;
+      }
       if (Date.parse(this.cardsRequest.createdAt) < Date.parse(flow.startedAt)) {
         throw new Error('Recreation requires a fresh analysis, not an earlier saved result.');
       }
@@ -1346,6 +1411,11 @@ class BlockLibraryGeneratorApp extends LitElement {
         ...flow, jobId: this.cardsRequest.jobId, jobKind: this.cardsRequest.kind, status: 'waiting',
       });
       this.sendCardsAnalysis();
+      if (flow.autoCreate && this.cardsError) {
+        this.savePageFlow({
+          ...this.pageFlow, status: 'failed', error: this.cardsError,
+        });
+      }
     } catch (error) {
       this.libraryError = error instanceof Error ? error.message : String(error);
     }
@@ -1389,6 +1459,42 @@ class BlockLibraryGeneratorApp extends LitElement {
         this.savePageFlow({ ...flow, status: 'failed', error: result.error });
       }
     }, { readOnly: true });
+    await this.completeAutomaticCreate();
+  }
+
+  async completeAutomaticCreate() {
+    const flow = this.pageFlow;
+    if (!flow?.autoCreate || flow.mode !== 'create' || !flow.jobId || flow.autoSaveStarted
+      || !['ready', 'blocked'].includes(flow.status) || flow.name !== this.selectedBlock
+      || !this.isCurrentTarget(flow.target) || this.workflowBusy
+      || this.autoCreateSaveJob === flow.jobId || this.cardsError) return;
+    this.autoCreateSaveJob = flow.jobId;
+    try {
+      if (this.generationPageMode(flow.name) !== 'create') {
+        throw new Error('Create stopped because the page is no longer known to be missing. Existing pages are never replaced automatically.');
+      }
+      if (flow.status === 'blocked') {
+        this.starterAnalysis();
+        this.savePageFlow({
+          ...flow, status: 'ready', starter: true, error: '',
+        });
+      }
+      if (this.pageFlow?.jobId !== flow.jobId || !this.isCurrentTarget(flow.target)) return;
+      this.savePageFlow({ ...this.pageFlow, autoSaveStarted: true });
+      await this.commitPageAction();
+    } catch (error) {
+      if (this.isConnected && this.pageFlow?.jobId === flow.jobId
+        && this.isCurrentTarget(flow.target)) {
+        this.libraryError = error instanceof Error ? error.message : String(error);
+        try {
+          this.savePageFlow({ ...this.pageFlow, status: 'failed', error: this.libraryError });
+        } catch (storageError) {
+          this.libraryError += ` Progress could not be saved: ${storageError.message}`;
+        }
+      }
+    } finally {
+      if (this.autoCreateSaveJob === flow.jobId) this.autoCreateSaveJob = null;
+    }
   }
 
   async commitPageAction() {
@@ -1418,6 +1524,10 @@ class BlockLibraryGeneratorApp extends LitElement {
         this.libraryReviewConfirmed = true;
         await this.generateLibraryDryRun({ starter: flow.starter === true });
         if (!this.libraryPreview) throw new Error(this.libraryError || 'Could not prepare creation.');
+        const { destinations } = this.libraryPreview;
+        if (flow.autoCreate && !sameDestinations(flow.createDestinations, destinations)) {
+          throw new Error('The library destination changed after Create was started. No page was saved.');
+        }
         this.libraryCreationConfirmed = true;
         await this.createApprovedLibrary({ starter: flow.starter === true });
         if (this.libraryError || this.libraryCreationReceipt?.status !== 'completed'
@@ -1526,7 +1636,61 @@ class BlockLibraryGeneratorApp extends LitElement {
     `;
   }
 
+  renderAutomaticCreateAction(flow) {
+    const problem = this.cardsError || this.libraryError || (flow.status === 'blocked' ? '' : flow.error);
+    const failed = ['failed', 'partial'].includes(flow.status) || Boolean(problem);
+    const mayHaveSaved = flow.autoSaveStarted || flow.status === 'partial';
+    const canCancel = !this.workflowBusy || (!flow.autoSaveStarted && !this.libraryCreating);
+    let progress = 'Waiting for analysis in chat...';
+    if (this.cardsBusy) {
+      progress = this.cardsState === 'collecting'
+        ? 'Reading block code and preparing analysis...' : 'Checking the saved analysis...';
+    } else if (this.libraryBusy) {
+      progress = this.libraryCreating ? 'Saving and previewing the page...' : 'Checking the page and library...';
+    } else if (flow.status === 'confirm') {
+      progress = 'Preparing analysis...';
+    } else if (flow.status === 'ready' || flow.status === 'blocked') {
+      progress = flow.starter || flow.status === 'blocked'
+        ? 'Preparing the unfinished default page...' : 'Preparing the example page...';
+    }
+    return html`
+      <section class="workflow-card page-action-confirm" aria-label="Create library page"
+        aria-busy=${this.workflowBusy ? 'true' : 'false'}>
+        <h3>Create ${readableLabel(flow.name)} library page</h3>
+        ${failed ? renderProblem(problem || 'Create was interrupted.', mayHaveSaved
+    ? 'Create did not finish. Refresh and inspect the page and index before another action.'
+    : 'Create could not be completed. No library page was saved.') : html`
+          <div class="create-progress" role="status">
+            <span class="startup-spinner" aria-hidden="true"></span><p>${progress}</p>
+          </div>
+          <p>The page will be saved and previewed automatically.
+            If working examples cannot be generated, an unfinished default page is saved.
+            Approve the analysis-result write in chat if asked. Nothing is published.</p>
+        `}
+        <details class="create-recovery">
+          <summary>Recovery options</summary>
+          ${mayHaveSaved ? html`
+            <p>A save may have been attempted. No automatic retry or rollback is performed.</p>
+            <button type="button" ?disabled=${this.workflowBusy || this.libraryOverviewBusy}
+              @click=${this.refreshWorkspace}>Refresh current state</button>
+          ` : html`
+            <p>If chat has finished but the page is not saved, check for pending approvals
+              and check the result. If preparation was interrupted, cancel and choose Create again.</p>
+            ${flow.jobId ? html`
+              <button type="button" ?disabled=${this.workflowBusy || this.libraryOverviewBusy}
+                @click=${this.loadPageGeneration}>Check result</button>
+            ` : ''}
+          `}
+        </details>
+        <p>Cancelling creation does not stop chat.</p>
+        <button type="button" ?disabled=${!canCancel}
+          @click=${this.cancelPageAction}>${mayHaveSaved && failed ? 'Dismiss saved action' : 'Cancel creation'}</button>
+      </section>
+    `;
+  }
+
   renderCreateAction(flow) {
+    if (flow.autoCreate) return this.renderAutomaticCreateAction(flow);
     const disabled = this.workflowBusy || this.libraryOverviewBusy;
     const receipt = flow.receipt || (flow.jobId
       && this.libraryCreationReceipt?.jobId === flow.jobId ? this.libraryCreationReceipt : null);
@@ -1643,7 +1807,7 @@ class BlockLibraryGeneratorApp extends LitElement {
   renderPageAction() {
     let flow = this.pageFlow;
     if (!flow || flow.name !== this.selectedBlock || flow.status === 'completed') return '';
-    if (flow.status === 'blocked' && ['create', 'recreate'].includes(flow.mode)) {
+    if (!flow.autoCreate && flow.status === 'blocked' && ['create', 'recreate'].includes(flow.mode)) {
       flow = { ...flow, mode: this.generationPageMode(flow.name) || flow.mode };
     }
     if (flow.mode === 'create') return this.renderCreateAction(flow);
@@ -2243,6 +2407,13 @@ class BlockLibraryGeneratorApp extends LitElement {
       }
       if (this.cardsHandoff) throw new Error('Chat handoff already requested; do not resend this job.');
       const prompt = createCardsPrompt(this.cardsRequest);
+      const autoSend = this.pageFlow?.autoCreate === true;
+      if (autoSend && (this.pageFlow.mode !== 'create' || this.pageFlow.status !== 'waiting'
+        || this.pageFlow.jobId !== this.cardsRequest.jobId
+        || this.pageFlow.name !== requestBlockName(this.cardsRequest)
+        || !this.isCurrentTarget(this.pageFlow.target))) {
+        throw new Error('Automatic Create does not match the prepared analysis job.');
+      }
       saveJobPointer(window.localStorage, this.cardsRequest, true);
       this.cardsHandoff = true;
       this.cardsSaved = {
@@ -2250,7 +2421,7 @@ class BlockLibraryGeneratorApp extends LitElement {
       };
       this.cardsState = 'requested';
       this.cardsError = '';
-      this.hostActions.setPrompt(prompt, { autoSend: false });
+      this.hostActions.setPrompt(prompt, { autoSend });
       if (this.isEditorContext) this.hostActions.closeLibrary();
     } catch (error) {
       this.cardsError = error instanceof Error ? error.message : String(error);
@@ -2990,6 +3161,9 @@ class BlockLibraryGeneratorApp extends LitElement {
           </div>
         ` : ''}
         ${entry && ['absent', 'missing-page'].includes(entry.status) && !creating ? html`
+          ${this.isAppsContext ? html`<p>Create runs analysis in chat, saves the page and previews it.
+            If working examples cannot be generated, an unfinished default page is saved.
+            Chat may ask you to approve its result write. Nothing is published.</p>` : ''}
           <div class="page-actions">
             <button class="primary-action" type="button"
               ?disabled=${actionDisabled || !supported}
@@ -3277,7 +3451,7 @@ class BlockLibraryGeneratorApp extends LitElement {
               <ul>${blocks.map((block) => html`
                 <li><button type="button" class="block-nav-item"
                   aria-current=${this.selectedBlock === block.name ? 'true' : 'false'}
-                  ?disabled=${this.libraryCreating}
+                  ?disabled=${this.libraryCreating || this.automaticCreateActive}
                   @click=${() => this.selectBlock(block.name)}>
                   <strong>${readableLabel(block.name)}</strong>
                   <span class="status-badge"

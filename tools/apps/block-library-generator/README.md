@@ -61,29 +61,29 @@ library location.
 ## Create an example page
 
 1. Select a block without an example page and choose **Create**.
-2. Choose **Continue in chat**. The app collects the block's sources and prepares
-   an analysis prompt.
-3. Review and send the prompt in the adjacent chat. Approve the analysis-result
-   write when requested.
-4. When chat finishes, the app checks the saved analysis. You can also choose
-   **Check result**.
-5. Review the outcome and choose **Confirm create page** to save the examples
-   and add the page to the Blocks index.
-6. Choose **Open** to review and edit the page in DA.
+2. The app collects the sources, submits the analysis to chat, validates its
+   result, saves the page and Blocks-index entry, and previews both.
+   **Approve the analysis-result write in chat if requested** by the host.
+3. Choose **Open** when creation finishes, then review and edit the examples in DA.
 
-Sending the prompt does not save a library page. Saving always requires a
-separate confirmation.
+**Create authorizes the whole new-page operation.** There is no separate prompt
+submission or final page-save confirmation. Existing pages are never replaced
+by Create, and nothing is published.
+
+The selected block stays active while creation runs. You can cancel during
+preparation or chat; cancelling does not stop chat. Use **Recovery options** only if a
+step is interrupted or chat finishes without a saved page.
 
 ### When examples cannot be generated
 
-The app explains what information is missing. You can:
+If analysis cannot produce working examples, Create automatically saves a
+clearly labelled unfinished default page instead.
 
-- **Retry analysis** after updating the block's JavaScript or CSS.
-- **Create a default example page** as an unfinished starting point.
-
-A default page uses an inferred layout when available, otherwise one row with
-one empty cell. Open it in DA and replace the instructions with usable values.
-It may render empty or report errors until you supply the required content.
+The default page uses an inferred layout when available, otherwise one row with
+one empty cell. Open it in DA and supply usable values or required external
+content. It may render empty or report errors until completed.
+Source-access errors and invalid analysis results stop creation; they do not
+silently become default pages.
 
 ## Manage existing pages
 
@@ -149,13 +149,14 @@ source does not unpublish an existing delivery copy.
 - Avoid concurrent editing while initializing, recreating or deleting content.
   Detected changes stop the action, but not every DA write is atomic.
 - Page and index writes can partially succeed. Read the reported outcome and
-  inspect the saved content before retrying.
+  inspect the saved content before retrying. An interrupted save is not retried
+  automatically when the app reopens.
 - Preview or temporary-analysis cleanup can fail after a successful save.
   These warnings do not mean the page was lost. For a Preview warning, open the
   reported file in DA and choose **Preview**.
 - If chat ends without a result, check for pending approvals and use
-  **Check result**. Reopening also checks a pending action; it does not resend
-  the prompt.
+  **Recovery options > Check result**. Reopening checks a pending analysis and
+  can finish its authorized Create, but does not resend the prompt.
 - If generation is unavailable, check `nxver=2`, site access and EW/chat
   availability. Authorized library management can still be used without chat.
 

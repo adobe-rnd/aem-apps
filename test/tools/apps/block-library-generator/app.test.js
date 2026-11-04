@@ -385,6 +385,488 @@ describe('Apps docked chat and scoped completion checks', () => {
   }
   const noWrites = (data) => assert.ok(data.calls.every(({ method }) => method === 'GET'));
 
+  function automaticInputs(data, h, { failIndex = false, registered = false } = {}) {
+    const root = 'https://admin.da.live/source/example-org/demo';
+    const pageURL = `${root}/docs/library/blocks/hero.html`;
+    const indexURL = `${root}/docs/library/blocks.json`;
+    const heroURL = 'https://content.da.live/example-org/demo/docs/library/blocks/hero';
+    ['/blocks/hero/hero.js', '/styles/styles.css', '/styles/lazy-styles.css'].forEach((path) => {
+      data.files.set(`https://main--demo--example-org.preview.da.live${path}`, new Response('', {
+        headers: { 'Content-Type': path.endsWith('.js') ? 'text/javascript' : 'text/css' },
+      }));
+    });
+    data.files.set(`${root}/index.html`, new Response('<main>Home</main>', {
+      headers: { 'Content-Type': 'text/html' },
+    }));
+    data.files.set('https://admin.da.live/config/example-org/demo', {
+      library: { data: [{ title: 'Blocks', path: 'https://content.da.live/example-org/demo/docs/library/blocks.json' }] },
+    });
+    const destinations = library.getBlockLibraryPaths({
+      library: { data: [{ title: 'Blocks', path: 'https://content.da.live/example-org/demo/docs/library/blocks.json' }] },
+    }, h.app.probeTarget, 'hero');
+    h.app.libraryOverview.paths = destinations;
+    h.app.libraryOverview.blocks.hero.pagePath = destinations.pagePath;
+    const rows = registered ? [{ name: 'Hero', path: heroURL }] : [];
+    data.files.set(indexURL, Response.json({
+      ':type': 'sheet', total: rows.length, limit: rows.length, offset: 0, data: rows,
+    }, { headers: { ETag: '"auto-index1"' } }));
+    if (registered) h.app.libraryOverview.blocks.hero.status = 'missing-page';
+    const original = h.app.hostActions.daFetch;
+    h.app.hostActions.daFetch = async (url, options) => {
+      if (options.method === 'GET' && url === pageURL && data.files.get(url) instanceof Response) {
+        const page = data.files.get(url);
+        return new Response(await page.clone().text(), {
+          status: page.status, headers: page.headers,
+        });
+      }
+      if (options.method !== 'PUT' || ![pageURL, indexURL].includes(url)) {
+        return original(url, options);
+      }
+      data.calls.push({ url, method: options.method });
+      if (url === pageURL) {
+        assert.equal(options.headers['If-None-Match'], '*');
+        if (data.files.has(url)) return new Response(null, { status: 412 });
+        data.files.set(url, new Response(await options.body.get('data').text(), {
+          headers: { 'Content-Type': 'text/html', ETag: '"auto-page1"' },
+        }));
+      } else {
+        assert.equal(options.headers['If-Match'], '"auto-index1"');
+        if (failIndex) return new Response(null, { status: 412 });
+        data.files.set(url, Response.json(JSON.parse(await options.body.get('data').text()), {
+          headers: { ETag: '"auto-index2"' },
+        }));
+      }
+      return new Response(null, { status: 201 });
+    };
+    return {
+      root, pageURL, indexURL, heroURL, destinations,
+    };
+  }
+
+  it('starts new-page Create from its first click and submits the owned prompt automatically', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    await h.app.beginPageAction('create');
+    assert.equal(h.app.pageFlow.status, 'waiting');
+    assert.equal(h.app.pageFlow.autoCreate, true);
+    assert.equal(data.prompts.length, 1);
+    assert.equal(data.prompts[0].options.autoSend, true);
+    assert.equal(data.closed.length, 0);
+    assert.equal(data.files.has(paths.pageURL), false);
+    assert.equal(data.calls.filter(({ method, url }) => method === 'PUT' && url === paths.indexURL).length, 0);
+  });
+
+  it('validates, saves, previews and cleans a ready Create without another user action', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    await h.app.beginPageAction('create');
+    const request = h.app.cardsRequest;
+    result(data, request);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow, null);
+    assert.equal(h.app.libraryError, '');
+    assert.equal(h.app.libraryCreationReceipt.status, 'completed');
+    assert.equal(h.app.jobCleanupReceipt.status, 'completed');
+    assert.equal(data.files.has(`${paths.root}${request.requestPath}`), false);
+    assert.equal(data.files.has(`${paths.root}${request.resultPath}`), false);
+    const page = await data.files.get(paths.pageURL).clone().text();
+    assert.match(page, /class="hero"/);
+    const index = await data.files.get(paths.indexURL).clone().json();
+    assert.deepEqual(index.data, [{ name: 'Hero', path: paths.heroURL }]);
+    assert.ok(h.app.libraryPreviewReceipts.every((receipt) => receipt.status === 'completed'));
+    assert.ok(data.calls.every(({ url }) => !url.includes('/live/')));
+    const writes = data.calls.filter(({ method }) => method === 'PUT').length;
+    await data.emitTurn(turn({ turnId: 'duplicate-after-save' }));
+    assert.equal(data.calls.filter(({ method }) => method === 'PUT').length, writes);
+  });
+
+  it('automatically saves an inferred blocked starter and retains the blocked job', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    await h.app.beginPageAction('create');
+    const request = h.app.cardsRequest;
+    const value = result(data, request, 'blocked');
+    value.payload.analysis.generation.starter = {
+      body: [['Replace with a usable value']], evidence: ['/blocks/hero/hero.js'],
+    };
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow, null);
+    assert.match(h.app.notice, /starter page created/);
+    const page = await data.files.get(paths.pageURL).clone().text();
+    assert.match(page, /Unfinished starter, not a working example/);
+    assert.match(page, /Replace with a usable value/);
+    assert.equal(data.files.has(`${paths.root}${request.requestPath}`), true);
+    assert.equal(data.files.has(`${paths.root}${request.resultPath}`), true);
+    assert.equal(h.app.jobCleanupReceipt, null);
+  });
+
+  it('automatically uses the empty-cell fallback when a valid blocked analysis has no starter', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    await h.app.beginPageAction('create');
+    result(data, h.app.cardsRequest, 'blocked');
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow, null);
+    const page = await data.files.get(paths.pageURL).clone().text();
+    assert.match(page, /class="hero">\s*<div>\s*<div><\/div>/);
+    assert.match(page, /Unfinished starter/);
+  });
+
+  it('keeps new Create controls automatic and places manual checks under recovery options', async () => {
+    const { data, h } = await setup();
+    automaticInputs(data, h);
+    await h.app.beginPageAction('create');
+    const view = JSON.stringify(h.app.renderPageAction());
+    assert.doesNotMatch(view, /Continue in chat|Confirm create page|Review and send/);
+    assert.match(view, /Recovery options/);
+    assert.match(view, /approve|approval/i);
+    assert.match(view, /Cancel creation/);
+  });
+
+  it('never promotes an automatic blocked Create into replacement if a page appears', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    await h.app.beginPageAction('create');
+    const request = h.app.cardsRequest;
+    result(data, request, 'blocked');
+    data.files.set(paths.pageURL, new Response('<body>New author page</body>', {
+      headers: { 'Content-Type': 'text/html' },
+    }));
+    h.app.libraryOverview.blocks.hero.status = 'existing';
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow.mode, 'create');
+    assert.equal(h.app.pageFlow.status, 'failed');
+    assert.equal(await data.files.get(paths.pageURL).clone().text(), '<body>New author page</body>');
+    assert.equal(data.calls.filter(({ url, method }) => method === 'PUT' && url === paths.pageURL).length, 0);
+    assert.equal(data.files.has(`${paths.root}${request.resultPath}`), true);
+  });
+
+  it('retains the conditional-create conflict guard if an existing page is not yet in the overview', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    await h.app.beginPageAction('create');
+    result(data, h.app.cardsRequest);
+    data.files.set(paths.pageURL, new Response('<body>Concurrent author page</body>', {
+      headers: { 'Content-Type': 'text/html' },
+    }));
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow.status, 'failed');
+    assert.match(h.app.libraryError, /exist|Overwrite/i);
+    assert.equal(await data.files.get(paths.pageURL).clone().text(), '<body>Concurrent author page</body>');
+  });
+
+  it('does not save or create a fallback from malformed or wrong-job results', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    await h.app.beginPageAction('create');
+    const value = result(data, h.app.cardsRequest, 'blocked');
+    value.jobId = crypto.randomUUID();
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow.status, 'waiting');
+    assert.ok(h.app.cardsError);
+    assert.equal(data.files.has(paths.pageURL), false);
+  });
+
+  it('refuses a library destination change instead of saving outside the initial Create target', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    await h.app.beginPageAction('create');
+    result(data, h.app.cardsRequest);
+    data.files.set('https://admin.da.live/config/example-org/demo', {
+      library: { data: [{ title: 'Blocks', path: 'https://content.da.live/example-org/demo/another-library/blocks.json' }] },
+    });
+    data.files.set(`${paths.root}/another-library/blocks.json`, Response.json({
+      ':type': 'sheet', total: 0, limit: 0, offset: 0, data: [],
+    }, { headers: { ETag: '"another-index"' } }));
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow.status, 'failed');
+    assert.match(h.app.libraryError, /destination.*changed|changed.*destination/i);
+    assert.equal(data.calls.filter(({ method, url }) => method === 'PUT' && url.includes('/another-library/')).length, 0);
+    assert.equal(data.files.has(paths.pageURL), false);
+  });
+
+  it('does not duplicate a registered missing-page index entry during automatic Create', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h, { registered: true });
+    await h.app.beginPageAction('create');
+    result(data, h.app.cardsRequest);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow, null);
+    const index = await data.files.get(paths.indexURL).clone().json();
+    assert.equal(index.data.length, 1);
+    assert.equal(index.data[0].path, paths.heroURL);
+  });
+
+  it('stops on preparation errors without sending chat or manufacturing a default page', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    data.files.delete('https://main--demo--example-org.preview.da.live/blocks/hero/hero.js');
+    await h.app.beginPageAction('create');
+    assert.equal(h.app.pageFlow.status, 'failed');
+    assert.match(h.app.cardsError, /404/);
+    assert.equal(data.prompts.length, 0);
+    assert.equal(data.files.has(paths.pageURL), false);
+    assert.equal(data.calls.filter(({ method }) => method === 'PUT').length, 0);
+  });
+
+  it('cancels automatic preparation and discards late results without starting another action', async () => {
+    const { data, h } = await setup();
+    automaticInputs(data, h);
+    const original = data.actions.daFetch;
+    let finish;
+    data.actions.daFetch = async (url, options) => {
+      if (url.endsWith('/blocks/hero/hero.js')) await new Promise((resolve) => { finish = resolve; });
+      return original(url, options);
+    };
+    const pending = h.app.beginPageAction('create');
+    await settle();
+    assert.equal(h.app.cardsBusy, true);
+    h.app.cancelPageAction();
+    finish();
+    await pending;
+    assert.equal(h.app.pageFlow, null);
+    assert.equal(data.prompts.length, 0);
+    assert.equal(data.calls.filter(({ method }) => method === 'PUT').length, 0);
+  });
+
+  it('cancels a waiting automatic Create without cancelling chat or saving its late result', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    await h.app.beginPageAction('create');
+    const request = h.app.cardsRequest;
+    h.app.cancelPageAction();
+    result(data, request);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow, null);
+    assert.equal(data.files.has(paths.pageURL), false);
+    assert.equal(data.files.has(`${paths.root}${request.requestPath}`), true);
+    assert.equal(data.files.has(`${paths.root}${request.resultPath}`), true);
+  });
+
+  it('stops this tab after Cancel even if its saved cancellation cannot be persisted', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    await h.app.beginPageAction('create');
+    const request = h.app.cardsRequest;
+    const original = data.storage.setItem;
+    data.storage.setItem = () => { throw new Error('Storage unavailable'); };
+    h.app.cancelPageAction();
+    assert.equal(h.app.pageFlow, null);
+    assert.match(h.app.libraryError, /Storage unavailable/);
+    assert.match(h.app.libraryError, /reopen|resume/i);
+    data.storage.setItem = original;
+    result(data, request);
+    await data.emitTurn(turn());
+    assert.equal(data.files.has(paths.pageURL), false);
+  });
+
+  it('does not save a page if the durable automatic-save marker cannot be persisted', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    await h.app.beginPageAction('create');
+    const original = data.storage.setItem;
+    data.storage.setItem = (key, value) => {
+      if (value.includes('"autoSaveStarted":true')) throw new Error('Cannot persist save attempt');
+      return original(key, value);
+    };
+    result(data, h.app.cardsRequest);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow.status, 'failed');
+    assert.match(h.app.libraryError, /Cannot persist save attempt/);
+    assert.equal(data.files.has(paths.pageURL), false);
+    assert.equal(data.calls.filter(({ method, url }) => (
+      method === 'PUT' && [paths.pageURL, paths.indexURL].includes(url)
+    )).length, 0);
+  });
+
+  it('keeps the active automatic Create selected until it finishes or is cancelled', async () => {
+    const { data, h } = await setup();
+    automaticInputs(data, h);
+    await h.app.beginPageAction('create');
+    await h.app.selectBlock('columns');
+    assert.equal(h.app.selectedBlock, 'hero');
+    assert.match(h.app.chatNotice, /cancel|finish|Wait/i);
+  });
+
+  it('never automatically retries a partial page/index write on another event or reopen', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h, { failIndex: true });
+    await h.app.beginPageAction('create');
+    const request = h.app.cardsRequest;
+    result(data, request);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow.status, 'partial');
+    assert.equal(h.app.pageFlow.autoSaveStarted, true);
+    assert.equal(data.files.has(paths.pageURL), true);
+    const writes = data.calls.filter(({ method }) => method === 'PUT').length;
+    await data.emitTurn(turn({ turnId: 'after-partial' }));
+    assert.equal(data.calls.filter(({ method }) => method === 'PUT').length, writes);
+    h.disconnect();
+    const reopened = await harness(data, { hash: appsContext.hash });
+    reopened.app.refreshWorkspace = async () => {};
+    await reopened.connect({ context: appsContext, capabilities: { chatTurnCompleted: 1 } });
+    assert.equal(reopened.app.pageFlow.status, 'partial');
+    assert.equal(data.calls.filter(({ method }) => method === 'PUT').length, writes);
+  });
+
+  it('restores a save-attempt marker as interrupted instead of automatically attempting the write again', async () => {
+    const { data, h } = await setup();
+    const { destinations } = automaticInputs(data, h);
+    const request = waiting(data, h.app);
+    result(data, request);
+    h.app.savePageFlow({
+      ...h.app.pageFlow,
+      autoCreate: true,
+      autoSaveStarted: true,
+      status: 'ready',
+      createDestinations: destinations,
+    });
+    h.disconnect();
+    const reopened = await harness(data, { hash: appsContext.hash });
+    reopened.app.refreshWorkspace = async () => {};
+    await reopened.connect({ context: appsContext, capabilities: { chatTurnCompleted: 1 } });
+    assert.equal(reopened.app.pageFlow.status, 'partial');
+    assert.match(reopened.app.pageFlow.error, /interrupted|inspect/i);
+    noWrites(data);
+  });
+
+  it('does not opt old saved manual Create actions into automatic saving', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    const request = waiting(data, h.app);
+    result(data, request);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow.status, 'ready');
+    assert.equal(h.app.pageFlow.autoCreate, undefined);
+    assert.equal(data.files.has(paths.pageURL), false);
+    noWrites(data);
+  });
+
+  it('rejects saved automatic intent attached to Recreate instead of authorizing replacement', async () => {
+    const { data, h } = await setup();
+    waiting(data, h.app);
+    const key = h.app.pageFlowKey();
+    data.storage.setItem(key, JSON.stringify({ ...h.app.pageFlow, autoCreate: true, mode: 'recreate' }));
+    h.app.restorePageFlow();
+    assert.equal(h.app.pageFlow, null);
+    assert.match(h.app.libraryError, /automatic|Create/i);
+    noWrites(data);
+  });
+
+  it('keeps Apps Recreate manual, with a fresh analysis and explicit whole-page replacement', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h, { registered: true });
+    h.app.libraryOverview.blocks.hero = { status: 'existing', pagePath: '/docs/library/blocks/hero.html' };
+    data.files.set(paths.pageURL, new Response('<body>Author edits</body>', {
+      headers: { 'Content-Type': 'text/html', ETag: '"author1"' },
+    }));
+    await h.app.beginPageAction('recreate');
+    assert.equal(h.app.pageFlow.status, 'confirm');
+    assert.equal(h.app.pageFlow.autoCreate, undefined);
+    assert.equal(data.prompts.length, 0);
+    await h.app.generatePageSuggestions();
+    assert.equal(data.prompts[0].options.autoSend, false);
+    result(data, h.app.cardsRequest);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow.status, 'ready');
+    assert.match(JSON.stringify(h.app.renderPageAction()), /Confirm replace entire page/);
+    assert.equal(await data.files.get(paths.pageURL).clone().text(), '<body>Author edits</body>');
+  });
+
+  it('continues a waiting automatic Create from a validated result after reopening without resending chat', async () => {
+    const { data, h } = await setup();
+    automaticInputs(data, h);
+    await h.app.beginPageAction('create');
+    const request = h.app.cardsRequest;
+    result(data, request);
+    h.disconnect();
+    const reopened = await harness(data, { hash: appsContext.hash });
+    reopened.app.refreshWorkspace = async () => {};
+    await reopened.connect({ context: appsContext, capabilities: { chatTurnCompleted: 1 } });
+    reopened.app.discoveryResult = {
+      complete: true, blocks: [{ name: 'hero', files: [{ path: '/blocks/hero/hero.js' }] }],
+    };
+    reopened.app.libraryOverview = { blocks: { hero: { status: 'absent' } } };
+    reopened.app.selectedBlock = 'hero';
+    reopened.app.parseAnalysisHTML = h.app.parseAnalysisHTML;
+    const paths = automaticInputs(data, reopened);
+    await reopened.app.loadPageGeneration();
+    assert.equal(reopened.app.pageFlow, null);
+    assert.equal(data.prompts.length, 1);
+    assert.equal(data.files.has(paths.pageURL), true);
+    assert.equal(data.files.has(`${paths.root}${request.requestPath}`), false);
+  });
+
+  it('does not re-dispatch an interrupted automatic preparation after reopening', async () => {
+    const { data, h } = await setup();
+    const { destinations } = automaticInputs(data, h);
+    h.app.savePageFlow({
+      mode: 'create',
+      autoCreate: true,
+      name: 'hero',
+      environment: 'prod',
+      status: 'confirm',
+      startedAt: new Date().toISOString(),
+      createDestinations: destinations,
+    });
+    h.disconnect();
+    const reopened = await harness(data, { hash: appsContext.hash });
+    reopened.app.refreshWorkspace = async () => {};
+    await reopened.connect({ context: appsContext, capabilities: { chatTurnCompleted: 1 } });
+    assert.equal(reopened.app.pageFlow.status, 'failed');
+    assert.match(reopened.app.pageFlow.error, /interrupted/);
+    assert.equal(data.prompts.length, 0);
+    noWrites(data);
+  });
+
+  it('surfaces a synchronous chat handoff failure instead of leaving Create apparently running', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    h.app.hostActions.setPrompt = () => { throw new Error('Chat port closed'); };
+    await h.app.beginPageAction('create');
+    assert.equal(h.app.pageFlow.status, 'failed');
+    assert.match(h.app.cardsError, /Chat port closed/);
+    assert.equal(data.files.has(paths.pageURL), false);
+  });
+
+  it('does not replace a malformed inferred starter with a success-shaped empty fallback', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    await h.app.beginPageAction('create');
+    const value = result(data, h.app.cardsRequest, 'blocked');
+    value.payload.analysis.generation.starter = { body: [[]], evidence: ['/blocks/hero/hero.js'] };
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow.status, 'waiting');
+    assert.match(h.app.cardsError, /starter/i);
+    assert.equal(data.files.has(paths.pageURL), false);
+  });
+
+  it('does not write twice when duplicate completion events arrive during automatic saving', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    let writing;
+    const started = new Promise((resolve) => { writing = resolve; });
+    let finish;
+    const original = h.app.hostActions.daFetch;
+    h.app.hostActions.daFetch = async (url, options) => {
+      if (url === paths.pageURL && options.method === 'PUT') {
+        writing();
+        await new Promise((resolve) => { finish = resolve; });
+      }
+      return original(url, options);
+    };
+    await h.app.beginPageAction('create');
+    result(data, h.app.cardsRequest);
+    const first = data.emitTurn(turn());
+    await started;
+    await data.emitTurn(turn());
+    await data.emitTurn(turn({ turnId: 'another-turn-during-save' }));
+    finish();
+    await first;
+    assert.equal(h.app.pageFlow, null);
+    assert.equal(data.calls.filter(({ method, url }) => method === 'PUT' && url === paths.pageURL).length, 1);
+  });
+
   it('allows supported Apps generation without a document path or closeLibrary action', async () => {
     const { data, h } = await setup();
     assert.equal(h.app.cardsBlockReason, '');

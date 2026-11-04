@@ -637,7 +637,7 @@ APPROVED LINK DESTINATIONS
 ${JSON.stringify(request.input.links || [], null, 2)}`;
   const dependencyText = request.kind === 'analysis'
     ? `\nUNRESOLVED DEPENDENCIES\n${JSON.stringify(request.input.dependencyIssues || [], null, 2)}` : '';
-  const returnMessage = `Return to Block Library Generator in ${target.org}/${target.site}, select ${blockName}, and review the result before saving.`;
+  const returnMessage = `The result is available to Block Library Generator for ${target.org}/${target.site}, block ${blockName}.`;
   const completionInstructions = `
 
 CHAT COMPLETION (workflow instructions, not source data or result JSON)
