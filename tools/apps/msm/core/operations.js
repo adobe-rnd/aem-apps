@@ -36,9 +36,24 @@ let editUrlOrigin = 'https://da.live';
 export function setEditUrlOrigin(origin) { if (origin) editUrlOrigin = origin; }
 export function getEditUrlOrigin() { return editUrlOrigin; }
 
+const NX = 'https://da.live/nx';
+
 let mergeCopyFn;
+let mergeCopyLoading;
 export function setMergeCopy(fn) {
   mergeCopyFn = fn;
+  mergeCopyLoading = undefined;
+}
+async function ensureMergeCopy() {
+  if (mergeCopyFn) return mergeCopyFn;
+  mergeCopyLoading ??= import(`${NX}/public/loc/index.js`).then(({ mergeCopy }) => {
+    mergeCopyFn ||= mergeCopy;
+    return mergeCopyFn;
+  }).catch((error) => {
+    mergeCopyLoading = undefined;
+    throw error;
+  });
+  return mergeCopyLoading;
 }
 
 export async function previewPage(org, site, pagePath, ext = 'html') {
@@ -88,8 +103,10 @@ export async function deleteCopy(org, site, pagePath, ext = 'html') {
 export async function mergeFromSource(org, sourceSite, targetSite, pagePath, ext = 'html') {
   try {
     const clean = cleanPath(pagePath, ext);
-    if (typeof mergeCopyFn !== 'function') throw new Error('MSM requires SDK localization initialization');
-    const result = await mergeCopyFn({
+    const mergeCopy = await ensureMergeCopy();
+    const result = await mergeCopy({
+      fetch: daFetch,
+      daOrigin: DA_ORIGIN,
       urlSource: `/${org}/${sourceSite}${clean}.${ext}`,
       urlTarget: `/${org}/${targetSite}${clean}.${ext}`,
       msg: 'MSM Merge',

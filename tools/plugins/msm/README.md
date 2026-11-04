@@ -84,7 +84,8 @@ current site from its source), two modes are available:
 
 - **Merge** — runs a 3-way merge that preserves local edits in the linked site
   while pulling in changes from the source. Backed by the
-  SDK's lazy `actions.loc.mergeCopy`; the SDK supplies transport and origin.
+  public `mergeCopy` from `nx/public/loc`, loaded lazily and called with the
+  SDK's `daFetch` and `DA_ORIGIN`.
   Configuration comes from the destination site.
 - **Replace** — replaces the linked site's content with the source's content.
   Local edits are lost.
@@ -108,19 +109,18 @@ dependency wiring also differs:
 | `daFetch`          | `blocks/shared/utils.js`                        | `DA_SDK.actions.daFetch`, plumbed in via `setSdkFetch`             |
 | `DA_ORIGIN`        | `blocks/shared/constants.js`                    | `admin.da.live`, defined in the shared `core/fetch.js`             |
 | NX URL             | `getNx()` (versioned/branch-aware)              | Hardcoded `https://da.live/nx`                                     |
-| `mergeCopy`        | Dynamic import via `getNx()`                    | Injected `DA_SDK.actions.loc.mergeCopy` |
+| `mergeCopy`        | Dynamic import via `getNx()`                    | Dynamic import of public `nx/public/loc/index.js` via the hardcoded NX URL |
 | UI primitives      | `se-*` components from `${nx}/public/se/components.js`   | Own plain `<button>` elements styled in `msm.css` (no `se-*`/`sl-*` component lib); base typography via nexter (`loadStyle` / `getStyle`) |
 | Icons              | Relative paths `/blocks/edit/img/...`           | Shared `core/icons.js` — inline `<svg><use>` from SVGs in `core/img/` |
 | Edit-link origin   | `window.location.origin` (always da.live)       | Derived from `document.referrer`; falls back to `https://da.live`  |
 
 ## NX dependency boundary
 
-Both MSM entrypoints inject `DA_SDK.actions.daFetch` and
-`DA_SDK.actions.loc.mergeCopy`. Shared core imports neither private NX modules
-nor the public loc core directly. Merge passes operation data only; the SDK
-binds transport and origin. The domain-wide IMS shim is removed.
-DA-backed sites only; no HLX6 expansion. Deploy da-nx's SDK loc actions before
-merging this migration.
+Both MSM entrypoints inject `DA_SDK.actions.daFetch`. Shared core lazily
+imports the public `mergeCopy` from `nx/public/loc` and passes it that fetch,
+`DA_ORIGIN`, paths, and message; it imports no private NX modules. The
+domain-wide IMS shim is removed. DA-backed sites only; no HLX6 expansion.
+Deploy da-nx's public loc helpers before merging this migration.
 
 Other private dependencies remain outside this change:
 

@@ -20,21 +20,21 @@ import assert from 'node:assert/strict';
 import {
   mergeFromSource, setMergeCopy, setEditUrlOrigin,
 } from '../../../../../tools/apps/msm/core/operations.js';
-import { setDaFetch } from '../../../../../tools/apps/msm/core/fetch.js';
+import { setDaFetch, daFetch, DA_ORIGIN } from '../../../../../tools/apps/msm/core/fetch.js';
 
 after(() => {
   setDaFetch(undefined);
   setMergeCopy(undefined);
 });
 
-describe('MSM SDK localization integration', () => {
+describe('MSM public loc merge', () => {
   beforeEach(() => {
     setMergeCopy(undefined);
     setDaFetch(undefined);
     setEditUrlOrigin('https://da.live');
   });
 
-  it('uses the injected SDK loc action without app-side transport wiring', async () => {
+  it('passes SDK fetch, DA origin, paths, and message to mergeCopy', async () => {
     let args;
     setMergeCopy(async (options) => {
       args = options;
@@ -45,15 +45,23 @@ describe('MSM SDK localization integration', () => {
       ok: true, editUrl: 'https://da.live/edit#/org/target/en/page',
     });
     assert.deepEqual(args, {
+      fetch: daFetch,
+      daOrigin: DA_ORIGIN,
       urlSource: '/org/source/en/page.html',
       urlTarget: '/org/target/en/page.html',
       msg: 'MSM Merge',
     });
   });
 
-  it('reports missing SDK initialization instead of importing private auth', async () => {
-    const result = await mergeFromSource('org', 'source', 'target', '/page');
-    assert.equal(result.error, 'MSM requires SDK localization initialization');
+  it('routes merge requests through the SDK fetch', async () => {
+    const requests = [];
+    setDaFetch(async (url) => {
+      requests.push(url);
+      return { ok: true };
+    });
+    setMergeCopy(async ({ fetch, daOrigin, urlTarget }) => fetch(`${daOrigin}/source${urlTarget}`));
+    assert.equal((await mergeFromSource('org', 'source', 'target', '/page')).ok, true);
+    assert.deepEqual(requests, [`${DA_ORIGIN}/source/org/target/page.html`]);
   });
 
   it('retains copy error details for the caller', async () => {
@@ -62,7 +70,7 @@ describe('MSM SDK localization integration', () => {
     assert.equal(result.error, 'Source read failed (401)');
   });
 
-  it('uses the current SDK loc action after initialization changes', async () => {
+  it('uses the current mergeCopy after it is replaced', async () => {
     setMergeCopy(async () => ({ ok: true }));
     assert.equal((await mergeFromSource('org', 'source', 'target', '/page')).ok, true);
     let calls = 0;
@@ -74,21 +82,7 @@ describe('MSM SDK localization integration', () => {
     assert.equal(calls, 1);
   });
 
-  it('passes only operation data to the SDK loc action', async () => {
-    let args;
-    setMergeCopy(async (options) => {
-      args = options;
-      return { ok: true };
-    });
-    assert.equal((await mergeFromSource('org', 'source', 'target', '/page')).ok, true);
-    assert.deepEqual(args, {
-      urlSource: '/org/source/page.html',
-      urlTarget: '/org/target/page.html',
-      msg: 'MSM Merge',
-    });
-  });
-
-  it('shares the injected SDK loc action across concurrent merges', async () => {
+  it('shares mergeCopy across concurrent merges', async () => {
     let calls = 0;
     setMergeCopy(async () => {
       calls += 1;
@@ -101,7 +95,7 @@ describe('MSM SDK localization integration', () => {
     assert.equal(calls, 6);
   });
 
-  it('preserves SDK denial details for the caller', async () => {
+  it('preserves transport denial details for the caller', async () => {
     setMergeCopy(async () => ({
       ok: false, status: 500, error: 'Outside permitted scope', code: 'denied',
     }));
@@ -110,7 +104,7 @@ describe('MSM SDK localization integration', () => {
     });
   });
 
-  it('reports a rejected SDK action without retrying', async () => {
+  it('reports a rejected merge without retrying', async () => {
     let calls = 0;
     setMergeCopy(async () => {
       calls += 1;
