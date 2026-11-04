@@ -126,9 +126,15 @@ async function harness(data, {
   const sdkPromise = new Promise((resolve) => { resolveSdk = resolve; });
   const timers = new Map();
   const navigations = [];
+  const reloads = [];
   const window = {
     localStorage: data.storage,
-    location: { hash, hostname: new URL(href).hostname },
+    location: {
+      hash,
+      hostname: new URL(href).hostname,
+      search: new URL(href).search,
+      reload: () => { reloads.push(window.location.hash); },
+    },
     open: (url, target) => { navigations.push({ url, target }); return {}; },
     matchMedia: () => ({ matches: wide }),
     fetch: async (url, options) => {
@@ -252,6 +258,8 @@ async function harness(data, {
     app,
     timers,
     navigations,
+    reloads,
+    location: window.location,
     async connect(overrides = {}) {
       resolveSdk({
         context: {
@@ -290,10 +298,10 @@ describe('Apps docked chat and scoped completion checks', () => {
     ...values,
   });
   async function setup({
-    context = appsContext, capabilities = { chatTurnCompleted: 1 }, actions,
+    context = appsContext, capabilities = { chatTurnCompleted: 1 }, actions, href,
   } = {}) {
     const data = fixtures();
-    const h = await harness(data, { hash: context.hash || '#/example-org/demo' });
+    const h = await harness(data, { hash: context.hash || '#/example-org/demo', href });
     h.app.refreshWorkspace = async () => {};
     await h.connect({ context, capabilities, ...(actions ? { actions } : {}) });
     h.app.discoveryResult = {
@@ -422,6 +430,35 @@ describe('Apps docked chat and scoped completion checks', () => {
     assert.equal(url.searchParams.get('nxver'), '2');
     assert.equal(url.searchParams.get('da-admin'), 'prod');
     assert.equal(h.app.context.site, 'demo');
+    assert.equal(data.calls.length, 0);
+  });
+
+  it('reloads the iframe with the new target when the parent navigation changes only its hash', async () => {
+    const { data, h } = await setup({
+      href: 'https://blocklibgen--aem-apps--adobe-rnd.preview.da.live/tools/apps/block-library-generator/block-library-generator.html?nxver=2&ref=blocklibgen&da-admin=prod',
+    });
+    h.app.manualOrg = 'msagolj';
+    h.app.manualSite = 'frescopa';
+    await h.app.applySiteTarget();
+    assert.equal(h.navigations.length, 1);
+    assert.equal(new URL(h.navigations[0].url).hash, '#/msagolj/frescopa');
+    assert.deepEqual(h.reloads, ['#/msagolj/frescopa']);
+    assert.equal(h.location.hash, '#/msagolj/frescopa');
+    assert.equal(h.app.context.site, 'demo');
+    assert.equal(data.calls.length, 0);
+  });
+
+  it('lets a full parent navigation reload the iframe when the query also changes', async () => {
+    const { data, h } = await setup({
+      href: 'https://blocklibgen--aem-apps--adobe-rnd.preview.da.live/tools/apps/block-library-generator/block-library-generator.html?nxver=2&ref=blocklibgen&da-admin=prod&ew=true',
+    });
+    h.app.manualOrg = 'msagolj';
+    h.app.manualSite = 'frescopa';
+    await h.app.applySiteTarget();
+    assert.equal(h.navigations.length, 1);
+    assert.equal(new URL(h.navigations[0].url).hash, '#/msagolj/frescopa');
+    assert.equal(h.reloads.length, 0);
+    assert.equal(h.location.hash, '#/example-org/demo');
     assert.equal(data.calls.length, 0);
   });
 

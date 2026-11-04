@@ -398,9 +398,14 @@ class BlockLibraryGeneratorApp extends LitElement {
         org: this.manualOrg.trim(), site: this.manualSite.trim(), branch: 'main',
       });
       if (this.isAppsContext && !fromLink && !this.appsTargetMatches(target)) {
-        const url = this.appsSiteURL(target);
+        const url = new URL(this.appsSiteURL(target));
         window.localStorage.setItem('block-library-generator:last-site:prod', JSON.stringify(target));
-        if (!window.open(url, '_top')) throw new Error('The Apps site could not be opened. Use the site link to continue.');
+        if (!window.open(url.href, '_top')) throw new Error('The Apps site could not be opened. Use the site link to continue.');
+        // A hash-only parent navigation does not refresh the iframe or its SDK context.
+        if (window.location.search === url.search) {
+          window.location.hash = url.hash;
+          window.location.reload();
+        }
         return;
       }
       this.stopChatNotifications();

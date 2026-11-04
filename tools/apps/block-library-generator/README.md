@@ -1,270 +1,182 @@
-# Block Library Generator V1
+# Block Library Generator
 
-Create an initial block library from an Edge Delivery Services site's JavaScript
-and CSS. The generator analyses one block at a time, proposes authorable examples,
-and saves a library page that authors can review and edit in DA.
+Generate a block library with example pages from an Edge Delivery Services site's
+JavaScript and CSS. Use the examples as a starting point, then review and edit
+them in DA.
 
-**V1 supports Production DA only. Nothing is published.**
+The app runs in **DA Apps** and uses **Production DA**. It previews saved content
+but never publishes it.
 
-## Supported launch
+## Open the app
 
-Use **DA Apps** for discovery, library setup, generation and page management.
-Choose the content organization/site; its block-code branch is `main`.
+[Open Block Library Generator](https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator?nxver=2&ref=blocklibgen)
 
-Apps generation does not require an open document. It uses the nx2 shell
-(`nxver=2`) and the target site's enabled Experience Workspace chat. The generator
-checks the host's advertised completion-event capability, not just SDK method
-names. Unsupported hosts still allow authorized library management.
-The editor extension is retired. Direct HTML and editor-extension launches are
-rejected; there is no alternate editor entry or migration launch screen.
-The HTML entry file remains an internal iframe resource used by the Apps shell.
+You need:
 
-## Try the hosted branch (no local setup)
+- A DA login with access to the site's code, content, configuration and Preview.
+- Experience Workspace chat enabled for the selected site or through your
+  browser's supported EW opt-in.
 
-Once `blocklibgen` has been pushed and AEM Code Sync has made the branch available,
-testers can use it without cloning the repository, installing tools or running
-localhost. These URLs are for that branch, not the current `main` version.
+Enter the content **Organization** and **Site**, then choose **Use site**.
+You do not need to open a document in the editor.
 
-Sign in to Production DA with access to the target site's code, source files,
-configuration and Preview operations. Generation requires supported chat and
-content-tool integration in Apps.
-
-### Generate through Apps
-
-Open the [hosted branch in DA Apps](https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator?nxver=2&ref=blocklibgen&da-admin=prod),
-choose the content organization/site, then choose **Use site**. This navigates the
-Apps wrapper to the selected site so the generator and chat share the same target.
-An Apps-index tile can use the same shell URL.
-
-Site-specific example:
+To open a particular site directly, append `#/organization/site`:
 
 ```text
-https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator?nxver=2&ref=blocklibgen&da-admin=prod#/organization/site
+https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator?nxver=2&ref=blocklibgen#/organization/site
 ```
 
-Use the canonical `#/organization/site` hash. Older `#organization/site` links can
-still inspect/manage that site, but must use **Open this site in Apps for chat**
-before generation. The app-hosting repository is never the default content target.
-**Change site** also navigates the wrapper and obtains a fresh host connection;
-finish or cancel any pending action first.
+Use the same URL for an entry in your site's **apps** sheet.
 
-The target site must enable EW/chat, or the browser must already have the supported
-EW opt-in. The app does not change those preferences or override disabled chat.
-If the host does not advertise support, generation stays disabled with an
-explanation. `ref=blocklibgen` selects the generator's code branch; Apps reads the
-content site's block code on `main`.
+- `nxver=2` selects the Apps shell that supports chat.
+- `ref=blocklibgen` selects the app's code branch, not the content site.
+- `#/organization/site` selects the site whose library you want to manage.
+
+Choose **Change site** to select another target. Finish or cancel any pending
+action before switching. The app reads block code from the content site's `main`
+branch.
+
+The internal HTML page cannot be used directly or as an editor extension.
+
+## Set up the library
+
+The app lists the site's blocks and shows whether each has an example page.
+Choose a block to see its available actions.
+
+If the library is not configured, choose **Initialize library**, review the
+destinations, then confirm. The app creates only the missing index or Blocks
+registration and preserves existing configuration.
+
+Default locations:
+
+| Content | Location |
+| --- | --- |
+| Blocks index | `/docs/library/blocks.json` |
+| Example pages | `/docs/library/blocks/<block-name>.html` |
+| Placeholder images | `/docs/library/media/block-library-generator/` |
+
+An existing valid Blocks registration is used instead, including a custom
+library location.
+
+## Create an example page
+
+1. Select a block without an example page and choose **Create**.
+2. Choose **Continue in chat**. The app collects the block's sources and prepares
+   an analysis prompt.
+3. Review and send the prompt in the adjacent chat. Approve the analysis-result
+   write when requested.
+4. When chat finishes, the app checks the saved analysis. You can also choose
+   **Check result**.
+5. Review the outcome and choose **Confirm create page** to save the examples
+   and add the page to the Blocks index.
+6. Choose **Open** to review and edit the page in DA.
+
+Sending the prompt does not save a library page. Saving always requires a
+separate confirmation.
+
+### When examples cannot be generated
+
+The app explains what information is missing. You can:
+
+- **Retry analysis** after updating the block's JavaScript or CSS.
+- **Create a default example page** as an unfinished starting point.
+
+A default page uses an inferred layout when available, otherwise one row with
+one empty cell. Open it in DA and replace the instructions with usable values.
+It may render empty or report errors until you supply the required content.
+
+## Manage existing pages
+
+- **Open** opens the current page in DA for normal authoring.
+- **Recreate** runs a fresh analysis. Confirming the result replaces the
+  **entire page, including any author edits**. If analysis is blocked, you can
+  separately confirm replacement with a default page instead.
+- **Delete** removes the example page and its Blocks-index entry. It does not
+  delete block code, shared images or unrelated pages.
+
+Generated pages belong to authors once saved. The app does not synchronize later
+edits with old analysis results.
+
+Only one page action is active at a time. **Resume** returns to a pending action.
+Cancelling the action does not stop chat or delete its saved analysis.
+
+## How it works
+
+### Source-based analysis
+
+The app discovers block JS/CSS files and reads fresh sources for each analysis,
+including shared styles and relevant local imports. The
+[analysis prompt](./block-analysis-prompt.js) asks chat to identify:
+
+- Author-selected block options.
+- Row and cell structure.
+- Editable text, headings, images, links and configuration values.
+- Restrictions, dependencies and meaningful example variations.
+
+Source code is analysed, not executed. The app validates the returned recipes
+and checks that the result belongs to the pending block and site.
+
+The discovered block list is cached. Use **Refresh blocks** after repository
+changes. Library configuration and page status are checked again when opening
+the app.
+
+### Example content
+
+New analyses use three bundled placeholder images, not images from an editor
+document. Missing copies are added to the site's library media folder; existing
+conflicting files are not overwritten.
+
+Real video, fragment, form or catalog references cannot be replaced by those
+images. Blocks that need unavailable resources may only support a default page.
+
+### Saving and Preview
+
+The app saves an authorable page with example headings, blocks and selector
+metadata, updates the index, and verifies the saved content.
+
+Library setup previews the index. Create/Recreate preview the page and index.
+Delete previews the updated index. **Preview is not Publish**, and deleting DA
+source does not unpublish an existing delivery copy.
+
+## Limitations and recovery
+
+- AI analysis can miss behavior or propose unsuitable examples. A ready analysis
+  is not proof of working runtime output: review every saved page.
+- Examples share an isolated library page. Blocks requiring authentication,
+  external data, companion blocks or special page context may need manual work.
+- Source collection is bounded; it is not a complete JavaScript resolver.
+  Unreadable code and unresolved dependencies are reported.
+- Avoid concurrent editing while initializing, recreating or deleting content.
+  Detected changes stop the action, but not every DA write is atomic.
+- Page and index writes can partially succeed. Read the reported outcome and
+  inspect the saved content before retrying.
+- Preview or temporary-analysis cleanup can fail after a successful save.
+  These warnings do not mean the page was lost. For a Preview warning, open the
+  reported file in DA and choose **Preview**.
+- If chat ends without a result, check for pending approvals and use
+  **Check result**. Reopening also checks a pending action; it does not resend
+  the prompt.
+- If generation is unavailable, check `nxver=2`, site access and EW/chat
+  availability. Authorized library management can still be used without chat.
+
+Production is the default DA environment. If your browser remembers Stage or a
+local service, add `&da-admin=prod` to the Apps URL.
 
 ## Run locally
 
-For development, use the authenticated Apps shell with a local server.
-
-Prerequisites:
-
-- Node.js 22 or newer and the repository's npm dependencies.
-- The [AEM CLI](https://github.com/adobe/helix-cli) (`aem`).
-- A Production DA login with access to the target site's code, source files,
-  configuration and Preview operations.
-- Supported chat and content-tool integration for generation.
-
-From the repository root:
+For local development, use Node.js 22 or newer and the
+[AEM CLI](https://github.com/adobe/helix-cli). From the repository root:
 
 ```sh
 npm ci
 aem up --port 3000 --stop-other=false --no-open
 ```
 
-There is no build step. The local app server runs on port 3000.
-If that port is occupied, do not stop another project's server.
+[Open the local app through DA Apps](https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator?nxver=2&ref=local)
+and select the content site. Allow the browser's local-network access prompt
+if needed.
 
-### Apps
-
-Open the [local app through the authenticated Apps shell](https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator?nxver=2&ref=local&da-admin=prod),
-enter the content **Organization** and **Site**, then choose **Use site**.
-The app-hosting repository is not automatically the content target.
-
-For a site-specific Apps link, append `#/organization/site` after the query:
-
-```text
-https://da.live/app/adobe-rnd/aem-apps/tools/apps/block-library-generator/block-library-generator?nxver=2&ref=local&da-admin=prod#/organization/site
-```
-
-The canonical fragment selects the site after authentication; without one,
-remembered fields are prefilled but not applied.
-For hosted branch testing, use `ref=blocklibgen` as shown above instead of
-`ref=local`; omitting `ref` loads `main`. An Apps-index tile uses the shell URL,
-not the raw localhost URL. Allow the browser's local-network access prompt if
-required for local development.
-
-**Apps local chat also requires a local agent on `http://localhost:4002/chat`.**
-The host uses `ref=local` for both the app iframe and chat backend. A running
-generator on port 3000 alone does not provide a connected chat. Use the hosted
-branch for production-agent testing if no local agent is configured; do not
-silently override the host's backend selection.
-
-Opening the internal HTML entry directly is not supported. Use an authenticated
-Apps URL above.
-
-## Use the generator
-
-### 1. Check the site and library
-
-Opening the app loads the block inventory and current library status. Select a
-block from the list; its badge indicates whether it has a library page or needs
-attention. **Refresh blocks** rediscovers code after repository changes.
-
-If setup is missing, choose **Initialize library** and confirm the proposed
-destinations. Initialization creates only the missing index and/or Blocks
-registration, preserving existing configuration.
-
-Default destinations:
-
-| Purpose | Path |
-| --- | --- |
-| Blocks index | `/docs/library/blocks.json` |
-| Example page | `/docs/library/blocks/<block-name>.html` |
-| Shared placeholder images | `/docs/library/media/block-library-generator/` |
-
-An existing valid same-site Blocks registration is honored, including custom
-locations. Invalid, inaccessible or ambiguous setup is reported instead of reset.
-
-### 2. Create examples
-
-1. Select a block without a page and choose **Create**.
-2. Choose **Continue in chat** to collect fresh sources and prepare the prompt.
-   Missing bundled placeholder images are added to the site's library media
-   folder at this step.
-3. Review and send the prompt in chat. Approve the analysis-result write
-   when requested.
-4. The generator stays beside chat and checks the pending saved analysis when a
-   relevant chat turn ends. **Check result** remains available.
-5. If the result is ready, choose **Confirm create page**. This separately
-   authorizes saving the page and its index entry.
-6. Use **Open** to review and edit the saved page in DA.
-
-Preparing a prompt does not submit chat or create a library page. Completion
-events are only a signal to validate the owned job's saved result: an unrelated,
-aborted or failed turn does not prove that analysis succeeded or failed.
-If another block is selected, the app offers **Resume** rather than switching
-selection or focus. Reopening checks a pending action once; there is no polling
-or automatic redispatch. Final page saving always needs separate confirmation.
-
-If working examples cannot be proposed, either **Retry analysis** after updating
-the block's code or choose **Create a default example page**. The separately
-confirmed fallback saves one clearly labelled unfinished starter, using an
-inferred layout when available or one row with one empty cell otherwise.
-Complete its instructions and required values in DA; it may render empty or
-report errors until then. It is not a working-example pass.
-
-### 3. Manage existing pages
-
-- **Open:** edit the current page normally in DA. Existing pages are author-owned;
-  the generator does not reconstruct their contents from old analysis results.
-- **Recreate:** run a fresh analysis, then separately confirm replacement of the
-  **entire page, including author edits**. A blocked result can instead offer
-  **Replace with a default example page**, with its own replacement confirmation.
-- **Delete:** confirm deletion of that example page and its index row. Block code,
-  shared assets and unrelated entries remain unchanged.
-
-A library entry without matching block code can still be opened or deleted, but
-not recreated. Only one page action is active at a time. Cancelling an action
-does not cancel chat or delete its saved analysis.
-
-## How it works
-
-- **Discovery:** resolves the selected site's block entry files. A shared
-  metadata-only inventory cache at
-  `/.da/block-library-generator/cache/blocks-<branch>.json` is reused until
-  **Refresh blocks**. Library configuration, index and page-existence checks
-  remain fresh on opening; analysis always reads fresh code.
-- **Source collection:** captures block JS/CSS, shared styles and bounded local
-  imports, with relevant framework-helper contracts. Project preprocessing is
-  outside scope. Unresolved dependencies are recorded; supplied code is not
-  executed during analysis. Delivery code uses credential-free browser GETs;
-  DA content/configuration access still uses the authenticated SDK. A protected
-  or unreadable code asset stops preparation; there is no alternate-origin or
-  authenticated fallback to bypass access restrictions.
-- **Analysis:** the [packaged analysis prompt](./block-analysis-prompt.js) distinguishes
-  author-selected block classes, body rows/cells, editable rich content,
-  configuration-row values and generated runtime behavior. Recipes must be
-  rectangular and pass HTML, option, evidence and approved-resource validation.
-  The semantic text is imported as a code module, not requested through a
-  protected hosted `.txt` content route.
-- **Images and links:** new analyses always use three bundled 640x360 PNG
-  placeholders, not images from the launch document. Identical site copies are
-  reused; conflicting files are never overwritten. `/index` is the verified
-  navigation destination, not a substitute for required media or fragment data.
-- **Chat jobs:** immutable requests/results live under
-  `/.da/block-library-generator/jobs/<job-id>/`. Results must match the request's
-  job, site, branch and block. If inline input exceeds the 256 KiB chat limit,
-  chat reads the complete saved request instead; sources are not truncated.
-- **Saving:** the generator builds an authorable page with example headings,
-  blocks and selector metadata, updates the index, and verifies readbacks.
-  Successful normal Create/Recreate removes only that job's request/result and
-  matching resume pointer. Blocked, failed and cancelled jobs remain for recovery.
-
-## Preview and write safety
-
-After verified source saving, initialization previews the index;
-Create/Recreate preview the page and index; Delete previews the updated index.
-**Preview is not Publish.** Deleting DA source does not unpublish delivery copies.
-
-Preview or temporary-job cleanup failures are reported separately and do not
-undo a successful page save. Reopening does not silently retry either operation.
-If Preview fails, open the reported files in DA and choose **Preview**.
-
-Only an explicit HTTP 404 means a resource is missing. Creates are conditional;
-index changes require a specific ETag. Replacement rechecks the confirmed source
-and uses its ETag when available. Without one, it compares the source hash before
-saving, which cannot eliminate the final read-to-write race.
-DA configuration POST and DELETE also lack atomic conditional-write protection.
-Avoid concurrent authoring during these actions.
-
-Page, index and configuration writes are not transactional. Partial outcomes stay
-visible: inspect and refresh before retrying. There is no automatic rollback,
-bulk generation, publishing or block-code modification.
-
-## V1 limitations
-
-- `ready` means the model proposed validated authored candidates, **not** that
-  runtime behavior or visual usefulness was verified. Review every saved page.
-- Analysis is nondeterministic and can miss conditions, overstate controls or
-  misjudge readiness. Structural validation does not prove semantic correctness.
-- Examples share an isolated library page. Blocks requiring real media,
-  fragments, catalog/order data, authentication, companion blocks or special page
-  context may need a starter or further manual work.
-- Source collection is bounded to 12 files and three dependency levels, with
-  1 MiB/15-second source-read limits; it is not a complete JavaScript resolver.
-- Selector heading scrolling depends on the preview renderer and remains tracked
-  in [adobe/da-live#1518](https://github.com/adobe/da-live/issues/1518).
-- If selector metadata is visible on the rendered site, hide `.library-metadata`
-  in site CSS, not its surrounding section, which may contain the actual example.
-  Preview caches can briefly show an older index or a cached 404; reload after
-  cache expiry rather than regenerating the page.
-
-## Host support
-
-The host changes for Apps chat are available:
-
-- Chat turn-completion events tracked in
-  [adobe/da-live#1507](https://github.com/adobe/da-live/issues/1507).
-- Apps chat handoff through the SDK in
-  [adobe/da-nx#895](https://github.com/adobe/da-nx/pull/895).
-
-The generator uses the supported SDK handoff and completion subscription, not a
-custom chat protocol. Existing site registrations are not removed automatically.
-
-## Development checks
-
-From the repository root:
-
-```sh
-NODE_OPTIONS=--experimental-vm-modules npm test
-npx --no-install eslint tools/apps/block-library-generator/*.js test/tools/apps/block-library-generator/*.test.js
-npx --no-install stylelint tools/apps/block-library-generator/block-library-generator.css
-npm run license:check
-```
-
-The explicit Stylelint command covers the app stylesheet, which is not included
-in the repository's normal CSS glob. No live DA credentials are needed for the
-offline tests. Live testing requires the authenticated host and separately
-approved writes described above.
+**Local chat also requires a local agent on `http://localhost:4002/chat`.**
+The shell uses `ref=local` for both the app and chat backend. A server on port
+3000 alone is not enough for generation; use the hosted app if no local agent is
+configured.
