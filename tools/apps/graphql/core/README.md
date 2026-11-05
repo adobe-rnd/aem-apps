@@ -85,7 +85,7 @@ Existing stores:
 
 | Store | Backed by | Runs in |
 | --- | --- | --- |
-| [`adapters/da-source.js`](../adapters/da-source.js) | nx2's `source` API, DA and hlx6 sites | a signed-in browser in the da.live shell |
+| [`adapters/da-source.js`](../adapters/da-source.js) | DA's admin API and the AEM source bus, through the DA SDK's fetch | a signed-in browser in the da.live shell |
 | [`memory-store.js`](../../../../test/tools/apps/graphql/core/helpers/memory-store.js) | a `Map`, with injectable failures | tests |
 
 For a script, a store over DA's admin API takes a few lines. This sketch
@@ -265,9 +265,6 @@ positions, because `sdl.js` imports `../../../deps/graphql/dist/index.js`.
 - `unwrapCodeblocks` uses regular expressions rather than a DOM. It decodes
   numeric entities and `&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;` and
   `&nbsp;` only.
-- nx2's `source.list` doesn't return the status of a failed listing, so
-  `adapters/da-source.js` reports it as `404`, and the app shows a folder it
-  can't list as empty.
 - There is no locking: when two callers save the same endpoint, the last
   write wins.
 - Schema renames aren't tracked. Endpoints keep the old id and skip it as

@@ -13,21 +13,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/* eslint-disable import/no-unresolved */
-import { fetchDaConfigs, getFirstSheet } from 'https://da.live/nx2/utils/daConfig.js';
 
 const ENDPOINT_PATTERN_KEY = 'graphql.endpoint';
 
-const findValue = (json) => getFirstSheet(json)
-  ?.find((row) => row.key === ENDPOINT_PATTERN_KEY)?.value;
+// DA serves a config as a sheet; the source bus serves a site's as `{ [sheetName]: rows }`.
+function firstSheetRows(json, hlx6) {
+  if (hlx6) return Object.values(json ?? {})[0];
+  if (json?.[':type'] !== 'multi-sheet') return json?.data;
+  return json[json[':names']?.[0]]?.data;
+}
+
+async function readPattern({ api, url, hlx6 }) {
+  const resp = await api.request(url);
+  const json = resp?.ok ? await resp.json().catch(() => undefined) : undefined;
+  const rows = firstSheetRows(json, hlx6);
+  if (!Array.isArray(rows)) return undefined;
+  return rows.find((row) => row?.key === ENDPOINT_PATTERN_KEY)?.value;
+}
 
 // The site's `graphql.endpoint` URL pattern, else the org's; undefined when unset or unreadable.
 // eslint-disable-next-line import/prefer-default-export
-export async function loadEndpointPattern({ org, site }) {
-  try {
-    const configs = await Promise.all(fetchDaConfigs({ org, site }));
-    return configs.map(findValue).findLast(Boolean);
-  } catch {
-    return undefined;
-  }
+export async function loadEndpointPattern({ api, org, site }) {
+  const { hlx6, orgConfig, siteConfig } = await api.locate(`/${org}/${site}`);
+  const [orgPattern, sitePattern] = await Promise.all([
+    readPattern({ api, url: orgConfig }),
+    readPattern({ api, url: siteConfig, hlx6 }),
+  ]);
+  return sitePattern || orgPattern;
 }

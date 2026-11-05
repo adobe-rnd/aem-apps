@@ -13,54 +13,89 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/* eslint-disable import/no-unresolved */
-import { aem, source, asText } from 'https://da.live/nx2/utils/api.js';
 
-const failure = (status) => ({ error: 'Request failed.', status });
+const failure = (resp) => ({ error: 'Request failed.', status: resp?.status });
+const done = (resp) => (resp?.ok ? { ok: true } : failure(resp));
 
-async function listAll({ path, continuationToken, items = [] }) {
-  const result = await source.list(path, { continuationToken }).catch(() => undefined);
-  if (!result) return failure();
-  // nx2 drops the status of a failed listing; the expected one is hlx6's for a missing folder.
-  if (!result.ok) return failure(result.status ?? 404);
-  const all = [...items, ...result.items];
-  if (!result.continuationToken) return { items: all, permissions: result.permissions };
-  return listAll({ path, continuationToken: result.continuationToken, items: all });
+// `{path}=read,write`: the actions allowed on the listed folder's content.
+function permissionsOf(resp) {
+  const actions = resp.headers.get('x-da-child-actions') ?? resp.headers.get('x-da-actions');
+  return actions?.split('=').pop().split(',');
 }
 
-export const list = ({ path }) => listAll({ path });
-
-export async function read({ path }) {
-  const { ok, data, status } = await asText(source.get(path)).catch(() => ({}));
-  return ok ? { text: data } : failure(status);
+// The source bus lists `{ name, content-type }`, with folders as `name/`; DA lists
+// `{ name, ext?, path }` already.
+function fromSourceBus({ name: fileName, 'content-type': type }, folder) {
+  const isFolder = fileName.endsWith('/') || type === 'application/folder';
+  const name = fileName.replace(/\/$/, '');
+  const path = `${folder}/${name}`;
+  const dot = name.lastIndexOf('.');
+  if (isFolder || dot <= 0) return { name, path };
+  return { name: name.slice(0, dot), ext: name.slice(dot + 1), path };
 }
 
-async function send(request) {
-  try {
-    const resp = await request();
-    return resp.ok ? { ok: true } : failure(resp.status);
-  } catch {
-    return failure();
+/**
+ * The core's store over DA and the AEM source bus.
+ * @param {{ request: Function, locate: Function }} api from `createDaApi`
+ */
+// eslint-disable-next-line import/prefer-default-export
+export function createDaStore(api) {
+  async function listAll({ path, continuationToken, items = [] }) {
+    const { hlx6, list: url } = await api.locate(path);
+    const headers = continuationToken ? { 'da-continuation-token': continuationToken } : {};
+    const resp = await api.request(url, { headers });
+    const page = resp?.ok ? await resp.json().catch(() => undefined) : undefined;
+    if (!Array.isArray(page)) return failure(resp);
+    const listed = hlx6
+      ? page.filter(({ name }) => name && !name.startsWith('.'))
+        .map((item) => fromSourceBus(item, path))
+      : page;
+    const all = [...items, ...listed];
+    const next = resp.headers.get('da-continuation-token');
+    if (next) return listAll({ path, continuationToken: next, items: all });
+    return { items: all, permissions: permissionsOf(resp) };
   }
-}
 
-export const write = ({ path, text }) => send(() => source.save(path, { body: text }));
+  async function read({ path }) {
+    const { source } = await api.locate(path);
+    const resp = await api.request(source);
+    const text = resp?.ok ? await resp.text().catch(() => undefined) : undefined;
+    return text === undefined ? failure(resp) : { text };
+  }
 
-export const remove = ({ path }) => send(() => source.delete(path));
+  // DA takes a form upload; the source bus takes the document itself.
+  async function write({ path, text }) {
+    const { hlx6, source } = await api.locate(path);
+    if (hlx6) {
+      const headers = { 'Content-Type': 'text/html' };
+      return done(await api.request(source, { method: 'POST', headers, body: text }));
+    }
+    const body = new FormData();
+    body.append('data', new Blob([text], { type: 'text/html' }));
+    return done(await api.request(source, { method: 'POST', body }));
+  }
 
-// AEM paths have no .html extension, and AEM only publishes what is previewed.
-const toAemPath = (path) => path.replace(/\.html$/, '');
+  async function remove({ path }) {
+    const { source } = await api.locate(path);
+    return done(await api.request(source, { method: 'DELETE' }));
+  }
 
-export async function publish({ path }) {
-  const aemPath = toAemPath(path);
-  const previewed = await send(() => aem.preview(aemPath));
-  return previewed.error ? previewed : send(() => aem.publish(aemPath));
-}
+  // AEM only publishes what is previewed.
+  async function publish({ path }) {
+    const { preview, live } = await api.locate(path);
+    const previewed = done(await api.request(preview, { method: 'POST' }));
+    return previewed.error ? previewed : done(await api.request(live, { method: 'POST' }));
+  }
 
-// A document missing from live may still be previewed.
-export async function unpublish({ path }) {
-  const aemPath = toAemPath(path);
-  const unpublished = await send(() => aem.unPublish(aemPath));
-  if (unpublished.error && unpublished.status !== 404) return unpublished;
-  return send(() => aem.unPreview(aemPath));
+  // A document missing from live may still be previewed.
+  async function unpublish({ path }) {
+    const { preview, live } = await api.locate(path);
+    const unpublished = done(await api.request(live, { method: 'DELETE' }));
+    if (unpublished.error && unpublished.status !== 404) return unpublished;
+    return done(await api.request(preview, { method: 'DELETE' }));
+  }
+
+  return {
+    list: ({ path }) => listAll({ path }), read, write, remove, publish, unpublish,
+  };
 }

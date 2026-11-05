@@ -19,8 +19,7 @@ import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { hashChange, loadStyle } from 'https://da.live/nx2/utils/utils.js';
 import { getColorScheme } from 'https://da.live/nx2/scripts/nx.js';
 import { showToast, VARIANT_ERROR } from 'https://da.live/nx2/blocks/shared/toast/toast.js';
-import { core } from './adapters/index.js';
-import { loadEndpointPattern } from './adapters/da-config.js';
+import { core, loadEndpointPattern } from './adapters/index.js';
 import { buildHash, isSameRoute, toRoute } from './ui/utils/route.js';
 import { messageStyle, renderLoading, renderMessage } from './ui/shared/message/message.js';
 
@@ -231,6 +230,6 @@ class Graphql extends LitElement {
 customElements.define(EL_NAME, Graphql);
 
 document.documentElement.style.colorScheme = getColorScheme() === 'dark-scheme' ? 'dark' : 'light';
-// nx2 daFetch reads the token DA_SDK hands over, so wait for it before loading data.
+// The adapters fetch through the DA SDK, so wait for the shell's handshake before loading data.
 await DA_SDK;
 document.body.append(document.createElement(EL_NAME));

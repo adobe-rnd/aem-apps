@@ -13,9 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+/* eslint-disable import/no-unresolved */
+import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { createGraphqlCore } from '../core/operations.js';
-import * as store from './da-source.js';
+import { createDaApi } from './da-api.js';
+import { loadEndpointPattern as loadPattern } from './da-config.js';
+import { createDaStore } from './da-source.js';
 import { loadValidator } from './sc-validator.js';
 
-// eslint-disable-next-line import/prefer-default-export
-export const core = createGraphqlCore({ store, loadValidator });
+// Requests wait for the shell's DA SDK handshake and go through its token-aware fetch.
+const api = createDaApi(DA_SDK);
+
+export const core = createGraphqlCore({ store: createDaStore(api), loadValidator });
+
+export const loadEndpointPattern = ({ org, site }) => loadPattern({ api, org, site });

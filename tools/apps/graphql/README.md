@@ -62,29 +62,25 @@ The app is `graphql.html`, loaded in an iframe by the da.live app shell
 - `graphql.html` only works inside the shell. Opened on its own (for example
   an endpoint link opened in a new tab), it stays blank, because the app waits
   for the shell's DA SDK handshake before it mounts.
-- nx2's `daFetch` gets its token through `scripts/nx-shim/utils/ims.js`, which
-  reads the token the DA SDK sets. `graphql.js` therefore awaits `DA_SDK`
-  before mounting `graphql-app`.
+- The adapters reach DA through the DA SDK's `actions.daFetch`, which adds
+  the signed-in user's token and keeps it current as the shell refreshes it.
+  `graphql.js` therefore awaits `DA_SDK` before mounting `graphql-app`.
 
 ### DA environment
 
-nx2's `source` API picks the DA admin from the iframe's host:
+The app uses the DA admin of the da.live page that opens it, which the
+shell passes as `context.daOrigin` in the DA SDK: `admin.da.live`, unless
+da.live is switched with its own `da-admin` parameter (for example
+`?da-admin=stage`). Since the SDK's fetch sends the user's token to any URL,
+an origin that isn't a known DA admin falls back to `admin.da.live`.
 
-| Iframe host | DA admin |
-| --- | --- |
-| `*.aem.live` | `admin.da.live` |
-| `*.preview.da.live` (the shell uses it for signed-in users), `localhost` | `stage-admin.da.live` |
+The AEM admin's ping (`admin.hlx.page/ping/{org}/{site}`) tells whether a
+site runs on Helix 6:
 
-On stage, production sites can't be listed, so the app shows "could not be
-loaded". Add `da-admin=prod` to the da.live URL to use production:
-
-```
-https://da.live/app/adobe-rnd/aem-apps/tools/apps/graphql/graphql?da-admin=prod#/{org}/{site}
-```
-
-The shell forwards the parameter to the iframe, which remembers it in its
-`localStorage`, so it is needed once per iframe host. `da-admin=reset`
-clears it.
+| Site | Content | Preview and publish |
+| --- | --- | --- |
+| DA | DA admin `source` and `list` | `admin.hlx.page` |
+| Helix 6 | AEM source bus, `api.aem.live/{org}/sites/{site}/source` | `api.aem.live` |
 
 ## Configuration
 
@@ -193,9 +189,10 @@ core/                       portable business logic, see core/README.md
   schemas.js                schema documents, validity and readable issues
   codeblock.js              codeblock document format
 adapters/                   the app's core instance and DA config
-  index.js                  core bound to DA
-  da-source.js              store port over nx2's `source` and `aem` APIs
-  da-config.js              `graphql.endpoint` URL pattern from nx2's `daConfig`
+  index.js                  core and config bound to the DA SDK
+  da-api.js                 SDK fetch, DA admin, Helix 6 detection, API URLs
+  da-source.js              store port over DA and the AEM source bus
+  da-config.js              `graphql.endpoint` URL pattern from the DA config
   sc-validator.js           da-sc-sdk validator, lazy
 ui/                         custom elements, UI helpers and icons
   endpoints-screen/         endpoint list, new endpoint dialog, delete, read-only notice
@@ -251,8 +248,8 @@ ui/                         custom elements, UI helpers and icons
 | --- | --- |
 | Lit | `tools/deps/lit` via the `da-lit` import map entry |
 | graphql-js | `tools/deps/graphql`, vendored (about 31 KB gzipped) |
-| DA SDK, `daFetch` | `https://da.live/nx/utils/` |
-| `source` and `aem` APIs, `hashChange`, `loadStyle`, styles, toast, dialog, `sl` components | `https://da.live/nx2/` |
+| DA SDK, `actions.daFetch` | `https://da.live/nx/utils/` |
+| `hashChange`, `loadStyle`, styles, toast, dialog, `sl` components | `https://da.live/nx2/` |
 | da-sc-sdk validator, CodeMirror | `https://da.live/nx/deps/` |
 
 The nx2 modules are not part of nx2's public SDK, so changes in da-nx can
@@ -271,11 +268,8 @@ npx esbuild --format=esm --minify --bundle tools/deps/graphql/src/index.js \
 Run `aem up` and open the app with `ref=local`:
 
 ```
-https://da.live/app/adobe-rnd/aem-apps/tools/apps/graphql/graphql?ref=local&da-admin=prod#/{org}/{site}
+https://da.live/app/adobe-rnd/aem-apps/tools/apps/graphql/graphql?ref=local#/{org}/{site}
 ```
-
-`da-admin=prod` is needed because nx2 uses the stage DA admin on `localhost`
-(see [DA environment](#da-environment)).
 
 ## Tests
 
@@ -289,4 +283,5 @@ against an in-memory store (`core/helpers/memory-store.js`).
 `schema-spec.test.js` checks the SDL for every construct of the
 [schema spec](https://github.com/adobe/da-sc-sdk/blob/main/docs/schema-spec.md).
 The golden SDL fixtures live in `core/fixtures/`. `ui/` covers routes,
-messages, the draft and the schema options.
+messages, the draft and the schema options. `adapters/` covers the DA and
+Helix 6 requests against a fake DA SDK (`adapters/helpers/fake-sdk.js`).
