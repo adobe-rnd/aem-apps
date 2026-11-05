@@ -235,7 +235,10 @@ it('keeps JSON scanning read-only and handles zero-width regex matches', async (
       parseOrgSite: () => ({ org: 'example', site: 'website' }),
       showMessage: (...args) => messages.push(args),
       updateProgress() {},
-      fetchFilesForJson: async () => [{ path: '/example/website/data.json', name: 'data.json' }],
+      listFolderFiles: async () => [
+        { path: '/example/website/data.json', name: 'data.json', ext: 'json' },
+        { path: '/example/website/page.html', name: 'page.html', ext: 'html' },
+      ],
       API: { SOURCE: 'https://admin.da.live/source' },
       fetch: async (url, options) => {
         assert.equal(url, 'https://admin.da.live/source/example/website/data.json');

@@ -354,85 +354,6 @@ function updateProgress(percent, text) {
   if (textEl) textEl.textContent = text;
 }
 
-// List all files (any ext) for JSON scanning, honoring filters and subfolders
-async function fetchFilesForJson(basePath = '') {
-  const { token } = app;
-  const orgSite = parseOrgSite();
-  if (!orgSite) {
-    throw new Error('Organization and site must be configured');
-  }
-  const { org, site } = orgSite;
-  const url = `${API.LIST}/${org}/${site}${basePath}`;
-
-  try {
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!response.ok) {
-      throw new Error(`Folder listing failed: HTTP ${response.status}`);
-    }
-    const data = await response.json();
-
-    const fileEntries = [];
-    const includeSubfolders = document.getElementById('include-subfolders')?.checked || false;
-
-    // Get filter options
-    const excludePathsInput = document.getElementById('exclude-paths')?.value?.trim() || '';
-    const excludePaths = excludePathsInput ? excludePathsInput.split(',').map((p) => p.trim()) : [];
-    const modifiedSinceInput = document.getElementById('modified-since')?.value;
-    const modifiedSince = modifiedSinceInput ? new Date(modifiedSinceInput) : null;
-
-    data.forEach((item) => {
-      if (item.lastModified && item.ext) {
-        const isExcluded = excludePaths.some((excludePath) => {
-          if (excludePath.startsWith('/')) {
-            return item.path.includes(excludePath);
-          }
-          return item.path.includes(`/${excludePath}`);
-        });
-        if (isExcluded) return;
-        if (modifiedSince) {
-          const fileModified = new Date(item.lastModified * 1000);
-          if (fileModified < modifiedSince) return;
-        }
-        fileEntries.push(item);
-      }
-    });
-
-    if (includeSubfolders) {
-      const subfolderPromises = data
-        .filter((item) => !item.ext && !item.lastModified && item.name !== '.DS_Store')
-        .filter((item) => {
-          const isExcluded = excludePaths.some((excludePath) => {
-            if (excludePath.startsWith('/')) {
-              return item.path.includes(excludePath);
-            }
-            return item.path.includes(`/${excludePath}`);
-          });
-          return !isExcluded;
-        })
-        .map(async (item) => {
-          try {
-            return await fetchFilesForJson(item.path.replace(`/${org}/${site}`, ''));
-          } catch (error) {
-            console.error('Could not list subfolder:', item.path, error);
-            return [];
-          }
-        });
-      const subfolderResults = await Promise.all(subfolderPromises);
-      subfolderResults.forEach((subFiles) => fileEntries.push(...subFiles));
-    }
-
-    return fileEntries;
-  } catch (error) {
-    console.error('Could not list files:', basePath || '/', error);
-    if (basePath === '') {
-      showMessage(`Error fetching files: ${error.message}`, 'error');
-    }
-    return [];
-  }
-}
-
 // List the files directly inside a folder (no subfolders).
 // DA returns large folders in pages, so keep requesting until there is no next page.
 async function listFolderFiles(folderPath) {
@@ -1121,31 +1042,38 @@ async function scanFiles() {
       return;
     }
 
-    // JSON branch: enumerate files and scan JSON content with concurrency
-    if (findJsonFiles) {
-      const basePaths = app.searchPaths.length > 0 ? app.searchPaths : [''];
-      const processedPaths = new Set();
-      const allFiles = [];
-
-      const uniqueBasePaths = basePaths.filter((p, i, arr) => arr.indexOf(p) === i);
-      const filesArrays = await Promise.all(uniqueBasePaths.map((p) => {
-        if (!processedPaths.has(p)) {
-          processedPaths.add(p);
-          return fetchFilesForJson(p);
-        }
-        return Promise.resolve([]);
-      }));
-      filesArrays.flat().forEach((f) => {
-        if (!allFiles.some((e) => e.path === f.path)) allFiles.push(f);
+    // Build proper paths with org/site prefix for crawl function
+    let crawlPaths;
+    if (app.searchPaths.length > 0) {
+      // Use specified search paths, ensuring they have org/site prefix
+      crawlPaths = app.searchPaths.map((path) => {
+        const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+        return `/${orgSite.org}/${orgSite.site}/${cleanPath}`.replace(/\/+/g, '/');
       });
+    } else {
+      // Default to org/site root
+      crawlPaths = [`/${orgSite.org}/${orgSite.site}`];
+    }
 
+    // Both modes find files the same way and differ only in how each file is checked
+    let processItem;
+
+    // JSON mode: check .json files only
+    if (findJsonFiles) {
+      const excludePathsInput = document.getElementById('exclude-paths')?.value?.trim() || '';
+      const excludePaths = excludePathsInput ? excludePathsInput.split(',').map((p) => p.trim()) : [];
+      const modifiedSinceInput = document.getElementById('modified-since')?.value;
+      const modifiedSince = modifiedSinceInput ? new Date(modifiedSinceInput) : null;
+      const isFilteredOut = (item) => excludePaths.some((excludePath) => (
+        item.path.includes(excludePath.startsWith('/') ? excludePath : `/${excludePath}`)
+      )) || (modifiedSince && new Date(item.lastModified * 1000) < modifiedSince);
       const { token } = app;
-      const queue = allFiles.slice();
-      const maxConcurrent = 10;
 
-      const processJsonItem = async (item) => {
+      processItem = async (item) => {
+        if (item.ext !== 'json' || isFilteredOut(item)) return;
+
         filesScanned++;
-        updateProgress(20 + Math.min((filesScanned / Math.max(allFiles.length, 1)) * 70, 70), `Checking ${item.name}...`);
+        updateProgress(20 + Math.min((filesScanned / 100) * 70, 70), `Checking ${item.name}...`);
         const cleanPath = item.path.startsWith('/') ? item.path.substring(1) : item.path;
         const url = `${API.SOURCE}/${cleanPath}`;
         try {
@@ -1220,30 +1148,8 @@ async function scanFiles() {
           console.error('JSON scan failed:', item.path, error);
         }
       };
-
-      const workers = Array.from({ length: Math.min(maxConcurrent, queue.length) }, async () => {
-        while (queue.length) {
-          const next = queue.shift();
-          // eslint-disable-next-line no-await-in-loop
-          await processJsonItem(next);
-        }
-      });
-      await Promise.all(workers);
     } else {
-      // Build proper paths with org/site prefix for crawl function
-      let crawlPaths;
-      if (app.searchPaths.length > 0) {
-        // Use specified search paths, ensuring they have org/site prefix
-        crawlPaths = app.searchPaths.map((path) => {
-          const cleanPath = path.startsWith('/') ? path.substring(1) : path;
-          return `/${orgSite.org}/${orgSite.site}/${cleanPath}`.replace(/\/+/g, '/');
-        });
-      } else {
-        // Default to org/site root
-        crawlPaths = [`/${orgSite.org}/${orgSite.site}`];
-      }
-
-      const processItem = async (item) => {
+      processItem = async (item) => {
         // Only process HTML files
         if (!item.path.endsWith('.html')) return;
 
@@ -1304,30 +1210,30 @@ async function scanFiles() {
           matchesFound += result.matches.length;
         }
       };
+    }
 
-      const includeSubfolders = document.getElementById('include-subfolders')?.checked || false;
-      if (includeSubfolders) {
-        // Process each crawl path using DA's crawl function (includes all subfolders)
-        const crawlPromises = crawlPaths.map(async (crawlPath) => {
-          const { results } = crawl({
-            path: crawlPath,
-            callback: processItem,
-            throttle: 10, // Same as DA's own search
-          });
-          return results;
+    const includeSubfolders = document.getElementById('include-subfolders')?.checked || false;
+    if (includeSubfolders) {
+      // Process each crawl path using DA's crawl function (includes all subfolders)
+      const crawlPromises = crawlPaths.map(async (crawlPath) => {
+        const { results } = crawl({
+          path: crawlPath,
+          callback: processItem,
+          throttle: 10, // Same as DA's own search
         });
-        await Promise.all(crawlPromises);
-      } else {
-        // Only scan files directly inside each search path, 10 at a time
-        const fileLists = await Promise.all(crawlPaths.map(listFolderFiles));
-        const queue = fileLists.flat();
-        const workers = Array.from({ length: Math.min(10, queue.length) }, async () => {
-          while (queue.length) {
-            await processItem(queue.shift());
-          }
-        });
-        await Promise.all(workers);
-      }
+        return results;
+      });
+      await Promise.all(crawlPromises);
+    } else {
+      // Only scan files directly inside each search path, 10 at a time
+      const fileLists = await Promise.all(crawlPaths.map(listFolderFiles));
+      const queue = fileLists.flat();
+      const workers = Array.from({ length: Math.min(10, queue.length) }, async () => {
+        while (queue.length) {
+          await processItem(queue.shift());
+        }
+      });
+      await Promise.all(workers);
     }
 
     // Initialize all matches as selected by default and populate selectedFiles
