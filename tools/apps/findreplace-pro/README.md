@@ -13,8 +13,9 @@ organization and site you want to work with.
 ### 1. Configure
 1. Enter **Organization/Site** in `/org/site` format.
 2. Optionally add **Search Paths** to limit the search to specific folders.
-3. Use **Include Subfolders** to control recursive JSON discovery; HTML discovery
-   uses the DA tree crawler.
+3. Check **Include Subfolders** to search nested folders. When unchecked (the
+   default), only files directly inside each search path (or the site root) are
+   scanned.
 4. Expand **Advanced Filters** to configure search options. Path exclusions and
    modification-date filtering currently apply to JSON discovery.
 

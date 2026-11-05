@@ -433,6 +433,31 @@ async function fetchFilesForJson(basePath = '') {
   }
 }
 
+// List the files directly inside a folder (no subfolders).
+// DA returns large folders in pages, so keep requesting until there is no next page.
+async function listFolderFiles(folderPath) {
+  const files = [];
+  let nextPageToken = null;
+
+  do {
+    const headers = { Authorization: `Bearer ${app.token}` };
+    if (nextPageToken) headers['da-continuation-token'] = nextPageToken;
+
+    const response = await fetch(`${API.LIST}${folderPath}`, { headers });
+    if (!response.ok) {
+      throw new Error(`Folder listing failed for ${folderPath}: HTTP ${response.status}`);
+    }
+
+    // Folders have no extension, so this keeps files only
+    const items = await response.json();
+    files.push(...items.filter((item) => item.ext));
+
+    nextPageToken = response.headers.get('da-continuation-token');
+  } while (nextPageToken);
+
+  return files;
+}
+
 async function fetchContent(path, useCache = true) {
   // For empty page detection, always fetch fresh content
   if (useCache && app.fileCache.has(path)) {
@@ -1280,17 +1305,29 @@ async function scanFiles() {
         }
       };
 
-      // Process each crawl path using DA's crawl function
-      // Following the pattern from DA documentation
-      const crawlPromises = crawlPaths.map(async (crawlPath) => {
-        const { results } = crawl({
-          path: crawlPath,
-          callback: processItem,
-          concurrent: 10, // Use DA's recommended concurrency to prevent resource exhaustion
+      const includeSubfolders = document.getElementById('include-subfolders')?.checked || false;
+      if (includeSubfolders) {
+        // Process each crawl path using DA's crawl function (includes all subfolders)
+        const crawlPromises = crawlPaths.map(async (crawlPath) => {
+          const { results } = crawl({
+            path: crawlPath,
+            callback: processItem,
+            concurrent: 10, // Use DA's recommended concurrency to prevent resource exhaustion
+          });
+          return results;
         });
-        return results;
-      });
-      await Promise.all(crawlPromises);
+        await Promise.all(crawlPromises);
+      } else {
+        // Only scan files directly inside each search path, 10 at a time
+        const fileLists = await Promise.all(crawlPaths.map(listFolderFiles));
+        const queue = fileLists.flat();
+        const workers = Array.from({ length: Math.min(10, queue.length) }, async () => {
+          while (queue.length) {
+            await processItem(queue.shift());
+          }
+        });
+        await Promise.all(workers);
+      }
     }
 
     // Initialize all matches as selected by default and populate selectedFiles
