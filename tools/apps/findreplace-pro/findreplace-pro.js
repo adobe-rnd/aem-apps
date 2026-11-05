@@ -1976,6 +1976,53 @@ async function executeReplace() {
   }
 }
 
+// Publishing copies the current preview to live, so preview the latest content first (same as DA)
+async function previewAndPublish(path, org, site, token) {
+  const options = { method: 'POST', headers: { Authorization: `Bearer ${token}` } };
+  const previewResponse = await fetch(`${API.PREVIEW}/${org}/${site}/main${path}`, options);
+  if (!previewResponse.ok) return previewResponse;
+  return fetch(`${API.LIVE}/${org}/${site}/main${path}`, options);
+}
+
+// Bulk jobs run in the background, so wait for the preview job to finish before publishing
+async function previewBeforeBulkPublish(paths, org, site, token) {
+  const headers = { Authorization: `Bearer ${token}` };
+  const response = await fetch(`${API.PREVIEW}/${org}/${site}/main/*`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ forceUpdate: true, paths }),
+  });
+  if (!response.ok) {
+    throw new Error(`Bulk preview failed: ${response.status} ${response.statusText}`);
+  }
+
+  const { job, links } = await response.json();
+  if (!job) return; // Small batches can finish without a background job
+
+  const timeoutMs = 5 * 60 * 1000;
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    await new Promise((resolve) => {
+      setTimeout(resolve, 1000);
+    });
+    const statusResponse = await fetch(links.self, { headers });
+    if (!statusResponse.ok) {
+      throw new Error(`Could not check the preview job: HTTP ${statusResponse.status}`);
+    }
+    const {
+      state, progress = {}, error, cancelled,
+    } = await statusResponse.json();
+    if (state === 'stopped') {
+      if (progress.failed || error || cancelled) {
+        throw new Error('Preview did not complete for all files, so nothing was published');
+      }
+      return;
+    }
+    updateProgress(30, `Previewing ${progress.processed || 0}/${paths.length} files...`);
+  }
+  throw new Error('Preview is taking too long, so nothing was published. Try again in a few minutes.');
+}
+
 async function handleSingleFileOperation(operationType, path, context, org, site, token) {
   let apiUrl;
   const method = operationType === 'unpublish' ? 'DELETE' : 'POST';
@@ -1991,12 +2038,14 @@ async function handleSingleFileOperation(operationType, path, context, org, site
 
   updateProgress(50, `${operationType}ing single file: ${path}`);
 
-  const response = await fetch(apiUrl, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const response = operationType === 'publish'
+    ? await previewAndPublish(path, org, site, token)
+    : await fetch(apiUrl, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
   if (!response.ok) {
     throw new Error(`${operationType} failed: ${response.status} ${response.statusText}`);
@@ -2051,6 +2100,11 @@ async function handleBulkOperation(operationType, paths, context, org, site, tok
     apiUrl = `${API.LIVE}/${org}/${site}/${branch}/*`;
   } else if (operationType === 'unpublish') {
     return handleBulkUnpublish(paths, org, site, token);
+  }
+
+  if (operationType === 'publish') {
+    updateProgress(30, 'Previewing files before publishing...');
+    await previewBeforeBulkPublish(paths, org, site, token);
   }
 
   updateProgress(30, `Sending bulk ${operationType} request...`);
@@ -2980,14 +3034,8 @@ function updateBulkButtonText() {
       button.classList.toggle('btn-danger', operation === 'unpublish');
       button.classList.toggle('btn-secondary', operation !== 'unpublish');
     }
-    let operationText;
 
-    // Handle special case for copy-urls
-    if (operation === 'copy-urls') {
-      operationText = 'Copy URLs';
-    } else {
-      operationText = operation.charAt(0).toUpperCase() + operation.slice(1);
-    }
+    const operationText = select.options[select.selectedIndex].textContent;
 
     // Count selected files
     const selectedCount = app.results.filter((result) => result.selected).length;
