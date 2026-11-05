@@ -1312,7 +1312,7 @@ async function scanFiles() {
           const { results } = crawl({
             path: crawlPath,
             callback: processItem,
-            concurrent: 10, // Use DA's recommended concurrency to prevent resource exhaustion
+            throttle: 10, // Same as DA's own search
           });
           return results;
         });
