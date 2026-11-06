@@ -9,6 +9,7 @@
   "ignore": [
     "node_modules/**",
     "tools/deps/**",
+    ".thinkrail/**",
     "**/*.css",
     "**/*.md",
     ".husky/**",
@@ -16,7 +17,7 @@
     ".editorconfig",
     ".eslintignore",
     ".eslintrc.js",
-    ".gitignore",
+    "**/.gitignore",
     ".hlxignore",
     ".idea/**",
     ".DS_Store",
