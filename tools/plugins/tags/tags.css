@@ -5,9 +5,9 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  font-family: Arial, sans-serif;
+  font-family: var(--s2-font-family);
   max-width: 600px;
-  margin: 0 auto;
+  margin: 20px auto;
 }
 
 /* Header */
@@ -20,21 +20,21 @@
 
 /* Error message */
 .error-message {
-  color: #721c24;
-  background-color: #f8d7da;
+  color: var(--s2-red-1000);
+  background-color: var(--s2-red-100);
   padding: 12px;
   border-radius: 6px;
-  border: 1px solid #f5c6cb;
+  border: 1px solid var(--s2-red-300);
   margin-bottom: 20px;
 }
 
 /* Warning message */
 .warning-message {
-  color: #856404;
-  background-color: #fff3cd;
+  color: var(--s2-yellow-1100);
+  background-color: var(--s2-yellow-100);
   padding: 12px;
   border-radius: 6px;
-  border: 1px solid #ffeaa7;
+  border: 1px solid var(--s2-yellow-300);
 }
 
 /* Search container */
@@ -56,15 +56,16 @@
 .search-input {
   width: 100%;
   padding: 12px 40px 12px 16px;
-  border: 2px solid #dee2e6;
+  border: 2px solid var(--s2-gray-200);
   border-radius: 6px;
+  font-family: inherit;
   font-size: 16px;
   box-sizing: border-box;
   transition: border-color 0.2s;
 }
 
 .search-input:focus {
-  border-color: #007bff;
+  border-color: var(--s2-blue-900);
 }
 
 /* Clear-search button */
@@ -75,7 +76,7 @@
   transform: translateY(-50%);
   background: none;
   border: none;
-  color: #6c757d;
+  color: var(--s2-gray-600);
   font-size: 20px;
   line-height: 1;
   padding: 4px 8px;
@@ -83,7 +84,7 @@
 }
 
 .search-clear:hover {
-  color: #212529;
+  color: var(--s2-gray-900);
 }
 
 .search-clear[hidden] {
@@ -94,7 +95,7 @@
 .results-container {
   flex: 1;
   overflow-y: auto;
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--s2-gray-200);
   border-radius: 6px;
   margin: 0 20px;
 }
@@ -103,7 +104,7 @@
 .no-results {
   padding: 20px;
   text-align: center;
-  color: #6c757d;
+  color: var(--s2-gray-600);
 }
 
 /* Namespace heading — a button so it's collapsible/expandable */
@@ -118,8 +119,8 @@
   font-weight: bold;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #495057;
-  background-color: #f8f9fa;
+  color: var(--s2-gray-700);
+  background-color: var(--s2-gray-50);
   border: none;
   cursor: pointer;
   position: sticky;
@@ -127,7 +128,7 @@
 }
 
 .tag-namespace:hover {
-  background-color: #e9ecef;
+  background-color: var(--s2-gray-100);
 }
 
 .tag-namespace-caret {
@@ -138,8 +139,8 @@
 
 /* Tag item */
 .tag-item {
-  padding: 12px 16px;
-  border-bottom: 1px solid #f8f9fa;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--s2-gray-50);
   transition: background-color 0.2s;
   display: flex;
   align-items: center;
@@ -147,7 +148,7 @@
 }
 
 .tag-item:hover {
-  background-color: #f8f9fa;
+  background-color: var(--s2-gray-50);
 }
 
 /* Checkbox */
@@ -169,19 +170,19 @@
 }
 
 .tag-value {
-  font-weight: bold;
-  color: #212529;
+  color: var(--s2-gray-900);
+  font-size: 14px;
 }
 
 /* A small pill so a tag's Category reads as distinct from its name,
    rather than another line of similarly-styled plain text */
 .tag-category-badge {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: bold;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: #495057;
-  background-color: #e9ecef;
+  color: var(--s2-gray-700);
+  background-color: var(--s2-gray-100);
   border-radius: 999px;
   padding: 2px 8px;
 }
@@ -194,7 +195,7 @@
 .tag-description-icon {
   background: none;
   border: none;
-  color: #6c757d;
+  color: var(--s2-gray-600);
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
@@ -203,7 +204,7 @@
 
 .tag-description-icon:hover,
 .tag-description-icon:focus-visible {
-  color: #212529;
+  color: var(--s2-gray-900);
 }
 
 /* Anchored (CSS anchor positioning) to the icon button that opens it via
@@ -221,8 +222,8 @@
   margin: 4px 0 0;
   max-width: 260px;
   padding: 8px 10px;
-  background-color: #212529;
-  color: white;
+  background-color: var(--s2-gray-900);
+  color: var(--s2-gray-25);
   font-size: 12px;
   line-height: 1.4;
   border: none;
@@ -241,7 +242,7 @@
 
 .selected-tags-empty {
   font-size: 13px;
-  color: #6c757d;
+  color: var(--s2-gray-600);
   font-style: italic;
 }
 
@@ -251,15 +252,15 @@
   gap: 6px;
   padding: 4px 6px 4px 10px;
   border-radius: 999px;
-  background-color: #e9ecef;
-  color: #212529;
+  background-color: var(--s2-gray-100);
+  color: var(--s2-gray-900);
   font-size: 13px;
 }
 
 .selected-tag-remove {
   background: none;
   border: none;
-  color: #6c757d;
+  color: var(--s2-gray-600);
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
@@ -267,58 +268,19 @@
 }
 
 .selected-tag-remove:hover {
-  color: #212529;
+  color: var(--s2-gray-900);
 }
 
 /* Action buttons container */
 .action-container {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin: 20px;
   justify-content: center;
   flex-shrink: 0;
   padding: 20px 0;
-  border-top: 1px solid #dee2e6;
-  background-color: white;
+  border-top: 1px solid var(--s2-gray-200);
+  background-color: var(--s2-gray-25);
 }
 
-/* Button base styles */
-.btn {
-  padding: 10px 20px;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.2s;
-}
-
-/* Secondary button */
-.btn-secondary {
-  background-color: #6c757d;
-}
-
-.btn-secondary:hover {
-  background-color: #5a6268;
-}
-
-/* Primary button */
-.btn-primary {
-  background-color: #007bff;
-  font-weight: bold;
-}
-
-.btn-primary:hover {
-  background-color: #0056b3;
-}
-
-/* Disabled button */
-.btn:disabled {
-  background-color: #6c757d;
-  cursor: not-allowed;
-}
-
-/* Error button state */
-.btn-error {
-  background-color: #dc3545;
-}

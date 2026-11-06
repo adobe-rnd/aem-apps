@@ -15,6 +15,8 @@
  */
 // eslint-disable-next-line import/no-unresolved
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
+// eslint-disable-next-line import/no-unresolved
+import 'https://da.live/nx2/public/sl/components.js';
 // Shared with tools/apps/tags (the taxonomy editor app) so both read
 // taxonomy.json against the same canonical resolve/fetch/parse logic.
 import {
@@ -183,11 +185,6 @@ function displayTaxonomy(taxonomyData, actions) {
   const container = document.createElement('div');
   container.className = 'tags-container';
 
-  const header = document.createElement('h2');
-  header.textContent = 'Tags';
-  header.className = 'tags-header';
-  container.appendChild(header);
-
   if (!Array.isArray(taxonomyData.data)) {
     const noDataDiv = document.createElement('div');
     noDataDiv.className = 'warning-message';
@@ -236,26 +233,25 @@ function displayTaxonomy(taxonomyData, actions) {
   const collapsedNamespaces = new Set();
   let lastVisibleTags = tags;
 
-  const readSelectionBtn = document.createElement('button');
+  const readSelectionBtn = document.createElement('sl-button');
   readSelectionBtn.type = 'button';
   readSelectionBtn.textContent = 'Read Selection';
   readSelectionBtn.title = 'Load tags from the currently selected text in the document';
-  readSelectionBtn.className = 'btn btn-secondary';
+  readSelectionBtn.className = 'primary outline';
 
-  const resetBtn = document.createElement('button');
+  const resetBtn = document.createElement('sl-button');
   resetBtn.type = 'button';
   resetBtn.textContent = 'Reset';
   resetBtn.title = 'Clear selected tags, search, and collapsed namespaces';
-  resetBtn.className = 'btn btn-secondary';
+  resetBtn.className = 'primary outline';
 
-  const sendSelectedBtn = document.createElement('button');
+  const sendSelectedBtn = document.createElement('sl-button');
   sendSelectedBtn.textContent = 'Send Selected (0)';
-  sendSelectedBtn.className = 'btn btn-primary';
 
   function updateSendButton() {
     const count = selectedTags.size;
     sendSelectedBtn.textContent = `Send Selected (${count})`;
-    sendSelectedBtn.className = count > 0 ? 'btn btn-primary' : 'btn btn-secondary';
+    sendSelectedBtn.className = count > 0 ? '' : 'primary outline';
     sendSelectedBtn.disabled = count === 0;
   }
 
@@ -265,7 +261,7 @@ function displayTaxonomy(taxonomyData, actions) {
     if (selectedTags.size === 0) {
       const empty = document.createElement('div');
       empty.className = 'selected-tags-empty';
-      empty.textContent = 'No tags selected yet';
+      empty.textContent = 'No tags selected';
       selectedTagsSummary.appendChild(empty);
       return;
     }
@@ -408,16 +404,11 @@ function displayTaxonomy(taxonomyData, actions) {
     } catch (error) {
       console.error('Error sending selected tags to document:', error);
 
-      const originalText = sendSelectedBtn.textContent;
       sendSelectedBtn.textContent = '✗ Error';
-      sendSelectedBtn.className = 'btn btn-error';
+      sendSelectedBtn.className = 'negative';
       sendSelectedBtn.disabled = true;
 
-      setTimeout(() => {
-        sendSelectedBtn.textContent = originalText;
-        sendSelectedBtn.className = 'btn btn-primary';
-        sendSelectedBtn.disabled = false;
-      }, 2000);
+      setTimeout(updateSendButton, 2000);
     }
   });
 
