@@ -16,6 +16,8 @@
 /* eslint-disable import/no-unresolved */
 import { createLocalization } from '../../localization/core/index.js';
 import createLegacyApi, { DA_ORIGIN } from '../../localization/core/api/legacy.js';
+import { createTranslationConnectors } from '../../localization/connectors/index.js';
+import { createTranslateProxy } from '../../localization/connectors/host.js';
 
 const NX_LOC = 'https://da.live/nx/public/loc/index.js';
 
@@ -32,11 +34,30 @@ function createLocAdapter(daFetch) {
   return { mergeCopy: run('mergeCopy'), overwriteCopy: run('overwriteCopy') };
 }
 
-export default function createRealLocalization({ org, actions }) {
+export async function createConnectors({ daFetch, simulatedDelayMs = 0, name = 'google' }) {
+  try {
+    const connectors = await createTranslationConnectors({
+      name,
+      settings: { simulatedDelayMs },
+      host: { translateProxy: createTranslateProxy({ fetch: daFetch }) },
+    });
+    if (connectors?.error) return { error: connectors.error.message ?? connectors.error.code };
+    return { connectors };
+  } catch (e) {
+    return { error: e.message || String(e) };
+  }
+}
+
+export default async function createRealLocalization({ org, actions, translateDelay = 0 }) {
   const api = createLegacyApi({ fetch: actions.daFetch });
-  return createLocalization({
+  const { connectors, error } = await createConnectors({
+    daFetch: actions.daFetch, simulatedDelayMs: translateDelay,
+  });
+  const localization = createLocalization({
     org,
     api,
     actions: { ...actions, loc: createLocAdapter(actions.daFetch) },
+    services: connectors ? { translationConnectors: connectors } : {},
   });
+  return { ...localization, translationError: error ?? null };
 }

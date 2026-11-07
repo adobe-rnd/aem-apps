@@ -18,9 +18,9 @@ import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from 'da-lit';
 import { editUrl, OPTION_LABELS } from '../../apps/msm-next/data/display.js';
 import {
-  pageKey, pagePathFrom, header, sourceRows, targetTree, targetRows, targetSummary,
-  pageActions, canPropagate, rolloutOptions, runSummary, translatingPages, describeFailure,
-  jobMessage, jobsWorthNoting, doneMessage,
+  pageKey, pagePathFrom, header, sourceInfo, detailRows, stateCard, menuItems, targetTree,
+  targetRows, canPropagate, rolloutOptions, runSummary, translatingPages, describeFailure,
+  jobMessage, jobsWorthNoting, doneMessage, pickerRows, togglePick, localeBadge,
 } from './model.js';
 
 const NX = 'https://da.live/nx';
@@ -36,19 +36,19 @@ try {
   console.warn('[MSM next plugin] Failed to load styles:', e);
 }
 
-const badge = (entry, extra = '') => (entry
-  ? html`<span class="badge ${entry.tone ?? 'neutral'} ${extra}">${entry.label}</span>`
+const pill = (entry, extra = '') => (entry
+  ? html`<span class="pill ${entry.tone ?? 'neutral'} ${extra}">${entry.label}</span>`
   : nothing);
 
-const overridden = (flag) => (flag
-  ? html`<span class="badge outline" title="This page has local edits since it was last synced">Overridden</span>`
-  : nothing);
-
-const lang = (location) => (location?.language
-  ? html`<span class="lang" title=${location.label ?? ''}>${location.language.toUpperCase()}</span>`
+const locale = (language, title = '') => (language
+  ? html`<span class="locale" title=${title}>${localeBadge(language)}</span>`
   : nothing);
 
 const spinner = (label = 'Working') => html`<span class="spinner" role="img" aria-label=${label}></span>`;
+
+const CARD_ICONS = {
+  negative: '!', notice: 'i', informative: 'i', neutral: 'i',
+};
 
 function appRef() {
   try {
@@ -81,6 +81,9 @@ class MsmNextPlugin extends LitElement {
     run: { state: true },
     runOption: { state: true },
     targetsPhase: { state: true },
+    menuOpen: { state: true },
+    picking: { state: true },
+    picked: { state: true },
   };
 
   constructor() {
@@ -90,18 +93,28 @@ class MsmNextPlugin extends LitElement {
     this.tree = [];
     this.busy = new Set();
     this.targetsPhase = 'loading';
+    this.menuOpen = false;
+    this.picking = false;
+    this.picked = new Set();
+    this.onDocumentClick = (event) => {
+      if (this.menuOpen && !event.composedPath().includes(this.shadowRoot.querySelector('.menu-wrap'))) {
+        this.menuOpen = false;
+      }
+    };
   }
 
   connectedCallback() {
     super.connectedCallback();
     if (styles) this.shadowRoot.adoptedStyleSheets = [styles];
     this.unsubscribe = this.localization.subscribe?.(() => this.reload());
+    document.addEventListener('click', this.onDocumentClick);
     this.load();
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this.unsubscribe?.();
+    document.removeEventListener('click', this.onDocumentClick);
   }
 
   get page() { return { site: this.site, path: this.path }; }
@@ -135,13 +148,12 @@ class MsmNextPlugin extends LitElement {
       return;
     }
     if (this.phase !== 'ready') return;
-    const ancestors = this.result.chain.slice(1).map(({ ref }) => this.loadPage(ref));
-    await Promise.all([...ancestors, this.loadTargets()]);
+    await this.loadTargets();
     if (autoCheck) this.autoCheck();
   }
 
   async loadTargets() {
-    this.targetsPhase = 'loading';
+    if (!this.tree.length) this.targetsPhase = 'loading';
     try {
       const model = await this.localization.orgModel();
       this.tree = targetTree(model, this.page);
@@ -203,7 +215,7 @@ class MsmNextPlugin extends LitElement {
         const warn = result.warnings?.length ? ` (warnings: ${result.warnings.join(', ')})` : '';
         this.say(`${doneMessage(action, label)}${warn}`, result.warnings?.length ? 'notice' : 'positive');
       } else {
-        const partial = result?.partial ? ' Content was partly written; run Update again to repair.' : '';
+        const partial = result?.partial ? ' Content was partly written; sync again to repair.' : '';
         this.say(`${label} failed. ${describeFailure(result)}.${partial}`, 'negative');
       }
       await this.reload();
@@ -228,14 +240,16 @@ class MsmNextPlugin extends LitElement {
     });
   }
 
-  propagate() {
+  propagate(targets) {
     const option = this.runOption ?? rolloutOptions(targetRows(this.tree), this.results)[0];
+    this.picking = false;
     return this.withBusy('propagate', async () => {
       this.run = { items: [] };
       const run = await this.localization.propagate({
         pages: [this.page],
+        targets,
         option,
-        title: `Update all from ${this.path}`,
+        title: `Update linked variations of ${this.path}`,
         onProgress: (progress) => { this.run = { ...progress, items: [...progress.items] }; },
       });
       this.run = { ...run, items: [...run.items] };
@@ -243,25 +257,48 @@ class MsmNextPlugin extends LitElement {
     });
   }
 
-  review(page) {
-    if (this.localization.resolveReview) {
-      return this.withBusy(pageKey(page), async () => {
-        await this.localization.resolveReview(page.site, page.path);
-        this.say('Mock: changes reviewed and accepted', 'positive');
-        await this.reload();
-      });
-    }
-    window.open(editUrl(this.org, page.site, page.path), '_blank', 'noopener');
-    return null;
+  resolveReview() {
+    return this.withBusy(pageKey(this.page), async () => {
+      await this.localization.resolveReview(this.site, this.path);
+      this.say('Mock: changes reviewed and accepted', 'positive');
+      await this.reload();
+    });
   }
 
-  pressButton(button) {
+  openSource() {
+    const source = sourceInfo(this.result);
+    if (source) window.open(editUrl(this.org, source.site, source.path), '_blank', 'noopener');
+  }
+
+  press(item) {
     this.confirm = null;
-    if (button.kind === 'execute') return this.execute(this.page, button);
-    if (button.kind === 'check') return this.checkJobs([this.page]);
-    if (button.kind === 'preview') return this.publish(this.page, { live: false });
-    if (button.kind === 'publish') return this.publish(this.page, { live: true });
-    return null;
+    this.menuOpen = false;
+    const handlers = {
+      execute: () => this.execute(this.page, item),
+      check: () => this.checkJobs([this.page]),
+      preview: () => this.publish(this.page, { live: false }),
+      publish: () => this.publish(this.page, { live: true }),
+      cascade: () => this.publish(this.page, { cascade: true }),
+      compare: () => this.openSource(),
+      source: () => this.openSource(),
+      resolve: () => this.resolveReview(),
+    };
+    return handlers[item.kind]?.() ?? null;
+  }
+
+  request(item) {
+    if (!item.enabled || this.isBusy()) return;
+    if (item.confirm) {
+      this.menuOpen = false;
+      this.confirm = item;
+      this.updateComplete.then(() => this.shadowRoot.querySelector('.confirm .btn')?.focus());
+      return;
+    }
+    this.press(item);
+  }
+
+  isBusy() {
+    return this.busy.has(pageKey(this.page)) || this.busy.has('check');
   }
 
   appLink() {
@@ -271,24 +308,87 @@ class MsmNextPlugin extends LitElement {
     return `${APP_URL}?${params.toString()}`;
   }
 
+  menu() {
+    const source = sourceInfo(this.result);
+    return menuItems(this.result, {
+      hasTargets: this.tree.length > 0,
+      sourceUrl: source ? editUrl(this.org, source.site, source.path) : null,
+      appUrl: this.appLink(),
+      canResolve: Boolean(this.localization.resolveReview),
+    });
+  }
+
+  toggleMenu(open = !this.menuOpen) {
+    this.menuOpen = open;
+    if (open) {
+      this.updateComplete.then(() => this.shadowRoot.querySelector('[role="menuitem"]:not([aria-disabled="true"])')?.focus());
+    }
+  }
+
+  onMenuKey(event) {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      this.menuOpen = false;
+      this.shadowRoot.querySelector('.menu-trigger')?.focus();
+      return;
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const items = [...this.shadowRoot.querySelectorAll('[role="menuitem"]')];
+    const index = items.indexOf(this.shadowRoot.activeElement);
+    const moves = {
+      ArrowDown: (index + 1) % items.length,
+      ArrowUp: (index - 1 + items.length) % items.length,
+      Home: 0,
+      End: items.length - 1,
+    };
+    items[moves[event.key]]?.focus();
+  }
+
+  renderMenuItem(item, index, items) {
+    const separator = index > 0 && items[index - 1].group !== item.group
+      ? html`<li role="separator" class="separator"></li>` : nothing;
+    if (item.kind === 'link') {
+      return html`${separator}<li role="none"><a role="menuitem" class="menu-item" href=${item.href}
+        target="_blank" rel="noopener" @click=${() => { this.menuOpen = false; }}>${item.label} <span aria-hidden="true">↗</span></a></li>`;
+    }
+    return html`${separator}<li role="none"><button type="button" role="menuitem"
+      class="menu-item ${item.destructive ? 'destructive' : ''}" aria-disabled=${String(!item.enabled)}
+      title=${item.reason || nothing} @click=${() => this.request(item)}>
+      <span>${item.label}</span>
+      ${item.enabled ? nothing : html`<span class="menu-reason">${item.reason}</span>`}
+    </button></li>`;
+  }
+
+  renderTop() {
+    const items = this.phase === 'ready' ? this.menu() : [];
+    return html`
+      <div class="top">
+        <span class="panel-name">Multi-site</span>
+        ${this.mode === 'mock' ? html`<span class="mock">Mock data</span>` : nothing}
+        ${items.length ? html`<div class="menu-wrap" @keydown=${this.onMenuKey}>
+          <button type="button" class="menu-trigger" aria-label="More actions" aria-haspopup="menu"
+            aria-expanded=${String(this.menuOpen)} @click=${() => this.toggleMenu()}>⋯</button>
+          ${this.menuOpen ? html`<ul class="menu" role="menu" aria-label="More actions">
+            ${items.map((item, index) => this.renderMenuItem(item, index, items))}
+          </ul>` : nothing}
+        </div>` : nothing}
+      </div>`;
+  }
+
   renderHeader() {
-    const publishState = this.localization.publishState?.(this.site, this.path);
-    const info = header(this.result, { ...this.page, publishState });
+    const info = header(this.result, this.page);
     return html`
       <header class="head">
-        <div class="head-title">
+        <div class="title-row">
           <h1>${info.title}</h1>
-          <a class="quiet-link" href=${this.appLink()} target="_blank" rel="noopener">Open MSM app ↗</a>
+          ${locale(this.result.location?.language, info.badgeTitle)}
         </div>
-        <p class="path">${info.site}:${info.path}</p>
-        <p class="where">${info.location}${info.level && info.level !== info.location ? html` · ${info.level}` : nothing}</p>
-        <div class="badges">
-          ${lang(this.result.location)}
-          <span class="badge type">${info.type.label}${info.type.detail ? html` · ${info.type.detail}` : nothing}</span>
-          ${badge(info.sync)}
-          ${overridden(info.overridden)}
-          ${badge(info.publish)}
-          ${this.mode === 'mock' ? html`<span class="badge informative">Mock data</span>` : nothing}
+        <div class="status-row">
+          ${pill(info.pill)}
+          ${info.overridden ? html`<span class="pill outline" title="This page has local edits since it was last synced">Overridden</span>` : nothing}
+          ${this.isBusy() ? spinner() : nothing}
+          ${info.lastSynced ? html`<span class="synced">Last synced ${info.lastSynced}</span>` : nothing}
         </div>
       </header>`;
   }
@@ -296,104 +396,62 @@ class MsmNextPlugin extends LitElement {
   renderMessage() {
     if (!this.message) return nothing;
     return html`
-      <div class="message ${this.message.tone}" role="status">
+      <div class="toast ${this.message.tone}" role="status">
         <span>${this.message.text}</span>
         <button type="button" class="dismiss" aria-label="Dismiss" @click=${() => { this.message = null; }}>×</button>
       </div>`;
   }
 
-  renderButton(button) {
-    const busy = this.busy.has(pageKey(this.page)) || this.busy.has(button.kind);
-    if (this.confirm === button.id) {
-      return html`
-        <div class="confirm ${button.destructive ? 'destructive' : ''}" role="alertdialog" aria-label="Confirm ${button.label}">
-          <p>${button.confirm}</p>
-          <div class="row">
-            <button type="button" class="btn" @click=${() => { this.confirm = null; }}>Cancel</button>
-            <button type="button" class="btn ${button.destructive ? 'destructive' : 'accent'}" @click=${() => this.pressButton(button)}>${button.label}</button>
-          </div>
-        </div>`;
-    }
-    const tone = [button.primary ? 'accent' : '', button.destructive ? 'destructive' : ''].join(' ');
+  renderConfirm() {
+    const item = this.confirm;
+    if (!item) return nothing;
+    return html`
+      <div class="confirm ${item.destructive ? 'destructive' : ''}" role="alertdialog" aria-label="Confirm ${item.label}"
+        @keydown=${(event) => { if (event.key === 'Escape') this.confirm = null; }}>
+        <p><strong>${item.label}?</strong> ${item.confirm}</p>
+        <div class="row">
+          <button type="button" class="btn" @click=${() => { this.confirm = null; }}>Cancel</button>
+          <button type="button" class="btn ${item.destructive ? 'destructive-fill' : 'accent'}" @click=${() => this.press(item)}>${item.label}</button>
+        </div>
+      </div>`;
+  }
+
+  renderCardButton(button) {
+    const disabled = !button.enabled || this.isBusy();
+    const style = { primary: 'btn accent', secondary: 'btn', link: 'link-btn' }[button.style] ?? 'btn';
     return html`
       <span class="action">
-        <button type="button" class="btn ${tone}" aria-disabled=${String(!button.enabled || busy)}
-          title=${button.reason || nothing}
-          @click=${() => {
-    if (!button.enabled || busy) return;
-    if (button.confirm) this.confirm = button.id;
-    else this.pressButton(button);
-  }}>${button.label}</button>
+        <button type="button" class=${style} aria-disabled=${String(disabled)} title=${button.reason || nothing}
+          @click=${() => this.request(button)}>${button.label}</button>
         ${button.enabled ? nothing : html`<span class="reason">${button.reason}</span>`}
       </span>`;
   }
 
-  renderActions() {
-    const { review, groups } = pageActions(this.result);
-    const busy = this.busy.has(pageKey(this.page)) || this.busy.has('check');
+  renderCard(card) {
+    if (!card) return nothing;
     return html`
-      <section aria-labelledby="actions-h">
-        <h2 id="actions-h">This page ${busy ? spinner() : nothing}</h2>
-        ${groups.length || review ? html`<dl class="groups">
-          ${review ? html`<div class="group"><dt>Review</dt><dd><span class="action">
-            <button type="button" class="btn accent" @click=${() => this.review(this.page)}>Review changes</button>
-            <span class="reason">Accept or reject the merged changes first</span></span></dd></div>` : nothing}
-          ${groups.map((group) => html`
-            <div class="group">
-              <dt>${group.title}</dt>
-              <dd>${group.buttons.map((button) => this.renderButton(button))}</dd>
-            </div>`)}
-        </dl>` : html`<p class="muted">No actions available for this page.</p>`}
-      </section>`;
+      <div class="card ${card.tone}" role="region" aria-label=${card.title}>
+        <div class="card-head">
+          <span class="card-icon" aria-hidden="true">${CARD_ICONS[card.tone] ?? 'i'}</span>
+          <h2>${card.title}</h2>
+        </div>
+        ${card.text ? html`<p>${card.text}</p>` : nothing}
+        ${card.note ? html`<p class="card-note">${card.note}</p>` : nothing}
+        ${card.buttons.length ? html`<div class="row">${card.buttons.map((button) => this.renderCardButton(button))}</div>` : nothing}
+      </div>`;
   }
 
-  renderSources() {
-    const rows = sourceRows(this.result, this.results);
-    if (!rows.length) return nothing;
+  renderVariation(row) {
     return html`
-      <section aria-labelledby="source-h">
-        <h2 id="source-h">Source</h2>
-        <ol class="list">
-          ${rows.map((row) => html`
-            <li class="item">
-              ${lang(row.location)}
-              <span class="item-text">
-                <span class="item-name">${row.location.label}<span class="muted"> · ${row.level}${row.direct ? ' · source page' : ''}</span></span>
-                <span class="path">${row.site === this.site ? row.path : `${row.site}:${row.path}`}</span>
-              </span>
-              <span class="item-status">
-                ${row.type ? html`<span class="badge type">${row.type.label}</span>` : spinner('Loading')}
-                ${badge(row.sync)}
-                ${overridden(row.overridden)}
-              </span>
-              ${row.exists ? html`<a class="btn small quiet" href=${editUrl(this.org, row.site, row.path)} target="_blank" rel="noopener">Open</a>` : html`<span class="btn-spacer"></span>`}
-            </li>`)}
-        </ol>
-      </section>`;
-  }
-
-  renderTargetRow(row) {
-    const page = { site: row.site, path: row.path };
-    const busy = this.busy.has(row.key);
-    const next = row.next && html`<button type="button" class="btn small ${row.next.kind === 'review' ? '' : 'accent'}"
-      aria-disabled=${String(busy)} @click=${() => {
-  if (busy) return;
-  if (row.next.kind === 'review') this.review(page);
-  else this.execute(page, row.next);
-}}>${row.next.label}</button>`;
-    return html`
-      <li class="item" style="--depth: ${row.depth}">
-        ${lang(row.location)}
-        <span class="item-text">
-          <span class="item-name">${row.location.label}</span>
-          <span class="path">${row.site === this.site ? row.path : `${row.site}:${row.path}`}</span>
+      <li class="variation" style="--depth: ${row.depth}">
+        ${locale(row.location.language, row.location.label)}
+        <span class="variation-name">
+          <a href=${editUrl(this.org, row.site, row.path)} target="_blank" rel="noopener">${row.location.label}</a>
+          ${row.site === this.site ? nothing : html`<span class="muted">${row.site}</span>`}
         </span>
-        <span class="item-status">
-          ${row.type ? html`<span class="badge type" title=${row.type.detail ?? ''}>${row.type.label}</span>` : spinner('Loading')}
-          ${badge(row.sync)}
-          ${overridden(row.overridden)}
-        </span>
-        ${busy ? spinner() : next || html`<span class="btn-spacer"></span>`}
+        ${this.busy.has(row.key) ? spinner() : nothing}
+        ${row.overridden ? html`<span class="pill outline small" title="Local edits since last sync">Overridden</span>` : nothing}
+        ${row.pill ? pill(row.pill, 'small') : spinner('Loading')}
       </li>`;
   }
 
@@ -403,53 +461,108 @@ class MsmNextPlugin extends LitElement {
     return html`
       <div class="run" role="status" aria-live="polite">
         <p class="run-head">
-          ${summary.finished ? html`<strong>Update finished</strong>` : html`${spinner()} <strong>Updating…</strong>`}
+          ${summary.finished ? html`<strong>Run finished</strong>` : html`${spinner()} <strong>Updating…</strong>`}
           <span class="muted">${summary.total} page${summary.total === 1 ? '' : 's'}</span>
           ${summary.finished ? html`<button type="button" class="dismiss" aria-label="Dismiss" @click=${() => { this.run = null; }}>×</button>` : nothing}
         </p>
-        <div class="badges">${summary.counts.map((entry) => html`<span class="badge ${entry.tone}">${entry.label} ${entry.count}</span>`)}</div>
+        <div class="pills">${summary.counts.map((entry) => html`<span class="pill small ${entry.tone}">${entry.label} ${entry.count}</span>`)}</div>
         ${summary.issues.length ? html`<ul class="issues">
           ${summary.issues.map((issue) => html`<li><span class="path">${issue.site === this.site ? issue.path : `${issue.site}:${issue.path}`}</span> ${issue.label}${issue.reason ? html`: ${issue.reason}` : nothing}</li>`)}
         </ul>` : nothing}
       </div>`;
   }
 
-  renderTargets() {
+  openPicker() {
+    const rows = pickerRows(this.tree, Math.max((this.result.chain?.length ?? 1) - 1, 0));
+    this.picked = new Set(rows.map((row) => row.id));
+    this.picking = true;
+  }
+
+  renderPicker(rows) {
+    const options = rolloutOptions(targetRows(this.tree), this.results);
+    const option = this.runOption ?? options[0];
+    const picks = pickerRows(this.tree, Math.max((this.result.chain?.length ?? 1) - 1, 0));
+    const selected = picks.filter((row) => this.picked.has(row.id));
+    return html`
+      <div class="picker" role="group" aria-label="Choose locations">
+        <p class="picker-head"><strong>Create or update in</strong>
+          <span class="muted">${selected.length} of ${picks.length}</span>
+          <button type="button" class="link-btn small" @click=${() => { this.picked = new Set(picks.map((row) => row.id)); }}>All</button>
+          <button type="button" class="link-btn small" @click=${() => { this.picked = new Set(); }}>None</button></p>
+        <ul class="picks">
+          ${picks.map((row) => html`
+            <li style="--depth: ${row.depth}">
+              <label>
+                <input type="checkbox" .checked=${this.picked.has(row.id)}
+                  @change=${(event) => { this.picked = togglePick(picks, this.picked, row.id, event.target.checked); }} />
+                <span>${row.label}</span>
+                <span class="muted">${row.level}</span>
+              </label>
+            </li>`)}
+        </ul>
+        <fieldset class="options">
+          <legend>Changes on existing pages</legend>
+          ${options.map((each) => html`<label><input type="radio" name="run-option" .checked=${each === option}
+            @change=${() => { this.runOption = each; }} /> ${OPTION_LABELS[each] ?? each}</label>`)}
+        </fieldset>
+        <div class="row">
+          <button type="button" class="btn accent" aria-disabled=${String(!selected.length || !rows.length)}
+            @click=${() => { if (selected.length) this.propagate(selected.map((row) => row.id)); }}>Run</button>
+          <button type="button" class="btn" @click=${() => { this.picking = false; }}>Cancel</button>
+        </div>
+      </div>`;
+  }
+
+  renderVariations(card) {
+    const locked = Boolean(card?.locksVariations);
+    const head = html`
+      <h2 id="variations-h">Linked variations</h2>
+      <p class="sub">Linked variations inherit content from this page.</p>`;
     if (this.targetsPhase === 'loading') {
-      return html`<section><h2>Pages that use this as their source</h2><p class="muted">${spinner('Loading')} Finding pages…</p></section>`;
+      return html`<section class="variations" aria-labelledby="variations-h">${head}<p class="muted">${spinner('Loading')} Finding linked variations…</p></section>`;
     }
     if (this.targetsPhase === 'error') {
-      return html`<section><h2>Pages that use this as their source</h2><p class="error-text">Could not load the pages that use this page.</p></section>`;
+      return html`<section class="variations" aria-labelledby="variations-h">${head}<p class="error-text">Could not load linked variations.</p></section>`;
     }
     const rows = targetRows(this.tree, this.results);
-    if (!rows.length) return nothing;
-    const summary = targetSummary(rows);
-    const options = rolloutOptions(rows, this.results);
-    const option = this.runOption ?? options[0];
+    const allowed = canPropagate(this.result, rows) && !locked;
     const propagating = this.busy.has('propagate');
     const cascading = this.busy.has('cascade');
-    const allowed = canPropagate(this.result, rows);
+    const why = locked ? 'Resolve the conflicts on this page first' : 'This page has no content yet';
     return html`
-      <section aria-labelledby="targets-h">
-        <h2 id="targets-h">Pages that use this as their source
-          <span class="muted">${summary.total} · ${summary.needsAction} need action</span></h2>
-        <div class="row bulk">
-          <button type="button" class="btn accent" aria-disabled=${String(!allowed || propagating)}
-            title=${allowed ? 'Updates every page below, level by level' : 'This page has no content yet'}
-            @click=${() => { if (allowed && !propagating) this.propagate(); }}>Update all</button>
-          <label class="option">Changes:
-            <select .value=${option} @change=${(event) => { this.runOption = event.target.value; }}>
-              ${options.map((each) => html`<option value=${each} ?selected=${each === option}>${OPTION_LABELS[each] ?? each}</option>`)}
-            </select>
-          </label>
-          <button type="button" class="btn" aria-disabled=${String(!allowed || cascading)}
+      <section class="variations ${locked ? 'locked' : ''}" aria-labelledby="variations-h" aria-disabled=${String(locked)}>
+        ${head}
+        ${locked ? html`<p class="lock-note">Resolve the conflicts on this page to work with its linked variations.</p>` : nothing}
+        ${rows.length ? html`<ul class="variation-list">${rows.map((row) => this.renderVariation(row))}</ul>`
+    : html`<p class="muted">No locations use this page's location as their source.</p>`}
+        ${rows.length ? html`<div class="row">
+          <button type="button" class="pill-btn" aria-disabled=${String(!allowed || propagating)}
+            aria-expanded=${String(this.picking)} title=${allowed ? 'Choose locations to create or update' : why}
+            @click=${() => { if (allowed && !propagating) this.openPicker(); }}>+ Create linked variation</button>
+          <button type="button" class="link-btn" aria-disabled=${String(!allowed || cascading)}
             title="Publishes this page and every inherited page below it"
             @click=${() => { if (allowed && !cascading) this.publish(this.page, { cascade: true }); }}>Publish with inherited pages</button>
           ${propagating || cascading ? spinner() : nothing}
-        </div>
+        </div>` : nothing}
+        ${this.picking && allowed ? this.renderPicker(rows) : nothing}
         ${this.renderRun()}
-        <ul class="list tree">${rows.map((row) => this.renderTargetRow(row))}</ul>
       </section>`;
+  }
+
+  renderDetails() {
+    const publishState = this.localization.publishState?.(this.site, this.path);
+    const rows = detailRows(this.result, { site: this.site, publishState });
+    return html`
+      <details class="details" open>
+        <summary>Page details</summary>
+        <dl>
+          ${rows.map((row) => html`
+            <div class="detail">
+              <dt>${row.label}</dt>
+              <dd>${row.value}${row.detail ? html`<span class="muted">${row.detail}</span>` : nothing}</dd>
+            </div>`)}
+        </dl>
+      </details>`;
   }
 
   renderBody() {
@@ -458,17 +571,20 @@ class MsmNextPlugin extends LitElement {
     if (this.phase === 'none') {
       return html`<p class="muted state"><strong>${this.site}:${this.path}</strong> is not in any configured location.</p>`;
     }
+    const card = stateCard(this.result);
     return html`
       ${this.renderHeader()}
+      ${this.renderConfirm()}
+      ${this.renderCard(card)}
       ${this.renderMessage()}
-      ${this.renderActions()}
-      ${this.renderSources()}
-      ${this.renderTargets()}`;
+      ${this.renderVariations(card)}
+      ${this.renderDetails()}`;
   }
 
   render() {
     return html`
-      ${this.notice ? html`<p class="notice">${this.notice}</p>` : nothing}
+      ${this.renderTop()}
+      ${this.notice ? html`<p class="banner">${this.notice}</p>` : nothing}
       ${this.renderBody()}`;
   }
 }
@@ -500,12 +616,17 @@ async function resolveSetup() {
   const { context, actions } = sdk;
   const site = context.site || context.repo;
   const { default: createRealLocalization } = await import('./real-localization.js');
+  const translateDelay = Number(params.get('translateDelay')) || 0;
+  const localization = await createRealLocalization({ org: context.org, actions, translateDelay });
   return {
     mode: 'real',
     org: context.org,
     site,
     path: pagePathFrom(context.path),
-    localization: createRealLocalization({ org: context.org, actions }),
+    localization,
+    notice: localization.translationError
+      ? `Translation is not available: ${localization.translationError}`
+      : undefined,
   };
 }
 

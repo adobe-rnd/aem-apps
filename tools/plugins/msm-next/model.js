@@ -15,9 +15,10 @@
  */
 import {
   pageType, syncBadges, nextStep, reasonText, levelLabel, pageTitle, isOverridden, isRealPage,
-  OPTION_LABELS, REASON_LABELS,
+  REASON_LABELS,
 } from '../../apps/msm-next/data/display.js';
 import { targetPages } from '../../localization/core/domain/resolve.js';
+import { parseLanguage } from '../../localization/core/domain/language.js';
 
 export const pageKey = ({ site, path }) => `${site}:${path}`;
 
@@ -41,41 +42,104 @@ export function publishBadge(state) {
 
 export const isTranslating = (result) => (result?.status?.sync ?? []).includes('translating');
 
-export function header(result, { site, path, publishState } = {}) {
-  const location = result?.location ?? null;
-  const depth = Math.max((result?.chain?.length ?? 1) - 1, 0);
+export const localeBadge = (language) => (language ? language.toUpperCase() : null);
+
+export function regionName(language, displayLocale = 'en') {
+  const parsed = parseLanguage(language);
+  if (!parsed?.region) return null;
+  try {
+    return new Intl.DisplayNames([displayLocale], { type: 'region' }).of(parsed.region);
+  } catch {
+    return null;
+  }
+}
+
+export function languageName(language, displayLocale = 'en') {
+  const parsed = parseLanguage(language);
+  if (!parsed) return language ?? null;
+  const base = parsed.script ? `${parsed.language}-${parsed.script}` : parsed.language;
+  try {
+    return new Intl.DisplayNames([displayLocale], { type: 'language' }).of(base);
+  } catch {
+    return language;
+  }
+}
+
+export function formatDate(iso, { locale = 'en-US', timeZone } = {}) {
+  const time = Date.parse(iso ?? '');
+  if (Number.isNaN(time)) return '';
+  return new Intl.DateTimeFormat(locale, {
+    month: 'short', day: 'numeric', year: 'numeric', timeZone,
+  }).format(time);
+}
+
+const relativePath = (path, location) => path
+  .slice(location && location.path !== '/' ? location.path.length : 0);
+
+export const refTitle = (ref) => pageTitle(relativePath(ref.path, ref.location));
+
+export function statusPill(result) {
   const [urgent] = syncBadges(result);
+  if (urgent) return { label: urgent.label, tone: urgent.tone, sync: urgent.sync };
+  return { label: pageType(result).label, tone: 'neutral', sync: null };
+}
+
+export function header(result, { path, timeZone } = {}) {
+  const location = result?.location ?? null;
   return {
-    title: pageTitle(path.slice(location && location.path !== '/' ? location.path.length : 0)),
-    site,
-    path,
-    location: location ? location.label : null,
-    level: location ? levelLabel(location, depth) : null,
-    language: location?.language ?? null,
-    type: pageType(result),
-    sync: urgent ?? null,
+    title: pageTitle(relativePath(path, location)),
+    badge: localeBadge(location?.language),
+    badgeTitle: location?.label ?? '',
+    pill: statusPill(result),
     overridden: isOverridden(result),
-    publish: publishBadge(publishState),
+    lastSynced: formatDate(result?.chain?.[0]?.info?.base?.at, { timeZone }),
   };
 }
 
-export function sourceRows(result, results = new Map()) {
-  return (result?.chain ?? []).slice(1).map(({ ref, info }, index) => {
-    const key = pageKey(ref);
-    const loaded = results.get(key);
-    return {
-      key,
-      site: ref.site,
-      path: ref.path,
-      location: ref.location,
-      level: levelLabel(ref.location, (result.chain.length - 2) - index),
-      exists: Boolean(info?.exists),
-      direct: index === 0,
-      type: loaded ? pageType(loaded) : null,
-      sync: loaded ? (syncBadges(loaded)[0] ?? null) : null,
-      overridden: isOverridden(loaded),
-    };
-  });
+export function sourceInfo(result) {
+  const ref = result?.status?.effectiveSource;
+  if (!ref) return null;
+  return {
+    site: ref.site,
+    path: ref.path,
+    label: ref.location?.label ?? ref.path,
+    title: refTitle(ref),
+  };
+}
+
+const sameLabel = (first, second) => (first === second ? first : `${first} · ${second}`);
+
+export function detailRows(result, { site, publishState } = {}) {
+  const location = result?.location;
+  if (!location) return [];
+  const type = pageType(result);
+  const source = sourceInfo(result);
+  const depth = Math.max((result.chain?.length ?? 1) - 1, 0);
+  const sourcePath = source && (source.site === site ? source.path : `${source.site}:${source.path}`);
+  const noSource = type.relationship === 'root' ? 'None (this is the source)' : 'None';
+  return [
+    {
+      id: 'type', label: 'Type', value: type.label, detail: type.detail ?? '',
+    },
+    {
+      id: 'source',
+      label: 'Source',
+      value: source ? `${source.title} (${source.label})` : noSource,
+      detail: sourcePath ?? '',
+    },
+    {
+      id: 'language', label: 'Language', value: languageName(location.language), detail: location.language,
+    },
+    {
+      id: 'locale', label: 'Locale', value: regionName(location.language) ?? '—', detail: '',
+    },
+    {
+      id: 'location', label: 'Location', value: sameLabel(location.label, levelLabel(location, depth)), detail: '',
+    },
+    publishState !== undefined && {
+      id: 'publish', label: 'Published', value: publishBadge(publishState).label, detail: '',
+    },
+  ].filter(Boolean);
 }
 
 export function targetTree(model, page, find = targetPages, seen = new Set([pageKey(page)])) {
@@ -108,6 +172,7 @@ export function targetRows(nodes, results = new Map()) {
       loaded: Boolean(result),
       type: result ? pageType(result) : null,
       sync: result ? (syncBadges(result)[0] ?? null) : null,
+      pill: result ? statusPill(result) : null,
       overridden: isOverridden(result),
       next: result ? nextStep(result) : null,
     };
@@ -123,83 +188,255 @@ export function targetSummary(rows) {
   };
 }
 
-const GROUPS = [
-  { id: 'update', title: 'Update from source', actions: ['rollout'] },
-  { id: 'translation', title: 'Translation', actions: ['translate', 'save', 'check'] },
-  { id: 'relationship', title: 'Relationship', actions: ['link', 'unlink', 'relink', 'reconnect'] },
-  { id: 'publish', title: 'Publish', actions: ['preview', 'publish'] },
-];
-
-const LABELS = {
-  translate: 'Translate',
-  save: 'Save translation',
-  link: 'Inherit',
-  unlink: 'Unlink',
-  relink: 'Relink',
-  reconnect: 'Revert to inherited',
-};
-
 const CONFIRMS = {
   reconnect: 'This deletes the local copy. The page will show its source content again.',
   unlink: 'This page will stop getting updates from its source.',
+  overwrite: 'This replaces the page with the source content. Local changes are lost.',
 };
 
 const PUBLISHABLE = ['source', 'copies', 'inherited', 'independent'];
+const UPDATES = ['rollout', 'translate'];
 
-function executeButtons(entry, primary) {
-  const base = {
+function fromEntry(entry, fields) {
+  if (!entry) return null;
+  return {
     kind: 'execute',
     action: entry.action,
     enabled: Boolean(entry.enabled),
     reason: entry.enabled ? '' : reasonText(entry.reasons),
     destructive: Boolean(entry.destructive),
-    primary: primary === entry.action,
     confirm: CONFIRMS[entry.action],
+    ...fields,
   };
-  if (entry.action === 'rollout' && entry.creates) {
-    return [{ ...base, id: 'rollout', label: 'Create local copy' }];
-  }
-  if (entry.action === 'rollout' && entry.options?.length) {
-    return entry.options.map((option, position) => ({
-      ...base,
-      id: `rollout:${option}`,
-      option,
-      primary: base.primary && position === 0,
-      label: OPTION_LABELS[option] ?? option,
-    }));
-  }
-  const label = entry.action === 'unlink' && entry.creates ? 'Unlink (creates a local copy)' : LABELS[entry.action];
-  return [{ ...base, id: entry.action, label: label ?? entry.action }];
 }
 
-export function pageActions(result, { canCheck = true } = {}) {
-  if (!result?.status) return { review: false, groups: [] };
-  const step = nextStep(result);
-  const primary = step?.kind === 'action' ? step.action : null;
-  const buttons = (result.actions ?? []).flatMap((entry) => executeButtons(entry, primary));
-  if (canCheck && isTranslating(result)) {
-    buttons.push({
-      kind: 'check', id: 'check', action: 'check', label: 'Check status', enabled: true, reason: '',
+const plain = (fields) => ({
+  enabled: true, reason: '', ...fields,
+});
+
+const findEntry = (result, name) => (result?.actions ?? []).find((entry) => entry.action === name);
+
+export function defaultUpdate(result) {
+  const entries = (result?.actions ?? []).filter((entry) => UPDATES.includes(entry.action));
+  return entries.find((entry) => entry.default) ?? entries[0] ?? null;
+}
+
+function syncButton(entry) {
+  if (!entry) return null;
+  if (entry.action === 'translate') {
+    return fromEntry(entry, { id: 'translate', label: 'Translate now', style: 'primary' });
+  }
+  return fromEntry(entry, {
+    id: 'sync', label: 'Sync now', option: entry.options?.[0], style: 'primary',
+  });
+}
+
+const card = (fields) => ({
+  note: null,
+  locksVariations: false,
+  ...fields,
+  buttons: (fields.buttons ?? []).filter(Boolean),
+});
+
+const TEXT = {
+  review: 'Some content needs your attention before the update can be completed. Resolve the conflicts in the canvas to continue.',
+  blocked: 'The source page has changes that need review first. Once they are resolved there, this page can be updated.',
+  ready: 'The translation is back from the translation service. Save it to apply it to this page.',
+  translating: 'The translation service is working on this page. Check the status to see if it is done.',
+  deleted: 'The page this one was synced from no longer exists.',
+  overridden: 'This page contains local changes that may be affected by synchronization.',
+  unlinked: 'This page no longer gets updates from its source.',
+};
+
+function updateCard(result, source) {
+  const entry = defaultUpdate(result);
+  const verb = entry?.action === 'translate' ? 'Translate' : 'Sync';
+  return card({
+    id: 'update',
+    tone: 'notice',
+    title: 'Available updates',
+    text: `An update from the source is available. ${verb} to apply the latest content to this page.`,
+    note: isOverridden(result) ? TEXT.overridden : null,
+    buttons: [
+      syncButton(entry),
+      source && plain({
+        kind: 'compare', id: 'compare', label: 'Compare with source', style: 'link',
+      }),
+    ],
+  });
+}
+
+function notCreatedCard(result) {
+  const create = defaultUpdate(result);
+  const link = findEntry(result, 'link');
+  const where = result.location?.label ?? 'this location';
+  const label = create?.action === 'translate' ? 'Translate' : 'Create';
+  return card({
+    id: 'not-created',
+    tone: 'neutral',
+    title: 'Not created yet',
+    text: `This page doesn't exist in ${where} yet.`,
+    buttons: [
+      create && fromEntry(create, { id: 'create', label, style: 'primary' }),
+      link?.enabled && fromEntry(link, { id: 'link', label: 'Inherit', style: 'link' }),
+    ],
+  });
+}
+
+function relationshipCard(result, source) {
+  const type = pageType(result);
+  if (type.relationship === 'inherited') {
+    return card({
+      id: 'inherited',
+      tone: 'neutral',
+      title: 'Inherited',
+      text: `This page inherits content from ${source?.label ?? 'its source'}.`,
+      buttons: [plain({
+        kind: 'publish', id: 'publish', label: 'Publish', style: 'primary',
+      })],
     });
   }
-  if (PUBLISHABLE.includes(pageType(result).group)) {
-    buttons.push(
-      {
-        kind: 'preview', id: 'preview', action: 'preview', label: 'Preview', enabled: true, reason: '',
-      },
-      {
-        kind: 'publish', id: 'publish', action: 'publish', label: 'Publish', enabled: true, reason: '',
-      },
-    );
+  if (type.relationship === 'not created') return notCreatedCard(result);
+  if (type.relationship === 'unlinked') {
+    const from = type.detail.replace(/^Unlinked from /, '');
+    return card({
+      id: 'unlinked',
+      tone: 'neutral',
+      title: from && from !== 'Unlinked' ? `Independent — unlinked from ${from}` : 'Independent — unlinked',
+      text: TEXT.unlinked,
+      buttons: [fromEntry(findEntry(result, 'relink'), { id: 'relink', label: 'Relink', style: 'primary' })],
+    });
   }
-  const groups = GROUPS
-    .map((group) => ({
-      id: group.id,
-      title: group.title,
-      buttons: buttons.filter((button) => group.actions.includes(button.action)),
-    }))
-    .filter((group) => group.buttons.length);
-  return { review: step?.kind === 'review', groups };
+  if (['missing', 'error'].includes(type.group)) {
+    return card({
+      id: 'unavailable', tone: 'neutral', title: type.label, text: type.detail ?? '',
+    });
+  }
+  return null;
+}
+
+export function stateCard(result) {
+  if (!result?.status) return null;
+  const sync = result.status.sync ?? [];
+  const source = sourceInfo(result);
+  if (sync.includes('needs review')) {
+    return card({
+      id: 'review', tone: 'negative', title: 'Conflicts', text: TEXT.review, locksVariations: true,
+    });
+  }
+  if (sync.includes('blocked by source review')) {
+    return card({
+      id: 'blocked',
+      tone: 'notice',
+      title: 'Waiting for source review',
+      text: TEXT.blocked,
+      buttons: [source && plain({
+        kind: 'source', id: 'open-source', label: 'Open source page', style: 'link',
+      })],
+    });
+  }
+  if (sync.includes('ready to save')) {
+    return card({
+      id: 'ready',
+      tone: 'informative',
+      title: 'Translation ready',
+      text: TEXT.ready,
+      buttons: [fromEntry(findEntry(result, 'save'), { id: 'save', label: 'Save translation', style: 'primary' })],
+    });
+  }
+  if (sync.includes('translating')) {
+    return card({
+      id: 'translating',
+      tone: 'informative',
+      title: 'Translation in progress',
+      text: TEXT.translating,
+      buttons: [plain({
+        kind: 'check', id: 'check', action: 'check', label: 'Check status', style: 'secondary',
+      })],
+    });
+  }
+  if (sync.includes('source deleted')) {
+    return card({
+      id: 'source-deleted', tone: 'negative', title: 'Source page deleted', text: TEXT.deleted,
+    });
+  }
+  if (sync.includes('behind source')) return updateCard(result, source);
+  return relationshipCard(result, source);
+}
+
+const isReview = (result) => (result?.status?.sync ?? []).includes('needs review');
+
+export function menuItems(result, {
+  hasTargets = false, sourceUrl = null, appUrl = null, canResolve = false,
+} = {}) {
+  const exists = Boolean(result?.chain?.[0]?.info?.exists);
+  const rollout = findEntry(result, 'rollout');
+  const unlink = findEntry(result, 'unlink');
+  const page = [
+    exists && rollout?.options?.includes('overwrite') && fromEntry(rollout, {
+      id: 'replace', label: 'Replace with source', option: 'overwrite', confirm: CONFIRMS.overwrite, destructive: true,
+    }),
+    rollout?.creates && fromEntry(rollout, { id: 'create-copy', label: 'Create local copy' }),
+    unlink && fromEntry(unlink, { id: 'unlink', label: unlink.creates ? 'Unlink (creates a local copy)' : 'Unlink' }),
+    fromEntry(findEntry(result, 'relink'), { id: 'relink', label: 'Relink' }),
+    fromEntry(findEntry(result, 'reconnect'), { id: 'reconnect', label: 'Revert to inherited' }),
+    canResolve && isReview(result) && plain({ kind: 'resolve', id: 'resolve', label: 'Mock: accept review changes' }),
+  ];
+  const publishable = PUBLISHABLE.includes(pageType(result).group);
+  const publish = [
+    publishable && plain({ kind: 'preview', id: 'preview', label: 'Preview' }),
+    publishable && plain({ kind: 'publish', id: 'publish', label: 'Publish' }),
+    hasTargets && isRealPage(result) && plain({ kind: 'cascade', id: 'cascade', label: 'Publish with inherited pages' }),
+  ];
+  const links = [
+    sourceUrl && plain({
+      kind: 'link', id: 'open-source', label: 'Open source in editor', href: sourceUrl,
+    }),
+    appUrl && plain({
+      kind: 'link', id: 'open-app', label: 'Open MSM app', href: appUrl,
+    }),
+  ];
+  return [['page', page], ['publish', publish], ['links', links]]
+    .map(([group, items]) => items.filter(Boolean).map((item) => ({ ...item, group })))
+    .flat();
+}
+
+export function pickerRows(tree, baseDepth = 0) {
+  const rows = [];
+  const walk = (nodes, depth, parentId) => nodes.forEach((node) => {
+    const { id } = node.location;
+    rows.push({
+      id,
+      key: node.key,
+      parentId,
+      depth,
+      label: node.location.label,
+      language: node.location.language,
+      level: levelLabel(node.location, baseDepth + depth + 1),
+    });
+    walk(node.children ?? [], depth + 1, id);
+  });
+  walk(tree, 0, null);
+  return rows;
+}
+
+export function togglePick(rows, selected, id, checked) {
+  const next = new Set(selected);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  if (checked) {
+    let current = byId.get(id);
+    while (current) {
+      next.add(current.id);
+      current = byId.get(current.parentId);
+    }
+    return next;
+  }
+  const remove = (target) => {
+    next.delete(target);
+    rows.filter((row) => row.parentId === target).forEach((row) => remove(row.id));
+  };
+  remove(id);
+  return next;
 }
 
 export function canPropagate(result, rows) {

@@ -16,9 +16,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  pagePathFrom, publishBadge, header, sourceRows, targetTree, flattenTargets, targetRows,
-  targetSummary, pageActions, canPropagate, rolloutOptions, runSummary, translatingPages,
-  describeFailure, jobMessage, jobsWorthNoting, doneMessage,
+  pagePathFrom, publishBadge, header, targetTree, flattenTargets, targetRows, targetSummary,
+  canPropagate, rolloutOptions, runSummary, translatingPages, describeFailure, jobMessage,
+  jobsWorthNoting, doneMessage, localeBadge, regionName, languageName, formatDate, statusPill,
+  sourceInfo, detailRows, stateCard, menuItems, defaultUpdate, pickerRows, togglePick,
 } from '../../../../tools/plugins/msm-next/model.js';
 import createMockLocalization from '../../../../tools/apps/msm-next/data/mock/mock-localization.js';
 
@@ -39,7 +40,18 @@ const result = (relationship, sync = [], extra = {}) => ({
   actions: extra.actions ?? [],
 });
 
-const ids = (groups) => groups.map((group) => [group.id, group.buttons.map((button) => button.id)]);
+const sourceRef = {
+  site: 'gamebox',
+  path: '/global/hardware/game-console.html',
+  location: location('/global', { label: 'Global', level: 'Global' }),
+};
+
+const withSource = (page, ref = sourceRef) => {
+  page.status.effectiveSource = ref;
+  return page;
+};
+
+const ids = (items) => items.map((item) => item.id);
 
 describe('pagePathFrom', () => {
   it('adds .html to DA context paths', () => {
@@ -61,58 +73,95 @@ describe('publishBadge', () => {
   });
 });
 
-describe('header', () => {
-  it('summarizes the page', () => {
-    const info = header(result('local copy', ['behind source', 'current'], { overridden: true }), {
-      site: 'gamebox', path: '/amer/hardware/game-console.html', publishState: 'live',
-    });
-    assert.equal(info.title, 'Game console');
-    assert.equal(info.location, 'Americas');
-    assert.equal(info.level, 'Region');
-    assert.equal(info.language, 'en');
-    assert.equal(info.type.label, 'Local copy');
-    assert.equal(info.sync.label, 'Update available');
-    assert.equal(info.overridden, true);
-    assert.equal(info.publish.label, 'Live');
+describe('language display', () => {
+  it('builds the locale badge, region and language names', () => {
+    assert.equal(localeBadge('es-MX'), 'ES-MX');
+    assert.equal(localeBadge(null), null);
+    assert.equal(regionName('es-MX'), 'Mexico');
+    assert.equal(regionName('es-419'), 'Latin America');
+    assert.equal(regionName('en'), null);
+    assert.equal(regionName('nonsense!'), null);
+    assert.equal(languageName('es-MX'), 'Spanish');
+    assert.equal(languageName('zh-Hant-TW'), 'Traditional Chinese');
+    assert.equal(languageName('nonsense!'), 'nonsense!');
   });
 
-  it('describes unlinked pages as independent', () => {
-    const page = result('unlinked');
-    page.chain[0].info.overrides = { unlinkedFrom: 'gamebox:/global/x.html' };
-    page.location.site = 'gamebox';
-    const info = header(page, { site: 'gamebox', path: '/amer/x.html' });
-    assert.equal(info.type.label, 'Independent');
-    assert.equal(info.type.detail, 'Unlinked from /global/x.html');
-    assert.equal(info.publish, null);
-  });
-
-  it('falls back to depth for the level', () => {
-    const page = result('root', [], { location: location('/global') });
-    assert.equal(header(page, { site: 'gamebox', path: '/global/index.html' }).level, 'Level 1');
+  it('formats dates and skips unknown ones', () => {
+    assert.equal(formatDate('2026-10-28T12:00:00Z', { timeZone: 'UTC' }), 'Oct 28, 2026');
+    assert.equal(formatDate(undefined), '');
+    assert.equal(formatDate('nope'), '');
   });
 });
 
-describe('sourceRows', () => {
-  const chain = [
-    { ref: { site: 'gamebox', path: '/fr/x.html', location: location('/fr') }, info: { exists: true } },
-    { ref: { site: 'gamebox', path: '/emea/x.html', location: location('/emea', { level: 'Region' }) }, info: { exists: false } },
-    { ref: { site: 'gamebox', path: '/global/x.html', location: location('/global', { level: 'Global' }) }, info: { exists: true } },
-  ];
-
-  it('lists the chain above the page, nearest first, with loaded status', () => {
-    const results = new Map([['gamebox:/global/x.html', result('root', [])]]);
-    const rows = sourceRows({ chain }, results);
-    assert.deepEqual(rows.map((row) => row.key), ['gamebox:/emea/x.html', 'gamebox:/global/x.html']);
-    assert.equal(rows[0].direct, true);
-    assert.equal(rows[0].exists, false);
-    assert.equal(rows[0].type, null);
-    assert.equal(rows[1].type.label, 'Source');
-    assert.equal(rows[1].level, 'Global');
+describe('header', () => {
+  it('summarizes the page with the most urgent status and the last sync', () => {
+    const page = result('local copy', ['behind source', 'current'], {
+      overridden: true,
+      location: location('/es-mx', { language: 'es-MX', label: 'Mexican Spanish' }),
+      chain: [{ ref: {}, info: { exists: true, base: { at: '2026-10-28T12:00:00Z' } } }],
+    });
+    const info = header(page, { path: '/es-mx/hardware/game-console.html', timeZone: 'UTC' });
+    assert.equal(info.title, 'Game console');
+    assert.equal(info.badge, 'ES-MX');
+    assert.equal(info.badgeTitle, 'Mexican Spanish');
+    assert.deepEqual(info.pill, { label: 'Update available', tone: 'notice', sync: 'behind source' });
+    assert.equal(info.overridden, true);
+    assert.equal(info.lastSynced, 'Oct 28, 2026');
   });
 
-  it('is empty for a source page', () => {
-    assert.deepEqual(sourceRows({ chain: chain.slice(2) }), []);
-    assert.deepEqual(sourceRows(null), []);
+  it('omits the last sync when unknown and falls back to the type for the pill', () => {
+    const info = header(result('unlinked'), { path: '/amer/index.html' });
+    assert.equal(info.title, 'Home');
+    assert.equal(info.lastSynced, '');
+    assert.deepEqual(info.pill, { label: 'Independent', tone: 'neutral', sync: null });
+  });
+
+  it('maps every sync state to a pill', () => {
+    assert.equal(statusPill(result('local copy', ['needs review', 'behind source'])).label, 'Needs review');
+    assert.equal(statusPill(result('local copy', ['needs review'])).tone, 'negative');
+    assert.equal(statusPill(result('translation', ['ready to save'])).label, 'Ready to save');
+    assert.equal(statusPill(result('not created', ['translating'])).label, 'Translating');
+    assert.equal(statusPill(result('local copy', ['current'])).tone, 'positive');
+    assert.equal(statusPill(result('root')).label, 'Source');
+  });
+});
+
+describe('detailRows', () => {
+  it('lists type, source, language, locale and location', () => {
+    const page = withSource(result('local copy', ['current'], {
+      location: location('/es-mx', { language: 'es-MX', label: 'Mexican Spanish', level: 'Locale' }),
+    }));
+    const rows = detailRows(page, { site: 'gamebox' });
+    assert.deepEqual(rows.map((row) => [row.label, row.value]), [
+      ['Type', 'Local copy'],
+      ['Source', 'Game console (Global)'],
+      ['Language', 'Spanish'],
+      ['Locale', 'Mexico'],
+      ['Location', 'Mexican Spanish · Locale'],
+    ]);
+    assert.equal(rows[1].detail, '/global/hardware/game-console.html');
+    assert.equal(rows.some((row) => row.label === 'Sync mode'), false);
+  });
+
+  it('marks the source page, cross-site sources and publish state', () => {
+    const root = result('root', [], { location: location('/global', { label: 'Global', level: 'Global' }) });
+    const rows = detailRows(root, { site: 'gamebox', publishState: 'live' });
+    assert.equal(rows[1].value, 'None (this is the source)');
+    assert.equal(rows[3].value, '—');
+    assert.equal(rows[4].value, 'Global');
+    assert.deepEqual(rows[5], {
+      id: 'publish', label: 'Published', value: 'Live', detail: '',
+    });
+    const retail = withSource(result('local copy'));
+    assert.equal(detailRows(retail, { site: 'gamebox-retail' })[1].detail, 'gamebox:/global/hardware/game-console.html');
+    assert.deepEqual(detailRows({ location: null }), []);
+  });
+
+  it('describes the source page', () => {
+    assert.deepEqual(sourceInfo(withSource(result('local copy'))), {
+      site: 'gamebox', path: '/global/hardware/game-console.html', label: 'Global', title: 'Game console',
+    });
+    assert.equal(sourceInfo(result('root')), null);
   });
 });
 
@@ -148,6 +197,8 @@ describe('target tree', () => {
     ]);
     const rows = targetRows(tree, results);
     assert.equal(rows[0].sync.label, 'Update available');
+    assert.deepEqual(rows[0].pill, { label: 'Update available', tone: 'notice', sync: 'behind source' });
+    assert.equal(rows[2].pill, null);
     assert.deepEqual(rows[0].next, { kind: 'action', action: 'rollout', label: 'Update' });
     assert.equal(rows[1].type.label, 'Inherited');
     assert.equal(rows[1].next, null);
@@ -170,8 +221,105 @@ describe('target tree', () => {
   });
 });
 
-describe('pageActions', () => {
-  it('groups rollout options under update and marks the next step primary', () => {
+describe('stateCard', () => {
+  const rollout = action('rollout', { default: true, options: ['merge', 'overwrite'] });
+
+  it('offers Sync now and Compare for an update, with the local changes note', () => {
+    const page = withSource(result('local copy', ['behind source'], { overridden: true, actions: [rollout] }));
+    const card = stateCard(page);
+    assert.equal(card.id, 'update');
+    assert.equal(card.title, 'Available updates');
+    assert.equal(card.tone, 'notice');
+    assert.match(card.text, /Sync to apply the latest content/);
+    assert.equal(card.note, 'This page contains local changes that may be affected by synchronization.');
+    const shape = (button) => [button.label, button.style, button.option ?? null];
+    assert.deepEqual(card.buttons.map(shape), [
+      ['Sync now', 'primary', 'merge'], ['Compare with source', 'link', null],
+    ]);
+    assert.equal(stateCard(withSource(result('local copy', ['behind source'], { actions: [rollout] }))).note, null);
+  });
+
+  it('says Translate now when translate is the default refresh', () => {
+    const page = withSource(result('translation', ['behind source'], {
+      actions: [action('translate', { default: true }), action('rollout')],
+    }));
+    const [button] = stateCard(page).buttons;
+    assert.equal(button.label, 'Translate now');
+    assert.equal(button.action, 'translate');
+    assert.equal(defaultUpdate(page).action, 'translate');
+  });
+
+  it('shows a disabled sync with its reason', () => {
+    const page = result('local copy', ['behind source'], {
+      actions: [action('rollout', { default: true, enabled: false, reasons: ['backend-unsupported'] })],
+    });
+    const [button] = stateCard(page).buttons;
+    assert.equal(button.enabled, false);
+    assert.equal(button.reason, 'Not supported on this backend yet');
+    assert.equal(stateCard(page).buttons.length, 1);
+  });
+
+  it('shows conflicts without buttons and locks linked variations', () => {
+    const card = stateCard(result('local copy', ['needs review', 'behind source'], { actions: [rollout] }));
+    assert.equal(card.id, 'review');
+    assert.equal(card.title, 'Conflicts');
+    assert.equal(card.tone, 'negative');
+    assert.deepEqual(card.buttons, []);
+    assert.equal(card.locksVariations, true);
+    assert.equal(stateCard(result('local copy', ['behind source'], { actions: [rollout] })).locksVariations, false);
+  });
+
+  it('explains blocked, translating, ready and deleted sources', () => {
+    const blocked = stateCard(withSource(result('local copy', ['blocked by source review'])));
+    assert.equal(blocked.id, 'blocked');
+    assert.deepEqual(ids(blocked.buttons), ['open-source']);
+    const translating = stateCard(result('not created', ['translating']));
+    assert.equal(translating.title, 'Translation in progress');
+    assert.deepEqual(translating.buttons.map((button) => [button.kind, button.label]), [['check', 'Check status']]);
+    const ready = stateCard(result('translation', ['ready to save'], { actions: [action('save')] }));
+    assert.equal(ready.title, 'Translation ready');
+    assert.deepEqual(ready.buttons.map((button) => [button.action, button.label, button.style]), [['save', 'Save translation', 'primary']]);
+    assert.equal(stateCard(result('local copy', ['source deleted'])).id, 'source-deleted');
+  });
+
+  it('describes inherited, not created and unlinked pages', () => {
+    const inherited = stateCard(withSource(result('inherited', [], { actions: [action('rollout', { creates: true })] })));
+    assert.equal(inherited.text, 'This page inherits content from Global.');
+    assert.deepEqual(inherited.buttons.map((button) => [button.kind, button.label]), [['publish', 'Publish']]);
+
+    const missing = stateCard(withSource(result('not created', [], {
+      actions: [action('rollout', { default: true }), action('link')],
+    })));
+    assert.equal(missing.id, 'not-created');
+    assert.deepEqual(missing.buttons.map((button) => [button.action, button.label, button.style]), [
+      ['rollout', 'Create', 'primary'], ['link', 'Inherit', 'link'],
+    ]);
+    const noLink = stateCard(result('not created', [], {
+      actions: [action('translate', { default: true }), action('link', { enabled: false })],
+    }));
+    assert.deepEqual(noLink.buttons.map((button) => button.label), ['Translate']);
+
+    const unlinked = result('unlinked', [], { actions: [action('relink')] });
+    unlinked.chain[0].info.overrides = { unlinkedFrom: 'gamebox:/amer/x.html' };
+    unlinked.location.site = 'gamebox';
+    const card = stateCard(unlinked);
+    assert.equal(card.title, 'Independent — unlinked from /amer/x.html');
+    assert.deepEqual(card.buttons.map((button) => [button.action, button.label]), [['relink', 'Relink']]);
+  });
+
+  it('shows no card when up to date, for sources and standalone pages', () => {
+    assert.equal(stateCard(result('local copy', ['current'])), null);
+    assert.equal(stateCard(result('root')), null);
+    assert.equal(stateCard(result('standalone')), null);
+    assert.equal(stateCard({ status: null }), null);
+    assert.equal(stateCard(result('unavailable')).id, 'unavailable');
+  });
+});
+
+describe('menuItems', () => {
+  const links = { sourceUrl: 'https://da.live/edit#/o/gamebox/global/x', appUrl: 'https://app' };
+
+  it('lists replace, relationship, publish and link items for a local copy', () => {
     const page = result('local copy', ['behind source'], {
       actions: [
         action('rollout', { default: true, options: ['merge', 'overwrite'] }),
@@ -179,57 +327,76 @@ describe('pageActions', () => {
         action('reconnect', { destructive: true }),
       ],
     });
-    const { review, groups } = pageActions(page);
-    assert.equal(review, false);
-    assert.deepEqual(ids(groups), [
-      ['update', ['rollout:merge', 'rollout:overwrite']],
-      ['relationship', ['unlink', 'reconnect']],
-      ['publish', ['preview', 'publish']],
+    const items = menuItems(page, { ...links, hasTargets: true });
+    assert.deepEqual(ids(items), [
+      'replace', 'unlink', 'reconnect', 'preview', 'publish', 'cascade', 'open-source', 'open-app',
     ]);
-    const [merge, replace] = groups[0].buttons;
-    assert.equal(merge.primary, true);
-    assert.equal(merge.label, 'Merge');
-    assert.equal(merge.option, 'merge');
-    assert.equal(replace.primary, false);
-    assert.equal(replace.label, 'Replace with source');
-    const reconnect = groups[1].buttons[1];
+    const [replace, unlink, reconnect] = items;
+    assert.deepEqual([replace.action, replace.option, replace.destructive, Boolean(replace.confirm)], ['rollout', 'overwrite', true, true]);
+    assert.ok(unlink.confirm);
     assert.equal(reconnect.label, 'Revert to inherited');
     assert.ok(reconnect.confirm);
-    assert.equal(reconnect.destructive, true);
+    assert.deepEqual([...new Set(items.map((item) => item.group))], ['page', 'publish', 'links']);
+    assert.equal(items.at(-1).href, 'https://app');
   });
 
-  it('offers a local copy and unlink-with-copy on inherited pages', () => {
-    const page = result('inherited', [], {
-      actions: [action('rollout', { creates: true }), action('unlink', { creates: true })],
+  it('hides replace when overwrite is not allowed and offers a local copy on inherited pages', () => {
+    const merged = result('local copy', [], { actions: [action('rollout', { options: ['merge'] })] });
+    assert.equal(ids(menuItems(merged)).includes('replace'), false);
+    const inherited = result('inherited', [], {
+      actions: [action('rollout', { creates: true, options: ['merge', 'overwrite'] }), action('unlink', { creates: true })],
     });
-    const { groups } = pageActions(page);
-    assert.equal(groups[0].buttons[0].label, 'Create local copy');
-    assert.equal(groups[1].buttons[0].label, 'Unlink (creates a local copy)');
+    const items = menuItems(inherited);
+    assert.deepEqual(ids(items), ['create-copy', 'unlink', 'preview', 'publish']);
+    assert.equal(items[1].label, 'Unlink (creates a local copy)');
   });
 
-  it('shows disabled translate with its reason and a status check while translating', () => {
-    const page = result('not created', ['translating'], {
-      actions: [action('translate', { enabled: false, reasons: ['translation-in-progress'], default: true })],
-    });
-    const { groups } = pageActions(page);
-    assert.deepEqual(ids(groups), [['translation', ['translate', 'check']]]);
-    assert.equal(groups[0].buttons[0].enabled, false);
-    assert.equal(groups[0].buttons[0].reason, 'A translation is in progress');
-    assert.equal(groups[0].buttons[1].kind, 'check');
+  it('offers relink, keeps disabled reasons and the mock review resolver', () => {
+    const unlinked = menuItems(result('unlinked', [], { actions: [action('relink', { enabled: false, reasons: ['no-source'] })] }));
+    assert.equal(unlinked[0].label, 'Relink');
+    assert.equal(unlinked[0].enabled, false);
+    assert.equal(unlinked[0].reason, 'There is no source page');
+    const review = result('local copy', ['needs review']);
+    assert.equal(ids(menuItems(review, { canResolve: true })).includes('resolve'), true);
+    assert.equal(ids(menuItems(review)).includes('resolve'), false);
   });
 
-  it('labels save and link, and flags review', () => {
-    const ready = pageActions(result('translation', ['ready to save'], { actions: [action('save')] }));
-    assert.equal(ready.groups[0].buttons[0].label, 'Save translation');
-    assert.equal(ready.groups[0].buttons[0].primary, true);
-    const missing = pageActions(result('not created', [], { actions: [action('link')] }));
-    assert.deepEqual(ids(missing.groups), [['relationship', ['link']]]);
-    assert.equal(missing.groups[0].buttons[0].label, 'Inherit');
-    assert.equal(pageActions(result('local copy', ['needs review'])).review, true);
+  it('skips publish items for pages that are not created', () => {
+    assert.deepEqual(ids(menuItems(result('not created'), { hasTargets: true })), []);
+  });
+});
+
+describe('target picker', () => {
+  const tree = [
+    {
+      key: 'gamebox:/amer/x.html',
+      location: location('/amer', { label: 'Americas', level: 'Region' }),
+      children: [
+        {
+          key: 'gamebox:/es-419/x.html',
+          location: location('/es-419', { label: 'Latin American Spanish' }),
+          children: [{ key: 'gamebox:/es-mx/x.html', location: location('/es-mx', { label: 'Mexican Spanish', level: 'Locale' }), children: [] }],
+        },
+      ],
+    },
+    { key: 'gamebox:/emea/x.html', location: location('/emea', { label: 'EMEA', level: 'Region' }), children: [] },
+  ];
+  const rows = pickerRows(tree, 0);
+
+  it('lists locations depth-first with level labels', () => {
+    assert.deepEqual(rows.map((row) => [row.id, row.depth, row.level, row.parentId]), [
+      ['gamebox:/amer', 0, 'Region', null],
+      ['gamebox:/es-419', 1, 'Level 3', 'gamebox:/amer'],
+      ['gamebox:/es-mx', 2, 'Locale', 'gamebox:/es-419'],
+      ['gamebox:/emea', 0, 'Region', null],
+    ]);
   });
 
-  it('is empty without a status', () => {
-    assert.deepEqual(pageActions({ status: null }), { review: false, groups: [] });
+  it('includes ancestors when checking and descendants when unchecking', () => {
+    const checked = togglePick(rows, new Set(), 'gamebox:/es-mx', true);
+    assert.deepEqual([...checked].sort(), ['gamebox:/amer', 'gamebox:/es-419', 'gamebox:/es-mx']);
+    const unchecked = togglePick(rows, new Set([...checked, 'gamebox:/emea']), 'gamebox:/amer', false);
+    assert.deepEqual([...unchecked], ['gamebox:/emea']);
   });
 });
 
