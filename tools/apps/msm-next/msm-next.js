@@ -26,8 +26,16 @@ import {
 import {
   needsAction, editUrl, reasonText, ACTION_LABELS,
 } from './data/display.js';
+import { buildTargetTree, toggleTarget, setMany } from './data/targets.js';
+import {
+  layoutMap, fitView, fitWidth, zoomView, toggleCollapse,
+} from './data/map-layout.js';
+import { mergeRuns, translatingItems, runStatus } from './data/run-view.js';
 import renderTreeTable from './views/tree-table.js';
 import renderDetailPanel from './views/detail-panel.js';
+import renderActionDrawer from './views/action-drawer.js';
+import renderRunsView from './views/runs-view.js';
+import renderMapView from './views/map-view.js';
 import { pageLabel } from './views/common.js';
 
 const NX = 'https://da.live/nx';
@@ -62,6 +70,11 @@ const ERROR_LABELS = {
   'remove-failed': 'The local copy could not be deleted',
 };
 
+const RUN_LIST_LIMIT = 15;
+const JOB_CHECK_DELAY = 400;
+
+const pageRef = ({ site, path }) => ({ site, path });
+
 const describeFailure = (result) => {
   const reasons = reasonText(result?.reasons);
   const base = ERROR_LABELS[result?.error] ?? result?.error ?? 'Something went wrong';
@@ -88,6 +101,19 @@ class MsmNextApp extends LitElement {
     busy: { state: true },
     toast: { state: true },
     confirm: { state: true },
+    view: { state: true },
+    tab: { state: true },
+    picked: { state: true },
+    drawer: { state: true },
+    runs: { state: true },
+    activeRunId: { state: true },
+    runBusy: { state: true },
+    runsLoading: { state: true },
+    runsError: { state: true },
+    starting: { state: true },
+    jobInfo: { state: true },
+    checking: { state: true },
+    mapState: { state: true },
   };
 
   constructor() {
@@ -100,6 +126,27 @@ class MsmNextApp extends LitElement {
     this.type = 'all';
     this.expanded = new Set();
     this.busy = new Set();
+    this.view = 'tree';
+    this.tab = 'pages';
+    this.picked = new Set();
+    this.drawer = null;
+    this.runs = [];
+    this.runBusy = new Set();
+    this.runChecked = new Map();
+    this.liveRuns = new Set();
+    this.autoResumed = new Set();
+    this.jobInfo = new Map();
+    this.jobChecked = new Set();
+    this.checking = new Set();
+    this.visibleKeys = [];
+    this.mapState = {
+      root: 'all',
+      collapsed: new Set(),
+      expanded: new Set(),
+      collapseLocales: false,
+      showIndependent: false,
+      view: null,
+    };
   }
 
   connectedCallback() {
@@ -120,6 +167,14 @@ class MsmNextApp extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this.unsubscribe?.();
+    clearTimeout(this.jobTimer);
+  }
+
+  updated() {
+    if (this.phase !== 'ready') return;
+    if (this.tab === 'pages') this.scheduleJobCheck();
+    if (this.tab === 'runs') this.autoResume();
+    if (this.tab === 'pages' && this.view === 'map' && !this.mapState.view) this.initMapView();
   }
 
   async load() {
@@ -129,6 +184,8 @@ class MsmNextApp extends LitElement {
       const tree = await this.loader.load();
       if (!tree) return;
       if (!this.expanded.size && tree.top[0]) this.expanded = new Set([tree.top[0].key]);
+      this.jobChecked = new Set();
+      this.picked = new Set([...this.picked].filter((key) => tree.nodes.has(key)));
       this.phase = tree.nodes.size ? 'ready' : 'empty';
     } catch (e) {
       console.error(e);
@@ -271,6 +328,10 @@ class MsmNextApp extends LitElement {
   }
 
   runNext(node, step) {
+    if (step.kind === 'drawer' || step.label === 'Update') {
+      this.openDrawerFor(node);
+      return;
+    }
     if (step.kind === 'review') {
       if (this.localization.resolveReview) {
         this.withBusy(node, async () => {
@@ -296,6 +357,385 @@ class MsmNextApp extends LitElement {
         this.showToast(`Publish failed for ${failed.length} of ${count}: ${failed[0]?.error ?? ''}`, 'negative');
       }
     });
+  }
+
+  pick(node, checked) {
+    const picked = new Set(this.picked);
+    if (checked) picked.add(node.key);
+    else picked.delete(node.key);
+    this.picked = picked;
+  }
+
+  pickAll(nodes, checked) {
+    const picked = new Set(this.picked);
+    nodes.forEach((node) => {
+      if (checked) picked.add(node.key);
+      else picked.delete(node.key);
+    });
+    this.picked = picked;
+  }
+
+  openDrawer(sources, focusLocationId = null) {
+    if (!sources.length || !this.loader.model) return;
+    const tree = buildTargetTree(this.loader.model, sources.map((node) => node.location.id));
+    const selected = focusLocationId && tree.nodes.has(focusLocationId)
+      ? toggleTarget(tree, new Set(), focusLocationId, true)
+      : new Set(tree.nodes.keys());
+    this.drawer = {
+      sources, tree, selected, query: '', option: 'merge', busy: false,
+    };
+    this.updateComplete.then(() => this.shadowRoot.querySelector('.sheet')?.focus());
+  }
+
+  openDrawerFor(node) {
+    const parent = node.parent ? this.tree.nodes.get(node.parent) : null;
+    if (parent) this.openDrawer([parent], node.location.id);
+    else this.openDrawer([node]);
+  }
+
+  openPickedDrawer() {
+    const sources = [...this.picked].map((key) => this.tree.nodes.get(key)).filter(Boolean);
+    this.openDrawer(sources);
+  }
+
+  patchDrawer(patch) {
+    this.drawer = { ...this.drawer, ...patch };
+  }
+
+  removeDrawerSource(key) {
+    const sources = this.drawer.sources.filter((node) => node.key !== key);
+    const tree = buildTargetTree(this.loader.model, sources.map((node) => node.location.id));
+    const selected = new Set([...this.drawer.selected].filter((id) => tree.nodes.has(id)));
+    this.patchDrawer({ sources, tree, selected });
+  }
+
+  drawerContext() {
+    return {
+      results: this.results,
+      rootSite: this.site,
+      onClose: () => { this.drawer = null; },
+      onRemoveSource: (key) => this.removeDrawerSource(key),
+      onToggle: (id, checked) => this.patchDrawer({
+        selected: toggleTarget(this.drawer.tree, this.drawer.selected, id, checked),
+      }),
+      onLevel: (ids, checked) => this.patchDrawer({
+        selected: setMany(this.drawer.selected, ids, checked),
+      }),
+      onAll: (checked) => this.patchDrawer({
+        selected: checked ? new Set(this.drawer.tree.nodes.keys()) : new Set(),
+      }),
+      onQuery: (query) => this.patchDrawer({ query }),
+      onOption: (option) => this.patchDrawer({ option }),
+      onRun: () => this.startRun(),
+    };
+  }
+
+  trackRun(run, busy) {
+    this.starting = null;
+    this.liveRuns.add(run.id);
+    this.runs = mergeRuns([run], this.runs);
+    const runBusy = new Set(this.runBusy);
+    if (busy) runBusy.add(run.id);
+    else runBusy.delete(run.id);
+    this.runBusy = runBusy;
+  }
+
+  async startRun() {
+    const {
+      sources, selected, option, tree,
+    } = this.drawer;
+    const pages = sources.map(pageRef);
+    const targets = selected.size === tree.nodes.size ? undefined : [...selected];
+    const title = sources.length === 1
+      ? `Update ${sources[0].title} (${sources[0].path})`
+      : `Update ${sources[0].title} and ${sources.length - 1} more`;
+    this.drawer = null;
+    this.picked = new Set();
+    this.tab = 'runs';
+    this.starting = title;
+    this.activeRunId = null;
+    this.loadRuns();
+    let run = null;
+    try {
+      run = await this.localization.propagate({
+        pages,
+        targets,
+        option,
+        title,
+        onProgress: (current) => {
+          if (!this.activeRunId) this.activeRunId = current.id;
+          this.trackRun(current, true);
+        },
+      });
+      this.activeRunId = run.id;
+      this.trackRun(run, false);
+      const status = runStatus(run);
+      this.showToast(`${title}: ${status.label.toLowerCase()}`, status.key === 'attention' ? 'negative' : 'positive');
+    } catch (e) {
+      console.error(e);
+      this.starting = null;
+      this.showToast(`Could not start the run: ${e.message || e}`, 'negative');
+    }
+    if (run) this.refreshAfterRun(run);
+  }
+
+  refreshAfterRun(run) {
+    const keys = new Set([
+      ...(run.pages ?? []).map((page) => nodeKey(page.site, page.path)),
+      ...(run.items ?? []).map((item) => item.key),
+    ]);
+    const nodes = [...keys].map((key) => this.tree.nodes.get(key)).filter(Boolean);
+    nodes.forEach((node) => this.jobChecked.delete(node.key));
+    if (nodes.length) this.loader.refreshNodes(nodes);
+  }
+
+  async withRun(run, task) {
+    if (this.runBusy.has(run.id)) return;
+    this.runBusy = new Set([...this.runBusy, run.id]);
+    try {
+      await task();
+    } catch (e) {
+      console.error(e);
+      this.showToast(e.message || String(e), 'negative');
+    }
+    this.trackRun(run, false);
+    this.refreshAfterRun(run);
+  }
+
+  retryRun(run) {
+    return this.withRun(run, () => this.localization.retryRun(run, {
+      onProgress: (current) => this.trackRun(current, true),
+    }));
+  }
+
+  resumeRun(run) {
+    if (!this.localization.resumeRun) return Promise.resolve();
+    return this.withRun(run, async () => {
+      await this.localization.resumeRun(run, {
+        onProgress: (current) => this.trackRun(current, true),
+      });
+      this.runChecked.set(run.id, new Date().toISOString());
+    });
+  }
+
+  autoResume() {
+    const run = this.runs.find((each) => each.id === this.activeRunId);
+    if (!run || this.autoResumed.has(run.id) || this.runBusy.has(run.id)) return;
+    if (!translatingItems(run).length || !this.localization.resumeRun) return;
+    this.autoResumed.add(run.id);
+    this.resumeRun(run);
+  }
+
+  async loadRuns() {
+    const provider = this.localization.runs;
+    if (!provider) {
+      this.runsError = 'Runs are not available for this backend.';
+      return;
+    }
+    this.runsLoading = true;
+    this.runsError = '';
+    try {
+      const listed = (await provider.list(this.site)).slice(0, RUN_LIST_LIMIT);
+      const read = await Promise.all(listed.map((entry) => provider.read(this.site, entry.id)
+        .catch(() => null)));
+      const live = this.runs.filter((run) => this.liveRuns.has(run.id));
+      this.runs = mergeRuns(live, read.filter(Boolean));
+      if (!this.activeRunId && !this.starting && this.runs[0]) this.activeRunId = this.runs[0].id;
+    } catch (e) {
+      console.error(e);
+      this.runsError = `Could not load runs: ${e.message || e}`;
+    } finally {
+      this.runsLoading = false;
+    }
+  }
+
+  showTab(tab) {
+    this.tab = tab;
+    if (tab === 'runs') this.loadRuns();
+  }
+
+  runsContext() {
+    const { model } = this.loader;
+    return {
+      runs: this.runs,
+      activeRunId: this.activeRunId,
+      runBusy: this.runBusy,
+      runChecked: this.runChecked,
+      loading: this.runsLoading,
+      error: this.runsError,
+      starting: this.starting,
+      canResume: Boolean(this.localization.resumeRun),
+      locationOf: (id) => model?.locations.get(id) ?? null,
+      levelOf: (id, depth) => {
+        const location = model?.locations.get(id);
+        return location?.level || (location ? `Level ${depth + 1}` : '');
+      },
+      nodeOf: (key) => this.tree.nodes.get(key),
+      onOpen: (run) => { this.activeRunId = run.id; },
+      onReload: () => this.loadRuns(),
+      onRetry: (run) => this.retryRun(run),
+      onResume: (run) => this.resumeRun(run),
+      onReveal: (node) => {
+        this.tab = 'pages';
+        this.view = 'tree';
+        this.select(node, true);
+      },
+    };
+  }
+
+  scheduleJobCheck() {
+    if (!this.localization.checkJobs || this.jobTimer) return;
+    this.jobTimer = setTimeout(() => {
+      this.jobTimer = null;
+      const keys = [...new Set([...this.visibleKeys, this.selectedKey].filter(Boolean))]
+        .filter((key) => !this.jobChecked.has(key))
+        .filter((key) => (this.results.get(key)?.status?.sync ?? []).includes('translating'));
+      if (keys.length) this.checkJobs(keys);
+    }, JOB_CHECK_DELAY);
+  }
+
+  async checkJobs(keys) {
+    const nodes = keys.map((key) => this.tree.nodes.get(key)).filter(Boolean);
+    if (!nodes.length) return [];
+    nodes.forEach((node) => this.jobChecked.add(node.key));
+    this.checking = new Set([...this.checking, ...nodes.map((node) => node.key)]);
+    let results = [];
+    try {
+      results = await this.localization.checkJobs(nodes.map(pageRef));
+      const jobInfo = new Map(this.jobInfo);
+      const checkedAt = new Date().toISOString();
+      results.forEach((result) => {
+        jobInfo.set(nodeKey(result.site, result.path), { ...result, checkedAt });
+      });
+      this.jobInfo = jobInfo;
+    } catch (e) {
+      console.error(e);
+      this.showToast(`Could not check translations: ${e.message || e}`, 'negative');
+    } finally {
+      const checking = new Set(this.checking);
+      nodes.forEach((node) => checking.delete(node.key));
+      this.checking = checking;
+    }
+    const changed = nodes.filter((node, index) => results[index]?.state !== 'translating');
+    if (changed.length) await this.loader.refreshNodes(changed);
+    return results;
+  }
+
+  async checkStatus(node) {
+    const [result] = await this.checkJobs([node.key]);
+    if (result?.state === 'ready') this.showToast(`Translation for ${node.path} is ready to save`, 'positive');
+    else if (result?.state === 'translating') this.showToast(`${node.path} is still translating`);
+  }
+
+  mapRoots() {
+    const root = this.mapState.root !== 'all' && this.tree.nodes.get(this.mapState.root);
+    return root ? [root] : this.tree.top;
+  }
+
+  mapLayout() {
+    const deps = [this.tick, this.mapState, this.needsActionOnly, this.tree];
+    if (this.mapCache && this.mapCache.deps.every((dep, index) => dep === deps[index])) {
+      return this.mapCache.layout;
+    }
+    const layout = layoutMap(this.mapRoots(), this.results, {
+      collapsed: this.mapState.collapsed,
+      expanded: this.mapState.expanded,
+      collapseLocales: this.mapState.collapseLocales,
+      showIndependent: this.mapState.showIndependent,
+      needsActionOnly: this.needsActionOnly,
+    });
+    this.mapCache = { deps, layout };
+    return layout;
+  }
+
+  viewportSize() {
+    const viewport = this.shadowRoot.querySelector('.map-viewport');
+    const rect = viewport?.getBoundingClientRect();
+    return { width: rect?.width ?? 0, height: rect?.height ?? 0 };
+  }
+
+  patchMap(patch) {
+    this.mapState = { ...this.mapState, ...patch };
+  }
+
+  initMapView() {
+    const size = this.viewportSize();
+    if (!size.width) return;
+    this.patchMap({ view: fitWidth(this.mapLayout(), size) });
+  }
+
+  setMapView(view) {
+    this.pendingView = view;
+    if (this.viewFrame) return;
+    this.viewFrame = requestAnimationFrame(() => {
+      const next = this.pendingView;
+      this.viewFrame = null;
+      this.pendingView = null;
+      this.patchMap({ view: next });
+    });
+  }
+
+  mapContext() {
+    const current = () => this.pendingView ?? this.mapState.view ?? { x: 0, y: 0, scale: 1 };
+    return {
+      results: this.results,
+      selectedKey: this.selectedKey,
+      mapState: this.mapState,
+      needsActionOnly: this.needsActionOnly,
+      roots: this.tree.top,
+      onSelect: (node) => this.select(node),
+      onCollapse: (entry) => this.patchMap(
+        toggleCollapse(this.mapState, entry.key, entry.collapsed),
+      ),
+      onRoot: (root) => this.patchMap({ root, view: null }),
+      onOption: (key, value) => {
+        if (key === 'needsActionOnly') this.needsActionOnly = value;
+        else this.patchMap({ [key]: value });
+      },
+      onZoom: (factor) => {
+        const size = this.viewportSize();
+        this.pendingView = null;
+        const center = { x: size.width / 2, y: size.height / 2 };
+        this.patchMap({ view: zoomView(current(), factor, center) });
+      },
+      onFit: () => {
+        this.pendingView = null;
+        this.patchMap({ view: fitView(this.mapLayout(), this.viewportSize()) });
+      },
+      onPointerDown: (event) => {
+        if (event.button !== 0 || event.target.closest('button, select, input, a')) return;
+        this.drag = { x: event.clientX, y: event.clientY, view: current() };
+        event.currentTarget.setPointerCapture(event.pointerId);
+        event.currentTarget.classList.add('dragging');
+      },
+      onPointerMove: (event) => {
+        if (!this.drag) return;
+        const { view } = this.drag;
+        this.setMapView({
+          ...view,
+          x: view.x + event.clientX - this.drag.x,
+          y: view.y + event.clientY - this.drag.y,
+        });
+      },
+      onPointerUp: (event) => {
+        if (!this.drag) return;
+        this.drag = null;
+        event.currentTarget.classList.remove('dragging');
+      },
+      onWheel: (event) => {
+        event.preventDefault();
+        const view = current();
+        if (event.ctrlKey || event.metaKey) {
+          const rect = event.currentTarget.getBoundingClientRect();
+          const factor = Math.exp(-event.deltaY * 0.01);
+          this.setMapView(zoomView(view, factor, {
+            x: event.clientX - rect.left, y: event.clientY - rect.top,
+          }));
+          return;
+        }
+        this.setMapView({ ...view, x: view.x - event.deltaX, y: view.y - event.deltaY });
+      },
+    };
   }
 
   renderHeader() {
@@ -354,8 +794,9 @@ class MsmNextApp extends LitElement {
             @input=${(event) => { this.query = event.target.value; }}>
         </label>
         <div class="segmented" role="group" aria-label="View">
-          <button type="button" aria-pressed="true">Tree</button>
-          <button type="button" aria-pressed="false" aria-disabled="true" title="Map view coming soon">Map</button>
+          ${['tree', 'map'].map((view) => html`
+            <button type="button" aria-pressed=${String(this.view === view)}
+              @click=${() => { this.view = view; }}>${view === 'tree' ? 'Tree' : 'Map'}</button>`)}
         </div>
         ${this.filtering() ? html`
           <button type="button" class="btn quiet" @click=${() => this.clearFilters()}>Clear filters</button>` : nothing}
@@ -373,6 +814,17 @@ class MsmNextApp extends LitElement {
     this.needsActionOnly = false;
     this.kind = 'all';
     this.type = 'all';
+  }
+
+  renderSelectionBar() {
+    const count = this.picked.size;
+    return html`
+      <div class="selection-bar ${count ? 'active' : ''}" role="region" aria-label="Selection">
+        <span>${count ? html`<strong>${count}</strong> source page${count === 1 ? '' : 's'} selected` : 'Select source pages to update or create their targets in one run.'}</span>
+        ${count ? html`<button type="button" class="btn quiet small" @click=${() => { this.picked = new Set(); }}>Clear</button>` : nothing}
+        <span class="spacer"></span>
+        <button type="button" class="btn accent" ?disabled=${!count} @click=${() => this.openPickedDrawer()}>Update / Create…</button>
+      </div>`;
   }
 
   renderWorkspace() {
@@ -402,12 +854,41 @@ class MsmNextApp extends LitElement {
       onPublish: (node, cascade) => this.publish(node, cascade),
       onConfirm: (confirm) => { this.confirm = confirm; },
       onKeydown: (event) => this.handleKeydown(event, rows),
+      picked: this.picked,
+      onPick: (node, checked) => this.pick(node, checked),
+      onPickAll: (nodes, checked) => this.pickAll(nodes, checked),
+      jobInfo: this.jobInfo,
+      checking: this.checking,
+      onCheckStatus: this.localization.checkJobs ? (node) => this.checkStatus(node) : null,
+      onOpenDrawer: this.localization.propagate ? (node) => this.openDrawerFor(node) : null,
     };
+    let main;
+    if (this.view === 'map') {
+      const layout = this.mapLayout();
+      this.visibleKeys = layout.nodes.map((entry) => entry.key);
+      main = renderMapView(layout, this.mapContext());
+    } else {
+      this.visibleKeys = rows.map((row) => row.node.key);
+      main = html`<section class="table-wrap" aria-label="Tree view">${renderTreeTable(rows, ctx)}</section>`;
+    }
     return html`
+      ${this.view === 'tree' ? this.renderSelectionBar() : nothing}
       <div class="workspace">
-        <section class="table-wrap" aria-label="Tree view">${renderTreeTable(rows, ctx)}</section>
+        ${main}
         <aside class="detail" aria-label="Page details">${renderDetailPanel(selected, ctx)}</aside>
       </div>`;
+  }
+
+  renderTabs() {
+    const active = this.runs.filter((run) => runStatus(run, this.runBusy.has(run.id)).key !== 'done').length;
+    return html`
+      <nav class="tabs" aria-label="Sections">
+        ${[['pages', 'Pages'], ['runs', 'Runs']].map(([tab, label]) => html`
+          <button type="button" class="tab ${this.tab === tab ? 'active' : ''}" aria-current=${this.tab === tab ? 'page' : 'false'}
+            @click=${() => this.showTab(tab)}>${label}
+            ${tab === 'runs' && (active || this.starting) ? html`<span class="count-pill">${active + (this.starting ? 1 : 0)}</span>` : nothing}
+          </button>`)}
+      </nav>`;
   }
 
   renderBody() {
@@ -420,8 +901,12 @@ class MsmNextApp extends LitElement {
     if (this.phase === 'empty') {
       return html`<div class="state">No localization locations are configured for <strong>${this.site}</strong>.</div>`;
     }
+    if (this.tab === 'runs') {
+      return html`${this.renderTabs()}${renderRunsView(this.runsContext())}`;
+    }
     const counts = countPages(this.tree, this.results, this.kind);
     return html`
+      ${this.renderTabs()}
       ${this.renderBanner(counts)}
       ${this.renderCards(counts)}
       ${this.renderToolbar()}
@@ -432,6 +917,7 @@ class MsmNextApp extends LitElement {
     return html`
       ${this.renderHeader()}
       ${this.renderBody()}
+      ${this.drawer ? renderActionDrawer(this.drawer, this.drawerContext()) : nothing}
       <div class="toast-region" role="status" aria-live="polite">
         ${this.toast ? html`<div class="toast ${this.toast.tone}">${this.toast.message}
           <button type="button" class="toast-close" aria-label="Dismiss" @click=${() => { this.toast = null; }}>×</button></div>` : nothing}

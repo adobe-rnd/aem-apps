@@ -62,6 +62,36 @@ function renderAttention(list, ctx) {
     </section>`;
 }
 
+const JOB_TEXT = {
+  translating: 'Still translating',
+  ready: 'Translation is ready to save',
+  none: 'No translation job found',
+  failed: 'The translation failed',
+  error: 'Could not check the translation',
+};
+
+function renderTranslation(node, result, ctx) {
+  const sync = result?.status?.sync ?? [];
+  if (!sync.includes('translating') && !sync.includes('ready to save')) return nothing;
+  const info = ctx.jobInfo?.get(node.key);
+  const checking = ctx.checking?.has(node.key);
+  const translating = sync.includes('translating');
+  const progress = info?.progress;
+  return html`
+    <section class="translation" aria-labelledby="translation-heading" aria-busy=${String(Boolean(checking))}>
+      <h3 id="translation-heading">Translation ${checking ? spinner('Checking') : nothing}</h3>
+      <p>
+        ${translating ? (JOB_TEXT[info?.state] ?? 'Sent to the translation service') : JOB_TEXT.ready}
+        ${progress?.total ? html`<span class="muted"> · ${progress.done} of ${progress.total} done</span>` : nothing}
+      </p>
+      ${progress?.total ? html`<progress max=${progress.total} .value=${progress.done}></progress>` : nothing}
+      ${info?.error ? html`<p class="error-text">${info.error}</p>` : nothing}
+      ${info?.checkedAt ? html`<p class="muted small-text">Checked ${formatRelative(info.checkedAt)}</p>` : nothing}
+      ${translating && ctx.onCheckStatus ? html`
+        <button type="button" class="btn" ?disabled=${checking} @click=${() => ctx.onCheckStatus(node)}>Check status</button>` : nothing}
+    </section>`;
+}
+
 function renderButton(node, button, ctx) {
   const confirming = ctx.confirm?.key === node.key && ctx.confirm?.action === button.action;
   const tone = [button.primary ? 'accent' : '', button.destructive ? 'destructive' : ''].join(' ');
@@ -107,11 +137,14 @@ function renderActions(node, result, ctx) {
       <div class="action-list">
         ${buttons.map((button) => html`<div class="action-item">${renderButton(node, button, ctx)}</div>`)}
       </div>
-      ${publishable || exists ? html`<div class="action-list secondary">
+      ${publishable || exists || node.children.length ? html`<div class="action-list secondary">
         ${publishable ? html`
           <div class="action-item"><button type="button" class="btn" @click=${() => ctx.onPublish(node, false)}>Publish</button></div>
           <div class="action-item"><button type="button" class="btn" title="Also publishes every inherited page below this one"
             @click=${() => ctx.onPublish(node, true)}>Publish with inherited pages</button></div>` : nothing}
+        ${node.children.length && ctx.onOpenDrawer ? html`
+          <div class="action-item"><button type="button" class="btn" title="Choose target locations and update or create them in one run"
+            @click=${() => ctx.onOpenDrawer(node)}>Update targets…</button></div>` : nothing}
         ${exists ? html`
           <div class="action-item"><a class="btn quiet" href=${editUrl(ctx.org, node.site, node.path)} target="_blank" rel="noopener">Open in editor</a></div>` : nothing}
       </div>` : nothing}
@@ -140,6 +173,7 @@ export default function renderDetailPanel(node, ctx) {
     ${!result && !error ? html`<p class="loading-text">${spinner('Loading')} Checking status…</p>` : nothing}
     ${result ? html`
       ${renderFacts(node, result, ctx)}
+      ${renderTranslation(node, result, ctx)}
       ${renderAttention(ctx.attention, ctx)}
       ${renderActions(node, result, ctx)}
       ${!isRealPage(result) && !result.actions.length ? html`<p class="muted">Create the source page first.</p>` : nothing}

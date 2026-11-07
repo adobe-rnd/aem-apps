@@ -47,10 +47,15 @@ function renderStatus(row, ctx) {
     </div>`;
 }
 
+function sourceStep(node, ctx) {
+  if (node.parent || !node.children.length) return null;
+  return rollup(node, ctx.results).needsAction ? { kind: 'drawer', label: 'Update' } : null;
+}
+
 function renderNext(node, ctx) {
   const result = ctx.results.get(node.key);
   if (ctx.busy.has(node.key) || ctx.refreshing.has(node.key)) return spinner('Updating');
-  const step = nextStep(result);
+  const step = nextStep(result) ?? sourceStep(node, ctx);
   if (!step) return html`<span class="muted">—</span>`;
   const name = `${step.label} ${pageLabel(node)} (${node.site}:${node.path})`;
   return html`
@@ -76,6 +81,13 @@ function renderRow(row, ctx) {
       aria-selected=${String(selected)}
       tabindex=${node.key === ctx.focusKey ? '0' : '-1'}
       @click=${() => ctx.onSelect(node)}>
+      <td role="gridcell" class="pick-cell">
+        ${node.parent ? nothing : html`
+          <input type="checkbox" tabindex="-1" .checked=${ctx.picked.has(node.key)}
+            aria-label="Select ${pageLabel(node)}"
+            @click=${(event) => event.stopPropagation()}
+            @change=${(event) => ctx.onPick(node, event.target.checked)}>`}
+      </td>
       <td role="gridcell">
         <div class="page-cell" style="--indent: ${row.level - 1}">
           ${row.hasChildren ? html`
@@ -102,6 +114,17 @@ function renderRow(row, ctx) {
     </tr>`;
 }
 
+function renderPickAll(rows, ctx) {
+  const sources = rows.filter((row) => !row.node.parent);
+  const picked = sources.filter((row) => ctx.picked.has(row.node.key)).length;
+  return html`
+    <input type="checkbox" aria-label="Select all visible source pages"
+      ?disabled=${!sources.length}
+      .checked=${sources.length > 0 && picked === sources.length}
+      .indeterminate=${picked > 0 && picked < sources.length}
+      @change=${(event) => ctx.onPickAll(sources.map((row) => row.node), event.target.checked)}>`;
+}
+
 export default function renderTreeTable(rows, ctx) {
   if (!rows.length) {
     return html`<div class="empty-table">${ctx.emptyMessage}</div>`;
@@ -110,6 +133,7 @@ export default function renderTreeTable(rows, ctx) {
     <table class="tree-table" role="treegrid" aria-label="Pages and their copies">
       <thead>
         <tr role="row">
+          <th role="columnheader" class="col-pick">${renderPickAll(rows, ctx)}</th>
           <th role="columnheader" class="col-page">Page</th>
           <th role="columnheader" class="col-type">Type</th>
           <th role="columnheader" class="col-status">Status</th>

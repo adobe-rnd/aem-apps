@@ -96,16 +96,27 @@ describe('mock localization', () => {
   it('runs translations through translating, ready and save', async () => {
     const { localization } = await loaded();
     const page = { site: 'gamebox', path: '/de/games/starfall.html' };
-    const changed = new Promise((resolve) => { localization.subscribe(resolve); });
     assert.equal((await localization.execute({ ...page, action: 'translate' })).ok, true);
     assert.equal((await localization.page(page.site, page.path)).status.sync[0], 'translating');
+    await settle();
+    const changed = new Promise((resolve) => { localization.subscribe(resolve); });
+    const [checked] = await localization.checkJobs([page]);
+    assert.equal(checked.state, 'ready');
     await changed;
-    localization.refresh();
     assert.equal((await localization.page(page.site, page.path)).status.sync[0], 'ready to save');
     assert.equal((await localization.execute({ ...page, action: 'save' })).ok, true);
     const saved = await localization.page(page.site, page.path);
     assert.equal(saved.status.relationship, 'translation');
     assert.equal(saved.status.sync[0], 'current');
+    assert.equal((await localization.checkJobs([page]))[0].state, 'none');
+  });
+
+  it('reports seeded translations as translating until the vendor is done', async () => {
+    const localization = createMockLocalization({ latency: false, translationDelay: 10000 });
+    const page = { site: 'gamebox', path: '/es-419/hardware/console.html' };
+    const [first] = await localization.checkJobs([page]);
+    assert.equal(first.state, 'translating');
+    assert.deepEqual(first.progress, { done: 0, total: 4 });
   });
 
   it('resolves reviews and publishes', async () => {
@@ -119,5 +130,56 @@ describe('mock localization', () => {
     assert.equal(published.ok, true);
     assert.ok(published.results.length > 1);
     assert.equal(localization.publishState(site, '/amer/hardware/controller.html'), 'live');
+  });
+});
+
+describe('mock runs', () => {
+  const site = 'gamebox';
+  const source = { site, path: '/global/hardware/controller.html' };
+
+  it('propagates, fails once on the flaky retailer and retries', async () => {
+    const localization = createMockLocalization({
+      latency: false, translationDelay: 5, seedRuns: false,
+    });
+    const progress = [];
+    const run = await localization.propagate({
+      pages: [source], option: 'merge', onProgress: (current) => progress.push(current.summary),
+    });
+    assert.ok(progress.length > 0);
+    const byKey = (key) => run.items.find((item) => item.key === key);
+    assert.equal(byKey('gamebox:/amer/hardware/controller.html').state, 'inherited');
+    assert.equal(byKey('gamebox:/es-419/hardware/controller.html').state, 'translating');
+    assert.equal(byKey('gamebox:/es-mx/hardware/controller.html').state, 'blocked');
+    assert.equal(byKey('gamebox-retail:/arcade-avenue/hardware/controller.html').state, 'failed');
+    assert.equal(byKey('gamebox-retail:/arcade-avenue/hardware/controller.html').error, 'Copy service timed out');
+    const listed = await localization.runs.list(site);
+    assert.deepEqual(listed.map((entry) => entry.id), [run.id]);
+
+    await localization.retryRun(run);
+    assert.equal(byKey('gamebox-retail:/arcade-avenue/hardware/controller.html').state, 'done');
+
+    await settle();
+    await localization.resumeRun(run);
+    assert.equal(byKey('gamebox:/es-419/hardware/controller.html').state, 'done');
+    assert.notEqual(byKey('gamebox:/es-mx/hardware/controller.html').state, 'blocked');
+    const saved = await localization.runs.read(site, run.id);
+    assert.equal(saved.summary.translating ?? 0, 0);
+  });
+
+  it('seeds a waiting French run', async () => {
+    const localization = createMockLocalization({ latency: false, translationDelay: 5 });
+    const [entry] = await localization.runs.list(site);
+    const run = await localization.runs.read(site, entry.id);
+    const states = Object.fromEntries(run.items.map((item) => [item.locationId, item.state]));
+    assert.deepEqual(states, {
+      'gamebox:/emea': 'inherited',
+      'gamebox:/fr': 'translating',
+      'gamebox:/fr-fr': 'blocked',
+      'gamebox:/fr-be': 'blocked',
+    });
+    await localization.resumeRun(run);
+    await settle();
+    await localization.resumeRun(run);
+    assert.deepEqual(run.items.map((item) => item.state), ['inherited', 'done', 'inherited', 'inherited']);
   });
 });

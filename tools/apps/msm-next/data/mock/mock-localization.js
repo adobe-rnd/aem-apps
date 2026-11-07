@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 import { createLocalization } from '../../../../localization/core/index.js';
+import createRunner from '../../../../localization/core/runs.js';
+import { createRunStore, buildSeedRun } from './mock-runs.js';
 import {
   buildFixture, CONFIGS, HIDDEN_PATHS, MOCK_ORG,
 } from './fixture.js';
@@ -63,12 +65,17 @@ export function listFolder(paths, site, folder) {
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
+export const FLAKY_PREFIX = 'gamebox-retail:/arcade-avenue/';
+export const JOB_STEPS = 4;
+
 export default function createMockLocalization({
-  latency = true, translationDelay = 6000, org = MOCK_ORG,
+  latency = true, translationDelay = 6000, org = MOCK_ORG, flaky = true, seedRuns = true,
 } = {}) {
   const { files, indexes } = buildFixture();
   const published = new Map();
   const listeners = new Set();
+  const jobClock = new Map();
+  const flakyFailed = new Set();
   let seq = 1000;
   const next = () => {
     seq += 1;
@@ -139,6 +146,10 @@ export default function createMockLocalization({
   const copy = (merge) => async ({ source, target }) => {
     await wait();
     if (!files.has(key(source))) return { ok: false, status: 404, error: 'Source page not found' };
+    if (flaky && key(target).startsWith(FLAKY_PREFIX) && !flakyFailed.has(key(target))) {
+      flakyFailed.add(key(target));
+      return { ok: false, status: 503, error: 'Copy service timed out' };
+    }
     writeFile(target, { merge });
     return { ok: true, status: 200 };
   };
@@ -188,14 +199,33 @@ export default function createMockLocalization({
   async function translate(current, page) {
     const job = { state: 'translating', id: `mock-job-${next()}`, at: new Date().toISOString() };
     await index.patch(current.location.id, jobPatch(current, page.path, job));
-    setTimeout(async () => {
-      localization.refresh();
-      const latest = await localization.page(page.site, page.path);
-      await index.patch(latest.location.id, jobPatch(latest, page.path, { ...job, state: 'ready' }));
-      localization.refresh();
-      emit(page);
-    }, translationDelay);
+    jobClock.set(key(page), Date.now());
     return { ok: true, job };
+  }
+
+  async function checkJob(page) {
+    const current = await localization.page(page.site, page.path);
+    const job = current.chain[0]?.info?.job;
+    if (!job) return { ...page, state: 'none' };
+    const total = JOB_STEPS;
+    if (job.state === 'ready') return { ...page, state: 'ready', progress: { done: total, total } };
+    if (!jobClock.has(key(page))) jobClock.set(key(page), Date.now());
+    const elapsed = Date.now() - jobClock.get(key(page));
+    if (elapsed < translationDelay) {
+      const done = Math.min(total - 1, Math.floor((elapsed / translationDelay) * total));
+      return { ...page, state: 'translating', progress: { done, total } };
+    }
+    await index.patch(current.location.id, jobPatch(current, page.path, { ...job, state: 'ready' }));
+    emit(page);
+    return { ...page, state: 'ready', progress: { done: total, total } };
+  }
+
+  async function checkJobs(pages) {
+    localization.refresh();
+    const results = await Promise.all(pages.map((page) => checkJob(page)
+      .catch((error) => ({ ...page, state: 'error', error: error.message }))));
+    localization.refresh();
+    return results;
   }
 
   async function save(current, page, option) {
@@ -220,6 +250,7 @@ export default function createMockLocalization({
       pending: { [page.path]: null },
     };
     await index.patch(current.location.id, changes);
+    jobClock.delete(key(page));
     return { ok: true };
   }
 
@@ -256,9 +287,29 @@ export default function createMockLocalization({
     return () => listeners.delete(listener);
   };
 
+  const runs = createRunStore({
+    wait,
+    seed: seedRuns
+      ? () => buildSeedRun({ orgModel: localization.orgModel, page: localization.page })
+      : null,
+  });
+  const runner = createRunner({
+    page: localization.page,
+    execute,
+    checkJobs,
+    orgModel: localization.orgModel,
+    refresh: localization.refresh,
+    runs,
+  });
+
   return {
     ...localization,
     execute,
+    checkJobs,
+    propagate: runner.propagate,
+    retryRun: runner.retryRun,
+    resumeRun: runner.resumeRun,
+    runs,
     resolveReview,
     subscribe,
     list: pageInfo.list,
