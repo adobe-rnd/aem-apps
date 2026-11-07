@@ -37,6 +37,9 @@ export default function createExecutor({
     const copied = await copy({ source, target, label: `${LABEL} rollout` });
     if (!copied?.ok) return { ok: false, status: copied?.status, error: copied?.error };
     const written = await providers.pageInfo.get(target.site, target.path);
+    if (!written?.exists || !written.id || !written.version) {
+      return { ok: false, error: 'target-unreadable' };
+    }
     const changes = {
       pages: {
         [written.id]: {
@@ -49,8 +52,8 @@ export default function createExecutor({
           },
         },
       },
+      pending: { [target.path]: null },
     };
-    if (!current.chain[0].info.exists) changes.pending = { [target.path]: null };
     await providers.index.patch(current.location.id, changes);
     return { ok: true, id: written.id };
   }
@@ -65,12 +68,23 @@ export default function createExecutor({
   }
 
   async function reconnect(current, target) {
+    if (!services.content?.remove) return { ok: false, error: 'content-unavailable' };
     const removed = await services.content.remove(target);
     if (!removed?.ok) return { ok: false, status: removed?.status, error: 'remove-failed' };
     const { id } = current.chain[0].info;
-    if (id) await providers.index.patch(current.location.id, { pages: { [id]: null } });
+    const changes = { pending: { [target.path]: null } };
+    if (id) changes.pages = { [id]: null };
+    await providers.index.patch(current.location.id, changes);
     const completed = await runOnComplete(current.location, target);
     return { ok: true, onComplete: completed };
+  }
+
+  async function link(current, target) {
+    await providers.index.patch(current.location.id, {
+      pending: { [target.path]: { linked: true, at: now() } },
+    });
+    const published = await services.publish.publish(target);
+    return { ok: Boolean(published?.ok), publish: published };
   }
 
   async function unlink(current, target, entry) {
@@ -101,7 +115,7 @@ export default function createExecutor({
   }
 
   const HANDLERS = {
-    rollout, reconnect, unlink, relink,
+    rollout, reconnect, unlink, relink, link,
   };
 
   async function execute({

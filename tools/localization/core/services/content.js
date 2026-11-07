@@ -45,6 +45,6 @@ export default function createContentService({ org, api, loc }) {
   }
 
   return {
-    read, merge, overwrite, remove,
+    copyAvailable: Boolean(loc), read, merge, overwrite, remove,
   };
 }

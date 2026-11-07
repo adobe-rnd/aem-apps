@@ -153,6 +153,7 @@ Per-page info comes from providers:
 |---|---|---|
 | rollout, translate | local copy, translation, inherited, not created | the location's `actions` |
 | reconnect | local copy, translation | `link` and `missingPages: linked`; destructive |
+| link | not created | `link` in the location's `actions` |
 | unlink | local copy, translation, inherited (`creates: true`: copy first) | — |
 | relink | unlinked | needs a source page |
 | save | any page with `ready to save` | — |
@@ -168,15 +169,16 @@ Per-page info comes from providers:
 import { createLocalization } from './core/index.js';
 const localization = createLocalization({ org, actions });
 await localization.page(site, path) // { location, chain: [{ ref, info }], status, actions }
-await localization.execute({ site, path, action, option }) // rollout | reconnect | unlink | relink
+await localization.execute({ site, path, action, option }) // rollout | link | reconnect | unlink | relink
 await localization.publish({ site, path, live = true, cascade = false })
 await localization.orgModel()       // parseConfig over every site in the org
 localization.refresh()              // clear all caches
 ```
 
 `execute()` (`execute.js`) refreshes, re-reads the page, and runs only an enabled action; otherwise `{ ok: false, error: 'action-unavailable' | 'action-disabled', reasons }`.
-- **rollout**: merge or overwrite (`option`, default the location's first `conflictBehavior`; others → `option-not-allowed`) from the effective source, then patches the index entry's `base` with `{ sourceId, sourceVersion, via, targetVersion, at }` and clears `pending`. Runs `onComplete`. A failed copy writes nothing to the index.
-- **reconnect**: deletes the copy and its index entry; runs `onComplete`.
+- **rollout**: merge or overwrite (`option`, default the location's first `conflictBehavior`; others → `option-not-allowed`) from the effective source. The written page must be readable with an id and version (else `target-unreadable`, index untouched). Then patches the index entry's `base` with `{ sourceId, sourceVersion, via, targetVersion, at }`, clears the path's `pending` entry, and runs `onComplete`. A failed copy writes nothing to the index.
+- **link**: on a not created page; sets `pending[path].linked` (status becomes inherited) and publishes the target. Delivery must honor it in `none` locations.
+- **reconnect**: deletes the copy, its index entry and any `pending` entry; runs `onComplete`. Works without a copy engine (content service `copyAvailable: false`).
 - **unlink**: inherited pages are copied (overwrite) first; then sets `overrides.{ unlinked, unlinkedFrom, unlinkedAt }`.
 - **relink**: removes those override fields.
 

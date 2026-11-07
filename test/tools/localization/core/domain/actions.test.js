@@ -223,6 +223,29 @@ describe('availableActions: relink', () => {
   });
 });
 
+describe('availableActions: link', () => {
+  it('is offered on not created pages when the location allows link', () => {
+    assert.deepEqual(actionsByName(statusWith('not created'), { missingPages: 'none' }).link, {
+      action: 'link', enabled: true, reasons: [],
+    });
+  });
+
+  it('is not offered without link in the location', () => {
+    assert.equal(actionsByName(statusWith('not created'), { actions: ['rollout'] }).link, undefined);
+  });
+
+  it('is disabled while the source needs review', () => {
+    const actions = actionsByName(statusWith('not created', ['blocked by source review']));
+    assert.deepEqual(actions.link.reasons, ['source-needs-review']);
+  });
+
+  it('is not offered on other pages', () => {
+    ['inherited', 'local copy', 'translation'].forEach((relationship) => {
+      assert.equal(actionsByName(statusWith(relationship)).link, undefined, relationship);
+    });
+  });
+});
+
 describe('availableActions: save', () => {
   it('is offered when a translation is ready, with options', () => {
     const actions = actionsByName(statusWith('translation', ['ready to save', 'current']));

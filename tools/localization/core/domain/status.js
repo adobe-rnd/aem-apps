@@ -32,7 +32,7 @@ function findEffectiveSource(chain) {
   for (let position = 1; position < chain.length; position += 1) {
     const entry = chain[position];
     if (exists(entry)) return entry;
-    if (entry.ref.location.missingPages !== 'linked') return null;
+    if (entry.ref.location.missingPages !== 'linked' && !entry.info?.linked) return null;
   }
   return null;
 }
@@ -86,7 +86,7 @@ function existingStatus(self, effective) {
 
 function missingStatus(self, effective, chain) {
   const opts = { sync: flags(self, effective), effectiveSource: effective };
-  const linked = self.ref.location.missingPages === 'linked';
+  const linked = self.ref.location.missingPages === 'linked' || Boolean(self.info?.linked);
   if (effective) return result(linked ? 'inherited' : 'not created', opts);
   if (linked && chain.slice(1).some(exists)) return result('unavailable', opts);
   return null;

@@ -59,7 +59,7 @@ function defaultProviders({ org, api }) {
 function defaultServices({ org, api, actions }) {
   if (!api) return {};
   const services = { publish: createPublishService({ org, api }) };
-  if (actions?.loc) services.content = createContentService({ org, api, loc: actions.loc });
+  services.content = createContentService({ org, api, loc: actions?.loc });
   return services;
 }
 
@@ -113,6 +113,7 @@ export default function createLocalization({
       base: entry?.base ?? null,
       job: entry?.job ?? null,
       overrides: entry?.overrides ?? null,
+      linked: !info?.exists && Boolean(entry?.linked),
     };
   }
 
@@ -172,7 +173,7 @@ export default function createLocalization({
       location,
       translationSupported: await translationSupported(location, status),
       backendSupported: await backendSupported(snapshot, site, status),
-      copyEngineAvailable: Boolean(services.content),
+      copyEngineAvailable: Boolean(services.content && services.content.copyAvailable !== false),
     });
     return {
       location, chain, status, actions: pageActions,

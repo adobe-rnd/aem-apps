@@ -117,6 +117,14 @@ describe('pageStatus: missing pages', () => {
     assert.deepEqual(summary(result), { relationship: 'inherited', sync: ['blocked by source review'] });
   });
 
+  it('is inherited when a not created page was linked explicitly', () => {
+    const result = statusOf('/es/x', {
+      '/en/x': file('a', '1'),
+      '/es/x': { exists: false, linked: true },
+    });
+    assert.deepEqual(summary(result), { relationship: 'inherited', sync: [] });
+  });
+
   it('shows blocked by source review on a not created page', () => {
     const result = statusOf('/es/x', { '/en/x': file('a', '1', { needsReview: true }) });
     assert.deepEqual(summary(result), { relationship: 'not created', sync: ['blocked by source review'] });

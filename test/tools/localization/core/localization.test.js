@@ -151,7 +151,7 @@ describe('page: page info', () => {
     });
     const result = await localizationFor(fixture).page('global', '/uk/x');
     assert.deepEqual(result.chain[0].info, {
-      exists: true, id: 'b', version: '7', base: base('a', '1'), job: null, overrides: null, needsReview: false,
+      exists: true, id: 'b', version: '7', base: base('a', '1'), job: null, overrides: null, linked: false, needsReview: false,
     });
     assert.equal(result.status.relationship, 'local copy');
     assert.deepEqual(result.status.sync, ['current']);

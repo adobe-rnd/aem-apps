@@ -38,7 +38,9 @@ const CONFIGS = {
   ],
 };
 
-function createWorld({ pages = {}, indexes = {}, failCopy = false } = {}) {
+function createWorld({
+  pages = {}, indexes = {}, failCopy = false, copyAvailable = true, loseWrites = false,
+} = {}) {
   const files = new Map(Object.entries(pages));
   const index = new Map(Object.entries(indexes));
   const calls = {
@@ -55,6 +57,7 @@ function createWorld({ pages = {}, indexes = {}, failCopy = false } = {}) {
     files.set(key(target), existing
       ? { ...existing, version: `${existing.version}+${operation}` }
       : { id: `new${ids}`, version: 'v1' });
+    if (loseWrites) files.delete(key(target));
     return { ok: true, status: 200 };
   };
 
@@ -98,6 +101,7 @@ function createWorld({ pages = {}, indexes = {}, failCopy = false } = {}) {
   };
   const services = {
     content: {
+      copyAvailable,
       merge: copy('merge'),
       overwrite: copy('overwrite'),
       remove: async (page) => {
@@ -185,6 +189,36 @@ describe('execute: rollout', () => {
     assert.deepEqual(world.calls.publish, ['gamebox:/fr/x']);
   });
 
+  it('clears a stale pending job after rolling out over an existing page', async () => {
+    const world = createWorld({
+      pages: { 'gamebox:/global/x': file('g', '2'), 'gamebox:/en-us/x': file('u', '5') },
+      indexes: { 'gamebox:/en-us': { pages: {}, pending: { '/en-us/x': { job: { state: 'ready' } } } } },
+    });
+    world.localization.refresh();
+    await world.localization.execute({
+      site: 'gamebox', path: '/en-us/x', action: 'rollout',
+    });
+    assert.deepEqual(world.index.get('gamebox:/en-us').pending, {});
+  });
+
+  it('fails without touching the index when the written page cannot be read', async () => {
+    const world = createWorld({
+      pages: { 'gamebox:/global/x': file('g', '2'), 'gamebox:/en-us/x': file('u', '5') },
+      loseWrites: true,
+    });
+    const result = await world.localization.execute({ site: 'gamebox', path: '/en-us/x', action: 'rollout' });
+    assert.deepEqual(result, { ok: false, error: 'target-unreadable' });
+    assert.equal(world.index.get('gamebox:/en-us'), undefined);
+  });
+
+  it('fails when the written page has no id', async () => {
+    const world = createWorld({
+      pages: { 'gamebox:/global/x': file('g', '2'), 'gamebox:/en-us/x': file(null, '5') },
+    });
+    const result = await world.localization.execute({ site: 'gamebox', path: '/en-us/x', action: 'rollout' });
+    assert.deepEqual(result, { ok: false, error: 'target-unreadable' });
+  });
+
   it('does not record a base when the copy fails', async () => {
     const world = createWorld({
       pages: { 'gamebox:/global/x': file('g', '2'), 'gamebox:/en-us/x': file('u', '5') },
@@ -202,7 +236,51 @@ describe('execute: rollout', () => {
   });
 });
 
+describe('execute: link', () => {
+  it('links a not created page and publishes it', async () => {
+    const world = createWorld({
+      pages: { 'gamebox:/en-us/x': file('u', '1') },
+    });
+    const fr = CONFIGS.gamebox.find((row) => row.path === '/fr');
+    fr.actions = 'link, rollout';
+    try {
+      const result = await world.localization.execute({ site: 'gamebox', path: '/fr/x', action: 'link' });
+      assert.equal(result.ok, true);
+      assert.equal(world.index.get('gamebox:/fr').pending['/fr/x'].linked, true);
+      assert.deepEqual(world.calls.publish, ['gamebox:/fr/x']);
+      const after = await world.localization.page('gamebox', '/fr/x');
+      assert.equal(after.status.relationship, 'inherited');
+    } finally {
+      fr.actions = 'rollout';
+    }
+  });
+});
+
 describe('execute: reconnect', () => {
+  it('clears a stale pending job for the path', async () => {
+    const world = createWorld({
+      pages: { 'gamebox:/global/x': file('g', '1'), 'gamebox:/en-us/x': file('u', '5') },
+      indexes: {
+        'gamebox:/en-us': {
+          pages: { u: { base: base('g', '1', '5') } },
+          pending: { '/en-us/x': { job: { state: 'translating' } } },
+        },
+      },
+    });
+    await world.localization.execute({ site: 'gamebox', path: '/en-us/x', action: 'reconnect' });
+    assert.deepEqual(world.index.get('gamebox:/en-us').pending, {});
+  });
+
+  it('works without a copy engine', async () => {
+    const world = createWorld({
+      pages: { 'gamebox:/global/x': file('g', '1'), 'gamebox:/en-us/x': file('u', '5') },
+      copyAvailable: false,
+    });
+    const before = await world.localization.page('gamebox', '/en-us/x');
+    assert.deepEqual(before.actions.find((each) => each.action === 'rollout').reasons, ['copy-engine-unavailable']);
+    const result = await world.localization.execute({ site: 'gamebox', path: '/en-us/x', action: 'reconnect' });
+    assert.equal(result.ok, true);
+  });
   it('deletes the copy and its index entry', async () => {
     const world = createWorld({
       pages: { 'gamebox:/global/x': file('g', '1'), 'gamebox:/en-us/x': file('u', '5') },

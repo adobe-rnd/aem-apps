@@ -80,6 +80,10 @@ export function availableActions({
     result.push(entry('reconnect', inProgress ? ['translation-in-progress'] : [], { destructive: true }));
   }
 
+  if (relationship === 'not created' && location.actions.includes('link')) {
+    result.push(entry('link', has('blocked by source review') ? ['source-needs-review'] : []));
+  }
+
   if (COPIES.includes(relationship) || relationship === 'inherited') {
     const unlinkCreates = relationship === 'inherited';
     const reasons = [
