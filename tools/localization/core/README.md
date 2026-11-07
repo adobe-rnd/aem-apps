@@ -71,7 +71,7 @@ Default providers are built from the `api` (by default, the legacy api over `act
 |---|---|---|
 | content | `services/content.js` | Pages are `{ site, path }` (DA paths).<br>`read(page) → html \| null`: `api.source.get`; 404 → `null`; other failures throw<br>`merge({ source, target, label, content? })`, `overwrite({ source, target, label, content? }) → { ok, status, error? }`: `actions.loc.mergeCopy` / `overwriteCopy` with `/{org}/{site}{path}` urls; `content` (e.g. a translation) replaces the source content; without `actions.loc` → `{ ok: false, error }`<br>`remove(page) → { ok, status }`: `api.source.delete` |
 | translationConnectors | `services/translation-connectors.js` | `supports(srcLang, tgtLang)`, `send(job)`, `status(job)`, `save(job)`, `cancel({ jobState, lang })` (optional) |
-| publish | `services/publish.js` | `preview(page)`, `publish(page) → { ok, status, error? }`: DA path → AEM path (`.html` stripped, `index.html` → folder; `toAemPath`). `publish` previews first and stops if that fails. `error` = `x-error` header. |
+| publish | `services/publish.js` | `preview(page)`, `publish(page) → { ok, status, error? }`: DA path → AEM path (`.html` stripped, `index.html` → folder; `toAemPath`). `publish` previews first and stops if that fails. `error` = `x-error` header.<br>`state(page) → { live, preview } \| null`: `api.aem.status` (`GET admin.hlx.page/status/{org}/{site}/main{path}`, `live.status` / `preview.status`: 200 → true, 404 → false). `null` (unknown) on any failure, other status, or missing `api.aem.status`. Cached and de-duplicated per path, at most 4 lookups in flight (`concurrency`); `clear()` empties the cache (`refresh()` calls it), and a successful preview/publish forgets that path. |
 
 ## Model
 
@@ -128,7 +128,8 @@ Validation produces issues as data (`{ level, code, site, row, id, field, messag
 `pageStatus(chain)`, where `chain` is `[{ ref, info }]` from `sourceChain`, → `{ relationship, sync, effectiveSource, reasons, overridden }`, or `null` when there's no page: an empty chain (no location), a missing root page, or a missing page with no content above it.
 
 - **relationship**: root · inherited (no file; shows its source) · local copy · translation · unlinked · standalone · not created · unavailable · config error · unknown
-- **sync**, in urgency order: needs review · blocked by source review · source deleted · ready to save · translating · behind source · current
+- **sync**, in urgency order: needs review · blocked by source review · source deleted · ready to save · translating · not published · behind source · current
+- **Not published**: an inherited page (no file, so no own index base) whose `info.published.live === false`. Delivery only serves an inherited page once its own path is previewed/published. `reasons` gets `not-previewed` when `published.preview === false` too. Unknown (`null`/absent) never flags. Not created pages in `none` locations aren't inherited and are never flagged.
 - **Effective source**: the nearest existing page above, passing only through missing pages in `linked` locations.
 - **No index entry:**
   - the source exists → local copy, behind source (`base-unknown`)
@@ -207,6 +208,7 @@ Failures: `option` is always checked against the location's `conflictBehavior` (
 `page()`:
 - Loads the page's site config, then each source site up the location chain as it's discovered (following location sources, even past nested locations). It never scans the other sites.
 - Reads page info and index entries for every page in the chain.
+- For an inherited page only, asks `services.publish.state` (when present) and sets `info.published`; a failed lookup leaves it unset.
 - Fetches `needsReview` only for the page itself (if it exists) and its effective source.
 - Asks `translationConnectors.supports()` only when the location allows translate.
 - Asks `api.isHlx6({ org, site })` for the page's site and its effective source's site (no `api` → legacy).
@@ -225,6 +227,8 @@ Configs, page info, index reads, review flags and backend checks are cached per 
 | actions | availableActions |
 
 ## Known limitations
+
+- **Publish state is one status call per inherited page**, not the async bulk status job (`POST /status/{org}/{site}/main/*`), which needs job polling. It is untested against admin.hlx.page; it assumes the status response carries `live.status` / `preview.status` as in the Admin API docs and that the caller's auth covers `GET /status`.
 
 - **Targets are only as complete as your access.** Relationships live in the target's site, so finding a location's targets means reading the config of every site you can access. Targets in sites you can't see are invisible; nothing indicates that they exist. Affected:
   - fan-out views

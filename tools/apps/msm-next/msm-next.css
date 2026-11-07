@@ -651,6 +651,14 @@ p {
   font-size: var(--s2-font-size-100, 14px);
 }
 
+.publish-notice {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--s2-notice-subtle, #fff4e5);
+  font-size: var(--s2-font-size-75, 13px);
+}
+
 .attention ul {
   margin: 0;
   padding: 0;

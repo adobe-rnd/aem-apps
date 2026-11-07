@@ -133,6 +133,61 @@ describe('mock localization', () => {
   });
 });
 
+describe('loader with publish lookups', () => {
+  it('keeps page loads (and so publish lookups) within the concurrency limit', async () => {
+    const localization = createMockLocalization({ latency: false });
+    let active = 0;
+    let peak = 0;
+    const page = localization.page.bind(localization);
+    const limited = {
+      ...localization,
+      page: async (...args) => {
+        active += 1;
+        peak = Math.max(peak, active);
+        await new Promise((resolve) => { setTimeout(resolve, 1); });
+        try { return await page(...args); } finally { active -= 1; }
+      },
+    };
+    const loader = createLoader({
+      localization: limited, list: localization.list, site: 'gamebox', concurrency: 3,
+    });
+    await loader.load();
+    await settle();
+    assert.ok(peak > 1 && peak <= 3);
+    assert.equal(loader.errors.size, 0);
+  });
+});
+
+describe('mock publish state', () => {
+  const site = 'gamebox';
+  const path = '/de-at/hardware/console.html';
+
+  it('flags a seeded unpublished inherited page and clears it once published', async () => {
+    const { localization, loader } = await loaded();
+    assert.deepEqual(describePage(loader, `${site}:${path}`), ['Inherited', 'not published', false]);
+    assert.equal(localization.publishState(site, path), null);
+    assert.equal((await localization.publish({ site, path })).ok, true);
+    assert.equal(localization.publishState(site, path), 'live');
+    const page = await localization.page(site, path);
+    assert.deepEqual(page.status.sync, []);
+  });
+
+  it('keeps already published inherited pages unflagged', async () => {
+    const { localization, loader } = await loaded();
+    const other = '/fr-fr/hardware/console.html';
+    assert.equal(primarySync(loader.results.get(`${site}:${other}`)), null);
+    assert.equal(localization.publishState(site, other), 'live');
+  });
+
+  it('only checks inherited pages', async () => {
+    const localization = createMockLocalization({ latency: false });
+    const root = await localization.page(site, '/global/hardware/controller.html');
+    assert.equal(root.chain[0].info.published, undefined);
+    const inherited = await localization.page(site, path);
+    assert.deepEqual(inherited.chain[0].info.published, { live: false, preview: false });
+  });
+});
+
 describe('mock runs', () => {
   const site = 'gamebox';
   const source = { site, path: '/global/hardware/controller.html' };

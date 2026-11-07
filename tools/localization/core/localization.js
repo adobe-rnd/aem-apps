@@ -84,7 +84,10 @@ export default function createLocalization({
   }
 
   let caches = newCaches();
-  const refresh = () => { caches = newCaches(); };
+  const refresh = () => {
+    caches = newCaches();
+    services.publish?.clear?.();
+  };
 
   const loadSite = async (snapshot, site) => {
     const rows = await cached(snapshot.config, site, () => providers.config.read(site));
@@ -166,6 +169,10 @@ export default function createLocalization({
     const draft = pageStatus(chain);
 
     const [self] = chain;
+    if (draft?.relationship === 'inherited' && services.publish?.state) {
+      const published = await services.publish.state({ site, path }).catch(() => null);
+      if (published) self.info.published = published;
+    }
     const reviewed = chain.filter((entry) => (entry === self && entry.info.exists)
       || (draft?.effectiveSource && entry.ref === draft.effectiveSource));
     await Promise.all(reviewed.map(async (entry) => {

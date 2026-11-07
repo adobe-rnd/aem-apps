@@ -16,7 +16,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  pageType, syncBadges, needsAction, urgencyRank, nextStep, actionButtons, editUrl,
+  publishNotice, pageType, syncBadges, needsAction, urgencyRank, nextStep, actionButtons, editUrl,
   pageTitle, levelLabel, formatRelative, reasonText, refLabel, typeGroup, isRealPage,
 } from '../../../../tools/apps/msm-next/data/display.js';
 
@@ -74,6 +74,21 @@ describe('sync display', () => {
     assert.equal(syncBadges(result('translation', ['translating']))[0].label, 'Translating');
   });
 
+  it('labels and flags inherited pages that are not published', () => {
+    const page = result('inherited', ['not published']);
+    assert.deepEqual(syncBadges(page)[0], { sync: 'not published', label: 'Not published', tone: 'notice' });
+    assert.equal(needsAction(page), true);
+    assert.ok(urgencyRank(page) < urgencyRank(result('inherited')));
+    assert.ok(urgencyRank(result('local copy', ['behind source'])) > urgencyRank(page));
+  });
+
+  it('explains why an unpublished inherited page needs publishing', () => {
+    assert.match(publishNotice(result('inherited', ['not published'])), /not published/i);
+    const unpreviewed = result('inherited', ['not published'], { status: { reasons: ['not-previewed'] } });
+    assert.match(publishNotice(unpreviewed), /previewed/i);
+    assert.equal(publishNotice(result('inherited')), '');
+  });
+
   it('flags pages that need action', () => {
     assert.equal(needsAction(result('local copy', ['behind source'])), true);
     assert.equal(needsAction(result('local copy', ['ready to save'])), true);
@@ -93,6 +108,12 @@ describe('sync display', () => {
 });
 
 describe('nextStep', () => {
+  it('suggests publishing an unpublished inherited page', () => {
+    assert.deepEqual(nextStep(result('inherited', ['not published'])), { kind: 'publish', label: 'Publish' });
+    assert.equal(nextStep(result('inherited', ['needs review', 'not published'])).kind, 'review');
+    assert.equal(nextStep(result('inherited', ['blocked by source review', 'not published'])).kind, 'publish');
+  });
+
   it('prefers review, then save', () => {
     assert.equal(nextStep(result('local copy', ['needs review'])).kind, 'review');
     const ready = result('translation', ['ready to save'], { actions: [action('save')] });

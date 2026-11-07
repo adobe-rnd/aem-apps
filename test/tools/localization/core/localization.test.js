@@ -248,6 +248,69 @@ describe('page: actions', () => {
   });
 });
 
+describe('page: publish state', () => {
+  const pages = { 'global:/en/x': file('a', '1'), 'global:/en/y': file('b', '1') };
+
+  function withPublish(states, extra = {}) {
+    const fixture = createFixture({ pages, ...extra });
+    const lookups = [];
+    let cleared = 0;
+    fixture.services.publish = {
+      state: async (page) => {
+        lookups.push(`${page.site}:${page.path}`);
+        const state = states[`${page.site}:${page.path}`];
+        if (state instanceof Error) throw state;
+        return state ?? null;
+      },
+      clear: () => { cleared += 1; },
+    };
+    return { fixture, lookups, cleared: () => cleared };
+  }
+
+  it('flags an inherited page that is not live', async () => {
+    const { fixture } = withPublish({ 'global:/uk/x': { live: false, preview: true } });
+    const result = await localizationFor(fixture).page('global', '/uk/x');
+    assert.deepEqual(result.status.sync, ['not published']);
+    assert.deepEqual(result.chain[0].info.published, { live: false, preview: true });
+  });
+
+  it('flags a page linked explicitly in a none location', async () => {
+    const { fixture } = withPublish({ 'brand-b:/es-en/x': { live: false, preview: false } }, {
+      indexes: { 'brand-b:/es-en': { pages: {}, pending: { '/es-en/x': { linked: true } } } },
+    });
+    const result = await localizationFor(fixture).page('brand-b', '/es-en/x');
+    assert.equal(result.status.relationship, 'inherited');
+    assert.deepEqual(result.status.sync, ['not published']);
+    assert.deepEqual(result.status.reasons, ['not-previewed']);
+  });
+
+  it('shows nothing when the lookup is unknown or fails', async () => {
+    const unknown = withPublish({});
+    assert.deepEqual((await localizationFor(unknown.fixture).page('global', '/uk/x')).status.sync, []);
+    const failing = withPublish({ 'global:/uk/x': new Error('boom') });
+    assert.deepEqual((await localizationFor(failing.fixture).page('global', '/uk/x')).status.sync, []);
+  });
+
+  it('only looks up inherited pages', async () => {
+    const { fixture, lookups } = withPublish({}, {
+      pages: { ...pages, 'global:/uk/y': file('c', '1') },
+    });
+    const localization = localizationFor(fixture);
+    await localization.page('global', '/en/x');
+    await localization.page('global', '/uk/y');
+    await localization.page('brand-b', '/es-en/x');
+    assert.deepEqual(lookups, []);
+    await localization.page('global', '/uk/x');
+    assert.deepEqual(lookups, ['global:/uk/x']);
+  });
+
+  it('clears the publish cache on refresh', async () => {
+    const { fixture, cleared } = withPublish({});
+    localizationFor(fixture).refresh();
+    assert.equal(cleared(), 1);
+  });
+});
+
 describe('page: backend gating', () => {
   const hlx6Api = (hlx6Sites, calls = []) => ({
     isHlx6: async ({ org, site }) => {

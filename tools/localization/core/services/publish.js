@@ -25,18 +25,73 @@ function toResult(operation, response) {
   return { ok: false, status: response.status, error };
 }
 
-export default function createPublishService({ org, api }) {
+const DEFAULT_CONCURRENCY = 4;
+
+function createLimiter(limit) {
+  let active = 0;
+  const queue = [];
+  const next = () => {
+    if (active >= limit || !queue.length) return;
+    const { task, resolve, reject } = queue.shift();
+    active += 1;
+    task().then(resolve, reject).finally(() => {
+      active -= 1;
+      next();
+    });
+  };
+  return (task) => new Promise((resolve, reject) => {
+    queue.push({ task, resolve, reject });
+    next();
+  });
+}
+
+const PUBLISHED = { 200: true, 404: false };
+
+const isPublished = (entry) => PUBLISHED[entry?.status] ?? null;
+
+export default function createPublishService({ org, api, concurrency = DEFAULT_CONCURRENCY }) {
+  const limit = createLimiter(concurrency);
+  let states = new Map();
+  const stateKey = ({ site, path }) => `${site}:${toAemPath(path)}`;
+
+  async function fetchState(page) {
+    try {
+      const response = await api.aem.status?.({ org, site: page.site, path: toAemPath(page.path) });
+      if (!response?.ok) return null;
+      const data = await response.json();
+      const live = isPublished(data?.live);
+      const previewed = isPublished(data?.preview);
+      return live === null ? null : { live, preview: previewed };
+    } catch {
+      return null;
+    }
+  }
+
+  function state(page) {
+    const key = stateKey(page);
+    if (!states.has(key)) states.set(key, limit(() => fetchState(page)));
+    return states.get(key);
+  }
+
+  const clear = () => { states = new Map(); };
+
   const aemTarget = ({ site, path }) => ({ org, site, path: toAemPath(path) });
 
   async function preview(page) {
-    return toResult('preview', await api.aem.preview(aemTarget(page)));
+    const result = toResult('preview', await api.aem.preview(aemTarget(page)));
+    if (result.ok) states.delete(stateKey(page));
+    return result;
   }
 
   async function publish(page) {
     const previewResult = await preview(page);
     if (!previewResult.ok) return previewResult;
-    return toResult('publish', await api.aem.publish(aemTarget(page)));
+    const result = toResult('publish', await api.aem.publish(aemTarget(page)));
+    if (result.ok) states.delete(stateKey(page));
+    return result;
   }
 
-  return { preview, publish };
+  return {
+    preview, publish, state, clear,
+  };
 }

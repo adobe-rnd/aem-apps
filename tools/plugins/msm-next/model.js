@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 import {
-  pageType, syncBadges, nextStep, reasonText, levelLabel, pageTitle, isOverridden, isRealPage,
+  pageType, syncBadges, publishNotice, nextStep, reasonText, levelLabel, pageTitle, isOverridden,
+  isRealPage,
   REASON_LABELS,
 } from '../../apps/msm-next/data/display.js';
 import { targetPages } from '../../localization/core/domain/resolve.js';
@@ -135,6 +136,9 @@ export function detailRows(result, { site, publishState } = {}) {
     },
     {
       id: 'location', label: 'Location', value: sameLabel(location.label, levelLabel(location, depth)), detail: '',
+    },
+    publishNotice(result) && {
+      id: 'delivery', label: 'Live site', value: 'Not published', detail: publishNotice(result),
     },
     publishState !== undefined && {
       id: 'publish', label: 'Published', value: publishBadge(publishState).label, detail: '',

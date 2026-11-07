@@ -20,6 +20,7 @@ export const URGENCY = [
   'source deleted',
   'ready to save',
   'translating',
+  'not published',
   'behind source',
   'current',
 ];
@@ -30,11 +31,12 @@ export const SYNC_DISPLAY = {
   'source deleted': { label: 'Source deleted', tone: 'negative' },
   'ready to save': { label: 'Ready to save', tone: 'informative' },
   translating: { label: 'Translating', tone: 'informative' },
+  'not published': { label: 'Not published', tone: 'notice' },
   'behind source': { label: 'Update available', tone: 'notice' },
   current: { label: 'Up to date', tone: 'positive' },
 };
 
-export const NEEDS_ACTION_SYNC = ['needs review', 'source deleted', 'ready to save', 'behind source'];
+export const NEEDS_ACTION_SYNC = ['needs review', 'source deleted', 'ready to save', 'not published', 'behind source'];
 
 const TYPES = {
   root: { group: 'source', label: 'Source' },
@@ -117,6 +119,14 @@ export function syncBadges(result) {
     .map((sync) => ({ sync, ...(SYNC_DISPLAY[sync] ?? { label: sync, tone: 'neutral' }) }));
 }
 
+const has = (result, sync) => (result?.status?.sync ?? []).includes(sync);
+
+export function publishNotice(result) {
+  if (!has(result, 'not published')) return '';
+  const unpreviewed = (result.status.reasons ?? []).includes('not-previewed') ? ' It has not been previewed either.' : '';
+  return `This inherited page is not published at its own path, so the live site does not serve it.${unpreviewed} Publish it to make it visible.`;
+}
+
 export const isOverridden = (result) => Boolean(result?.status?.overridden);
 
 export const needsAction = (result) => (result?.status?.sync ?? [])
@@ -167,7 +177,6 @@ export function formatRelative(iso, now = Date.now()) {
   return `${count} ${unit}${count === 1 ? '' : 's'} ago`;
 }
 
-const has = (result, sync) => (result?.status?.sync ?? []).includes(sync);
 const enabledAction = (result, name) => (result?.actions ?? [])
   .find((entry) => entry.action === name && entry.enabled);
 
@@ -192,6 +201,7 @@ export function nextStep(result) {
     const update = (result.actions ?? []).find((entry) => entry.default && entry.enabled);
     return update ? { kind: 'action', action: update.action, label: 'Update' } : null;
   }
+  if (has(result, 'not published')) return { kind: 'publish', label: 'Publish' };
   return null;
 }
 

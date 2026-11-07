@@ -73,6 +73,17 @@ describe('publishBadge', () => {
   });
 });
 
+describe('detailRows: unpublished inherited page', () => {
+  it('adds a live-site row only when the page is not published', () => {
+    const flagged = result('inherited', ['not published'], { location: location('/es-mx') });
+    const row = detailRows(flagged, { site: 'gamebox' }).find((entry) => entry.id === 'delivery');
+    assert.equal(row.value, 'Not published');
+    assert.match(row.detail, /Publish/);
+    const clean = result('inherited', [], { location: location('/es-mx') });
+    assert.equal(detailRows(clean, { site: 'gamebox' }).some((entry) => entry.id === 'delivery'), false);
+  });
+});
+
 describe('language display', () => {
   it('builds the locale badge, region and language names', () => {
     assert.equal(localeBadge('es-MX'), 'ES-MX');

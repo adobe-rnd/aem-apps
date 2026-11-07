@@ -375,6 +375,10 @@ class MsmNextApp extends LitElement {
       this.openDrawerFor(node);
       return;
     }
+    if (step.kind === 'publish') {
+      this.publish(node, false);
+      return;
+    }
     if (step.kind === 'review') {
       if (this.localization.resolveReview) {
         this.withBusy(node, async () => {

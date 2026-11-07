@@ -124,6 +124,17 @@ describe('legacy api: config', () => {
   });
 });
 
+describe('legacy api: aem status', () => {
+  it('reads the status of a path on the main branch', async () => {
+    const recorder = createRecorder();
+    const api = apiFor(recorder);
+    await api.aem.status({ org: 'acme', site: 'global', path: '/en/x' });
+    assert.deepEqual(recorder.requests.map((request) => `${request.method} ${request.url}`), [
+      `GET ${AEM_ORIGIN}/status/acme/global/main/en/x`,
+    ]);
+  });
+});
+
 describe('legacy api: aem', () => {
   it('previews and publishes on the main branch', async () => {
     const recorder = createRecorder();

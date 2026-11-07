@@ -68,6 +68,7 @@ export default function createLegacyApi({
 
   const aemUrl = (route, { org, site, path }) => `${aemOrigin}/${route}/${org}/${site}/main${path}`;
   const aem = {
+    status: (target) => fetch(aemUrl('status', target), { cache: 'no-store' }),
     preview: (target) => fetch(aemUrl('preview', target), { method: 'POST' }),
     publish: (target) => fetch(aemUrl('live', target), { method: 'POST' }),
   };

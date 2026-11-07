@@ -125,6 +125,41 @@ describe('pageStatus: missing pages', () => {
     assert.deepEqual(summary(result), { relationship: 'inherited', sync: [] });
   });
 
+  it('flags an inherited page that is not live', () => {
+    const result = statusOf('/uk/x', { '/en/x': file('a', '1'), '/uk/x': { exists: false, published: { live: false, preview: true } } });
+    assert.deepEqual(summary(result), { relationship: 'inherited', sync: ['not published'] });
+    assert.deepEqual(result.reasons, []);
+  });
+
+  it('notes when an unpublished inherited page is not previewed either', () => {
+    const result = statusOf('/uk/x', { '/en/x': file('a', '1'), '/uk/x': { exists: false, published: { live: false, preview: false } } });
+    assert.deepEqual(result.reasons, ['not-previewed']);
+  });
+
+  it('does not flag live or unknown publish state', () => {
+    const source = { '/en/x': file('a', '1') };
+    const live = statusOf('/uk/x', { ...source, '/uk/x': { exists: false, published: { live: true, preview: true } } });
+    const unknown = statusOf('/uk/x', { ...source, '/uk/x': { exists: false, published: { live: null, preview: null } } });
+    assert.deepEqual(live.sync, []);
+    assert.deepEqual(unknown.sync, []);
+  });
+
+  it('keeps other states next to not published', () => {
+    const result = statusOf('/uk/x', {
+      '/en/x': file('a', '1', { needsReview: true }),
+      '/uk/x': { exists: false, published: { live: false } },
+    });
+    assert.deepEqual(result.sync, ['blocked by source review', 'not published']);
+  });
+
+  it('never flags a not created page in a none location', () => {
+    const result = statusOf('/es/x', {
+      '/en/x': file('a', '1'),
+      '/es/x': { exists: false, published: { live: false, preview: false } },
+    });
+    assert.deepEqual(summary(result), { relationship: 'not created', sync: [] });
+  });
+
   it('shows blocked by source review on a not created page', () => {
     const result = statusOf('/es/x', { '/en/x': file('a', '1', { needsReview: true }) });
     assert.deepEqual(summary(result), { relationship: 'not created', sync: ['blocked by source review'] });

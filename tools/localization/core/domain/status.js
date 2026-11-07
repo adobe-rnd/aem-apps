@@ -20,6 +20,7 @@ export const SYNC_ORDER = [
   'source deleted',
   'ready to save',
   'translating',
+  'not published',
   'behind source',
   'current',
 ];
@@ -87,7 +88,13 @@ function existingStatus(self, effective) {
 function missingStatus(self, effective, chain) {
   const opts = { sync: flags(self, effective), effectiveSource: effective };
   const linked = self.ref.location.missingPages === 'linked' || Boolean(self.info?.linked);
-  if (effective) return result(linked ? 'inherited' : 'not created', opts);
+  if (effective && linked) {
+    const { live, preview } = self.info?.published ?? {};
+    if (live === false) opts.sync.push('not published');
+    if (live === false && preview === false) opts.reasons = ['not-previewed'];
+    return result('inherited', opts);
+  }
+  if (effective) return result('not created', opts);
   if (linked && chain.slice(1).some(exists)) return result('unavailable', opts);
   return null;
 }

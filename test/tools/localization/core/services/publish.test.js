@@ -39,6 +39,104 @@ describe('toAemPath', () => {
   });
 });
 
+describe('publish service: state', () => {
+  const body = (live, preview) => JSON.stringify({
+    live: { status: live }, preview: { status: preview },
+  });
+
+  function statusApi(responses, calls = []) {
+    return {
+      calls,
+      api: {
+        aem: {
+          status: async (target) => {
+            calls.push(target.path);
+            const response = responses[target.path];
+            if (response instanceof Error) throw response;
+            return response ?? new Response(body(404, 404));
+          },
+        },
+      },
+    };
+  }
+
+  it('reads live and preview from the status response with AEM paths', async () => {
+    const { api, calls } = statusApi({
+      '/en/a': new Response(body(200, 200)),
+      '/en/b': new Response(body(404, 200)),
+      '/en/': new Response(body(404, 404)),
+    });
+    const service = createPublishService({ org: 'acme', api });
+    assert.deepEqual(await service.state({ site: 's', path: '/en/a.html' }), { live: true, preview: true });
+    assert.deepEqual(await service.state({ site: 's', path: '/en/b.html' }), { live: false, preview: true });
+    assert.deepEqual(await service.state({ site: 's', path: '/en/index.html' }), { live: false, preview: false });
+    assert.deepEqual(calls, ['/en/a', '/en/b', '/en/']);
+  });
+
+  it('is unknown (null) on failed or malformed lookups', async () => {
+    const { api } = statusApi({
+      '/a': new Response('{}', { status: 401 }),
+      '/b': new Response('nope'),
+      '/c': new Error('network'),
+      '/d': new Response('{}'),
+    });
+    const service = createPublishService({ org: 'acme', api });
+    const states = await Promise.all(['/a.html', '/b.html', '/c.html', '/d.html']
+      .map((path) => service.state({ site: 's', path })));
+    assert.deepEqual(states, [null, null, null, null]);
+  });
+
+  it('caches and de-duplicates lookups until cleared', async () => {
+    const { api, calls } = statusApi({ '/a': new Response(body(200, 200)) });
+    const service = createPublishService({ org: 'acme', api });
+    const page = { site: 's', path: '/a.html' };
+    await Promise.all([service.state(page), service.state(page)]);
+    await service.state(page);
+    assert.equal(calls.length, 1);
+    service.clear();
+    await service.state(page);
+    assert.equal(calls.length, 2);
+  });
+
+  it('limits concurrent lookups', async () => {
+    let active = 0;
+    let peak = 0;
+    const api = {
+      aem: {
+        status: async () => {
+          active += 1;
+          peak = Math.max(peak, active);
+          await new Promise((resolve) => { setTimeout(resolve, 5); });
+          active -= 1;
+          return new Response(body(200, 200));
+        },
+      },
+    };
+    const service = createPublishService({ org: 'acme', api, concurrency: 2 });
+    await Promise.all(Array.from({ length: 6 }, (_, i) => service.state({ site: 's', path: `/p${i}.html` })));
+    assert.equal(peak, 2);
+  });
+
+  it('is unknown without an api status call', async () => {
+    const service = createPublishService({ org: 'acme', api: { aem: {} } });
+    assert.equal(await service.state({ site: 's', path: '/a.html' }), null);
+  });
+
+  it('forgets the cached state after a successful preview or publish', async () => {
+    const responses = { '/a': new Response(body(404, 404)) };
+    const { api, calls } = statusApi(responses);
+    api.aem.preview = async () => new Response('{}');
+    api.aem.publish = async () => new Response('{}');
+    const service = createPublishService({ org: 'acme', api });
+    const page = { site: 's', path: '/a.html' };
+    await service.state(page);
+    await service.publish(page);
+    responses['/a'] = new Response(body(200, 200));
+    assert.deepEqual(await service.state(page), { live: true, preview: true });
+    assert.equal(calls.length, 2);
+  });
+});
+
 describe('publish service', () => {
   it('previews with the AEM path', async () => {
     const { api, calls } = createFakeApi();

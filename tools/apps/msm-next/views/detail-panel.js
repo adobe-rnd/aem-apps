@@ -17,7 +17,7 @@
 import { html, nothing } from 'da-lit';
 import {
   pageType, syncBadges, nextStep, actionButtons, editUrl, formatRelative, levelLabel, refLabel,
-  isRealPage, primarySync,
+  isRealPage, primarySync, publishNotice,
 } from '../data/display.js';
 import {
   badge, overriddenBadge, langBadge, pageLabel, spinner, syncBadge,
@@ -177,6 +177,7 @@ export default function renderDetailPanel(node, ctx) {
     ${!result && !error ? html`<p class="loading-text">${spinner('Loading')} Checking status…</p>` : nothing}
     ${result ? html`
       ${renderFacts(node, result, ctx)}
+      ${publishNotice(result) ? html`<p class="publish-notice" role="status">${publishNotice(result)}</p>` : nothing}
       ${renderTranslation(node, result, ctx)}
       ${renderAttention(ctx.attention, ctx)}
       ${renderActions(node, result, ctx)}

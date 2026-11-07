@@ -67,12 +67,14 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 
 export const FLAKY_PREFIX = 'gamebox-retail:/arcade-avenue/';
 export const JOB_STEPS = 4;
+export const UNPUBLISHED_SEED = ['gamebox:/de-at/hardware/console.html'];
 
 export default function createMockLocalization({
   latency = true, translationDelay = 6000, org = MOCK_ORG, flaky = true, seedRuns = true,
 } = {}) {
   const { files, indexes } = buildFixture();
   const published = new Map();
+  const unpublished = new Set(UNPUBLISHED_SEED);
   const listeners = new Set();
   const jobClock = new Map();
   const flakyFailed = new Set();
@@ -169,6 +171,11 @@ export default function createMockLocalization({
     },
   };
 
+  const publishStateOf = (page) => {
+    if (published.has(key(page))) return published.get(key(page));
+    return unpublished.has(key(page)) ? null : 'live';
+  };
+
   const publishService = {
     preview: async (page) => {
       await wait();
@@ -180,6 +187,12 @@ export default function createMockLocalization({
       published.set(key(page), 'live');
       return { ok: true, status: 200 };
     },
+    state: async (page) => {
+      await wait();
+      const state = publishStateOf(page);
+      return { live: state === 'live', preview: state !== null };
+    },
+    clear: () => {},
   };
 
   const translationConnectors = { supports: async () => true };
@@ -357,7 +370,7 @@ export default function createMockLocalization({
     resolveReview,
     subscribe,
     list: pageInfo.list,
-    publishState: (site, path) => published.get(key({ site, path })) ?? null,
+    publishState: (site, path) => publishStateOf({ site, path }),
     mock: true,
   };
 }
