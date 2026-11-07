@@ -31,6 +31,7 @@ const { items, cursor } = await translationConnectors.call('getResults', { jobSt
 
 - Proxy: `POST {translateOrigin}/translate/google/{org}/{site}`, form fields `data`, `fromlang`, `tolang`; response `{ translated }`. HTML over 5000 chars is split after closing tags, never inside `translate="no"`.
 - Formats: `html` only.
+- Descriptor `capabilities`: `cancel: true`, plus `maxBatchItems` / `maxBatchBytes`; core splits a grouped job (one per source location, all pages × target languages) into several `send` calls within those limits.
 - `cancel` makes no remote call: it marks the language `cancelled` in `jobState`, so `getStatus` reports it `cancelled`.
 - `jobState` holds the source items and target codes; translation happens in `getResults` (paged by `resultsPageSize`, default 20).
 - Settings: `simulatedDelayMs` (status `in-progress` until `sentAt + delay`), `translateOrigin`, `resultsPageSize`.

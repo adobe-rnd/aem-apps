@@ -2,7 +2,7 @@
 
 Shared core for Localization V2: translation, regional copies, and content shared within or across sites. It replaces the loc app (da-nx `nx/blocks/loc`) and MSM (`tools/apps/msm`, `tools/plugins/msm`).
 
-Status: draft. The domain layer and the facade's `page()` are built; providers and services are in design.
+Status: draft prototype. Domain, providers, content/publish services, the facade (`page`, `execute`, `propagate`, grouped translation, publish) and the Google connector are built; contracts may still change.
 
 ## Layers
 
@@ -13,7 +13,7 @@ core/
   domain/           pure logic, no I/O
   api/              backend transport: DA + AEM admin; legacy adapter now, nx api.js later
   providers/        supply data: config, page-info, loc-index
-  services/         perform operations: content, translation-connectors (planned), publish
+  services/         perform operations: content, translation-connectors, publish
 ```
 
 - UI layers import only `index.js`.
@@ -102,7 +102,7 @@ Each site has a `locations` sheet in its own config. **The target defines the re
 | level | free text, e.g. `Global`, `Region`, `Language`, `Locale`; any row | empty (UI falls back to depth) |
 | source | `site:/path`, or `/path` for the same site; empty for a root | — |
 | actions | `link`, `rollout`, `translate` | `rollout` |
-| missingPages | `linked` · `none` | `none` |
+| missingPages | `linked` · `none` (don't use `linked` on a translation relationship; not validated yet, UIs show it as configured) | `none` |
 | conflictBehavior | `merge`, `overwrite`; first is the default | `merge` |
 | onComplete | `none` · `preview` · `publish` | `none` |
 
@@ -163,6 +163,7 @@ Per-page info comes from providers:
 - Rollout and translate don't publish unless `onComplete` says so.
 - Rollout, translate and save use the DA-only copy engine (PR 801). They're disabled with `backend-unsupported` when the page's site or its effective source's site is on Helix 6, and with `copy-engine-unavailable` when there's no `content` service. Reconnect isn't affected.
 - Reason order: language/connector, then backend, then page blockers.
+- `isRelevantAction(entry)`: UI filter. Panels show an action if it is enabled or `default`, or if it is disabled because of `needs-review`, `source-needs-review` or `translation-in-progress` (the user needs the explanation). Other disabled actions are hidden.
 
 ## Facade API
 
@@ -224,7 +225,7 @@ Configs, page info, index reads, review flags and backend checks are cached per 
 | config | parseConfig, normalizePath, parseSource, constants |
 | resolve | findLocation, sourcePage, sourceChain (includes self), targetPages, targetLocations (direct only), equivalentSites |
 | status | pageStatus, SYNC_ORDER |
-| actions | availableActions |
+| actions | availableActions, isRelevantAction, REFRESHABLE |
 
 ## Known limitations
 
