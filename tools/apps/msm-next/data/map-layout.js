@@ -28,7 +28,9 @@ export const MAP_SIZES = {
 export const MIN_SCALE = 0.2;
 export const MAX_SCALE = 2;
 export const PAN_PADDING = 48;
-export const MINIMAP = { width: 140, height: 100 };
+export const MINIMAP = {
+  width: 240, height: 140, minWidth: 160, minHeight: 90,
+};
 
 export const isIndependent = (node, results) => Boolean(node.parent)
   && typeGroup(results.get(node.key)) === 'independent';
@@ -216,22 +218,32 @@ export function clampView(view, layout, viewport, padding = PAN_PADDING) {
 
 export function minimapGeometry(layout, box = MINIMAP) {
   const scale = Math.min(box.width / layout.width, box.height / layout.height);
-  return { scale, width: layout.width * scale, height: layout.height * scale };
+  const contentWidth = layout.width * scale;
+  const contentHeight = layout.height * scale;
+  const width = Math.max(contentWidth, box.minWidth ?? 0);
+  const height = Math.max(contentHeight, box.minHeight ?? 0);
+  return {
+    scale,
+    width,
+    height,
+    offsetX: (width - contentWidth) / 2,
+    offsetY: (height - contentHeight) / 2,
+  };
 }
 
 export function minimapViewport(view, viewport, mini) {
   const ratio = mini.scale / view.scale;
   return {
-    x: -view.x * ratio,
-    y: -view.y * ratio,
+    x: -view.x * ratio + (mini.offsetX ?? 0),
+    y: -view.y * ratio + (mini.offsetY ?? 0),
     width: viewport.width * ratio,
     height: viewport.height * ratio,
   };
 }
 
 export function viewFromMinimap(point, view, viewport, mini) {
-  const contentX = point.x / mini.scale;
-  const contentY = point.y / mini.scale;
+  const contentX = (point.x - (mini.offsetX ?? 0)) / mini.scale;
+  const contentY = (point.y - (mini.offsetY ?? 0)) / mini.scale;
   return {
     ...view,
     x: viewport.width / 2 - contentX * view.scale,

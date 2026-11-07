@@ -80,7 +80,7 @@ function renderMinimap(layout, view, ctx) {
       @pointerup=${ctx.onMinimap} @pointercancel=${ctx.onMinimap}>
       ${layout.nodes.map((entry) => html`
         <span class="mini-card ${entry.key === ctx.selectedKey ? 'selected' : ''}"
-          style="left: ${entry.x * mini.scale}px; top: ${entry.y * mini.scale}px; width: ${cardWidth * mini.scale}px; height: ${cardHeight * mini.scale}px"></span>`)}
+          style="left: ${mini.offsetX + entry.x * mini.scale}px; top: ${mini.offsetY + entry.y * mini.scale}px; width: ${cardWidth * mini.scale}px; height: ${cardHeight * mini.scale}px"></span>`)}
       <span class="mini-view"
         style="left: ${rect.x}px; top: ${rect.y}px; width: ${rect.width}px; height: ${rect.height}px"></span>
     </div>`;

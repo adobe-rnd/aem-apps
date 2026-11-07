@@ -131,4 +131,20 @@ describe('map view bounds and minimap', () => {
     const view = viewFromMinimap({ x: 50, y: 40 }, { x: 0, y: 0, scale: 1 }, viewport, mini);
     assert.deepEqual(view, { x: -300, y: -250, scale: 1 });
   });
+
+  it('keeps a minimum minimap size for tall narrow layouts and centers the content', () => {
+    const narrow = { width: 250, height: 2000 };
+    const mini = minimapGeometry(narrow, {
+      width: 240, height: 140, minWidth: 160, minHeight: 90,
+    });
+    assert.equal(mini.height, 140);
+    assert.equal(mini.width, 160);
+    assert.equal(mini.offsetX, (160 - 250 * mini.scale) / 2);
+    assert.equal(mini.offsetY, 0);
+    const rect = minimapViewport({ x: 0, y: 0, scale: 1 }, viewport, mini);
+    assert.equal(rect.x, mini.offsetX);
+    const origin = { x: 0, y: 0, scale: 1 };
+    const view = viewFromMinimap({ x: mini.offsetX, y: 0 }, origin, viewport, mini);
+    assert.deepEqual(view, { x: 200, y: 150, scale: 1 });
+  });
 });
