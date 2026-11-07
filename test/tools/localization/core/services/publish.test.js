@@ -292,7 +292,7 @@ describe('publish service: stateMany', () => {
     assert.equal(log.filter(([kind]) => kind === 'single').length, 0);
   });
 
-  it('reads status objects on result entries and unknown paths as null', async () => {
+  it('reads status objects on result entries and treats unlisted paths as not published', async () => {
     const { api } = bulkApi({
       resources: () => [
         { path: '/a', live: { status: 200 }, preview: { status: 200 } },
@@ -301,7 +301,7 @@ describe('publish service: stateMany', () => {
     });
     const service = createPublishService({ org: 'acme', api, ...BULK });
     assert.deepEqual(await service.stateMany(pages('/a', '/b', '/c')), [
-      { live: true, preview: true }, { live: false, preview: true }, null,
+      { live: true, preview: true }, { live: false, preview: true }, { live: false, preview: false },
     ]);
   });
 

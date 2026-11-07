@@ -190,7 +190,7 @@ export default function createPublishService({
       states.set(stateKey(page), result.then((outcome) => {
         if (outcome.failed) return fetchState(page);
         if (outcome.denied) return null;
-        return lookup(outcome.entries, toAemPath(page.path));
+        return lookup(outcome.entries, toAemPath(page.path)) ?? { live: false, preview: false };
       }));
     });
   }
