@@ -84,9 +84,58 @@ export default function createLocalization({
   }
 
   let caches = newCaches();
+  const publishValues = new Map();
+  const publishFresh = new Set();
+  const publishInflight = new Map();
+  const publishKey = (site, path) => `${site}:${path}`;
+  const publishValue = (state) => {
+    if (state?.live) return 'live';
+    return state?.preview ? 'preview' : null;
+  };
+  const invalidatePublishState = (site, path) => {
+    if (site === undefined) {
+      publishFresh.clear();
+      publishInflight.clear();
+      return;
+    }
+    publishFresh.delete(publishKey(site, path));
+    publishInflight.delete(publishKey(site, path));
+  };
+  const publishState = (site, path) => publishValues.get(publishKey(site, path)) ?? null;
+  const loadPublishStateFor = ({ site, path }) => {
+    const key = publishKey(site, path);
+    if (publishFresh.has(key)) return Promise.resolve(false);
+    if (publishInflight.has(key)) return publishInflight.get(key);
+    const task = Promise.resolve(services.publish.state({ site, path }))
+      .catch(() => null)
+      .then((state) => {
+        if (publishInflight.get(key) !== task) return false;
+        publishInflight.delete(key);
+        publishFresh.add(key);
+        const value = publishValue(state);
+        const changed = publishState(site, path) !== value;
+        publishValues.set(key, value);
+        return changed;
+      });
+    publishInflight.set(key, task);
+    return task;
+  };
+  const loadPublishState = async (pages) => {
+    if (!services.publish?.state) return false;
+    const changes = await Promise.all(pages.map(loadPublishStateFor));
+    return changes.some(Boolean);
+  };
+  const invalidating = (fn) => async (...args) => {
+    try {
+      return await fn(...args);
+    } finally {
+      invalidatePublishState();
+    }
+  };
   const refresh = () => {
     caches = newCaches();
     services.publish?.clear?.();
+    invalidatePublishState();
   };
 
   const loadSite = async (snapshot, site) => {
@@ -218,13 +267,16 @@ export default function createLocalization({
     page,
     refresh,
     orgModel,
-    execute: executor.execute,
-    publish: executor.publish,
+    execute: invalidating(executor.execute),
+    publish: invalidating(executor.publish),
+    publishState,
+    loadPublishState,
+    invalidatePublishState,
     checkJobs: executor.checkJobs,
     translateMany: executor.translateMany,
-    propagate: runner.propagate,
-    retryRun: runner.retryRun,
-    resumeRun: runner.resumeRun,
+    propagate: invalidating(runner.propagate),
+    retryRun: invalidating(runner.retryRun),
+    resumeRun: invalidating(runner.resumeRun),
     cancelRun: runner.cancelRun,
     archiveRun: runner.archiveRun,
     runs: providers.runs ?? null,

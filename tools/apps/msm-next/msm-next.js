@@ -34,6 +34,7 @@ import {
   layoutMap, fitView, fitWidth, zoomView, toggleCollapse, clampView, centerOn,
   minimapGeometry, viewFromMinimap,
 } from './data/map-layout.js';
+import createPublishLoader from './data/publish-states.js';
 import {
   mergeRollouts, translatingItems, rolloutStatus, needsMe, visibleRollouts, rolloutTitle,
 } from './data/rollout-view.js';
@@ -169,6 +170,10 @@ class MsmNextApp extends LitElement {
       site: this.site,
       onChange: () => { this.tick += 1; },
     });
+    this.publishLoader = createPublishLoader({
+      localization: this.localization,
+      onChange: () => { this.tick += 1; },
+    });
     this.unsubscribe = this.localization.subscribe?.(
       (page) => this.refreshKey(nodeKey(page.site, page.path)),
     );
@@ -187,12 +192,14 @@ class MsmNextApp extends LitElement {
     window.removeEventListener('focus', this.onReturn);
     document.removeEventListener('visibilitychange', this.onReturn);
     this.unsubscribe?.();
+    this.publishLoader?.stop();
     clearTimeout(this.jobTimer);
   }
 
   updated() {
     if (this.phase !== 'ready') return;
     if (this.tab === 'pages') this.scheduleJobCheck();
+    if (this.tab === 'pages') this.requestVisiblePublishStates();
     if (this.tab === 'rollouts') this.autoResumeRollout();
     if (this.tab === 'pages' && this.view === 'map' && !this.mapState.view) this.initMapView();
   }
@@ -207,6 +214,7 @@ class MsmNextApp extends LitElement {
       this.jobChecked = new Set();
       this.picked = new Set([...this.picked].filter((key) => tree.nodes.has(key)));
       this.phase = tree.nodes.size ? 'ready' : 'empty';
+      this.publishLoader.request([...tree.nodes.values()]);
     } catch (e) {
       console.error(e);
       this.error = e.message || String(e);
@@ -216,7 +224,16 @@ class MsmNextApp extends LitElement {
 
   refreshKey(key) {
     const node = this.loader.tree.nodes.get(key);
-    if (node) this.loader.refreshSubtree(node);
+    if (!node) return;
+    this.publishLoader.invalidate([node]);
+    this.loader.refreshSubtree(node);
+  }
+
+  requestVisiblePublishStates() {
+    const nodes = this.view === 'map'
+      ? this.visibleKeys.map((key) => this.tree.nodes.get(key))
+      : this.visibleRows().rows.map((row) => row.node);
+    this.publishLoader.request(nodes.filter(Boolean), { priority: true });
   }
 
   awaitReturn(node) {
@@ -232,6 +249,7 @@ class MsmNextApp extends LitElement {
 
   async recheck(node, silent = false) {
     if (this.loader.refreshing.has(node.key)) return;
+    this.publishLoader.invalidate([node]);
     await this.loader.refreshSubtree(node);
     if (silent) return;
     const sync = this.results.get(node.key)?.status?.sync ?? [];
@@ -398,6 +416,7 @@ class MsmNextApp extends LitElement {
     return this.withBusy(node, async () => {
       const result = await this.localization.publish({ site: node.site, path: node.path, cascade });
       const count = result?.results?.length ?? 0;
+      this.publishLoader.request([...this.tree.nodes.values()]);
       if (result?.ok) {
         this.showToast(`Published ${count} page${count === 1 ? '' : 's'}`, 'positive');
       } else {

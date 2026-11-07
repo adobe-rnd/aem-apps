@@ -106,3 +106,30 @@ describe('target tree', () => {
     assert.equal(flattenSection(sections[0], new Set(['brand:/emea'])).length, 1);
   });
 });
+
+describe('level groups with consolidated order', () => {
+  it('merges same-named levels reached at different depths in one order', () => {
+    const mixed = parseConfig({
+      sites: {
+        brand: [
+          { path: '/g', language: 'en', level: 'Global' },
+          {
+            path: '/r', language: 'en', level: 'Region', source: '/g', actions: 'rollout',
+          },
+          {
+            path: '/l', language: 'fr', level: 'Language', source: '/r', actions: 'rollout',
+          },
+          {
+            path: '/c', language: 'fr', level: 'locale', source: '/l', actions: 'rollout',
+          },
+          {
+            path: '/d', language: 'fr', level: ' Locale ', source: '/r', actions: 'rollout',
+          },
+        ],
+      },
+    });
+    const groups = levelGroups(buildTargetTree(mixed, ['brand:/g']));
+    assert.deepEqual(groups.map((group) => group.label), ['Region', 'Language', 'locale']);
+    assert.equal(groups[2].ids.length, 2);
+  });
+});

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 import { needsAction, typeGroup, levelLabel } from './display.js';
+import { levelKey, orderLevels } from './levels.js';
 
 export const MAP_SIZES = {
   colWidth: 250,
@@ -125,9 +126,6 @@ export function layoutMap(roots, results, options = {}) {
     nodes.push(entry);
     byKey.set(node.key, entry);
     entry.label = levelLabel(node.location, node.depth);
-    const columnKey = `${node.depth}\u0000${entry.label}`;
-    if (!columns.has(columnKey)) columns.set(columnKey, { depth: node.depth, label: entry.label });
-    entry.column = columnKey;
     entry.placedKids = placedKids;
     return entry;
   };
@@ -137,8 +135,28 @@ export function layoutMap(roots, results, options = {}) {
     place(root);
   });
 
+  const pairs = nodes.map((entry) => ({
+    level: entry.node.location?.level,
+    depth: entry.depth,
+    parent: entry.node.parent && byKey.has(entry.node.parent)
+      ? byKey.get(entry.node.parent).node.location?.level
+      : null,
+  }));
+  const rank = orderLevels(pairs);
+  nodes.forEach((entry) => {
+    const columnKey = rank ? levelKey(entry.label) : `${entry.depth}\u0000${entry.label}`;
+    const existing = columns.get(columnKey);
+    if (!existing) {
+      columns.set(columnKey, {
+        depth: entry.depth, label: entry.label, order: rank?.get(columnKey) ?? entry.depth,
+      });
+    } else {
+      existing.depth = Math.min(existing.depth, entry.depth);
+    }
+    entry.column = columnKey;
+  });
   const ordered = [...columns.entries()]
-    .sort(([, first], [, second]) => first.depth - second.depth)
+    .sort(([, first], [, second]) => first.order - second.order || first.depth - second.depth)
     .map(([columnKey, column], index) => ({
       ...column, key: columnKey, x: sizes.padding + index * sizes.colWidth,
     }));

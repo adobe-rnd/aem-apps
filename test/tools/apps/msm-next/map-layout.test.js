@@ -92,6 +92,70 @@ describe('map layout', () => {
   });
 });
 
+describe('map columns by level name', () => {
+  const named = (key, depth, level, parent, children = []) => ({
+    key, depth, parent, children, location: { level, language: 'en', label: key },
+  });
+  const all = (nodes) => new Map(nodes.map((each) => [each.key, status('local copy', ['current'])]));
+  const link = (parent, kids) => { parent.children.push(...kids); return parent; };
+
+  const mixed = () => {
+    const sub = named('sub', 5, 'sub-locale', 'loc');
+    const deep = link(named('loc', 4, 'Locale', 'lang'), [sub]);
+    const lang = link(named('lang', 3, 'Language', 'region'), [deep]);
+    const region = link(named('region', 2, 'Region', 'legal'), [lang]);
+    const legal = link(named('legal', 1, 'Legal source', 'global'), [region]);
+    const global = link(named('global', 0, 'Global', null), [legal]);
+    const skipLoc = named('skip', 3, ' LOCALE ', 'region2');
+    const region2 = link(named('region2', 2, 'Region', 'global2'), [skipLoc]);
+    const global2 = link(named('global2', 0, 'Global', null), [region2]);
+    const dist = named('dist', 2, 'Distributor', 'global3');
+    const dloc = named('dloc', 3, 'Locale', 'dist');
+    link(dist, [dloc]);
+    const global3 = link(named('global3', 0, 'Global', null), [dist]);
+    return {
+      roots: [global, global2, global3],
+      nodes: [
+        global, legal, region, lang, deep, sub, global2, region2, skipLoc, global3, dist, dloc,
+      ],
+    };
+  };
+
+  it('uses one column per level name in a consolidated order regardless of depth', () => {
+    const { roots, nodes } = mixed();
+    const layout = layoutMap(roots, all(nodes), { showIndependent: true });
+    assert.deepEqual(layout.columns.map((column) => column.label), [
+      'Global', 'Legal source', 'Region', 'Distributor', 'Language', 'Locale', 'sub-locale',
+    ]);
+    const x = (key) => layout.byKey.get(key).x;
+    assert.equal(x('loc'), x('skip'));
+    assert.equal(x('loc'), x('dloc'));
+    assert.equal(x('region'), x('region2'));
+    assert.equal(x('global'), x('global3'));
+    const span = 6 * MAP_SIZES.colWidth;
+    assert.equal(layout.width, MAP_SIZES.padding * 2 + span + MAP_SIZES.cardWidth);
+    assert.ok(layout.edges.some((edge) => edge.from === 'region2' && edge.to === 'skip'));
+    assert.equal(layout.edges.length, 9);
+  });
+
+  it('falls back to depth columns on a level cycle', () => {
+    const b = named('b', 1, 'B', 'a');
+    const c = named('c', 2, 'A', 'b');
+    link(b, [c]);
+    const a = link(named('a', 0, 'A', null), [b]);
+    const layout = layoutMap([a], all([a, b, c]), {});
+    assert.deepEqual(layout.columns.map((column) => column.label), ['A', 'B', 'A']);
+    assert.equal(layout.byKey.get('c').x, MAP_SIZES.padding + 2 * MAP_SIZES.colWidth);
+  });
+
+  it('falls back to depth columns when a level is unnamed', () => {
+    const bare = named('x', 1, '', 'r');
+    const top = link(named('r', 0, 'Top', null), [bare]);
+    const fallback = layoutMap([top], all([top, bare]), {});
+    assert.deepEqual(fallback.columns.map((column) => column.label), ['Top', 'Level 2']);
+  });
+});
+
 describe('map view bounds and minimap', () => {
   const layout = { width: 1000, height: 800 };
   const viewport = { width: 400, height: 300 };

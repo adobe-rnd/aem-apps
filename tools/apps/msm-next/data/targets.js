@@ -15,6 +15,7 @@
  */
 import { childLocations } from './tree.js';
 import { levelLabel } from './display.js';
+import { levelKey, orderLevels } from './levels.js';
 
 export const KIND_SECTIONS = [
   { kind: 'localization', label: 'Localization' },
@@ -111,20 +112,30 @@ export function targetState(selected, implied, id) {
 }
 
 export function levelGroups(tree) {
+  const rank = orderLevels([...tree.nodes.values()].map((node) => ({
+    level: node.location?.level,
+    depth: node.depth,
+    parent: node.parentId ? tree.nodes.get(node.parentId)?.location?.level : null,
+  })));
+  const groupKey = (node) => (rank ? levelKey(node.level) : node.level);
   const groups = new Map();
   tree.nodes.forEach((node) => {
-    if (!groups.has(node.level)) {
-      groups.set(node.level, {
-        label: node.level, depth: node.depth, maxDepth: node.depth, ids: [],
+    const key = groupKey(node);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        label: node.level, depth: node.depth, maxDepth: node.depth, ids: [], key,
       });
     }
-    const group = groups.get(node.level);
+    const group = groups.get(key);
     group.depth = Math.min(group.depth, node.depth);
     group.maxDepth = Math.max(group.maxDepth, node.depth);
     group.ids.push(node.id);
   });
-  return [...groups.values()].sort((first, second) => first.depth - second.depth
-    || first.maxDepth - second.maxDepth);
+  const order = (group) => (rank ? rank.get(group.key) : 0);
+  return [...groups.values()]
+    .sort((first, second) => order(first) - order(second) || first.depth - second.depth
+      || first.maxDepth - second.maxDepth)
+    .map(({ key, ...group }) => group);
 }
 
 export function setMany(selected, ids, checked) {

@@ -504,3 +504,74 @@ describe('page: caching', () => {
     assert.equal((await localization.page('global', '/uk/x')).status.relationship, 'local copy');
   });
 });
+
+describe('publish state', () => {
+  const withPublish = (states) => {
+    const fixture = createFixture();
+    const calls = [];
+    let active = 0;
+    let peak = 0;
+    fixture.services.publish = {
+      state: async ({ path }) => {
+        calls.push(path);
+        active += 1;
+        peak = Math.max(peak, active);
+        await new Promise((resolve) => { setTimeout(resolve, 2); });
+        active -= 1;
+        const value = states[path];
+        if (value instanceof Error) throw value;
+        return value;
+      },
+      clear: () => {},
+    };
+    return { localization: localizationFor(fixture), calls, peak: () => peak };
+  };
+  const ref = (path) => ({ site: 'global', path });
+
+  it('reads live, preview and unknown values through the publish service', async () => {
+    const { localization } = withPublish({
+      '/a': { live: true, preview: true },
+      '/b': { live: false, preview: true },
+      '/c': { live: false, preview: false },
+      '/d': null,
+      '/e': new Error('boom'),
+    });
+    assert.equal(localization.publishState('global', '/a'), null);
+    const changed = await localization.loadPublishState(['/a', '/b', '/c', '/d', '/e'].map(ref));
+    assert.equal(changed, true);
+    assert.deepEqual(['/a', '/b', '/c', '/d', '/e'].map((path) => localization.publishState('global', path)), ['live', 'preview', null, null, null]);
+  });
+
+  it('caches lookups and reports no change when nothing new arrived', async () => {
+    const { localization, calls } = withPublish({ '/a': { live: true, preview: true } });
+    await localization.loadPublishState([ref('/a')]);
+    assert.equal(await localization.loadPublishState([ref('/a')]), false);
+    assert.deepEqual(calls, ['/a']);
+  });
+
+  it('keeps the stale value while an invalidated path reloads', async () => {
+    const states = { '/a': { live: false, preview: true } };
+    const { localization, calls } = withPublish(states);
+    await localization.loadPublishState([ref('/a')]);
+    states['/a'] = { live: true, preview: true };
+    localization.invalidatePublishState('global', '/a');
+    assert.equal(localization.publishState('global', '/a'), 'preview');
+    assert.equal(await localization.loadPublishState([ref('/a')]), true);
+    assert.equal(localization.publishState('global', '/a'), 'live');
+    assert.equal(calls.length, 2);
+  });
+
+  it('invalidates everything on refresh', async () => {
+    const { localization, calls } = withPublish({ '/a': { live: true, preview: true } });
+    await localization.loadPublishState([ref('/a')]);
+    localization.refresh();
+    await localization.loadPublishState([ref('/a')]);
+    assert.equal(calls.length, 2);
+  });
+
+  it('is empty without a publish service', async () => {
+    const localization = localizationFor(createFixture());
+    assert.equal(await localization.loadPublishState([ref('/a')]), false);
+    assert.equal(localization.publishState('global', '/a'), null);
+  });
+});
