@@ -157,7 +157,7 @@ export default function renderActionDrawer(drawer, ctx) {
   const disabled = drawer.busy || !model.items.length;
   return html`
     <div class="sheet-backdrop" @click=${ctx.onClose}></div>
-    <aside class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"
+    <aside class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1"
       @keydown=${(event) => { if (event.key === 'Escape') ctx.onClose(); }}>
       <header class="sheet-header">
         <div>

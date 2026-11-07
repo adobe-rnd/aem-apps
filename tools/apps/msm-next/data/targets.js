@@ -114,13 +114,17 @@ export function levelGroups(tree) {
   const groups = new Map();
   tree.nodes.forEach((node) => {
     if (!groups.has(node.level)) {
-      groups.set(node.level, { label: node.level, depth: node.depth, ids: [] });
+      groups.set(node.level, {
+        label: node.level, depth: node.depth, maxDepth: node.depth, ids: [],
+      });
     }
     const group = groups.get(node.level);
     group.depth = Math.min(group.depth, node.depth);
+    group.maxDepth = Math.max(group.maxDepth, node.depth);
     group.ids.push(node.id);
   });
-  return [...groups.values()].sort((first, second) => first.depth - second.depth);
+  return [...groups.values()].sort((first, second) => first.depth - second.depth
+    || first.maxDepth - second.maxDepth);
 }
 
 export function setMany(selected, ids, checked) {

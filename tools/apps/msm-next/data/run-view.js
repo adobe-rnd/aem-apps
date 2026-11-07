@@ -28,6 +28,7 @@ export const ITEM_STATES = {
   skipped: { label: 'Skipped', tone: 'neutral', icon: '–' },
   blocked: { label: 'Blocked', tone: 'notice', icon: '⊘' },
   failed: { label: 'Failed', tone: 'negative', icon: '✕' },
+  waiting: { label: 'Waiting', tone: 'neutral', icon: '⧗' },
 };
 
 export const STATE_ORDER = Object.keys(ITEM_STATES);
@@ -38,12 +39,33 @@ const PROBLEM_STATES = ['failed', 'blocked', 'needs review'];
 
 export const itemState = (state) => ITEM_STATES[state] ?? { label: state, tone: 'neutral', icon: '?' };
 
+export function viewStates(run) {
+  const items = run?.items ?? [];
+  const byKey = new Map(items.map((item) => [item.key, item]));
+  const states = new Map();
+  const resolve = (item, seen = new Set()) => {
+    if (states.has(item.key)) return states.get(item.key);
+    let { state } = item;
+    const parent = item.parent && byKey.get(item.parent);
+    if (item.state === 'blocked' && parent && !seen.has(parent.key)) {
+      seen.add(item.key);
+      const parentState = resolve(parent, seen);
+      if (TRANSLATION_STATES.includes(parentState) || parentState === 'waiting') state = 'waiting';
+    }
+    states.set(item.key, state);
+    return state;
+  };
+  items.forEach((item) => resolve(item));
+  return states;
+}
+
 export function runProgress(run) {
   const items = run?.items ?? [];
   const total = items.length;
-  const count = (states) => items.filter((item) => states.includes(item.state)).length;
+  const states = viewStates(run);
+  const count = (list) => items.filter((item) => list.includes(states.get(item.key))).length;
   const open = count(OPEN_STATES);
-  const translating = count(TRANSLATION_STATES);
+  const translating = count([...TRANSLATION_STATES, 'waiting']);
   const settled = total - open - translating;
   return {
     total,
@@ -58,19 +80,26 @@ export function runProgress(run) {
 export function runStatus(run, busy = false) {
   const progress = runProgress(run);
   if (busy || progress.open) return { key: 'running', label: 'Running', tone: 'informative' };
-  if (progress.translating) return { key: 'waiting', label: 'Waiting for translation', tone: 'informative' };
   if (progress.problems) return { key: 'attention', label: 'Needs attention', tone: 'notice' };
+  if (progress.translating) return { key: 'waiting', label: 'Waiting for translation', tone: 'informative' };
   return { key: 'done', label: 'Complete', tone: 'positive' };
 }
 
-export const canRetry = (run) => (run?.items ?? []).some((item) => ['failed', 'blocked', 'needs review'].includes(item.state));
+export function canRetry(run) {
+  const states = viewStates(run);
+  return (run?.items ?? []).some((item) => PROBLEM_STATES.includes(states.get(item.key)));
+}
 
 export const translatingItems = (run) => (run?.items ?? [])
   .filter((item) => TRANSLATION_STATES.includes(item.state));
 
 export function summaryChips(run) {
   const counts = new Map();
-  (run?.items ?? []).forEach((item) => counts.set(item.state, (counts.get(item.state) ?? 0) + 1));
+  const states = viewStates(run);
+  (run?.items ?? []).forEach((item) => {
+    const state = states.get(item.key);
+    counts.set(state, (counts.get(state) ?? 0) + 1);
+  });
   return STATE_ORDER
     .filter((state) => counts.has(state))
     .map((state) => ({ state, count: counts.get(state), ...itemState(state) }))
@@ -80,6 +109,7 @@ export function summaryChips(run) {
 
 export function groupRun(run, { levelOf = () => '', locationOf = () => null } = {}) {
   const depths = new Map();
+  const states = viewStates(run);
   (run?.items ?? []).forEach((item) => {
     if (!depths.has(item.depth)) depths.set(item.depth, new Map());
     const locations = depths.get(item.depth);
@@ -88,7 +118,7 @@ export function groupRun(run, { levelOf = () => '', locationOf = () => null } = 
         locationId: item.locationId, location: locationOf(item.locationId), items: [],
       });
     }
-    locations.get(item.locationId).items.push(item);
+    locations.get(item.locationId).items.push({ ...item, viewState: states.get(item.key) });
   });
   return [...depths.keys()].sort((first, second) => first - second).map((depth) => {
     const locations = [...depths.get(depth).values()];
@@ -99,7 +129,10 @@ export function groupRun(run, { levelOf = () => '', locationOf = () => null } = 
       depth,
       label: labels.length ? labels.join(' · ') : `Step ${depth}`,
       locations,
-      progress: runProgress({ items: locations.flatMap((entry) => entry.items) }),
+      progress: runProgress({
+        items: locations.flatMap((entry) => entry.items)
+          .map((item) => ({ ...item, state: item.viewState, parent: null })),
+      }),
     };
   });
 }

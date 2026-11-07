@@ -54,7 +54,7 @@ function renderListEntry(run, ctx) {
 }
 
 function renderItem(item, ctx) {
-  const display = itemState(item.state);
+  const display = itemState(item.viewState ?? item.state);
   const notes = itemNotes(item);
   const node = ctx.nodeOf(item.key);
   return html`

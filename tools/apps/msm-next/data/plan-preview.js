@@ -19,7 +19,7 @@ export const OUTCOMES = {
   create: { label: 'Create', tone: 'informative' },
   'up to date': { label: 'Up to date', tone: 'positive' },
   inherited: { label: 'Inherited', tone: 'neutral' },
-  'in progress': { label: 'Translating', tone: 'informative' },
+  'in progress': { label: 'In translation', tone: 'informative' },
   waiting: { label: 'After translation', tone: 'neutral' },
   blocked: { label: 'Blocked', tone: 'negative' },
   skip: { label: 'Skipped', tone: 'neutral' },
@@ -138,7 +138,7 @@ export function summaryText(counts) {
 
 export function primaryLabel(counts) {
   const work = counts.update + counts.create;
-  if (!work) return 'Run';
+  if (!work) return 'Start run';
   if (counts.update && counts.create) return `Update and create ${plural(work, 'page')}`;
   if (counts.update) return `Update ${plural(work, 'page')}`;
   return `Create ${plural(work, 'page')}`;

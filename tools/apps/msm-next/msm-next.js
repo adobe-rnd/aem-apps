@@ -463,6 +463,7 @@ class MsmNextApp extends LitElement {
         option,
         title,
         onProgress: (current) => {
+          this.autoResumed.add(current.id);
           if (!this.activeRunId) this.activeRunId = current.id;
           this.trackRun(current, true);
         },
