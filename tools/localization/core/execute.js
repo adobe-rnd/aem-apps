@@ -16,11 +16,14 @@
 import { targetPages } from './domain/resolve.js';
 
 const LABEL = 'MSM';
+const ITEM_ID = 'item-1';
 const now = () => new Date().toISOString();
 const pageKey = ({ site, path }) => `${site}:${path}`;
+const newJobId = () => `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+const relativeTo = (ref) => (ref.location.path === '/' ? ref.path : ref.path.slice(ref.location.path.length));
 
 export default function createExecutor({
-  page, providers, services, refresh, orgModel,
+  org, page, providers, services, refresh, orgModel,
 }) {
   const infoOf = (current, ref) => current.chain.find((entry) => entry.ref === ref)?.info;
 
@@ -30,11 +33,17 @@ export default function createExecutor({
     return { ok: true };
   }
 
-  async function copyFromSource(current, target, option, progress) {
-    const source = current.status.effectiveSource;
-    const sourceInfo = infoOf(current, source);
+  const completeWith = (completed) => (completed.ok
+    ? { ok: true, onComplete: completed }
+    : { ok: true, onComplete: completed, warnings: ['onComplete-failed'] });
+
+  async function writeCopy(current, target, {
+    option, progress, source, content, base, extra = {},
+  }) {
     const copy = option === 'overwrite' ? services.content.overwrite : services.content.merge;
-    const copied = await copy({ source, target, label: `${LABEL} rollout` });
+    const request = { source, target, label: `${LABEL} ${base.via}` };
+    if (content !== undefined) request.content = content;
+    const copied = await copy(request);
     if (!copied?.ok) return { ok: false, status: copied?.status, error: copied?.error };
     Object.assign(progress, { wrote: true });
     const written = await providers.pageInfo.get(target.site, target.path);
@@ -44,13 +53,8 @@ export default function createExecutor({
     const changes = {
       pages: {
         [written.id]: {
-          base: {
-            sourceId: sourceInfo.id,
-            sourceVersion: sourceInfo.version,
-            via: 'rollout',
-            targetVersion: written.version,
-            at: now(),
-          },
+          ...extra,
+          base: { ...base, targetVersion: written.version, at: now() },
         },
       },
       pending: { [target.path]: null },
@@ -59,16 +63,140 @@ export default function createExecutor({
     return { ok: true, id: written.id };
   }
 
-  async function rollout(current, target, entry, option, progress) {
+  async function copyFromSource(current, target, option, progress) {
+    const source = current.status.effectiveSource;
+    const sourceInfo = infoOf(current, source);
+    return writeCopy(current, target, {
+      option,
+      progress,
+      source,
+      base: { sourceId: sourceInfo.id, sourceVersion: sourceInfo.version, via: 'rollout' },
+    });
+  }
+
+  const chooseOption = (current, entry, option, fallback) => {
     const allowed = entry.options ?? current.location.conflictBehavior;
-    const chosen = option ?? allowed[0] ?? 'merge';
-    if (!allowed.includes(chosen)) return { ok: false, error: 'option-not-allowed' };
+    const chosen = option ?? fallback ?? allowed[0] ?? 'merge';
+    return allowed.includes(chosen) ? chosen : null;
+  };
+
+  async function rollout(current, target, entry, option, progress) {
+    const chosen = chooseOption(current, entry, option);
+    if (!chosen) return { ok: false, error: 'option-not-allowed' };
     const copied = await copyFromSource(current, target, chosen, progress);
     if (!copied.ok) return copied;
-    const completed = await runOnComplete(current.location, target);
-    return completed.ok
-      ? { ok: true, onComplete: completed }
-      : { ok: true, onComplete: completed, warnings: ['onComplete-failed'] };
+    return completeWith(await runOnComplete(current.location, target));
+  }
+
+  const jobPatch = (current, target, job) => {
+    const { exists, id } = current.chain[0].info;
+    if (exists) return { pages: { [id]: { job } } };
+    return { pending: { [target.path]: job ? { job } : null } };
+  };
+
+  async function translate(current, target, entry, option, progress) {
+    const connectors = services.translationConnectors;
+    if (!connectors?.call || !services.content?.read) return { ok: false, error: 'connector-unavailable' };
+    if (option && !chooseOption(current, entry, option)) return { ok: false, error: 'option-not-allowed' };
+    const source = current.status.effectiveSource;
+    const sourceInfo = infoOf(current, source);
+    const content = await services.content.read(source);
+    if (content === null || content === undefined) return { ok: false, error: 'source-unreadable' };
+    const lang = current.location.language;
+    const job = {
+      title: `${LABEL} ${source.path}`, org, site: source.site, src: source.location.language, dests: [lang],
+    };
+    const items = [{
+      id: ITEM_ID, path: relativeTo(source), format: 'html', content,
+    }];
+    const sent = await connectors.call('send', { job, items });
+    if (sent?.error || !sent?.jobState) {
+      return { ok: false, error: sent?.error?.message ?? 'send-failed', code: sent?.error?.code };
+    }
+    const jobId = newJobId();
+    const sentAt = now();
+    await providers.jobs.save(target.site, jobId, {
+      jobState: sent.jobState,
+      lang,
+      source: { site: source.site, path: source.path },
+      sourceId: sourceInfo.id,
+      sourceVersion: sourceInfo.version,
+      target,
+      option: option ?? null,
+      sentAt,
+    });
+    Object.assign(progress, { wrote: true });
+    await providers.index.patch(current.location.id, jobPatch(current, target, {
+      state: 'translating', jobId, sentAt,
+    }));
+    return { ok: true, jobId };
+  }
+
+  async function save(current, target, entry, option, progress) {
+    const { job } = current.chain[0].info;
+    const record = job?.jobId && await providers.jobs.read(target.site, job.jobId);
+    if (!record) return { ok: false, error: 'job-missing' };
+    const chosen = chooseOption(current, entry, option, record.option);
+    if (!chosen) return { ok: false, error: 'option-not-allowed' };
+    const results = await services.translationConnectors.call('getResults', {
+      jobState: record.jobState, lang: record.lang,
+    });
+    const item = results?.items?.find((each) => each.id === ITEM_ID);
+    if (results?.error || !item || item.error) {
+      return { ok: false, error: (results?.error ?? item?.error)?.message ?? 'results-missing' };
+    }
+    const written = await writeCopy(current, target, {
+      option: chosen,
+      progress,
+      source: record.source,
+      content: item.content,
+      base: { sourceId: record.sourceId, sourceVersion: record.sourceVersion, via: 'translate' },
+      extra: { job: null },
+    });
+    if (!written.ok) return written;
+    return completeWith(await runOnComplete(current.location, target));
+  }
+
+  async function checkJob({ site, path }) {
+    const current = await page(site, path);
+    const info = current.chain[0]?.info;
+    const job = info?.job;
+    if (!job?.jobId) return { site, path, state: 'none' };
+    if (job.state === 'ready') return { site, path, state: 'ready' };
+    const record = await providers.jobs.read(site, job.jobId);
+    const target = { site, path };
+    if (!record) {
+      await providers.index.patch(current.location.id, jobPatch(current, target, null));
+      return {
+        site, path, state: 'failed', error: 'job-missing',
+      };
+    }
+    const status = await services.translationConnectors.call('getStatus', { jobState: record.jobState });
+    const lang = status?.langs?.[record.lang];
+    const result = { site, path };
+    if (lang) result.progress = { done: lang.done, total: lang.total };
+    if (status?.jobState) {
+      await providers.jobs.save(site, job.jobId, { ...record, jobState: status.jobState });
+    }
+    if (lang?.status === 'translated') {
+      await providers.index.patch(current.location.id, jobPatch(current, target, { ...job, state: 'ready' }));
+      return { ...result, state: 'ready' };
+    }
+    if (!lang || ['failed', 'cancelled'].includes(lang.status)) {
+      await providers.index.patch(current.location.id, jobPatch(current, target, null));
+      const error = lang?.error?.message ?? status?.error?.message;
+      return error ? { ...result, state: 'failed', error } : { ...result, state: 'failed' };
+    }
+    return { ...result, state: 'translating' };
+  }
+
+  async function checkJobs(pages) {
+    refresh();
+    if (!services.translationConnectors?.call) return pages.map((ref) => ({ ...ref, state: 'none' }));
+    const results = await Promise.all(pages.map((ref) => checkJob(ref)
+      .catch((error) => ({ ...ref, state: 'error', error: error.message }))));
+    refresh();
+    return results;
   }
 
   async function reconnect(current, target, entry, option, progress) {
@@ -80,10 +208,7 @@ export default function createExecutor({
     const changes = { pending: { [target.path]: null } };
     if (id) changes.pages = { [id]: null };
     await providers.index.patch(current.location.id, changes);
-    const completed = await runOnComplete(current.location, target);
-    return completed.ok
-      ? { ok: true, onComplete: completed }
-      : { ok: true, onComplete: completed, warnings: ['onComplete-failed'] };
+    return completeWith(await runOnComplete(current.location, target));
   }
 
   async function link(current, target) {
@@ -126,7 +251,7 @@ export default function createExecutor({
   }
 
   const HANDLERS = {
-    rollout, reconnect, unlink, relink, link,
+    rollout, reconnect, unlink, relink, link, translate, save,
   };
 
   async function execute({
@@ -179,5 +304,5 @@ export default function createExecutor({
     return { ok: results.every((result) => result.ok), results };
   }
 
-  return { execute, publish };
+  return { execute, publish, checkJobs };
 }

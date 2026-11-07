@@ -38,6 +38,38 @@ function patchIndex(index, locationId, changes) {
   return updated;
 }
 
+export function createTranslator() {
+  const translator = {
+    ready: false, failed: false, sendError: null, sent: [],
+  };
+  translator.connectors = {
+    supports: async () => true,
+    call: async (method, args) => {
+      if (method === 'send') {
+        translator.sent.push(structuredClone({ job: args.job, items: args.items }));
+        if (translator.sendError) return { jobState: null, error: translator.sendError };
+        const { dests } = args.job;
+        return { jobState: { n: translator.sent.length, items: args.items, dests } };
+      }
+      if (method === 'getStatus') {
+        const status = (translator.failed && 'failed') || (translator.ready ? 'translated' : 'in-progress');
+        const langs = Object.fromEntries(args.jobState.dests.map((lang) => [lang, {
+          status, done: translator.ready ? 1 : 0, total: 1,
+        }]));
+        return { jobState: args.jobState, langs };
+      }
+      if (method === 'getResults') {
+        return {
+          jobState: args.jobState,
+          items: args.jobState.items.map((item) => ({ id: item.id, content: `[${args.lang}] ${item.content}` })),
+        };
+      }
+      return { error: { code: 'unknown', message: method } };
+    },
+  };
+  return translator;
+}
+
 export default function createWorld({
   configs,
   pages = {},
@@ -48,6 +80,7 @@ export default function createWorld({
   review = [],
   reviewAfterMerge = [],
   runs = null,
+  translator = null,
   services: extraServices = {},
 } = {}) {
   const files = new Map(Object.entries(pages));
@@ -55,12 +88,14 @@ export default function createWorld({
   const needsReview = new Set(review);
   let world;
   const calls = {
-    merge: [], overwrite: [], remove: [], preview: [], publish: [],
+    merge: [], overwrite: [], remove: [], preview: [], publish: [], content: [],
   };
+  const jobs = new Map();
   let ids = 0;
 
-  const copy = (operation) => async ({ source, target }) => {
+  const copy = (operation) => async ({ source, target, content }) => {
     calls[operation].push(`${pageKey(source)}>${pageKey(target)}`);
+    if (content !== undefined) calls.content.push(content);
     if (failCopy === true || (Array.isArray(failCopy) && failCopy.includes(pageKey(target)))) {
       return { ok: false, status: 500, error: 'boom' };
     }
@@ -96,10 +131,15 @@ export default function createWorld({
       },
     },
     runs,
+    jobs: {
+      save: async (site, id, record) => { jobs.set(`${site}:${id}`, structuredClone(record)); },
+      read: async (site, id) => structuredClone(jobs.get(`${site}:${id}`) ?? null),
+    },
   };
   const services = {
     content: {
       copyAvailable,
+      read: async (page) => (files.has(pageKey(page)) ? `<main>${pageKey(page)}</main>` : null),
       merge: copy('merge'),
       overwrite: copy('overwrite'),
       remove: async (page) => {
@@ -118,11 +158,12 @@ export default function createWorld({
         return { ok: true, status: 200 };
       },
     },
+    ...(translator ? { translationConnectors: translator.connectors } : {}),
     ...extraServices,
   };
   const localization = createLocalization({ org: 'acme', providers, services });
   world = {
-    localization, files, index, calls, needsReview, failIndex: false,
+    localization, files, index, calls, needsReview, jobs, failIndex: false,
   };
   return world;
 }

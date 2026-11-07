@@ -15,7 +15,7 @@
  */
 import planPropagation from './domain/plan.js';
 
-const BLOCKING = new Set(['failed', 'blocked', 'needs review', 'awaiting translation', 'skipped']);
+const BLOCKING = new Set(['failed', 'blocked', 'needs review', 'translating', 'skipped']);
 const SKIPPED = ['unlinked', 'standalone', 'root'];
 const REFRESH = ['rollout', 'translate'];
 
@@ -29,23 +29,24 @@ function summarize(items) {
 }
 
 export default function createRunner({
-  page, execute, orgModel, refresh, runs,
+  page, execute, checkJobs, orgModel, refresh, runs,
 }) {
   const settle = (item, state, extra = {}) => Object.assign(item, {
     state, reasons: [], ...extra, at: new Date().toISOString(),
   });
 
-  async function rollout(item, entry, option) {
-    const chosen = option && entry.options?.includes(option) ? option : undefined;
+  async function perform(item, action, option, options = []) {
+    const chosen = option && options.includes(option) ? option : undefined;
     const result = await execute({
-      site: item.site, path: item.path, action: 'rollout', option: chosen,
+      site: item.site, path: item.path, action, option: chosen,
     });
-    if (!result.ok) return settle(item, 'failed', { action: 'rollout', error: result.error ?? 'failed' });
+    if (!result.ok) return settle(item, 'failed', { action, error: result.error ?? 'failed' });
     const warnings = result.warnings ? { warnings: result.warnings } : {};
+    if (action === 'translate') return settle(item, 'translating', { action, ...warnings });
     refresh();
     const after = await page(item.site, item.path);
-    if (after.status?.sync.includes('needs review')) return settle(item, 'needs review', { action: 'rollout', ...warnings });
-    return settle(item, 'done', { action: 'rollout', ...warnings });
+    if (after.status?.sync.includes('needs review')) return settle(item, 'needs review', { action, ...warnings });
+    return settle(item, 'done', { action, ...warnings });
   }
 
   async function processItem(run, item) {
@@ -58,22 +59,24 @@ export default function createRunner({
     if (!status) return settle(item, 'skipped', { reasons: ['no-page'] });
     if (status.relationship === 'inherited') return settle(item, 'inherited');
     if (SKIPPED.includes(status.relationship)) return settle(item, 'skipped', { reasons: [status.relationship] });
-    if (status.sync.includes('translating') || status.sync.includes('ready to save')) {
-      return settle(item, 'awaiting translation', { action: 'translate', reasons: ['translation-in-progress'] });
+    if (status.sync.includes('ready to save')) {
+      const saveEntry = current.actions.find((entry) => entry.action === 'save');
+      if (!saveEntry?.enabled) return settle(item, 'blocked', { action: 'save', reasons: saveEntry?.reasons ?? [] });
+      return perform(item, 'save', run.option, saveEntry.options ?? current.location.conflictBehavior);
     }
+    if (status.sync.includes('translating')) return settle(item, 'translating', { action: 'translate' });
 
     const refreshers = current.actions.filter((entry) => REFRESH.includes(entry.action));
     const chosen = refreshers.find((entry) => entry.default) ?? refreshers[0];
     if (!chosen) {
       const link = current.actions.find((entry) => entry.action === 'link' && entry.enabled);
       if (!link) return settle(item, 'skipped', { reasons: ['no-action'] });
-      const linked = await execute({ site: item.site, path: item.path, action: 'link' });
-      return settle(item, linked.ok ? 'done' : 'failed', { action: 'link', error: linked.error });
+      return perform(item, 'link');
     }
     if (!chosen.enabled) return settle(item, 'blocked', { action: chosen.action, reasons: chosen.reasons });
     if (status.sync.includes('current')) return settle(item, 'up to date');
-    if (chosen.action === 'translate') return settle(item, 'awaiting translation', { action: 'translate' });
-    return rollout(item, chosen, run.option);
+    const options = chosen.options ?? current.location.conflictBehavior;
+    return perform(item, chosen.action, run.option, options);
   }
 
   async function save(run) {
@@ -143,5 +146,11 @@ export default function createRunner({
     return process(run, onProgress);
   }
 
-  return { propagate, retryRun };
+  async function resumeRun(run, { onProgress } = {}) {
+    const translating = run.items.filter((item) => item.state === 'translating');
+    if (translating.length) await checkJobs(translating.map(({ site, path }) => ({ site, path })));
+    return retryRun(run, { onProgress });
+  }
+
+  return { propagate, retryRun, resumeRun };
 }

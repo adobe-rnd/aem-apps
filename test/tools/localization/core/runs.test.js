@@ -15,7 +15,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import createWorld from './world.js';
+import createWorld, { createTranslator } from './world.js';
 
 // g:/global en (root)
 // ├── g:/emea en           link, rollout; linked
@@ -57,7 +57,7 @@ const base = (sourceId, sourceVersion, targetVersion = 'v0') => ({
 const states = (run) => Object.fromEntries(run.items.map((item) => [item.key, item.state]));
 const world = (options) => createWorld({
   configs: CONFIGS,
-  services: { translationConnectors: { supports: async () => true } },
+  translator: createTranslator(),
   ...options,
 });
 
@@ -81,16 +81,16 @@ describe('runs: propagate', () => {
     assert.deepEqual(states(run), {
       'g:/emea/x': 'done',
       'g:/amer/x': 'inherited',
-      'g:/fr/x': 'awaiting translation',
+      'g:/fr/x': 'translating',
       'g:/en-gb/x': 'done',
       'r:/shop/x': 'inherited',
       'g:/fr-be/x': 'blocked',
     });
     assert.deepEqual(calls.merge, ['g:/global/x>g:/emea/x', 'g:/emea/x>g:/en-gb/x']);
     assert.equal(run.items.find((item) => item.key === 'g:/fr/x').action, 'translate');
-    assert.deepEqual(run.items.find((item) => item.key === 'g:/fr-be/x').reasons, ['parent:awaiting translation']);
+    assert.deepEqual(run.items.find((item) => item.key === 'g:/fr-be/x').reasons, ['parent:translating']);
     assert.deepEqual(run.summary, {
-      total: 6, done: 2, inherited: 2, 'awaiting translation': 1, blocked: 1,
+      total: 6, done: 2, inherited: 2, translating: 1, blocked: 1,
     });
   });
 

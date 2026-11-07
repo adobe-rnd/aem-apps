@@ -21,6 +21,7 @@ import createConfigProvider from './providers/config.js';
 import createPageInfoProvider from './providers/page-info.js';
 import createLocIndexProvider from './providers/loc-index.js';
 import createRunsProvider from './providers/runs.js';
+import createJobsProvider from './providers/jobs.js';
 import createContentService from './services/content.js';
 import createPublishService from './services/publish.js';
 import createLegacyApi, { DA_ORIGIN } from './api/legacy.js';
@@ -56,6 +57,7 @@ function defaultProviders({ org, api }) {
     pageInfo: createPageInfoProvider({ org, api }),
     index: createLocIndexProvider({ org, api }),
     runs: createRunsProvider({ org, api }),
+    jobs: createJobsProvider({ org, api }),
   };
 }
 
@@ -191,10 +193,15 @@ export default function createLocalization({
   }
 
   const executor = createExecutor({
-    page, providers, services, refresh, orgModel,
+    org, page, providers, services, refresh, orgModel,
   });
   const runner = createRunner({
-    page, execute: executor.execute, orgModel, refresh, runs: providers.runs,
+    page,
+    execute: executor.execute,
+    checkJobs: executor.checkJobs,
+    orgModel,
+    refresh,
+    runs: providers.runs,
   });
 
   return {
@@ -204,8 +211,10 @@ export default function createLocalization({
     orgModel,
     execute: executor.execute,
     publish: executor.publish,
+    checkJobs: executor.checkJobs,
     propagate: runner.propagate,
     retryRun: runner.retryRun,
+    resumeRun: runner.resumeRun,
     runs: providers.runs ?? null,
   };
 }
