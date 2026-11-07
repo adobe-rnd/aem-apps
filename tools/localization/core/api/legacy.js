@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import guardFetch from './guard-fetch.js';
+
 export const DA_ORIGIN = 'https://admin.da.live';
 export const AEM_ORIGIN = 'https://admin.hlx.page';
 
@@ -32,8 +34,9 @@ const sitePath = ({ org, site, path = '' }) => {
 };
 
 export default function createLegacyApi({
-  fetch, daOrigin = DA_ORIGIN, aemOrigin = AEM_ORIGIN,
+  fetch: rawFetch, daOrigin = DA_ORIGIN, aemOrigin = AEM_ORIGIN,
 }) {
+  const fetch = guardFetch(rawFetch);
   const sourceUrl = (target) => `${daOrigin}/source${sitePath(target)}`;
 
   const source = {
@@ -71,6 +74,19 @@ export default function createLegacyApi({
     status: (target) => fetch(aemUrl('status', target), { cache: 'no-store' }),
     preview: (target) => fetch(aemUrl('preview', target), { method: 'POST' }),
     publish: (target) => fetch(aemUrl('live', target), { method: 'POST' }),
+    bulkStatus: ({
+      org, site, paths, select = ['preview', 'live'],
+    }) => fetch(`${aemOrigin}/status/${org}/${site}/main/*`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ paths, select }),
+    }),
+    job: ({
+      org, site, topic = 'status', name, details = false,
+    }) => fetch(
+      `${aemOrigin}/job/${org}/${site}/main/${topic}/${name}${details ? '/details' : ''}`,
+      { cache: 'no-store' },
+    ),
   };
 
   return {

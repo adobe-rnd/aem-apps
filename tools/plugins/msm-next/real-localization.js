@@ -15,11 +15,15 @@
  */
 import { createLocalization } from '../../localization/core/index.js';
 import createLegacyApi from '../../localization/core/api/legacy.js';
+import guardFetch from '../../localization/core/api/guard-fetch.js';
 import { createConnectors, createLocAdapter } from '../../apps/msm-next/data/real-localization.js';
 
 export { createConnectors };
 
-export default async function createRealLocalization({ org, actions, translateDelay = 0 }) {
+export default async function createRealLocalization({
+  org, actions: rawActions, translateDelay = 0,
+}) {
+  const actions = { ...rawActions, daFetch: guardFetch(rawActions.daFetch) };
   const api = createLegacyApi({ fetch: actions.daFetch });
   const { connectors, error } = await createConnectors({
     daFetch: actions.daFetch, simulatedDelayMs: translateDelay,

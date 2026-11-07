@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-const BATCH = 4;
+const BATCH = 100;
 const IDLE_RETRY = 750;
 
 export default function createPublishLoader({

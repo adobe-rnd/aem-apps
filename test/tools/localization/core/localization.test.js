@@ -596,3 +596,58 @@ describe('publish state', () => {
     assert.equal(localization.publishState('global', '/a'), null);
   });
 });
+
+describe('publish state: bulk', () => {
+  const ref = (path) => ({ site: 'global', path });
+
+  function withBulk(states) {
+    const fixture = createFixture();
+    const batches = [];
+    const singles = [];
+    fixture.services.publish = {
+      state: async ({ path }) => { singles.push(path); return states[path] ?? null; },
+      stateMany: async (pages) => {
+        batches.push(pages.map((page) => page.path));
+        await new Promise((resolve) => { setTimeout(resolve, 2); });
+        return pages.map((page) => states[page.path] ?? null);
+      },
+      clear: () => {},
+    };
+    return { localization: localizationFor(fixture), batches, singles };
+  }
+
+  it('loads a batch with one bulk lookup', async () => {
+    const { localization, batches, singles } = withBulk({
+      '/a': { live: true, preview: true }, '/b': { live: false, preview: true },
+    });
+    assert.equal(await localization.loadPublishState(['/a', '/b', '/c', '/a'].map(ref)), true);
+    assert.deepEqual(batches, [['/a', '/b', '/c']]);
+    assert.deepEqual(singles, []);
+    assert.deepEqual(['/a', '/b', '/c'].map((path) => localization.publishState('global', path)), ['live', 'preview', null]);
+  });
+
+  it('skips cached and in-flight pages', async () => {
+    const { localization, batches } = withBulk({ '/a': { live: true, preview: true } });
+    const first = localization.loadPublishState(['/a', '/b'].map(ref));
+    const second = localization.loadPublishState(['/a', '/b', '/c', '/d'].map(ref));
+    await Promise.all([first, second]);
+    assert.deepEqual(batches, [['/a', '/b'], ['/c', '/d']]);
+    assert.equal(await localization.loadPublishState(['/a', '/b', '/c'].map(ref)), false);
+    assert.equal(batches.length, 2);
+  });
+
+  it('uses the single lookup for one page and survives a failing bulk lookup', async () => {
+    const { localization, singles } = withBulk({ '/a': { live: true, preview: true } });
+    await localization.loadPublishState([ref('/a')]);
+    assert.deepEqual(singles, ['/a']);
+    const fixture = createFixture();
+    fixture.services.publish = {
+      state: async () => null,
+      stateMany: async () => { throw new Error('boom'); },
+      clear: () => {},
+    };
+    const failing = localizationFor(fixture);
+    assert.equal(await failing.loadPublishState(['/a', '/b'].map(ref)), false);
+    assert.equal(failing.publishState('global', '/a'), null);
+  });
+});

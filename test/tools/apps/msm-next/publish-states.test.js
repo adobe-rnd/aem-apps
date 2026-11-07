@@ -130,4 +130,13 @@ describe('publish loader', () => {
     loader.invalidate();
     assert.deepEqual(batches, [['invalidate', 's', '/a'], ['invalidate']]);
   });
+
+  it('sends large batches by default so one batch is one bulk job', async () => {
+    const { localization, batches } = fake();
+    const loader = createPublishLoader({ localization });
+    loader.request(nodes(250));
+    await settle();
+    loader.stop();
+    assert.deepEqual(batches.map((batch) => batch.length), [100, 100, 50]);
+  });
 });

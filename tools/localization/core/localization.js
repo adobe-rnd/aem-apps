@@ -103,12 +103,9 @@ export default function createLocalization({
     publishInflight.delete(publishKey(site, path));
   };
   const publishState = (site, path) => publishValues.get(publishKey(site, path)) ?? null;
-  const loadPublishStateFor = ({ site, path }) => {
+  const trackPublishState = ({ site, path }, lookup) => {
     const key = publishKey(site, path);
-    if (publishFresh.has(key)) return Promise.resolve(false);
-    if (publishInflight.has(key)) return publishInflight.get(key);
-    const task = Promise.resolve()
-      .then(() => services.publish.state({ site, path }))
+    const task = lookup
       .catch(() => null)
       .then((state) => {
         if (publishInflight.get(key) !== task) return false;
@@ -122,9 +119,31 @@ export default function createLocalization({
     publishInflight.set(key, task);
     return task;
   };
+  const pendingPublishState = ({ site, path }) => {
+    const key = publishKey(site, path);
+    if (publishFresh.has(key)) return Promise.resolve(false);
+    return publishInflight.get(key) ?? null;
+  };
   const loadPublishState = async (pages) => {
     if (!services.publish?.state) return false;
-    const changes = await Promise.all(pages.map(loadPublishStateFor));
+    const unique = new Map();
+    pages.forEach((ref) => unique.set(publishKey(ref.site, ref.path), ref));
+    const waiting = [];
+    const missing = [];
+    unique.forEach((ref) => {
+      const pending = pendingPublishState(ref);
+      if (pending) waiting.push(pending);
+      else missing.push(ref);
+    });
+    let lookups;
+    if (missing.length > 1 && services.publish.stateMany) {
+      const many = Promise.resolve().then(() => services.publish.stateMany(missing));
+      lookups = missing.map((ref, index) => many.then((states) => states[index]));
+    } else {
+      lookups = missing.map((ref) => Promise.resolve().then(() => services.publish.state(ref)));
+    }
+    const started = missing.map((ref, index) => trackPublishState(ref, lookups[index]));
+    const changes = await Promise.all([...waiting, ...started]);
     return changes.some(Boolean);
   };
   const invalidating = (fn) => async (...args) => {

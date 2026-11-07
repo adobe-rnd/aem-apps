@@ -16,6 +16,7 @@
 /* eslint-disable import/no-unresolved */
 import { createLocalization } from '../../../localization/core/index.js';
 import createLegacyApi, { DA_ORIGIN } from '../../../localization/core/api/legacy.js';
+import guardFetch from '../../../localization/core/api/guard-fetch.js';
 import createPageInfoProvider from '../../../localization/core/providers/page-info.js';
 import { createTranslationConnectors } from '../../../localization/connectors/index.js';
 import { createTranslateProxy } from '../../../localization/connectors/host.js';
@@ -49,7 +50,10 @@ export async function createConnectors({ daFetch, simulatedDelayMs = 0, name = '
   }
 }
 
-export default async function createRealLocalization({ org, actions, translateDelay = 0 }) {
+export default async function createRealLocalization({
+  org, actions: rawActions, translateDelay = 0,
+}) {
+  const actions = { ...rawActions, daFetch: guardFetch(rawActions.daFetch) };
   const api = createLegacyApi({ fetch: actions.daFetch });
   const pageInfo = createPageInfoProvider({ org, api });
   const { connectors, error } = await createConnectors({

@@ -30,6 +30,13 @@ const DEFAULT_MIN_INTERVAL = 150;
 const DEFAULT_RETRIES = 2;
 const DEFAULT_BACKOFF = 400;
 
+const DEFAULT_BULK_CHUNK = 100;
+const DEFAULT_POLL_INTERVAL = 1000;
+const DEFAULT_MAX_POLLS = 20;
+const MAX_POLL_STEPS = 3;
+const SETTLED_JOBS = ['stopped', 'completed'];
+const SELECT = ['preview', 'live'];
+
 const NO_RETRY = [401, 403];
 
 const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
@@ -68,6 +75,36 @@ const PUBLISHED = { 200: true, 404: false };
 
 const isPublished = (entry) => PUBLISHED[entry?.status] ?? null;
 
+const flag = (info, lastModified) => {
+  if (info && typeof info === 'object') return isPublished(info) ?? Boolean(info.lastModified);
+  return Boolean(lastModified);
+};
+
+const entryState = (entry) => ({
+  live: flag(entry.live, entry.publishLastModified),
+  preview: flag(entry.preview, entry.previewLastModified),
+});
+
+const resourcesOf = (job) => (Array.isArray(job?.data?.resources) ? job.data.resources : null);
+
+const pathVariants = (path) => {
+  if (!path.endsWith('/')) return [path, `${path}/`];
+  return [path, path.slice(0, -1) || '/', `${path}index`];
+};
+
+const lookup = (entries, path) => {
+  const key = pathVariants(path).find((variant) => entries.has(variant));
+  return key === undefined ? null : entryState(entries.get(key));
+};
+
+const httpError = (status) => Object.assign(new Error(`status ${status}`), { status });
+
+const chunksOf = (list, size) => {
+  const chunks = [];
+  for (let i = 0; i < list.length; i += size) chunks.push(list.slice(i, i + size));
+  return chunks;
+};
+
 export default function createPublishService({
   org,
   api,
@@ -75,6 +112,9 @@ export default function createPublishService({
   minInterval = DEFAULT_MIN_INTERVAL,
   retries = DEFAULT_RETRIES,
   backoff = DEFAULT_BACKOFF,
+  bulkChunk = DEFAULT_BULK_CHUNK,
+  pollInterval = DEFAULT_POLL_INTERVAL,
+  maxPolls = DEFAULT_MAX_POLLS,
 }) {
   const limit = createLimiter(concurrency, minInterval);
   let states = new Map();
@@ -107,6 +147,71 @@ export default function createPublishService({
     return states.get(key);
   }
 
+  const call = async (request) => {
+    const response = await limit(request);
+    if (!response?.ok) throw httpError(response?.status);
+    return response.json();
+  };
+
+  async function settle(target, job, poll = 0) {
+    if (resourcesOf(job) || SETTLED_JOBS.includes(job?.state)) return job;
+    if (!job?.name || poll >= maxPolls) throw new Error('bulk status job did not finish');
+    await sleep(pollInterval * Math.min(poll + 1, MAX_POLL_STEPS));
+    const next = await call(() => api.aem.job({ ...target, topic: 'status', name: job.name }));
+    return settle(target, next, poll + 1);
+  }
+
+  async function bulkEntries(site, paths) {
+    const target = { org, site };
+    const started = await call(() => api.aem.bulkStatus({ ...target, paths, select: SELECT }));
+    const job = await settle(target, started?.job);
+    let resources = resourcesOf(job);
+    if (!resources) {
+      const details = await call(() => api.aem.job({
+        ...target, topic: 'status', name: job.name, details: true,
+      }));
+      resources = resourcesOf(details);
+    }
+    if (!resources) throw new Error('bulk status job returned no resources');
+    return new Map(resources.filter((entry) => entry?.path).map((entry) => [entry.path, entry]));
+  }
+
+  async function bulkChunkResult(site, pages) {
+    try {
+      return { entries: await bulkEntries(site, pages.map((page) => toAemPath(page.path))) };
+    } catch (error) {
+      return NO_RETRY.includes(error?.status) ? { denied: true } : { failed: true };
+    }
+  }
+
+  function trackChunk(site, pages) {
+    const result = bulkChunkResult(site, pages);
+    pages.forEach((page) => {
+      states.set(stateKey(page), result.then((outcome) => {
+        if (outcome.failed) return fetchState(page);
+        if (outcome.denied) return null;
+        return lookup(outcome.entries, toAemPath(page.path));
+      }));
+    });
+  }
+
+  function stateMany(pages) {
+    if (!api.aem.bulkStatus || !api.aem.job) return Promise.all(pages.map(state));
+    const fresh = new Map();
+    pages.forEach((page) => {
+      const key = stateKey(page);
+      if (!states.has(key) && !fresh.has(key)) fresh.set(key, page);
+    });
+    const bySite = new Map();
+    [...fresh.values()].forEach((page) => {
+      bySite.set(page.site, [...(bySite.get(page.site) ?? []), page]);
+    });
+    bySite.forEach((sitePages, site) => {
+      chunksOf(sitePages, bulkChunk).forEach((chunk) => trackChunk(site, chunk));
+    });
+    return Promise.all(pages.map(state));
+  }
+
   const invalidate = (page) => { states.delete(stateKey(page)); };
 
   const clear = () => { states = new Map(); };
@@ -128,6 +233,6 @@ export default function createPublishService({
   }
 
   return {
-    preview, publish, state, clear, invalidate,
+    preview, publish, state, stateMany, clear, invalidate,
   };
 }

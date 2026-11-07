@@ -147,3 +147,53 @@ describe('legacy api: aem', () => {
     ]);
   });
 });
+
+describe('legacy api: aem bulk status', () => {
+  it('starts a bulk status job with a JSON body for the whole site', async () => {
+    const recorder = createRecorder();
+    await apiFor(recorder).aem.bulkStatus({
+      org: 'acme', site: 'global', paths: ['/en/a', '/en/'],
+    });
+    const [request] = recorder.requests;
+    assert.equal(request.method, 'POST');
+    assert.equal(request.url, `${AEM_ORIGIN}/status/acme/global/main/*`);
+    assert.equal(request.options.headers['content-type'], 'application/json');
+    assert.deepEqual(JSON.parse(request.options.body), {
+      paths: ['/en/a', '/en/'], select: ['preview', 'live'],
+    });
+  });
+
+  it('reads job status and details without caching', async () => {
+    const recorder = createRecorder();
+    const api = apiFor(recorder);
+    await api.aem.job({ org: 'acme', site: 'global', name: 'job-1' });
+    await api.aem.job({
+      org: 'acme', site: 'global', name: 'job-1', details: true,
+    });
+    assert.deepEqual(recorder.requests.map((request) => `${request.method} ${request.url}`), [
+      `GET ${AEM_ORIGIN}/job/acme/global/main/status/job-1`,
+      `GET ${AEM_ORIGIN}/job/acme/global/main/status/job-1/details`,
+    ]);
+    assert.equal(recorder.requests[0].options.cache, 'no-store');
+  });
+});
+
+describe('legacy api: unauthorized requests', () => {
+  it('rethrows a missing IMS client id as a 401 naming the request', async (t) => {
+    t.mock.method(console, 'warn', () => {});
+    const api = createLegacyApi({
+      fetch: async () => { throw new Error('Missing IMS Client ID'); },
+      daOrigin: DA_ORIGIN,
+      aemOrigin: AEM_ORIGIN,
+    });
+    await assert.rejects(api.source.get(target), (error) => {
+      assert.equal(error.status, 401);
+      assert.equal(error.url, `${DA_ORIGIN}/source/acme/global/en/x.html`);
+      assert.equal(
+        error.message,
+        'Request not authorized (401): GET da.example/source/acme/global/en/x.html',
+      );
+      return true;
+    });
+  });
+});
