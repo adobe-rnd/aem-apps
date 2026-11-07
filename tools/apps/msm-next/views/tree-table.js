@@ -63,6 +63,18 @@ function renderNext(node, ctx) {
       @click=${(event) => { event.stopPropagation(); ctx.onNext(node, step); }}>${step.label}</button>`;
 }
 
+const flatName = (node) => (node.parent ? `${node.location.label} · ${node.title}` : node.title);
+const fullPath = (node, rootSite) => (node.site === rootSite ? node.path : `${node.site}:${node.path}`);
+
+function renderTwisty(row, ctx) {
+  const { node } = row;
+  if (!row.hasChildren) return html`<span class="twisty-space"></span>`;
+  return html`
+    <button type="button" class="twisty ${row.expanded ? 'open' : ''}" tabindex="-1"
+      aria-label="${row.expanded ? 'Collapse' : 'Expand'} ${pageLabel(node)}"
+      @click=${(event) => { event.stopPropagation(); ctx.onToggle(node); }}></button>`;
+}
+
 function renderRow(row, ctx) {
   const { node } = row;
   const result = ctx.results.get(node.key);
@@ -77,7 +89,7 @@ function renderRow(row, ctx) {
       aria-level=${row.level}
       aria-posinset=${row.posinset}
       aria-setsize=${row.setsize}
-      aria-expanded=${row.hasChildren ? String(row.expanded) : nothing}
+      aria-expanded=${row.hasChildren && !row.flat ? String(row.expanded) : nothing}
       aria-selected=${String(selected)}
       tabindex=${node.key === ctx.focusKey ? '0' : '-1'}
       @click=${() => ctx.onSelect(node)}>
@@ -90,15 +102,11 @@ function renderRow(row, ctx) {
       </td>
       <td role="gridcell">
         <div class="page-cell" style="--indent: ${row.level - 1}">
-          ${row.hasChildren ? html`
-            <button type="button" class="twisty ${row.expanded ? 'open' : ''}" tabindex="-1"
-              aria-label="${row.expanded ? 'Collapse' : 'Expand'} ${pageLabel(node)}"
-              @click=${(event) => { event.stopPropagation(); ctx.onToggle(node); }}></button>`
-    : html`<span class="twisty-space"></span>`}
+          ${row.flat ? nothing : renderTwisty(row, ctx)}
           ${langBadge(node.location)}
           <div class="page-text">
-            <span class="page-name">${pageLabel(node)}</span>
-            <span class="page-path">${pageSubLabel(node, ctx.rootSite)}</span>
+            <span class="page-name">${row.flat ? flatName(node) : pageLabel(node)}</span>
+            <span class="page-path">${row.flat ? fullPath(node, ctx.rootSite) : pageSubLabel(node, ctx.rootSite)}</span>
           </div>
         </div>
       </td>

@@ -127,6 +127,7 @@ function renderActions(node, result, ctx) {
     ...button, primary: button.primary && button.action === primaryAction,
   }));
   const busy = ctx.busy.has(node.key);
+  const needsReview = (result?.status?.sync ?? []).includes('needs review');
   const exists = Boolean(result?.chain?.[0]?.info?.exists);
   const publishable = PUBLISHABLE.includes(pageType(result).group);
   return html`
@@ -134,6 +135,9 @@ function renderActions(node, result, ctx) {
       <h3 id="actions-heading">Actions ${busy ? spinner('Working') : nothing}</h3>
       ${step?.kind === 'review' ? html`
         <button type="button" class="btn accent" @click=${() => ctx.onNext(node, step)}>Review changes</button>` : nothing}
+      ${needsReview && ctx.onRecheck ? html`
+        <button type="button" class="btn" ?disabled=${ctx.refreshing?.has(node.key)}
+          title="Check again after resolving the review" @click=${() => ctx.onRecheck(node)}>Recheck</button>` : nothing}
       <div class="action-list">
         ${buttons.map((button) => html`<div class="action-item">${renderButton(node, button, ctx)}</div>`)}
       </div>
@@ -146,7 +150,7 @@ function renderActions(node, result, ctx) {
           <div class="action-item"><button type="button" class="btn" title="Choose target locations and update or create them in one run"
             @click=${() => ctx.onOpenDrawer(node)}>Update targets…</button></div>` : nothing}
         ${exists ? html`
-          <div class="action-item"><a class="btn quiet" href=${editUrl(ctx.org, node.site, node.path)} target="_blank" rel="noopener">Open in editor</a></div>` : nothing}
+          <div class="action-item"><a class="btn quiet" href=${editUrl(ctx.org, node.site, node.path)} @click=${() => ctx.onOpenEditor?.(node)} target="_blank" rel="noopener">Open in editor</a></div>` : nothing}
       </div>` : nothing}
       ${!buttons.length && !publishable && !exists ? html`<p class="muted">No actions available for this page.</p>` : nothing}
     </section>`;

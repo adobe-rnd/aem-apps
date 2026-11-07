@@ -193,6 +193,24 @@ export function flattenRows(top, { expanded, visible = null, forceExpand = false
   return rows;
 }
 
+export function flatMatches(top, matches) {
+  const rows = [];
+  const walk = (siblings) => siblings.forEach((node) => {
+    if (matches.has(node.key)) rows.push(node);
+    walk(node.children);
+  });
+  walk(top);
+  return rows.map((node, index) => ({
+    node,
+    level: 1,
+    hasChildren: false,
+    expanded: false,
+    flat: true,
+    posinset: index + 1,
+    setsize: rows.length,
+  }));
+}
+
 export function rollup(node, results) {
   let count = 0;
   let worst = null;

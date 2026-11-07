@@ -20,7 +20,8 @@ import createLoader from './data/loader.js';
 import createMockLocalization from './data/mock/mock-localization.js';
 import { MOCK_ORG, MOCK_SITE } from './data/mock/fixture.js';
 import {
-  flattenRows, visibleSet, matchesKind, matchesQuery, matchesType, countPages, ancestors,
+  flattenRows, flatMatches, visibleSet, matchesKind, matchesQuery, matchesType, countPages,
+  ancestors,
   attentionList, nodeKey,
 } from './data/tree.js';
 import {
@@ -28,7 +29,8 @@ import {
 } from './data/display.js';
 import { buildTargetTree, toggleTarget, setMany } from './data/targets.js';
 import {
-  layoutMap, fitView, fitWidth, zoomView, toggleCollapse,
+  layoutMap, fitView, fitWidth, zoomView, toggleCollapse, clampView, centerOn,
+  minimapGeometry, viewFromMinimap,
 } from './data/map-layout.js';
 import { mergeRuns, translatingItems, runStatus } from './data/run-view.js';
 import renderTreeTable from './views/tree-table.js';
@@ -161,11 +163,20 @@ class MsmNextApp extends LitElement {
     this.unsubscribe = this.localization.subscribe?.(
       (page) => this.refreshKey(nodeKey(page.site, page.path)),
     );
+    this.awaitingReturn = new Set();
+    this.onReturn = () => {
+      if (document.visibilityState === 'hidden') return;
+      this.recheckAwaiting();
+    };
+    window.addEventListener('focus', this.onReturn);
+    document.addEventListener('visibilitychange', this.onReturn);
     this.load();
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    window.removeEventListener('focus', this.onReturn);
+    document.removeEventListener('visibilitychange', this.onReturn);
     this.unsubscribe?.();
     clearTimeout(this.jobTimer);
   }
@@ -199,6 +210,27 @@ class MsmNextApp extends LitElement {
     if (node) this.loader.refreshSubtree(node);
   }
 
+  awaitReturn(node) {
+    this.awaitingReturn.add(node.key);
+  }
+
+  recheckAwaiting() {
+    if (!this.awaitingReturn.size || this.phase !== 'ready') return;
+    const nodes = [...this.awaitingReturn].map((key) => this.tree.nodes.get(key)).filter(Boolean);
+    this.awaitingReturn.clear();
+    nodes.forEach((node) => this.recheck(node, true));
+  }
+
+  async recheck(node, silent = false) {
+    if (this.loader.refreshing.has(node.key)) return;
+    await this.loader.refreshSubtree(node);
+    if (silent) return;
+    const sync = this.results.get(node.key)?.status?.sync ?? [];
+    this.showToast(sync.includes('needs review')
+      ? `${node.path} still needs review`
+      : `${node.path} rechecked`, sync.includes('needs review') ? 'neutral' : 'positive');
+  }
+
   get tree() { return this.loader.tree; }
 
   get results() { return this.loader.results; }
@@ -228,11 +260,8 @@ class MsmNextApp extends LitElement {
     if (!this.filtering()) {
       return { rows: flattenRows(this.tree.top, { expanded: this.expanded }), matches: null };
     }
-    const { visible, matches } = visibleSet(this.tree, this.predicate());
-    const rows = flattenRows(this.tree.top, {
-      expanded: this.expanded, visible, forceExpand: true,
-    });
-    return { rows, matches };
+    const { matches } = visibleSet(this.tree, this.predicate());
+    return { rows: flatMatches(this.tree.top, matches), matches: null };
   }
 
   toggle(node) {
@@ -289,7 +318,7 @@ class MsmNextApp extends LitElement {
       case 'ArrowLeft':
         event.preventDefault();
         if (row.expanded && !this.filtering()) this.toggle(node);
-        else if (node.parent) this.moveFocus(node.parent);
+        else if (node.parent && !this.filtering()) this.moveFocus(node.parent);
         break;
       case 'Enter':
       case ' ':
@@ -340,6 +369,7 @@ class MsmNextApp extends LitElement {
         });
         return;
       }
+      this.awaitReturn(node);
       window.open(editUrl(this.org, node.site, node.path), '_blank', 'noopener');
       return;
     }
@@ -659,10 +689,46 @@ class MsmNextApp extends LitElement {
     this.mapState = { ...this.mapState, ...patch };
   }
 
+  bound(view) {
+    return clampView(view, this.mapLayout(), this.viewportSize());
+  }
+
+  mapMatches(layout) {
+    const needle = this.query.trim();
+    if (!needle) return null;
+    const matches = new Set();
+    const context = new Set();
+    layout.nodes.forEach((entry) => {
+      if (!matchesQuery(entry.node, needle)) return;
+      matches.add(entry.key);
+      ancestors(this.tree.nodes, entry.node).forEach((node) => context.add(node.key));
+    });
+    return { matches, context };
+  }
+
+  centerOnFirstMatch() {
+    const layout = this.mapLayout();
+    const found = this.mapMatches(layout);
+    if (!found?.matches.size) return;
+    const entry = layout.nodes
+      .filter((item) => found.matches.has(item.key))
+      .sort((first, second) => first.x - second.x || first.y - second.y)[0];
+    const view = this.pendingView ?? this.mapState.view ?? { x: 0, y: 0, scale: 1 };
+    this.pendingView = null;
+    this.patchMap({ view: this.bound(centerOn(view, entry, this.viewportSize(), layout.sizes)) });
+  }
+
+  onSearchKeydown(event) {
+    if (event.key === 'Enter' && this.view === 'map') {
+      event.preventDefault();
+      this.centerOnFirstMatch();
+    }
+  }
+
   initMapView() {
     const size = this.viewportSize();
     if (!size.width) return;
-    this.patchMap({ view: fitWidth(this.mapLayout(), size) });
+    this.patchMap({ view: this.bound(fitWidth(this.mapLayout(), size)) });
   }
 
   setMapView(view) {
@@ -672,7 +738,7 @@ class MsmNextApp extends LitElement {
       const next = this.pendingView;
       this.viewFrame = null;
       this.pendingView = null;
-      this.patchMap({ view: next });
+      this.patchMap({ view: this.bound(next) });
     });
   }
 
@@ -684,6 +750,8 @@ class MsmNextApp extends LitElement {
       mapState: this.mapState,
       needsActionOnly: this.needsActionOnly,
       roots: this.tree.top,
+      search: this.mapMatches(this.mapLayout()),
+      viewport: this.viewportSize(),
       onSelect: (node) => this.select(node),
       onCollapse: (entry) => this.patchMap(
         toggleCollapse(this.mapState, entry.key, entry.collapsed),
@@ -697,14 +765,14 @@ class MsmNextApp extends LitElement {
         const size = this.viewportSize();
         this.pendingView = null;
         const center = { x: size.width / 2, y: size.height / 2 };
-        this.patchMap({ view: zoomView(current(), factor, center) });
+        this.patchMap({ view: this.bound(zoomView(current(), factor, center)) });
       },
       onFit: () => {
         this.pendingView = null;
-        this.patchMap({ view: fitView(this.mapLayout(), this.viewportSize()) });
+        this.patchMap({ view: this.bound(fitView(this.mapLayout(), this.viewportSize())) });
       },
       onPointerDown: (event) => {
-        if (event.button !== 0 || event.target.closest('button, select, input, a')) return;
+        if (event.button !== 0 || event.target.closest('button, select, input, a, .map-minimap')) return;
         this.drag = { x: event.clientX, y: event.clientY, view: current() };
         event.currentTarget.setPointerCapture(event.pointerId);
         event.currentTarget.classList.add('dragging');
@@ -717,6 +785,23 @@ class MsmNextApp extends LitElement {
           x: view.x + event.clientX - this.drag.x,
           y: view.y + event.clientY - this.drag.y,
         });
+      },
+      onMinimap: (event) => {
+        if (event.type === 'pointerdown') {
+          if (event.button !== 0) return;
+          this.miniDrag = true;
+          event.currentTarget.setPointerCapture(event.pointerId);
+        } else if (!this.miniDrag) return;
+        if (event.type === 'pointerup' || event.type === 'pointercancel') {
+          this.miniDrag = false;
+          return;
+        }
+        event.preventDefault();
+        const layout = this.mapLayout();
+        const mini = minimapGeometry(layout);
+        const rect = event.currentTarget.getBoundingClientRect();
+        const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        this.setMapView(viewFromMinimap(point, current(), this.viewportSize(), mini));
       },
       onPointerUp: (event) => {
         if (!this.drag) return;
@@ -792,7 +877,8 @@ class MsmNextApp extends LitElement {
         <label class="search">
           <span class="visually-hidden">Search pages</span>
           <input type="search" placeholder="Search pages, paths or languages" .value=${this.query}
-            @input=${(event) => { this.query = event.target.value; }}>
+            @input=${(event) => { this.query = event.target.value; }}
+            @keydown=${(event) => this.onSearchKeydown(event)}>
         </label>
         <div class="segmented" role="group" aria-label="View">
           ${['tree', 'map'].map((view) => html`
@@ -849,6 +935,8 @@ class MsmNextApp extends LitElement {
       emptyMessage: this.filtering() ? 'No pages match these filters.' : 'No pages found.',
       attention: selected ? attentionList(selected, this.results) : [],
       onToggle: (node) => this.toggle(node),
+      onRecheck: (node) => this.recheck(node),
+      onOpenEditor: (node) => this.awaitReturn(node),
       onSelect: (node, reveal) => this.select(node, reveal),
       onNext: (node, step) => this.runNext(node, step),
       onAction: (node, button) => this.runAction(node, button),

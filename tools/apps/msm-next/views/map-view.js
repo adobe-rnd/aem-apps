@@ -16,6 +16,7 @@
 /* eslint-disable import/no-unresolved */
 import { html, nothing } from 'da-lit';
 import { pageType, primarySync, SYNC_DISPLAY } from '../data/display.js';
+import { minimapGeometry, minimapViewport } from '../data/map-layout.js';
 import { langBadge, badge, pageLabel } from './common.js';
 
 function cardBadge(result) {
@@ -26,6 +27,12 @@ function cardBadge(result) {
     return badge(display.label, display.tone);
   }
   return badge(pageType(result).label, 'neutral');
+}
+
+function searchClass(search, key) {
+  if (!search) return '';
+  if (search.matches.has(key)) return 'match';
+  return search.context.has(key) ? 'context' : 'dimmed';
 }
 
 function renderCard(entry, layout, ctx) {
@@ -39,6 +46,7 @@ function renderCard(entry, layout, ctx) {
     entry.independent ? 'independent' : '',
     type?.group === 'missing' ? 'missing' : '',
     selected ? 'selected' : '',
+    searchClass(ctx.search, node.key),
   ].join(' ');
   const { cardWidth, cardHeight } = layout.sizes;
   return html`
@@ -57,6 +65,24 @@ function renderCard(entry, layout, ctx) {
         <button type="button" class="map-collapse" aria-expanded=${String(!entry.collapsed)}
           aria-label="${entry.collapsed ? 'Expand' : 'Collapse'} ${pageLabel(node)}"
           @click=${() => ctx.onCollapse(entry)}>${entry.collapsed ? `+${entry.hidden}` : '−'}</button>` : nothing}
+    </div>`;
+}
+
+function renderMinimap(layout, view, ctx) {
+  const { viewport } = ctx;
+  if (!viewport?.width || !layout.nodes.length) return nothing;
+  const mini = minimapGeometry(layout);
+  const rect = minimapViewport(view, viewport, mini);
+  const { cardWidth, cardHeight } = layout.sizes;
+  return html`
+    <div class="map-minimap" aria-hidden="true" style="width: ${mini.width}px; height: ${mini.height}px"
+      @pointerdown=${ctx.onMinimap} @pointermove=${ctx.onMinimap}
+      @pointerup=${ctx.onMinimap} @pointercancel=${ctx.onMinimap}>
+      ${layout.nodes.map((entry) => html`
+        <span class="mini-card ${entry.key === ctx.selectedKey ? 'selected' : ''}"
+          style="left: ${entry.x * mini.scale}px; top: ${entry.y * mini.scale}px; width: ${cardWidth * mini.scale}px; height: ${cardHeight * mini.scale}px"></span>`)}
+      <span class="mini-view"
+        style="left: ${rect.x}px; top: ${rect.y}px; width: ${rect.width}px; height: ${rect.height}px"></span>
     </div>`;
 }
 
@@ -117,6 +143,7 @@ export default function renderMapView(layout, ctx) {
           ${layout.nodes.map((entry) => renderCard(entry, layout, ctx))}
         </div>
         ${!layout.nodes.length ? html`<div class="map-empty">No pages match.</div>` : nothing}
+        ${renderMinimap(layout, view, ctx)}
         <span class="map-hint">Drag empty space to pan · Ctrl + scroll to zoom</span>
       </div>
       <p class="map-legend">Lines connect each page to its source. Dashed border = inherited (no own file). Independent pages have no line; updates never reach them.</p>

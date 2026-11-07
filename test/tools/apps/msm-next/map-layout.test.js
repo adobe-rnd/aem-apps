@@ -17,6 +17,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   layoutMap, toggleCollapse, fitView, fitWidth, zoomView, MAP_SIZES,
+  clampView, minimapGeometry, minimapViewport, viewFromMinimap,
 } from '../../../../tools/apps/msm-next/data/map-layout.js';
 
 const loc = (level) => ({ level, language: 'en', label: level });
@@ -44,10 +45,10 @@ describe('map layout', () => {
   it('places nodes in depth columns and centers parents', () => {
     const layout = layoutMap([root], results, { showIndependent: true });
     const at = (key) => layout.byKey.get(key);
-    assert.equal(at('a1').x, MAP_SIZES.padding + 2 * MAP_SIZES.colWidth);
+    assert.equal(at('a1').x, MAP_SIZES.padding + 3 * MAP_SIZES.colWidth);
     assert.equal(at('a').y, (at('a1').y + at('a2').y) / 2);
     assert.ok(at('b').y > at('a2').y);
-    assert.deepEqual(layout.columns.map((column) => column.label), ['L0', 'L1 / L1x', 'L2']);
+    assert.deepEqual(layout.columns.map((column) => column.label), ['L0', 'L1', 'L1x', 'L2']);
     assert.equal(layout.edges.length, 3);
     assert.ok(!layout.edges.some((edge) => edge.to === 'b'));
     assert.ok(at('b').independent);
@@ -88,5 +89,46 @@ describe('map layout', () => {
     const zoomed = zoomView({ x: 0, y: 0, scale: 1 }, 2, { x: 100, y: 100 });
     assert.deepEqual(zoomed, { scale: 2, x: -100, y: -100 });
     assert.equal(zoomView({ x: 0, y: 0, scale: 1 }, 100).scale, 2);
+  });
+});
+
+describe('map view bounds and minimap', () => {
+  const layout = { width: 1000, height: 800 };
+  const viewport = { width: 400, height: 300 };
+
+  it('clamps translation to the layout edges with padding', () => {
+    const view = { x: 500, y: 500, scale: 1 };
+    assert.deepEqual(clampView(view, layout, viewport, 10), { x: 10, y: 10, scale: 1 });
+    const far = clampView({ x: -9999, y: -9999, scale: 1 }, layout, viewport, 10);
+    assert.equal(far.x, 400 - 1000 - 10);
+    assert.equal(far.y, 300 - 800 - 10);
+    const inside = { x: -100, y: -50, scale: 1 };
+    assert.deepEqual(clampView(inside, layout, viewport, 10), inside);
+  });
+
+  it('accounts for scale and keeps small content on screen', () => {
+    const zoomed = clampView({ x: -9999, y: 0, scale: 2 }, layout, viewport, 0);
+    assert.equal(zoomed.x, 400 - 2000);
+    const small = clampView({ x: 900, y: -900, scale: 0.2 }, layout, viewport, 10);
+    assert.equal(small.x, 400 - 200 - 10);
+    assert.equal(small.y, 10);
+  });
+
+  it('passes through when the viewport is unmeasured', () => {
+    const view = { x: 5, y: 5, scale: 1 };
+    assert.equal(clampView(view, layout, { width: 0, height: 0 }), view);
+  });
+
+  it('computes minimap geometry, viewport rect and recentering', () => {
+    const mini = minimapGeometry(layout, { width: 100, height: 100 });
+    assert.equal(mini.scale, 0.1);
+    assert.equal(mini.width, 100);
+    assert.equal(mini.height, 80);
+    const rect = minimapViewport({ x: -200, y: -100, scale: 1 }, viewport, mini);
+    assert.deepEqual(rect, {
+      x: 20, y: 10, width: 40, height: 30,
+    });
+    const view = viewFromMinimap({ x: 50, y: 40 }, { x: 0, y: 0, scale: 1 }, viewport, mini);
+    assert.deepEqual(view, { x: -300, y: -250, scale: 1 });
   });
 });

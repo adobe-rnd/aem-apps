@@ -27,6 +27,8 @@ export const MAP_SIZES = {
 
 export const MIN_SCALE = 0.2;
 export const MAX_SCALE = 2;
+export const PAN_PADDING = 48;
+export const MINIMAP = { width: 140, height: 100 };
 
 export const isIndependent = (node, results) => Boolean(node.parent)
   && typeGroup(results.get(node.key)) === 'independent';
@@ -89,10 +91,8 @@ export function layoutMap(roots, results, options = {}) {
   const keep = keepSet(roots, results, options);
   const nodes = [];
   const byKey = new Map();
-  const edges = [];
   const columns = new Map();
   let cursor = sizes.padding + sizes.header;
-  let maxDepth = 0;
 
   const countHidden = (node) => visibleChildren(node, keep)
     .reduce((sum, child) => sum + 1 + countHidden(child), 0);
@@ -112,7 +112,7 @@ export function layoutMap(roots, results, options = {}) {
     const entry = {
       key: node.key,
       node,
-      x: sizes.padding + node.depth * sizes.colWidth,
+      x: 0,
       y,
       depth: node.depth,
       hasChildren: kids.length > 0,
@@ -122,13 +122,11 @@ export function layoutMap(roots, results, options = {}) {
     };
     nodes.push(entry);
     byKey.set(node.key, entry);
-    maxDepth = Math.max(maxDepth, node.depth);
-    if (!columns.has(node.depth)) columns.set(node.depth, new Set());
-    columns.get(node.depth).add(levelLabel(node.location, node.depth));
-    placedKids.forEach((child) => {
-      if (child.independent) return;
-      edges.push({ from: entry.key, to: child.key, path: edgePath(entry, child, sizes) });
-    });
+    entry.label = levelLabel(node.location, node.depth);
+    const columnKey = `${node.depth}\u0000${entry.label}`;
+    if (!columns.has(columnKey)) columns.set(columnKey, { depth: node.depth, label: entry.label });
+    entry.column = columnKey;
+    entry.placedKids = placedKids;
     return entry;
   };
 
@@ -137,16 +135,29 @@ export function layoutMap(roots, results, options = {}) {
     place(root);
   });
 
-  const width = sizes.padding * 2 + maxDepth * sizes.colWidth + sizes.cardWidth;
+  const ordered = [...columns.entries()]
+    .sort(([, first], [, second]) => first.depth - second.depth)
+    .map(([columnKey, column], index) => ({
+      ...column, key: columnKey, x: sizes.padding + index * sizes.colWidth,
+    }));
+  const columnX = new Map(ordered.map((column) => [column.key, column.x]));
+  nodes.forEach((entry) => { entry.x = columnX.get(entry.column); });
+  const edges = [];
+  nodes.forEach((entry) => {
+    entry.placedKids.forEach((child) => {
+      if (child.independent) return;
+      edges.push({ from: entry.key, to: child.key, path: edgePath(entry, child, sizes) });
+    });
+  });
+
+  const width = sizes.padding * 2 + Math.max(ordered.length - 1, 0) * sizes.colWidth
+    + sizes.cardWidth;
   const height = Math.max(cursor - sizes.rowGap + sizes.padding, sizes.padding * 2);
   return {
     nodes,
     byKey,
     edges,
-    columns: [...columns.entries()].sort(([first], [second]) => first - second)
-      .map(([depth, labels]) => ({
-        depth, x: sizes.padding + depth * sizes.colWidth, label: [...labels].join(' / '),
-      })),
+    columns: ordered.map(({ depth, x, label }) => ({ depth, x, label })),
     width,
     height,
     sizes,
@@ -185,5 +196,45 @@ export function centerOn(view, entry, viewport, sizes = MAP_SIZES) {
     ...view,
     x: viewport.width / 2 - (entry.x + sizes.cardWidth / 2) * view.scale,
     y: viewport.height / 2 - (entry.y + sizes.cardHeight / 2) * view.scale,
+  };
+}
+
+const clampAxis = (offset, content, viewport, padding) => {
+  const low = viewport - content - padding;
+  const high = padding;
+  return low > high ? clamp(offset, high, low) : clamp(offset, low, high);
+};
+
+export function clampView(view, layout, viewport, padding = PAN_PADDING) {
+  if (!viewport.width || !viewport.height) return view;
+  return {
+    ...view,
+    x: clampAxis(view.x, layout.width * view.scale, viewport.width, padding),
+    y: clampAxis(view.y, layout.height * view.scale, viewport.height, padding),
+  };
+}
+
+export function minimapGeometry(layout, box = MINIMAP) {
+  const scale = Math.min(box.width / layout.width, box.height / layout.height);
+  return { scale, width: layout.width * scale, height: layout.height * scale };
+}
+
+export function minimapViewport(view, viewport, mini) {
+  const ratio = mini.scale / view.scale;
+  return {
+    x: -view.x * ratio,
+    y: -view.y * ratio,
+    width: viewport.width * ratio,
+    height: viewport.height * ratio,
+  };
+}
+
+export function viewFromMinimap(point, view, viewport, mini) {
+  const contentX = point.x / mini.scale;
+  const contentY = point.y / mini.scale;
+  return {
+    ...view,
+    x: viewport.width / 2 - contentX * view.scale,
+    y: viewport.height / 2 - contentY * view.scale,
   };
 }

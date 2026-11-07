@@ -174,3 +174,16 @@ describe('rows and filters', () => {
     assert.equal(matchesQuery(shop, ''), true);
   });
 });
+
+describe('flatMatches', () => {
+  it('lists matching pages flat in tree order with no expandable rows', async () => {
+    const { flatMatches } = await import('../../../../tools/apps/msm-next/data/tree.js');
+    const listed = new Map(treeLocations(model, treeRoots(model, 'brand')).map(({ location }) => [location.id, ['/index.html']]));
+    const tree = buildPageTree({ model, roots: treeRoots(model, 'brand'), files: listed });
+    const all = new Set(tree.nodes.keys());
+    const rows = flatMatches(tree.top, all);
+    assert.equal(rows.length, all.size);
+    assert.ok(rows.every((row) => row.level === 1 && !row.hasChildren && row.flat));
+    assert.deepEqual(flatMatches(tree.top, new Set()), []);
+  });
+});

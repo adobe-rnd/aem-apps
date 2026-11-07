@@ -1529,6 +1529,48 @@ p {
   font-size: var(--s2-font-size-75, 12px);
 }
 
+.map-card.dimmed {
+  opacity: 0.25;
+}
+
+.map-card.context {
+  opacity: 0.7;
+}
+
+.map-card.match {
+  box-shadow: 0 0 0 3px var(--s2-blue-800);
+}
+
+.map-minimap {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  border: 1px solid var(--s2-gray-400);
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 20%);
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.mini-card {
+  position: absolute;
+  background: var(--s2-gray-500);
+  border-radius: 1px;
+}
+
+.mini-card.selected {
+  background: var(--s2-blue-800);
+}
+
+.mini-view {
+  position: absolute;
+  border: 2px solid var(--s2-blue-800);
+  background: rgb(20 115 230 / 12%);
+  pointer-events: none;
+}
+
 .map-legend {
   padding: 6px 12px;
   border-top: 1px solid var(--line);
