@@ -943,8 +943,9 @@ async function resolveSetup() {
   if (window.self === window.top) return mockSetup('Not running inside DA, so this shows mock data. Open the app from da.live to see real content.');
   const sdk = await Promise.race([DA_SDK, timeout(SDK_TIMEOUT)]);
   if (!sdk?.actions?.daFetch) return mockSetup('DA did not respond, so this shows mock data.');
-  const org = params.get('org') || sdk.context?.org;
-  const site = params.get('site') || sdk.context?.repo;
+  const [hashOrg, hashSite] = window.location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  const org = params.get('org') || hashOrg || sdk.context?.org;
+  const site = params.get('site') || hashSite || sdk.context?.repo;
   if (!org || !site) return mockSetup('No org or site in the DA context, so this shows mock data.');
   const { default: createRealLocalization } = await import('./data/real-localization.js');
   const translateDelay = Number(params.get('translateDelay')) || 0;
