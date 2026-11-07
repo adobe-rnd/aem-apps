@@ -461,7 +461,7 @@ class MsmNextPlugin extends LitElement {
     return html`
       <div class="run" role="status" aria-live="polite">
         <p class="run-head">
-          ${summary.finished ? html`<strong>Run finished</strong>` : html`${spinner()} <strong>Updating…</strong>`}
+          ${summary.finished ? html`<strong>Rollout finished</strong>` : html`${spinner()} <strong>Updating…</strong>`}
           <span class="muted">${summary.total} page${summary.total === 1 ? '' : 's'}</span>
           ${summary.finished ? html`<button type="button" class="dismiss" aria-label="Dismiss" @click=${() => { this.run = null; }}>×</button>` : nothing}
         </p>
@@ -507,7 +507,7 @@ class MsmNextPlugin extends LitElement {
         </fieldset>
         <div class="row">
           <button type="button" class="btn accent" aria-disabled=${String(!selected.length || !rows.length)}
-            @click=${() => { if (selected.length) this.propagate(selected.map((row) => row.id)); }}>Run</button>
+            @click=${() => { if (selected.length) this.propagate(selected.map((row) => row.id)); }}>Roll out</button>
           <button type="button" class="btn" @click=${() => { this.picking = false; }}>Cancel</button>
         </div>
       </div>`;

@@ -162,7 +162,7 @@ export default function renderActionDrawer(drawer, ctx) {
       <header class="sheet-header">
         <div>
           <h2 id="sheet-title">Update and create pages</h2>
-          <p class="muted">Choose target locations. Each level runs after its source level is done.</p>
+          <p class="muted">Choose target locations. Each level is updated after its source level is done.</p>
         </div>
         <button type="button" class="btn quiet icon" aria-label="Close" @click=${ctx.onClose}>×</button>
       </header>
@@ -178,7 +178,7 @@ export default function renderActionDrawer(drawer, ctx) {
         </p>
         <div class="sheet-actions">
           <button type="button" class="btn" @click=${ctx.onClose}>Cancel</button>
-          <button type="button" class="btn accent" ?disabled=${disabled} @click=${() => ctx.onRun(model)}>
+          <button type="button" class="btn accent" ?disabled=${disabled} @click=${() => ctx.onRollout(model)}>
             ${drawer.busy ? spinner('Starting') : nothing}${primaryLabel(counts)}
           </button>
         </div>

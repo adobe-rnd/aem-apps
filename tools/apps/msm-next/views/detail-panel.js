@@ -65,7 +65,7 @@ function renderAttention(list, ctx) {
 const JOB_TEXT = {
   translating: 'Still translating',
   ready: 'Translation is ready to save',
-  none: 'No translation job found',
+  none: 'No translation found',
   failed: 'The translation failed',
   error: 'Could not check the translation',
 };
@@ -147,7 +147,7 @@ function renderActions(node, result, ctx) {
           <div class="action-item"><button type="button" class="btn" title="Also publishes every inherited page below this one"
             @click=${() => ctx.onPublish(node, true)}>Publish with inherited pages</button></div>` : nothing}
         ${node.children.length && ctx.onOpenDrawer ? html`
-          <div class="action-item"><button type="button" class="btn" title="Choose target locations and update or create them in one run"
+          <div class="action-item"><button type="button" class="btn" title="Choose target locations and update or create them in one rollout"
             @click=${() => ctx.onOpenDrawer(node)}>Update targets…</button></div>` : nothing}
         ${exists ? html`
           <div class="action-item"><a class="btn quiet" href=${editUrl(ctx.org, node.site, node.path)} @click=${() => ctx.onOpenEditor?.(node)} target="_blank" rel="noopener">Open in editor</a></div>` : nothing}

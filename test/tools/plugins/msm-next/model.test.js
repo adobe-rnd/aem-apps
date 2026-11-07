@@ -474,7 +474,7 @@ describe('messages', () => {
 
   it('summarizes job checks', () => {
     assert.equal(jobMessage([{ state: 'ready' }, { state: 'translating' }, { state: 'translating' }]), 'Translation status: 1 ready to save, 2 still translating.');
-    assert.equal(jobMessage([{ state: 'none' }]), 'No translation jobs found.');
+    assert.equal(jobMessage([{ state: 'none' }]), 'No translations found.');
     assert.equal(jobMessage([{ state: 'translating', progress: { done: 3, total: 10 } }]), 'Translation status: 1 still translating (3 of 10).');
     assert.equal(jobsWorthNoting([{ state: 'translating' }]), false);
     assert.equal(jobsWorthNoting([{ state: 'ready' }]), true);

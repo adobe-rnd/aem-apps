@@ -27,16 +27,21 @@ import {
 import {
   needsAction, editUrl, reasonText, ACTION_LABELS,
 } from './data/display.js';
-import { buildTargetTree, toggleTarget, setMany } from './data/targets.js';
+import {
+  buildTargetTree, toggleTarget, setMany, descendantIds,
+} from './data/targets.js';
 import {
   layoutMap, fitView, fitWidth, zoomView, toggleCollapse, clampView, centerOn,
   minimapGeometry, viewFromMinimap,
 } from './data/map-layout.js';
-import { mergeRuns, translatingItems, runStatus } from './data/run-view.js';
+import {
+  mergeRollouts, translatingItems, rolloutStatus, needsMe, visibleRollouts, rolloutTitle,
+} from './data/rollout-view.js';
+import { needsRollout } from './data/rollout-scope.js';
 import renderTreeTable from './views/tree-table.js';
 import renderDetailPanel from './views/detail-panel.js';
 import renderActionDrawer from './views/action-drawer.js';
-import renderRunsView from './views/runs-view.js';
+import renderRolloutsView from './views/rollouts-view.js';
 import renderMapView from './views/map-view.js';
 import { pageLabel } from './views/common.js';
 
@@ -72,7 +77,7 @@ const ERROR_LABELS = {
   'remove-failed': 'The local copy could not be deleted',
 };
 
-const RUN_LIST_LIMIT = 15;
+const ROLLOUT_LIST_LIMIT = 15;
 const JOB_CHECK_DELAY = 400;
 
 const pageRef = ({ site, path }) => ({ site, path });
@@ -107,11 +112,13 @@ class MsmNextApp extends LitElement {
     tab: { state: true },
     picked: { state: true },
     drawer: { state: true },
-    runs: { state: true },
-    activeRunId: { state: true },
-    runBusy: { state: true },
-    runsLoading: { state: true },
-    runsError: { state: true },
+    rollouts: { state: true },
+    showCompleted: { state: true },
+    cancelConfirmId: { state: true },
+    activeRolloutId: { state: true },
+    rolloutBusy: { state: true },
+    rolloutsLoading: { state: true },
+    rolloutsError: { state: true },
     starting: { state: true },
     jobInfo: { state: true },
     checking: { state: true },
@@ -132,11 +139,13 @@ class MsmNextApp extends LitElement {
     this.tab = 'pages';
     this.picked = new Set();
     this.drawer = null;
-    this.runs = [];
-    this.runBusy = new Set();
-    this.runChecked = new Map();
-    this.liveRuns = new Set();
-    this.autoResumed = new Set();
+    this.rollouts = [];
+    this.rolloutBusy = new Set();
+    this.rolloutChecked = new Map();
+    this.liveRollouts = new Set();
+    this.showCompleted = false;
+    this.cancelConfirmId = null;
+    this.autoResumedRollouts = new Set();
     this.jobInfo = new Map();
     this.jobChecked = new Set();
     this.checking = new Set();
@@ -184,7 +193,7 @@ class MsmNextApp extends LitElement {
   updated() {
     if (this.phase !== 'ready') return;
     if (this.tab === 'pages') this.scheduleJobCheck();
-    if (this.tab === 'runs') this.autoResume();
+    if (this.tab === 'rollouts') this.autoResumeRollout();
     if (this.tab === 'pages' && this.view === 'map' && !this.mapState.view) this.initMapView();
   }
 
@@ -345,7 +354,12 @@ class MsmNextApp extends LitElement {
     await this.loader.refreshSubtree(node);
   }
 
-  runAction(node, { action, option, label }) {
+  performAction(node, step) {
+    const { action, option, label } = step;
+    const parent = node.parent ? this.tree.nodes.get(node.parent) : null;
+    if (parent && this.localization.propagate && needsRollout(node, this.tree, action)) {
+      return this.rolloutForNode(node, parent, step);
+    }
     return this.withBusy(node, async () => {
       const result = await this.localization.execute({
         site: node.site, path: node.path, action, option,
@@ -373,7 +387,7 @@ class MsmNextApp extends LitElement {
       window.open(editUrl(this.org, node.site, node.path), '_blank', 'noopener');
       return;
     }
-    this.runAction(node, step);
+    this.performAction(node, step);
   }
 
   publish(node, cascade) {
@@ -456,35 +470,56 @@ class MsmNextApp extends LitElement {
       }),
       onQuery: (query) => this.patchDrawer({ query }),
       onOption: (option) => this.patchDrawer({ option }),
-      onRun: () => this.startRun(),
+      onRollout: () => this.startRolloutFromDrawer(),
     };
   }
 
-  trackRun(run, busy) {
-    this.starting = null;
-    this.liveRuns.add(run.id);
-    this.runs = mergeRuns([run], this.runs);
-    const runBusy = new Set(this.runBusy);
-    if (busy) runBusy.add(run.id);
-    else runBusy.delete(run.id);
-    this.runBusy = runBusy;
+  rolloutForNode(node, parent, { action, option }) {
+    const targetTree = buildTargetTree(this.loader.model, [parent.location.id]);
+    const targets = [node.location.id, ...descendantIds(targetTree, node.location.id)];
+    const name = action === 'rollout' ? 'Update' : ACTION_LABELS[action] ?? action;
+    return this.startRollout({
+      pages: [pageRef(parent)],
+      targets,
+      option,
+      title: `${name} ${pageLabel(node)} (${node.path})`,
+    });
   }
 
-  async startRun() {
+  trackRollout(run, busy) {
+    this.starting = null;
+    this.liveRollouts.add(run.id);
+    this.rollouts = mergeRollouts([run], this.rollouts);
+    const rolloutBusy = new Set(this.rolloutBusy);
+    if (busy) rolloutBusy.add(run.id);
+    else rolloutBusy.delete(run.id);
+    this.rolloutBusy = rolloutBusy;
+  }
+
+  startRolloutFromDrawer() {
     const {
       sources, selected, option, tree,
     } = this.drawer;
-    const pages = sources.map(pageRef);
-    const targets = selected.size === tree.nodes.size ? undefined : [...selected];
     const title = sources.length === 1
       ? `Update ${sources[0].title} (${sources[0].path})`
       : `Update ${sources[0].title} and ${sources.length - 1} more`;
     this.drawer = null;
     this.picked = new Set();
-    this.tab = 'runs';
+    return this.startRollout({
+      pages: sources.map(pageRef),
+      targets: selected.size === tree.nodes.size ? undefined : [...selected],
+      option,
+      title,
+    });
+  }
+
+  async startRollout({
+    pages, targets, option, title,
+  }) {
+    this.tab = 'rollouts';
     this.starting = title;
-    this.activeRunId = null;
-    this.loadRuns();
+    this.activeRolloutId = null;
+    this.loadRollouts();
     let run = null;
     try {
       run = await this.localization.propagate({
@@ -493,24 +528,24 @@ class MsmNextApp extends LitElement {
         option,
         title,
         onProgress: (current) => {
-          this.autoResumed.add(current.id);
-          if (!this.activeRunId) this.activeRunId = current.id;
-          this.trackRun(current, true);
+          this.autoResumedRollouts.add(current.id);
+          if (!this.activeRolloutId) this.activeRolloutId = current.id;
+          this.trackRollout(current, true);
         },
       });
-      this.activeRunId = run.id;
-      this.trackRun(run, false);
-      const status = runStatus(run);
+      this.activeRolloutId = run.id;
+      this.trackRollout(run, false);
+      const status = rolloutStatus(run);
       this.showToast(`${title}: ${status.label.toLowerCase()}`, status.key === 'attention' ? 'negative' : 'positive');
     } catch (e) {
       console.error(e);
       this.starting = null;
-      this.showToast(`Could not start the run: ${e.message || e}`, 'negative');
+      this.showToast(`Could not start the rollout: ${e.message || e}`, 'negative');
     }
-    if (run) this.refreshAfterRun(run);
+    if (run) this.refreshAfterRollout(run);
   }
 
-  refreshAfterRun(run) {
+  refreshAfterRollout(run) {
     const keys = new Set([
       ...(run.pages ?? []).map((page) => nodeKey(page.site, page.path)),
       ...(run.items ?? []).map((item) => item.key),
@@ -520,80 +555,127 @@ class MsmNextApp extends LitElement {
     if (nodes.length) this.loader.refreshNodes(nodes);
   }
 
-  async withRun(run, task) {
-    if (this.runBusy.has(run.id)) return;
-    this.runBusy = new Set([...this.runBusy, run.id]);
+  async withRollout(run, task) {
+    if (this.rolloutBusy.has(run.id)) return;
+    this.rolloutBusy = new Set([...this.rolloutBusy, run.id]);
+    let current = run;
     try {
-      await task();
+      const result = await task();
+      if (result?.items) current = result;
     } catch (e) {
       console.error(e);
       this.showToast(e.message || String(e), 'negative');
     }
-    this.trackRun(run, false);
-    this.refreshAfterRun(run);
+    this.trackRollout(current, false);
+    this.refreshAfterRollout(current);
   }
 
-  retryRun(run) {
-    return this.withRun(run, () => this.localization.retryRun(run, {
-      onProgress: (current) => this.trackRun(current, true),
-    }));
-  }
-
-  resumeRun(run) {
-    if (!this.localization.resumeRun) return Promise.resolve();
-    return this.withRun(run, async () => {
-      await this.localization.resumeRun(run, {
-        onProgress: (current) => this.trackRun(current, true),
+  cancelRollout(run) {
+    this.cancelConfirmId = null;
+    if (!this.localization.cancelRun) return Promise.resolve();
+    return this.withRollout(run, async () => {
+      const updated = await this.localization.cancelRun(run, {
+        onProgress: (current) => this.trackRollout(current, true),
       });
-      this.runChecked.set(run.id, new Date().toISOString());
+      this.showToast(`${rolloutTitle(run)}: cancelled`, 'positive');
+      return updated;
     });
   }
 
-  autoResume() {
-    const run = this.runs.find((each) => each.id === this.activeRunId);
-    if (!run || this.autoResumed.has(run.id) || this.runBusy.has(run.id)) return;
-    if (!translatingItems(run).length || !this.localization.resumeRun) return;
-    this.autoResumed.add(run.id);
-    this.resumeRun(run);
-  }
-
-  async loadRuns() {
-    const provider = this.localization.runs;
-    if (!provider) {
-      this.runsError = 'Runs are not available for this backend.';
-      return;
-    }
-    this.runsLoading = true;
-    this.runsError = '';
+  async archiveRollout(run, archived = true) {
+    if (!this.localization.archiveRun || this.rolloutBusy.has(run.id)) return;
     try {
-      const listed = (await provider.list(this.site)).slice(0, RUN_LIST_LIMIT);
-      const read = await Promise.all(listed.map((entry) => provider.read(this.site, entry.id)
-        .catch(() => null)));
-      const live = this.runs.filter((run) => this.liveRuns.has(run.id));
-      this.runs = mergeRuns(live, read.filter(Boolean));
-      if (!this.activeRunId && !this.starting && this.runs[0]) this.activeRunId = this.runs[0].id;
+      const result = await this.localization.archiveRun(run, archived);
+      if (result?.ok === false) {
+        this.showToast(result.error === 'run-active'
+          ? 'This rollout is still in progress, so it cannot be archived yet.'
+          : `Could not ${archived ? 'archive' : 'unarchive'} the rollout: ${result.error}`, 'negative');
+        return;
+      }
+      this.trackRollout(result?.items ? result : run, false);
+      if (this.activeRolloutId === run.id && !this.showCompleted) {
+        this.activeRolloutId = this.visibleRollouts(null)[0]?.id ?? null;
+      }
     } catch (e) {
       console.error(e);
-      this.runsError = `Could not load runs: ${e.message || e}`;
+      this.showToast(e.message || String(e), 'negative');
+    }
+  }
+
+  visibleRollouts(keepId = this.activeRolloutId) {
+    return visibleRollouts(this.rollouts, {
+      showCompleted: this.showCompleted, busyIds: this.rolloutBusy, keepId,
+    });
+  }
+
+  retryRollout(run) {
+    return this.withRollout(run, () => this.localization.retryRun(run, {
+      onProgress: (current) => this.trackRollout(current, true),
+    }));
+  }
+
+  resumeRollout(run) {
+    if (!this.localization.resumeRun) return Promise.resolve();
+    return this.withRollout(run, async () => {
+      await this.localization.resumeRun(run, {
+        onProgress: (current) => this.trackRollout(current, true),
+      });
+      this.rolloutChecked.set(run.id, new Date().toISOString());
+    });
+  }
+
+  autoResumeRollout() {
+    const run = this.rollouts.find((each) => each.id === this.activeRolloutId);
+    if (!run || this.autoResumedRollouts.has(run.id) || this.rolloutBusy.has(run.id)) return;
+    if (!translatingItems(run).length || !this.localization.resumeRun) return;
+    this.autoResumedRollouts.add(run.id);
+    this.resumeRollout(run);
+  }
+
+  async loadRollouts() {
+    const provider = this.localization.runs;
+    if (!provider) {
+      this.rolloutsError = 'Rollouts are not available for this backend.';
+      return;
+    }
+    this.rolloutsLoading = true;
+    this.rolloutsError = '';
+    try {
+      const listed = (await provider.list(this.site)).slice(0, ROLLOUT_LIST_LIMIT);
+      const read = await Promise.all(listed.map((entry) => provider.read(this.site, entry.id)
+        .catch(() => null)));
+      const live = this.rollouts.filter((run) => this.liveRollouts.has(run.id));
+      this.rollouts = mergeRollouts(live, read.filter(Boolean));
+      if (!this.activeRolloutId && !this.starting) {
+        this.activeRolloutId = this.visibleRollouts(null)[0]?.id ?? null;
+      }
+    } catch (e) {
+      console.error(e);
+      this.rolloutsError = `Could not load rollouts: ${e.message || e}`;
     } finally {
-      this.runsLoading = false;
+      this.rolloutsLoading = false;
     }
   }
 
   showTab(tab) {
     this.tab = tab;
-    if (tab === 'runs') this.loadRuns();
+    if (tab === 'rollouts') this.loadRollouts();
   }
 
-  runsContext() {
+  rolloutsContext() {
     const { model } = this.loader;
     return {
-      runs: this.runs,
-      activeRunId: this.activeRunId,
-      runBusy: this.runBusy,
-      runChecked: this.runChecked,
-      loading: this.runsLoading,
-      error: this.runsError,
+      rollouts: this.visibleRollouts(),
+      allRollouts: this.rollouts,
+      showCompleted: this.showCompleted,
+      cancelConfirmId: this.cancelConfirmId,
+      canCancel: Boolean(this.localization.cancelRun),
+      canArchive: Boolean(this.localization.archiveRun),
+      activeRolloutId: this.activeRolloutId,
+      rolloutBusy: this.rolloutBusy,
+      rolloutChecked: this.rolloutChecked,
+      loading: this.rolloutsLoading,
+      error: this.rolloutsError,
       starting: this.starting,
       canResume: Boolean(this.localization.resumeRun),
       locationOf: (id) => model?.locations.get(id) ?? null,
@@ -602,10 +684,15 @@ class MsmNextApp extends LitElement {
         return location?.level || (location ? `Level ${depth + 1}` : '');
       },
       nodeOf: (key) => this.tree.nodes.get(key),
-      onOpen: (run) => { this.activeRunId = run.id; },
-      onReload: () => this.loadRuns(),
-      onRetry: (run) => this.retryRun(run),
-      onResume: (run) => this.resumeRun(run),
+      onOpen: (run) => { this.activeRolloutId = run.id; },
+      onReload: () => this.loadRollouts(),
+      onToggleCompleted: (checked) => { this.showCompleted = checked; },
+      onAskCancel: (run) => { this.cancelConfirmId = run.id; },
+      onDismissCancel: () => { this.cancelConfirmId = null; },
+      onCancel: (run) => this.cancelRollout(run),
+      onArchive: (run, archived) => this.archiveRollout(run, archived),
+      onRetry: (run) => this.retryRollout(run),
+      onResume: (run) => this.resumeRollout(run),
       onReveal: (node) => {
         this.tab = 'pages';
         this.view = 'tree';
@@ -907,7 +994,7 @@ class MsmNextApp extends LitElement {
     const count = this.picked.size;
     return html`
       <div class="selection-bar ${count ? 'active' : ''}" role="region" aria-label="Selection">
-        <span>${count ? html`<strong>${count}</strong> source page${count === 1 ? '' : 's'} selected` : 'Select source pages to update or create their targets in one run.'}</span>
+        <span>${count ? html`<strong>${count}</strong> source page${count === 1 ? '' : 's'} selected` : 'Select source pages to update or create their targets in one rollout.'}</span>
         ${count ? html`<button type="button" class="btn quiet small" @click=${() => { this.picked = new Set(); }}>Clear</button>` : nothing}
         <span class="spacer"></span>
         <button type="button" class="btn accent" ?disabled=${!count} @click=${() => this.openPickedDrawer()}>Update / Create…</button>
@@ -939,7 +1026,7 @@ class MsmNextApp extends LitElement {
       onOpenEditor: (node) => this.awaitReturn(node),
       onSelect: (node, reveal) => this.select(node, reveal),
       onNext: (node, step) => this.runNext(node, step),
-      onAction: (node, button) => this.runAction(node, button),
+      onAction: (node, button) => this.performAction(node, button),
       onPublish: (node, cascade) => this.publish(node, cascade),
       onConfirm: (confirm) => { this.confirm = confirm; },
       onKeydown: (event) => this.handleKeydown(event, rows),
@@ -969,13 +1056,13 @@ class MsmNextApp extends LitElement {
   }
 
   renderTabs() {
-    const active = this.runs.filter((run) => runStatus(run, this.runBusy.has(run.id)).key !== 'done').length;
+    const active = this.rollouts.filter((run) => needsMe(run, this.rolloutBusy.has(run.id))).length;
     return html`
       <nav class="tabs" aria-label="Sections">
-        ${[['pages', 'Pages'], ['runs', 'Runs']].map(([tab, label]) => html`
+        ${[['pages', 'Pages'], ['rollouts', 'Rollouts']].map(([tab, label]) => html`
           <button type="button" class="tab ${this.tab === tab ? 'active' : ''}" aria-current=${this.tab === tab ? 'page' : 'false'}
             @click=${() => this.showTab(tab)}>${label}
-            ${tab === 'runs' && (active || this.starting) ? html`<span class="count-pill">${active + (this.starting ? 1 : 0)}</span>` : nothing}
+            ${tab === 'rollouts' && (active || this.starting) ? html`<span class="count-pill">${active + (this.starting ? 1 : 0)}</span>` : nothing}
           </button>`)}
       </nav>`;
   }
@@ -990,8 +1077,8 @@ class MsmNextApp extends LitElement {
     if (this.phase === 'empty') {
       return html`<div class="state">No localization locations are configured for <strong>${this.site}</strong>.</div>`;
     }
-    if (this.tab === 'runs') {
-      return html`${this.renderTabs()}${renderRunsView(this.runsContext())}`;
+    if (this.tab === 'rollouts') {
+      return html`${this.renderTabs()}${renderRolloutsView(this.rolloutsContext())}`;
     }
     const counts = countPages(this.tree, this.results, this.kind);
     return html`

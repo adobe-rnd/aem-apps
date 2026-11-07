@@ -1094,40 +1094,40 @@ p {
   font-size: var(--s2-font-size-75, 12px);
 }
 
-.runs-layout {
+.rollouts-layout {
   display: grid;
   grid-template-columns: 340px minmax(0, 1fr);
   gap: var(--spacing-300);
   align-items: start;
 }
 
-.runs-list,
-.run-detail {
+.rollouts-list,
+.rollout-detail {
   padding: var(--spacing-300);
   border: 1px solid var(--line);
   border-radius: 12px;
 }
 
-.runs-list {
+.rollouts-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.runs-list-head,
-.run-head {
+.rollouts-list-head,
+.rollout-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
-.runs-list-head h2,
-.run-head h2 {
+.rollouts-list-head h2,
+.rollout-head h2 {
   font-size: var(--s2-font-size-300, 18px);
 }
 
-.run-entries {
+.rollout-entries {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1136,7 +1136,7 @@ p {
   list-style: none;
 }
 
-.run-entry {
+.rollout-entry {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1151,20 +1151,20 @@ p {
   cursor: pointer;
 }
 
-.run-entry.active {
+.rollout-entry.active {
   border-color: var(--s2-blue-800);
   background: var(--s2-blue-100);
 }
 
-.run-entry-head,
-.run-entry-meta,
-.run-overview-line {
+.rollout-entry-head,
+.rollout-entry-meta,
+.rollout-overview-line {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.run-progress {
+.rollout-progress {
   position: relative;
   display: flex;
   height: 8px;
@@ -1173,21 +1173,30 @@ p {
   overflow: hidden;
 }
 
-.run-progress-fill {
+.rollout-progress-fill {
   background: var(--s2-green-700);
   transition: width 0.2s;
 }
 
-.run-progress-wait {
+.rollout-progress-wait {
   background: repeating-linear-gradient(45deg, var(--s2-blue-500), var(--s2-blue-500) 4px, var(--s2-blue-300) 4px, var(--s2-blue-300) 8px);
 }
 
-.run-actions {
+.rollout-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
-.run-overview {
+.rollout-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted, inherit);
+}
+
+.rollout-overview {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1197,31 +1206,31 @@ p {
   border-radius: 8px;
 }
 
-.run-group {
+.rollout-group {
   margin-top: var(--spacing-300);
 }
 
-.run-group-head {
+.rollout-group-head {
   display: flex;
   align-items: baseline;
   gap: 8px;
   margin-bottom: 6px;
 }
 
-.run-group-head h4 {
+.rollout-group-head h4 {
   margin: 0;
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-.run-location {
+.rollout-location {
   margin-bottom: 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
 }
 
-.run-location-head {
+.rollout-location-head {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1230,13 +1239,13 @@ p {
   background: var(--s2-gray-50);
 }
 
-.run-items {
+.rollout-items {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.run-item {
+.rollout-item {
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -1244,7 +1253,7 @@ p {
   border-bottom: 1px solid var(--s2-gray-100);
 }
 
-.run-item:last-child {
+.rollout-item:last-child {
   border-bottom: 0;
 }
 
@@ -1280,29 +1289,29 @@ p {
   color: var(--s2-blue-1000);
 }
 
-.run-item-text {
+.rollout-item-text {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-width: 0;
 }
 
-.run-item-state {
+.rollout-item-state {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
 }
 
-.run-note {
+.rollout-note {
   color: var(--s2-gray-600);
   font-size: var(--s2-font-size-75, 12px);
 }
 
-.run-note.negative {
+.rollout-note.negative {
   color: var(--s2-red-900);
 }
 
-.run-note.notice {
+.rollout-note.notice {
   color: var(--s2-orange-1000);
 }
 
@@ -1584,7 +1593,7 @@ p {
 .twisty:focus-visible,
 .link-row:focus-visible,
 .tab:focus-visible,
-.run-entry:focus-visible,
+.rollout-entry:focus-visible,
 .map-card-main:focus-visible,
 .level-chip:focus-visible,
 .search input:focus-visible {
@@ -1602,7 +1611,7 @@ p {
     max-height: none;
   }
 
-  .runs-layout {
+  .rollouts-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 }

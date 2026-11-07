@@ -29,6 +29,7 @@ export const ITEM_STATES = {
   blocked: { label: 'Blocked', tone: 'notice', icon: '⊘' },
   failed: { label: 'Failed', tone: 'negative', icon: '✕' },
   waiting: { label: 'Waiting', tone: 'neutral', icon: '⧗' },
+  cancelled: { label: 'Cancelled', tone: 'neutral', icon: '⊘' },
 };
 
 export const STATE_ORDER = Object.keys(ITEM_STATES);
@@ -59,7 +60,7 @@ export function viewStates(run) {
   return states;
 }
 
-export function runProgress(run) {
+export function rolloutProgress(run) {
   const items = run?.items ?? [];
   const total = items.length;
   const states = viewStates(run);
@@ -77,15 +78,46 @@ export function runProgress(run) {
   };
 }
 
-export function runStatus(run, busy = false) {
-  const progress = runProgress(run);
+export function rolloutStatus(run, busy = false) {
+  const progress = rolloutProgress(run);
   if (busy || progress.open) return { key: 'running', label: 'Running', tone: 'informative' };
+  if (run?.cancelledAt) return { key: 'cancelled', label: 'Cancelled', tone: 'neutral' };
   if (progress.problems) return { key: 'attention', label: 'Needs attention', tone: 'notice' };
   if (progress.translating) return { key: 'waiting', label: 'Waiting for translation', tone: 'informative' };
   return { key: 'done', label: 'Complete', tone: 'positive' };
 }
 
+export const isArchived = (run) => Boolean(run?.archivedAt);
+
+export const IN_FLIGHT = ['running', 'waiting'];
+const FINISHED = ['done', 'cancelled', 'attention'];
+
+export const isInFlight = (run, busy = false) => IN_FLIGHT.includes(rolloutStatus(run, busy).key);
+
+export const canCancel = (run, busy = false) => isInFlight(run, busy) && !busy
+  && !isArchived(run);
+
+export const canArchive = (run, busy = false) => !busy
+  && FINISHED.includes(rolloutStatus(run, busy).key);
+
+export const needsMe = (run, busy = false) => !isArchived(run)
+  && ['running', 'waiting', 'attention'].includes(rolloutStatus(run, busy).key);
+
+const TIER = { attention: 0, running: 1, waiting: 1 };
+
+export function visibleRollouts(rollouts, {
+  showCompleted = false, busyIds = new Set(), keepId = null,
+} = {}) {
+  const time = (run) => Date.parse(run.createdAt ?? '') || 0;
+  const tierOf = (run) => (needsMe(run, busyIds.has(run.id))
+    ? TIER[rolloutStatus(run, busyIds.has(run.id)).key] : 2);
+  return rollouts
+    .filter((run) => showCompleted || tierOf(run) < 2 || run.id === keepId)
+    .sort((first, second) => tierOf(first) - tierOf(second) || time(second) - time(first));
+}
+
 export function canRetry(run) {
+  if (run?.cancelledAt) return false;
   const states = viewStates(run);
   return (run?.items ?? []).some((item) => PROBLEM_STATES.includes(states.get(item.key)));
 }
@@ -107,7 +139,7 @@ export function summaryChips(run) {
       .map((state) => ({ state, count: counts.get(state), ...itemState(state) })));
 }
 
-export function groupRun(run, { levelOf = () => '', locationOf = () => null } = {}) {
+export function groupRollout(run, { levelOf = () => '', locationOf = () => null } = {}) {
   const depths = new Map();
   const states = viewStates(run);
   (run?.items ?? []).forEach((item) => {
@@ -129,7 +161,7 @@ export function groupRun(run, { levelOf = () => '', locationOf = () => null } = 
       depth,
       label: labels.length ? labels.join(' · ') : `Step ${depth}`,
       locations,
-      progress: runProgress({
+      progress: rolloutProgress({
         items: locations.flatMap((entry) => entry.items)
           .map((item) => ({ ...item, state: item.viewState, parent: null })),
       }),
@@ -143,6 +175,7 @@ const PARENT_REASONS = {
   'parent:blocked': 'Its source page is blocked',
   'parent:needs review': 'Its source page needs review',
   'parent:skipped': 'Its source page was skipped',
+  'parent:cancelled': 'Its source page was cancelled',
   'parent:awaiting translation': 'Waits for its source page to be translated',
 };
 
@@ -169,15 +202,15 @@ export function itemNotes(item) {
   return notes;
 }
 
-export function runTitle(run) {
+export function rolloutTitle(run) {
   if (run?.title) return run.title;
   const pages = run?.pages ?? [];
-  if (!pages.length) return 'Run';
+  if (!pages.length) return 'Rollout';
   const first = pages[0].path;
   return pages.length === 1 ? `Update ${first}` : `Update ${first} and ${pages.length - 1} more`;
 }
 
-export function mergeRuns(memory, listed) {
+export function mergeRollouts(memory, listed) {
   const byId = new Map();
   listed.forEach((run) => byId.set(run.id, run));
   memory.forEach((run) => byId.set(run.id, run));

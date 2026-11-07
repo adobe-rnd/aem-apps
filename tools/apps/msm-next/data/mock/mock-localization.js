@@ -302,10 +302,54 @@ export default function createMockLocalization({
     runs,
   });
 
+  const CANCELLABLE = ['pending', 'blocked', 'translating', 'awaiting translation'];
+  const ACTIVE = ['pending', 'running', 'translating', 'awaiting translation'];
+  const summarize = (items) => items.reduce((summary, item) => ({
+    ...summary, [item.state]: (summary[item.state] ?? 0) + 1,
+  }), { total: items.length });
+
+  async function clearJob(item) {
+    const current = await localization.page(item.site, item.path);
+    const { info } = current.chain[0];
+    if (!info?.job) return;
+    const changes = info.exists
+      ? { pages: { [info.id]: { job: null } } }
+      : { pending: { [item.path]: null } };
+    await index.patch(current.location.id, changes);
+    jobClock.delete(key(item));
+  }
+
+  async function cancelRun(run, { onProgress } = {}) {
+    const cancelling = run.items.filter((item) => CANCELLABLE.includes(item.state));
+    await Promise.all(cancelling.filter((item) => ['translating', 'awaiting translation'].includes(item.state))
+      .map((item) => clearJob(item)));
+    const at = new Date().toISOString();
+    cancelling.forEach((item) => Object.assign(item, {
+      state: 'cancelled', reasons: [], at,
+    }));
+    Object.assign(run, { cancelledAt: at, updatedAt: at, summary: summarize(run.items) });
+    await runs.save(run);
+    localization.refresh();
+    onProgress?.(run);
+    return run;
+  }
+
+  async function archiveRun(run, archived = true) {
+    if (archived && run.items.some((item) => ACTIVE.includes(item.state))) {
+      return { ok: false, error: 'run-active' };
+    }
+    if (archived) Object.assign(run, { archivedAt: new Date().toISOString() });
+    else delete run.archivedAt;
+    await runs.save(run);
+    return run;
+  }
+
   return {
     ...localization,
     execute,
     checkJobs,
+    cancelRun,
+    archiveRun,
     propagate: runner.propagate,
     retryRun: runner.retryRun,
     resumeRun: runner.resumeRun,

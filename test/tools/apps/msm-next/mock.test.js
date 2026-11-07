@@ -182,4 +182,30 @@ describe('mock runs', () => {
     await localization.resumeRun(run);
     assert.deepEqual(run.items.map((item) => item.state), ['inherited', 'done', 'inherited', 'inherited']);
   });
+
+  it('cancels a waiting run, clears pending translations and archives it', async () => {
+    const localization = createMockLocalization({
+      latency: false, translationDelay: 5, seedRuns: false,
+    });
+    const run = await localization.propagate({ pages: [source], option: 'merge' });
+    const translating = run.items.find((item) => item.state === 'translating');
+    assert.ok(translating);
+    assert.deepEqual(await localization.archiveRun(run), { ok: false, error: 'run-active' });
+
+    const cancelled = await localization.cancelRun(run);
+    assert.ok(cancelled.cancelledAt);
+    const open = ['pending', 'blocked', 'translating'];
+    assert.equal(cancelled.items.some((item) => open.includes(item.state)), false);
+    const same = cancelled.items.find((item) => item.key === translating.key);
+    assert.equal(same.state, 'cancelled');
+    const { site: jobSite, path } = translating;
+    const [check] = await localization.checkJobs([{ site: jobSite, path }]);
+    assert.equal(check.state, 'none');
+
+    const archived = await localization.archiveRun(run);
+    assert.ok(archived.archivedAt);
+    assert.ok((await localization.runs.read(site, run.id)).archivedAt);
+    const restored = await localization.archiveRun(run, false);
+    assert.equal(restored.archivedAt, undefined);
+  });
 });

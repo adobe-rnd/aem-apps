@@ -5,7 +5,7 @@ DA Prepare-menu panel for the msm-next prototype, built on `tools/localization/c
 1. "Multi-site" row with a `⋯` menu: Replace with source, Unlink / Relink, Revert to inherited, Create local copy, Preview, Publish, Publish with inherited pages, Open source in editor, Open MSM app.
 2. Page title, locale badge, status pill (most urgent sync state) and "Last synced".
 3. One state card: Available updates (Sync now / Translate now, Compare with source), Conflicts (needs review; locks linked variations), Waiting for source review, Translation in progress (Check status; checked once on open), Translation ready (Save translation), Inherited (Publish), Not created (Create / Inherit), Independent (Relink). Action results show below the card.
-4. Linked variations: pages that use this page as their source, "+ Create linked variation" (location picker, Merge / Replace, Run → `propagate` with `targets`) and "Publish with inherited pages".
+4. Linked variations: pages that use this page as their source, "+ Create linked variation" (location picker, Merge / Replace, Roll out → `propagate` with `targets`) and "Publish with inherited pages".
 5. Page details: Type, Source, Language, Locale, Location, Published.
 
 ## Setup
@@ -31,5 +31,5 @@ Uses the DA SDK's `actions.daFetch` for the legacy api, `nx/public/loc` for copi
 ## Files
 
 - `msm-next.js`: `<msm-next-plugin>` and DA SDK / mock setup
-- `model.js`: pure logic (header, state card, menu, details, target tree and picker, run summary); tests in `test/tools/plugins/msm-next`
+- `model.js`: pure logic (header, state card, menu, details, target tree and picker, rollout summary); tests in `test/tools/plugins/msm-next`
 - `real-localization.js`: core facade over `actions.daFetch`, `nx/public/loc` and the translation connector

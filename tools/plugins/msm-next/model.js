@@ -557,7 +557,7 @@ export function jobMessage(jobs = []) {
     .map(([state, label]) => [jobs.filter((job) => job.state === state).length, label])
     .filter(([count]) => count)
     .map(([count, label]) => `${count} ${label}`);
-  if (!parts.length) return 'No translation jobs found.';
+  if (!parts.length) return 'No translations found.';
   return `Translation status: ${parts.join(', ')}${progressText(jobs)}.`;
 }
 
