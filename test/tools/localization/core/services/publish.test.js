@@ -301,7 +301,9 @@ describe('publish service: stateMany', () => {
     });
     const service = createPublishService({ org: 'acme', api, ...BULK });
     assert.deepEqual(await service.stateMany(pages('/a', '/b', '/c')), [
-      { live: true, preview: true }, { live: false, preview: true }, { live: false, preview: false },
+      { live: true, preview: true },
+      { live: false, preview: true },
+      { live: false, preview: false },
     ]);
   });
 
