@@ -15,7 +15,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { availableActions } from '../../../../../tools/localization/core/domain/actions.js';
+import { availableActions, isRelevantAction } from '../../../../../tools/localization/core/domain/actions.js';
 
 const location = (overrides = {}) => ({
   id: 'global:/uk',
@@ -306,5 +306,30 @@ describe('availableActions: backend', () => {
     assert.deepEqual(actions.translate.reasons, [
       'language-not-translatable', 'backend-unsupported', 'copy-engine-unavailable', 'needs-review',
     ]);
+  });
+});
+
+describe('isRelevantAction', () => {
+  it('keeps enabled actions', () => {
+    assert.equal(isRelevantAction({ action: 'unlink', enabled: true, reasons: [] }), true);
+  });
+
+  it('keeps a disabled default action so the user learns why', () => {
+    const entry = {
+      action: 'rollout', enabled: false, default: true, reasons: ['backend-unsupported'],
+    };
+    assert.equal(isRelevantAction(entry), true);
+  });
+
+  it('keeps disabled actions blocked by review or an in-progress translation', () => {
+    ['needs-review', 'source-needs-review', 'translation-in-progress'].forEach((reason) => {
+      assert.equal(isRelevantAction({ action: 'unlink', enabled: false, reasons: [reason] }), true);
+    });
+  });
+
+  it('drops other disabled actions', () => {
+    ['no-source', 'language-not-translatable', 'connector-unsupported'].forEach((reason) => {
+      assert.equal(isRelevantAction({ action: 'translate', enabled: false, reasons: [reason] }), false);
+    });
   });
 });

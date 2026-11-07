@@ -19,6 +19,7 @@ import {
   REASON_LABELS,
 } from '../../apps/msm-next/data/display.js';
 import { targetPages } from '../../localization/core/domain/resolve.js';
+import { isRelevantAction } from '../../localization/core/domain/actions.js';
 import { parseLanguage } from '../../localization/core/domain/language.js';
 
 export const pageKey = ({ site, path }) => `${site}:${path}`;
@@ -202,7 +203,7 @@ const PUBLISHABLE = ['source', 'copies', 'inherited', 'independent'];
 const UPDATES = ['rollout', 'translate'];
 
 function fromEntry(entry, fields) {
-  if (!entry) return null;
+  if (!isRelevantAction(entry)) return null;
   return {
     kind: 'execute',
     action: entry.action,

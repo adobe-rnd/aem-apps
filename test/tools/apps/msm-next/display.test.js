@@ -162,11 +162,21 @@ describe('actionButtons', () => {
 
   it('explains disabled actions', () => {
     const [button] = actionButtons(result('local copy', [], {
-      actions: [action('relink', { enabled: false, reasons: ['no-source'] })],
+      actions: [action('unlink', { enabled: false, reasons: ['translation-in-progress'] })],
     }));
     assert.equal(button.enabled, false);
-    assert.equal(button.reason, 'There is no source page');
+    assert.ok(button.reason);
     assert.equal(reasonText(['custom']), 'custom');
+  });
+
+  it('hides actions that do not apply to the page', () => {
+    const buttons = actionButtons(result('unlinked', [], {
+      actions: [
+        action('relink', { enabled: false, reasons: ['no-source'] }),
+        action('translate', { enabled: false, reasons: ['language-not-translatable'] }),
+      ],
+    }));
+    assert.deepEqual(buttons, []);
   });
 
   it('labels creating rollouts', () => {

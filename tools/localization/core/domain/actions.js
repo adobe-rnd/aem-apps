@@ -18,6 +18,13 @@ import { canTranslate, defaultRefreshAction } from './language.js';
 export const REFRESHABLE = ['local copy', 'translation', 'inherited', 'not created'];
 const COPIES = ['local copy', 'translation'];
 const MISSING = ['inherited', 'not created'];
+const EXPLAINED = ['needs-review', 'source-needs-review', 'translation-in-progress'];
+
+export function isRelevantAction(entry) {
+  if (!entry) return false;
+  if (entry.enabled || entry.default) return true;
+  return (entry.reasons ?? []).some((reason) => EXPLAINED.includes(reason));
+}
 
 export function availableActions({
   status,

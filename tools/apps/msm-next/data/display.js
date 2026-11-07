@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { isRelevantAction } from '../../../localization/core/domain/actions.js';
 
 export const URGENCY = [
   'needs review',
@@ -206,7 +207,7 @@ export function nextStep(result) {
 }
 
 export function actionButtons(result) {
-  return (result?.actions ?? []).flatMap((entry) => {
+  return (result?.actions ?? []).filter(isRelevantAction).flatMap((entry) => {
     const base = {
       action: entry.action,
       enabled: entry.enabled,

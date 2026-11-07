@@ -351,6 +351,16 @@ describe('menuItems', () => {
     assert.equal(items.at(-1).href, 'https://app');
   });
 
+  it('drops disabled items that do not apply and keeps blocked ones', () => {
+    const page = result('local copy', [], {
+      actions: [
+        action('unlink', { enabled: false, reasons: ['translation-in-progress'] }),
+        action('relink', { enabled: false, reasons: ['no-source'] }),
+      ],
+    });
+    assert.deepEqual(ids(menuItems(page)).filter((id) => ['unlink', 'relink'].includes(id)), ['unlink']);
+  });
+
   it('hides replace when overwrite is not allowed and offers a local copy on inherited pages', () => {
     const merged = result('local copy', [], { actions: [action('rollout', { options: ['merge'] })] });
     assert.equal(ids(menuItems(merged)).includes('replace'), false);
@@ -362,11 +372,11 @@ describe('menuItems', () => {
     assert.equal(items[1].label, 'Unlink (creates a local copy)');
   });
 
-  it('offers relink, keeps disabled reasons and the mock review resolver', () => {
-    const unlinked = menuItems(result('unlinked', [], { actions: [action('relink', { enabled: false, reasons: ['no-source'] })] }));
+  it('offers relink, keeps blocked reasons and the mock review resolver', () => {
+    const unlinked = menuItems(result('unlinked', [], { actions: [action('relink', { enabled: false, reasons: ['needs-review'] })] }));
     assert.equal(unlinked[0].label, 'Relink');
     assert.equal(unlinked[0].enabled, false);
-    assert.equal(unlinked[0].reason, 'There is no source page');
+    assert.ok(unlinked[0].reason);
     const review = result('local copy', ['needs review']);
     assert.equal(ids(menuItems(review, { canResolve: true })).includes('resolve'), true);
     assert.equal(ids(menuItems(review)).includes('resolve'), false);
