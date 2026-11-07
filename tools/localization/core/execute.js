@@ -437,6 +437,30 @@ export default function createExecutor({
     return pages.map((ref) => results.get(ref));
   }
 
+  async function clearJobs(pages) {
+    refresh();
+    const changes = new Map();
+    const results = await Promise.all(pages.map(async (ref) => {
+      try {
+        const current = await page(ref.site, ref.path);
+        if (current.chain[0]?.info?.job) {
+          mergeChanges(changes, current.location.id, jobPatch(current, ref, null));
+        }
+        return { ...ref, ok: true };
+      } catch (error) {
+        return { ...ref, ok: false, error: error.message };
+      }
+    }));
+    try {
+      await patchAll(changes);
+    } catch (error) {
+      refresh();
+      return results.map((result) => ({ ...result, ok: false, error: error.message }));
+    }
+    refresh();
+    return results;
+  }
+
   async function reconnect(current, target, entry, option, progress) {
     if (!services.content?.remove) return { ok: false, error: 'content-unavailable' };
     const removed = await services.content.remove(target);
@@ -543,6 +567,6 @@ export default function createExecutor({
   }
 
   return {
-    execute, publish, checkJobs, translateMany,
+    execute, publish, checkJobs, translateMany, clearJobs,
   };
 }

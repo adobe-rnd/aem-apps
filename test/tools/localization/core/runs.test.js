@@ -194,3 +194,137 @@ describe('runs: propagate', () => {
     assert.ok(files.has('g:/fr/x'));
   });
 });
+
+const memoryRuns = () => {
+  const saved = new Map();
+  return { saved, save: async (run) => { saved.set(run.id, structuredClone(run)); return run; } };
+};
+
+describe('runs: cancel and archive', () => {
+  it('cancels waiting items, clears their jobs and keeps done items', async () => {
+    const runs = memoryRuns();
+    const { localization, index } = world({ ...staleChain(), runs });
+    const run = await localization.propagate({ pages: [{ site: 'g', path: '/global/x' }] });
+    assert.ok(index.get('g:/fr').pending['/fr/x'].job);
+    const progress = [];
+    const cancelled = await localization.cancelRun(run, {
+      onProgress: (each) => progress.push(each.summary),
+    });
+    assert.deepEqual(states(cancelled), {
+      'g:/emea/x': 'done',
+      'g:/amer/x': 'inherited',
+      'g:/fr/x': 'cancelled',
+      'g:/en-gb/x': 'done',
+      'r:/shop/x': 'inherited',
+      'g:/fr-be/x': 'cancelled',
+    });
+    assert.deepEqual(cancelled.items.find((item) => item.key === 'g:/fr/x').reasons, ['cancelled']);
+    assert.ok(cancelled.cancelledAt);
+    assert.equal(cancelled.summary.cancelled, 2);
+    assert.equal(index.get('g:/fr').pending['/fr/x'], undefined);
+    assert.ok(progress.length);
+    assert.equal(runs.saved.get(run.id).cancelledAt, cancelled.cancelledAt);
+    const { status } = await localization.page('g', '/fr/x');
+    assert.equal(status.sync.includes('translating'), false);
+  });
+
+  it('clears a job on an existing page so it returns to its prior status', async () => {
+    const { localization, index, files } = world({
+      pages: {
+        'g:/global/x': file('G', 'v2'),
+        'g:/emea/x': file('E', 'e1'),
+        'g:/fr/x': file('F', 'f1'),
+      },
+      indexes: {
+        'g:/emea': { pages: { E: { base: base('G', 'v2', 'e1') } }, pending: {} },
+        'g:/fr': {
+          pages: { F: { base: base('E', 'e0', 'f1'), job: { state: 'translating', jobId: 'j' } } },
+          pending: {},
+        },
+      },
+    });
+    const run = {
+      id: 'r1',
+      site: 'g',
+      items: [{
+        key: 'g:/fr/x', site: 'g', path: '/fr/x', state: 'translating',
+      }],
+    };
+    await localization.cancelRun(run);
+    assert.equal(index.get('g:/fr').pages.F.job, undefined);
+    assert.ok(index.get('g:/fr').pages.F.base);
+    assert.ok(files.has('g:/fr/x'));
+    const { status } = await localization.page('g', '/fr/x');
+    assert.deepEqual(status.sync, ['behind source']);
+  });
+
+  it('does not resume or retry cancelled runs', async () => {
+    const { localization, calls } = world(staleChain());
+    const run = await localization.propagate({ pages: [{ site: 'g', path: '/global/x' }] });
+    await localization.cancelRun(run);
+    const before = calls.merge.length;
+    assert.equal(await localization.retryRun(run), run);
+    assert.equal(await localization.resumeRun(run), run);
+    assert.equal(run.items.find((item) => item.key === 'g:/fr/x').state, 'cancelled');
+    assert.equal(calls.merge.length, before);
+  });
+
+  it('cancels pending and blocked items without jobs', async () => {
+    const { localization } = world(staleChain());
+    const run = {
+      id: 'r2',
+      site: 'g',
+      items: [
+        {
+          key: 'a', site: 'g', path: '/emea/x', state: 'failed',
+        },
+        {
+          key: 'b', site: 'g', path: '/en-gb/x', state: 'blocked',
+        },
+        {
+          key: 'c', site: 'g', path: '/amer/x', state: 'pending',
+        },
+        {
+          key: 'd', site: 'g', path: '/global/x', state: 'done',
+        },
+      ],
+    };
+    await localization.cancelRun(run);
+    assert.deepEqual(states(run), {
+      a: 'failed', b: 'cancelled', c: 'cancelled', d: 'done',
+    });
+  });
+
+  it('archives and unarchives finished runs', async () => {
+    const runs = memoryRuns();
+    const { localization } = world({ ...staleChain(), runs });
+    const run = await localization.propagate({
+      pages: [{ site: 'g', path: '/global/x' }], targets: ['g:/emea'],
+    });
+    const archived = await localization.archiveRun(run);
+    assert.ok(archived.archivedAt);
+    assert.ok(runs.saved.get(run.id).archivedAt);
+    const restored = await localization.archiveRun(run, false);
+    assert.equal(restored.archivedAt, undefined);
+    assert.equal(runs.saved.get(run.id).archivedAt, undefined);
+  });
+
+  it('refuses to archive an in-flight run but allows cancelled and failed ones', async () => {
+    const { localization } = world(staleChain());
+    const active = await localization.propagate({ pages: [{ site: 'g', path: '/global/x' }] });
+    assert.deepEqual(await localization.archiveRun(active), { ok: false, error: 'run-active' });
+    assert.equal(active.archivedAt, undefined);
+    await localization.cancelRun(active);
+    assert.ok((await localization.archiveRun(active)).archivedAt);
+    const failed = { id: 'f', site: 'g', items: [{ state: 'failed' }, { state: 'blocked' }] };
+    assert.ok((await localization.archiveRun(failed)).archivedAt);
+  });
+
+  it('lets a new propagate redo cancelled work', async () => {
+    const { localization } = world(staleChain());
+    const run = await localization.propagate({ pages: [{ site: 'g', path: '/global/x' }] });
+    await localization.cancelRun(run);
+    const again = await localization.propagate({ pages: [{ site: 'g', path: '/global/x' }] });
+    assert.equal(states(again)['g:/fr/x'], 'translating');
+  });
+});

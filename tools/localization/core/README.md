@@ -173,6 +173,8 @@ await localization.execute({ site, path, action, option }) // rollout | link | r
 await localization.publish({ site, path, live = true, cascade = false })
 await localization.propagate({ pages, targets?, option?, title?, onProgress? }) // staged run
 await localization.retryRun(run, { onProgress? })
+await localization.cancelRun(run, { onProgress? }) // → run
+await localization.archiveRun(run, archived = true) // → run | { ok: false, error }
 await localization.translateMany([{ site, path, option? }]) // grouped translate, one result per page
 await localization.checkJobs(pages) // polls each shared job once
 localization.runs                   // { save, read, list } at /{site}/.da/loc/runs/{id}.json
@@ -198,6 +200,8 @@ Failures: `option` is always checked against the location's `conflictBehavior` (
 - Saved through `providers.runs` after each depth; `summary` counts states. A failed save doesn't stop the run; it's recorded in `run.saveError`.
 - **Grouped translation**: pages translated together (all `translate` items of one depth in a run, or `translateMany`) are sent as one connector job per source location (source language): one item per source page (`item-N`), dests = the target languages, split into several jobs by the connector's `maxBatchItems` / `maxBatchBytes`. The job record (`/.da/loc/jobs/{id}.json`, in the first target's site; index entries carry `jobSite` when a page lives elsewhere) maps `itemId` → target page, language, source, base and option. Each target page keeps its own index `job` entry and status. `checkJobs` polls each shared job once and updates every page of it; `save` pages `getResults` per language once and caches it while sibling pages save. Records written before grouping (`lang`/`target`/`source` at the top level) are still read. A single-page translate is a group of one. Items × dests is a cross product, so a page is also translated into languages another page in the job needs.
 - `retryRun()` re-evaluates every item in a blocking state (failed, blocked, needs review, awaiting translation, skipped), so resolving a review or a translation unblocks its subtree. Translate stages are wired separately.
+- `cancelRun(run, { onProgress })` stops the remaining stages. `pending`, `blocked` and `translating` items become `cancelled` (`reasons: ['cancelled']`); `done` and other settled items stay as they are, and nothing is rolled back. A `translating` item's page has its index `job` cleared (the page's entry, or `pending[path]` for a page that doesn't exist yet), so it returns to its prior status and can be redone. The shared job record is left in place (the jobs provider can't delete; other pages of the job keep their own index entries). Sets `run.cancelledAt` and saves. If clearing a job fails, that item stays `translating`, `run.cancelError` is set and `cancelledAt` isn't. `cancelled` is terminal and non-blocking. `retryRun` and `resumeRun` return a cancelled run unchanged; a new `propagate` redoes the work.
+- `archiveRun(run, archived = true)` sets `run.archivedAt` (or clears it) and saves. A run with a `pending`, `running` or `translating` item is in flight: `{ ok: false, error: 'run-active' }`. Done, cancelled, failed and blocked runs can be archived. A failed save returns `{ ok: false, error: 'save-failed', message }`.
 - `runs.list(site)` treats a missing runs folder as empty and throws on other failures.
 
 `page()`:

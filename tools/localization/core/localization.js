@@ -199,6 +199,7 @@ export default function createLocalization({
     page,
     execute: executor.execute,
     checkJobs: executor.checkJobs,
+    clearJobs: executor.clearJobs,
     translateMany: executor.translateMany,
     orgModel,
     refresh,
@@ -217,6 +218,8 @@ export default function createLocalization({
     propagate: runner.propagate,
     retryRun: runner.retryRun,
     resumeRun: runner.resumeRun,
+    cancelRun: runner.cancelRun,
+    archiveRun: runner.archiveRun,
     runs: providers.runs ?? null,
   };
 }

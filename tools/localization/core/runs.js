@@ -16,6 +16,8 @@
 import planPropagation from './domain/plan.js';
 
 const BLOCKING = new Set(['failed', 'blocked', 'needs review', 'translating', 'skipped']);
+const CANCELLABLE = new Set(['pending', 'blocked', 'translating']);
+const ACTIVE = new Set(['pending', 'running', 'translating']);
 const SKIPPED = ['unlinked', 'standalone', 'root'];
 const REFRESH = ['rollout', 'translate'];
 
@@ -29,7 +31,7 @@ function summarize(items) {
 }
 
 export default function createRunner({
-  page, execute, checkJobs, translateMany, orgModel, refresh, runs,
+  page, execute, checkJobs, clearJobs, translateMany, orgModel, refresh, runs,
 }) {
   const settle = (item, state, extra = {}) => Object.assign(item, {
     state, reasons: [], ...extra, at: new Date().toISOString(),
@@ -163,6 +165,7 @@ export default function createRunner({
   }
 
   async function retryRun(run, { onProgress } = {}) {
+    if (run.cancelledAt) return run;
     run.items.forEach((item) => {
       if (BLOCKING.has(item.state)) {
         Object.assign(item, {
@@ -174,10 +177,47 @@ export default function createRunner({
   }
 
   async function resumeRun(run, { onProgress } = {}) {
+    if (run.cancelledAt) return run;
     const translating = run.items.filter((item) => item.state === 'translating');
     if (translating.length) await checkJobs(translating.map(({ site, path }) => ({ site, path })));
     return retryRun(run, { onProgress });
   }
 
-  return { propagate, retryRun, resumeRun };
+  async function cancelRun(run, { onProgress } = {}) {
+    const items = run.items.filter((item) => CANCELLABLE.has(item.state));
+    const waiting = items.filter((item) => item.state === 'translating');
+    const cleared = await clearJobs(waiting.map(({ site, path }) => ({ site, path })));
+    const failed = new Set(waiting.filter((_, index) => !cleared[index].ok));
+    items.filter((item) => !failed.has(item)).forEach((item) => {
+      settle(item, 'cancelled', { reasons: ['cancelled'], error: undefined });
+      run.summary = summarize(run.items);
+      onProgress?.(run);
+    });
+    run.summary = summarize(run.items);
+    run.updatedAt = new Date().toISOString();
+    if (failed.size) {
+      run.cancelError = cleared.find((result) => !result.ok).error;
+    } else {
+      run.cancelError = undefined;
+      run.cancelledAt = run.updatedAt;
+    }
+    await save(run);
+    refresh();
+    return run;
+  }
+
+  async function archiveRun(run, archived = true) {
+    if (archived && run.items.some((item) => ACTIVE.has(item.state))) {
+      return { ok: false, error: 'run-active' };
+    }
+    if (archived) run.archivedAt = new Date().toISOString();
+    else run.archivedAt = undefined;
+    await save(run);
+    if (run.saveError) return { ok: false, error: 'save-failed', message: run.saveError };
+    return run;
+  }
+
+  return {
+    propagate, retryRun, resumeRun, cancelRun, archiveRun,
+  };
 }
