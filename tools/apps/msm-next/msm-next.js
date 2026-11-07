@@ -947,11 +947,16 @@ async function resolveSetup() {
   const site = params.get('site') || sdk.context?.repo;
   if (!org || !site) return mockSetup('No org or site in the DA context, so this shows mock data.');
   const { default: createRealLocalization } = await import('./data/real-localization.js');
+  const translateDelay = Number(params.get('translateDelay')) || 0;
+  const localization = await createRealLocalization({ org, actions: sdk.actions, translateDelay });
   return {
     mode: 'real',
     org,
     site,
-    localization: createRealLocalization({ org, actions: sdk.actions }),
+    localization,
+    notice: localization.translationError
+      ? `Translation is unavailable: ${localization.translationError}`
+      : undefined,
   };
 }
 

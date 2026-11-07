@@ -13,40 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/* eslint-disable import/no-unresolved */
 import { createLocalization } from '../../localization/core/index.js';
-import createLegacyApi, { DA_ORIGIN } from '../../localization/core/api/legacy.js';
-import { createTranslationConnectors } from '../../localization/connectors/index.js';
-import { createTranslateProxy } from '../../localization/connectors/host.js';
+import createLegacyApi from '../../localization/core/api/legacy.js';
+import { createConnectors, createLocAdapter } from '../../apps/msm-next/data/real-localization.js';
 
-const NX_LOC = 'https://da.live/nx/public/loc/index.js';
-
-function createLocAdapter(daFetch) {
-  let engine;
-  const load = () => {
-    engine ??= import(NX_LOC);
-    return engine;
-  };
-  const run = (method) => async (options) => {
-    const module = await load();
-    return module[method]({ fetch: daFetch, daOrigin: DA_ORIGIN, ...options });
-  };
-  return { mergeCopy: run('mergeCopy'), overwriteCopy: run('overwriteCopy') };
-}
-
-export async function createConnectors({ daFetch, simulatedDelayMs = 0, name = 'google' }) {
-  try {
-    const connectors = await createTranslationConnectors({
-      name,
-      settings: { simulatedDelayMs },
-      host: { translateProxy: createTranslateProxy({ fetch: daFetch }) },
-    });
-    if (connectors?.error) return { error: connectors.error.message ?? connectors.error.code };
-    return { connectors };
-  } catch (e) {
-    return { error: e.message || String(e) };
-  }
-}
+export { createConnectors };
 
 export default async function createRealLocalization({ org, actions, translateDelay = 0 }) {
   const api = createLegacyApi({ fetch: actions.daFetch });
