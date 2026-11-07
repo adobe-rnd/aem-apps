@@ -92,7 +92,7 @@ export default function createRunner({
     try {
       results = await translateMany(batch.map(({ item, option }) => ({
         site: item.site, path: item.path, option,
-      })));
+      })), { title: run.title ?? undefined });
     } catch (error) {
       results = batch.map(() => ({ ok: false, error: error.message }));
     }
@@ -188,6 +188,8 @@ export default function createRunner({
     const waiting = items.filter((item) => item.state === 'translating');
     const cleared = await clearJobs(waiting.map(({ site, path }) => ({ site, path })));
     const failed = new Set(waiting.filter((_, index) => !cleared[index].ok));
+    const warnings = [...new Set(cleared.flatMap((result) => result.cancelWarnings ?? []))];
+    run.cancelWarnings = warnings.length ? warnings : undefined;
     items.filter((item) => !failed.has(item)).forEach((item) => {
       settle(item, 'cancelled', { reasons: ['cancelled'], error: undefined });
       run.summary = summarize(run.items);

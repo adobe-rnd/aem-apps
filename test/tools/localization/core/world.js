@@ -49,13 +49,18 @@ export function createTranslator() {
     sent: [],
     statusCalls: 0,
     resultCalls: [],
+    cancelCalls: [],
+    cancelSupported: false,
+    cancelError: null,
   };
   const langStatus = (lang) => {
     if (translator.failed || translator.failedLangs.includes(lang)) return 'failed';
     return translator.ready ? 'translated' : 'in-progress';
   };
   translator.connectors = {
-    get describe() { return { capabilities: translator.limits ?? {} }; },
+    get describe() {
+      return { capabilities: { ...translator.limits, cancel: translator.cancelSupported } };
+    },
     supports: async () => true,
     call: async (method, args) => {
       if (method === 'send') {
@@ -79,6 +84,13 @@ export function createTranslator() {
           .map((item) => ({ id: item.id, content: `[${args.lang}] ${item.content}` }));
         const more = end < args.jobState.items.length;
         return { jobState: args.jobState, items, ...(more ? { cursor: String(end) } : {}) };
+      }
+      if (method === 'cancel') {
+        translator.cancelCalls.push({ n: args.jobState.n, lang: args.lang });
+        const { jobState } = args;
+        if (translator.cancelError) return { jobState, ok: false, error: translator.cancelError };
+        const cancelled = [...(jobState.cancelled ?? []), args.lang];
+        return { jobState: { ...jobState, cancelled }, ok: true };
       }
       return { error: { code: 'unknown', message: method } };
     },

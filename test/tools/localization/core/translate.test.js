@@ -313,4 +313,13 @@ describe('runs with grouped translation', () => {
     const resumed = await world.localization.resumeRun(run);
     assert.deepEqual(resumed.items.map((item) => item.state), ['done', 'done', 'done', 'done']);
   });
+
+  it('sends the run title as the vendor job title and a default for direct calls', async () => {
+    const world = groupSetup();
+    await world.localization.propagate({ pages: pagesOf(['/global/x']), title: 'Spring launch' });
+    assert.equal(world.translator.sent[0].job.title, 'Spring launch');
+    const direct = groupSetup();
+    await direct.localization.translateMany([{ site: 'g', path: '/fr/x' }]);
+    assert.equal(direct.translator.sent[0].job.title, 'MSM /global/x');
+  });
 });

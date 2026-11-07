@@ -328,3 +328,43 @@ describe('runs: cancel and archive', () => {
     assert.equal(states(again)['g:/fr/x'], 'translating');
   });
 });
+
+describe('runs: vendor cancel', () => {
+  const cancelWorld = (configure) => {
+    const translator = createTranslator();
+    configure?.(translator);
+    return { ...world({ ...staleChain(), translator }), translator };
+  };
+
+  it('cancels each job and language once when the connector supports it', async () => {
+    const { localization, translator } = cancelWorld((each) => {
+      Object.assign(each, { cancelSupported: true });
+    });
+    const run = await localization.propagate({ pages: [{ site: 'g', path: '/global/x' }] });
+    const cancelled = await localization.cancelRun(run);
+    assert.equal(translator.cancelCalls.length, 1);
+    assert.equal(translator.cancelCalls[0].lang, 'fr');
+    assert.equal(cancelled.cancelWarnings, undefined);
+    assert.ok(cancelled.cancelledAt);
+  });
+
+  it('does not call cancel when the connector does not support it', async () => {
+    const { localization, translator } = cancelWorld();
+    const run = await localization.propagate({ pages: [{ site: 'g', path: '/global/x' }] });
+    const cancelled = await localization.cancelRun(run);
+    assert.equal(translator.cancelCalls.length, 0);
+    assert.ok(cancelled.cancelledAt);
+  });
+
+  it('collects a failed vendor cancel as a warning and still clears the page job', async () => {
+    const { localization, translator, index } = cancelWorld((each) => Object.assign(each, {
+      cancelSupported: true, cancelError: { code: 'vendor', message: 'boom' },
+    }));
+    const run = await localization.propagate({ pages: [{ site: 'g', path: '/global/x' }] });
+    const cancelled = await localization.cancelRun(run);
+    assert.equal(translator.cancelCalls.length, 1);
+    assert.deepEqual(cancelled.cancelWarnings, ['fr: boom']);
+    assert.equal(index.get('g:/fr').pending['/fr/x'], undefined);
+    assert.ok(cancelled.cancelledAt);
+  });
+});

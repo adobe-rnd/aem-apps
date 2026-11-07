@@ -142,6 +142,8 @@ export default function createExecutor({
     ? `${LABEL} ${sources[0].path}`
     : `${LABEL} ${sources.length} pages from ${location.id}`);
 
+  const jobTitle = (title, sources, location) => title || groupTitle(sources, location);
+
   function chunkItems(items, { maxBatchItems, maxBatchBytes } = {}) {
     const chunks = [];
     let chunk = [];
@@ -162,12 +164,12 @@ export default function createExecutor({
     return chunks;
   }
 
-  async function sendChunk(members, items, results) {
+  async function sendChunk(members, items, results, title) {
     const { source } = members[0];
     const keys = new Set(items.map((item) => item.key));
     const chunkMembers = members.filter((member) => keys.has(pageKey(member.source)));
     const job = {
-      title: groupTitle(items.map((item) => item.source), source.location),
+      title: jobTitle(title, items.map((item) => item.source), source.location),
       org,
       site: source.site,
       src: source.location.language,
@@ -221,7 +223,7 @@ export default function createExecutor({
     }
   }
 
-  async function sendGroup(members, results) {
+  async function sendGroup(members, results, title) {
     const unique = new Map(members.map((member) => [pageKey(member.source), member.source]));
     const sources = [...unique.values()];
     const contents = await Promise.all(sources.map((source) => services.content.read(source)));
@@ -245,18 +247,18 @@ export default function createExecutor({
     const limits = services.translationConnectors.describe?.capabilities;
     await chunkItems(items, limits).reduce(async (previous, chunk) => {
       await previous;
-      await sendChunk(readableMembers, chunk, results);
+      await sendChunk(readableMembers, chunk, results, title);
     }, Promise.resolve());
   }
 
-  async function sendGroups(prepared) {
+  async function sendGroups(prepared, title) {
     const results = new Map();
     const groups = new Map();
     prepared.forEach((member) => {
       const key = member.source.location.id;
       groups.set(key, [...(groups.get(key) ?? []), member]);
     });
-    await Promise.all([...groups.values()].map((members) => sendGroup(members, results)));
+    await Promise.all([...groups.values()].map((members) => sendGroup(members, results, title)));
     return results;
   }
 
@@ -266,7 +268,7 @@ export default function createExecutor({
     return (await sendGroups([prepared])).get(prepared);
   }
 
-  async function translateMany(targets) {
+  async function translateMany(targets, { title } = {}) {
     refresh();
     try {
       const slots = await Promise.all(targets.map(async ({ site, path, option }) => {
@@ -281,7 +283,7 @@ export default function createExecutor({
         }
       }));
       const prepared = slots.filter((slot) => slot.prepared).map((slot) => slot.prepared);
-      const results = await sendGroups(prepared);
+      const results = await sendGroups(prepared, title);
       return targets.map(({ site, path }, index) => ({
         site, path, ...(slots[index].prepared ? results.get(slots[index].prepared) : slots[index]),
       }));
@@ -437,13 +439,72 @@ export default function createExecutor({
     return pages.map((ref) => results.get(ref));
   }
 
+  async function cancelAtVendor(jobSite, jobId, langs) {
+    const record = await providers.jobs.read(jobSite, jobId);
+    if (!record) return [];
+    const warnings = [];
+    const jobState = await [...langs].reduce(async (previous, lang) => {
+      const state = await previous;
+      try {
+        const result = await services.translationConnectors.call('cancel', { jobState: state, lang });
+        if (result?.ok === false || result?.error) {
+          warnings.push(`${lang}: ${result.error?.message ?? result.error ?? 'cancel-failed'}`);
+          return result.jobState ?? state;
+        }
+        return result?.jobState ?? state;
+      } catch (error) {
+        warnings.push(`${lang}: ${error.message}`);
+        return state;
+      }
+    }, Promise.resolve(record.jobState));
+    try {
+      if (jobState !== record.jobState) {
+        await providers.jobs.save(jobSite, jobId, { ...record, jobState });
+      }
+    } catch (error) {
+      warnings.push(`${jobId}: ${error.message}`);
+    }
+    return warnings;
+  }
+
+  const supportsCancel = () => {
+    const connectors = services.translationConnectors;
+    return Boolean(connectors?.call && connectors.describe?.capabilities?.cancel);
+  };
+
+  async function cancelVendorJobs(waiting) {
+    if (!waiting.length || !supportsCancel()) return [];
+    const jobs = new Map();
+    await Promise.all(waiting.map(async ({ ref, current }) => {
+      const job = current.chain[0]?.info?.job;
+      if (!job?.jobId || job.state !== 'translating') return;
+      const jobSite = jobSiteOf(job, ref.site);
+      const key = `${jobSite}\n${job.jobId}`;
+      const group = jobs.get(key) ?? { jobSite, jobId: job.jobId, langs: new Set() };
+      try {
+        const record = await providers.jobs.read(jobSite, job.jobId);
+        const tracked = record && trackedFor(record, ref);
+        if (tracked?.lang) group.langs.add(tracked.lang);
+      } catch {
+        return;
+      }
+      jobs.set(key, group);
+    }));
+    const warnings = await Promise.all([...jobs.values()]
+      .filter(({ langs }) => langs.size)
+      .map(({ jobSite, jobId, langs }) => cancelAtVendor(jobSite, jobId, langs)));
+    return warnings.flat();
+  }
+
   async function clearJobs(pages) {
     refresh();
     const changes = new Map();
+    const waiting = [];
     const results = await Promise.all(pages.map(async (ref) => {
       try {
         const current = await page(ref.site, ref.path);
         if (current.chain[0]?.info?.job) {
+          waiting.push({ ref, current });
           mergeChanges(changes, current.location.id, jobPatch(current, ref, null));
         }
         return { ...ref, ok: true };
@@ -451,6 +512,10 @@ export default function createExecutor({
         return { ...ref, ok: false, error: error.message };
       }
     }));
+    const warnings = await cancelVendorJobs(waiting).catch((error) => [error.message]);
+    if (warnings.length) {
+      results.forEach((result) => Object.assign(result, { cancelWarnings: warnings }));
+    }
     try {
       await patchAll(changes);
     } catch (error) {
