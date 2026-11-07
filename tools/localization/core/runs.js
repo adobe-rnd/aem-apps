@@ -29,7 +29,7 @@ function summarize(items) {
 }
 
 export default function createRunner({
-  page, execute, checkJobs, orgModel, refresh, runs,
+  page, execute, checkJobs, translateMany, orgModel, refresh, runs,
 }) {
   const settle = (item, state, extra = {}) => Object.assign(item, {
     state, reasons: [], ...extra, at: new Date().toISOString(),
@@ -49,7 +49,7 @@ export default function createRunner({
     return settle(item, 'done', { action, ...warnings });
   }
 
-  async function processItem(run, item) {
+  async function processItem(run, item, batch) {
     const parent = item.parent && run.items.find((each) => each.key === item.parent);
     if (parent && BLOCKING.has(parent.state)) {
       return settle(item, 'blocked', { reasons: [`parent:${parent.state}`] });
@@ -76,7 +76,32 @@ export default function createRunner({
     if (!chosen.enabled) return settle(item, 'blocked', { action: chosen.action, reasons: chosen.reasons });
     if (status.sync.includes('current')) return settle(item, 'up to date');
     const options = chosen.options ?? current.location.conflictBehavior;
+    if (chosen.action === 'translate' && translateMany) {
+      const option = run.option && options.includes(run.option) ? run.option : undefined;
+      batch.push({ item, option });
+      return undefined;
+    }
     return perform(item, chosen.action, run.option, options);
+  }
+
+  async function sendBatch(run, batch, onProgress) {
+    if (!batch.length) return;
+    let results;
+    try {
+      results = await translateMany(batch.map(({ item, option }) => ({
+        site: item.site, path: item.path, option,
+      })));
+    } catch (error) {
+      results = batch.map(() => ({ ok: false, error: error.message }));
+    }
+    batch.forEach(({ item }, index) => {
+      const result = results[index];
+      const action = 'translate';
+      if (result.ok) settle(item, 'translating', { action });
+      else settle(item, 'failed', { action, error: result.error ?? 'failed' });
+      run.summary = summarize(run.items);
+      onProgress?.(run);
+    });
   }
 
   async function save(run) {
@@ -95,16 +120,18 @@ export default function createRunner({
       await previous;
       refresh();
       const pending = run.items.filter((item) => item.depth === depth && item.state === 'pending');
+      const batch = [];
       await Promise.all(pending.map(async (item) => {
         settle(item, 'running');
         try {
-          await processItem(run, item);
+          await processItem(run, item, batch);
         } catch (error) {
           settle(item, 'failed', { error: error.message });
         }
         run.summary = summarize(run.items);
         onProgress?.(run);
       }));
+      await sendBatch(run, batch, onProgress);
       run.summary = summarize(run.items);
       await save(run);
     }, Promise.resolve());

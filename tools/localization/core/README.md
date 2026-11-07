@@ -173,6 +173,8 @@ await localization.execute({ site, path, action, option }) // rollout | link | r
 await localization.publish({ site, path, live = true, cascade = false })
 await localization.propagate({ pages, targets?, option?, title?, onProgress? }) // staged run
 await localization.retryRun(run, { onProgress? })
+await localization.translateMany([{ site, path, option? }]) // grouped translate, one result per page
+await localization.checkJobs(pages) // polls each shared job once
 localization.runs                   // { save, read, list } at /{site}/.da/loc/runs/{id}.json
 await localization.orgModel()       // parseConfig over every site in the org
 localization.refresh()              // clear all caches
@@ -194,6 +196,7 @@ Failures: `option` is always checked against the location's `conflictBehavior` (
 - **Run**: depth by depth; each item re-reads its page then settles as `done` (rollout or link), `up to date`, `inherited`, `awaiting translation`, `needs review` (merge left diffs), `skipped` (unlinked, standalone, no action), `blocked` (action disabled, or parent in a blocking state) or `failed`. Blocking states: failed, blocked, needs review, awaiting translation, skipped.
 - `option` (merge/overwrite) applies where the location allows it.
 - Saved through `providers.runs` after each depth; `summary` counts states. A failed save doesn't stop the run; it's recorded in `run.saveError`.
+- **Grouped translation**: pages translated together (all `translate` items of one depth in a run, or `translateMany`) are sent as one connector job per source location (source language): one item per source page (`item-N`), dests = the target languages, split into several jobs by the connector's `maxBatchItems` / `maxBatchBytes`. The job record (`/.da/loc/jobs/{id}.json`, in the first target's site; index entries carry `jobSite` when a page lives elsewhere) maps `itemId` → target page, language, source, base and option. Each target page keeps its own index `job` entry and status. `checkJobs` polls each shared job once and updates every page of it; `save` pages `getResults` per language once and caches it while sibling pages save. Records written before grouping (`lang`/`target`/`source` at the top level) are still read. A single-page translate is a group of one. Items × dests is a cross product, so a page is also translated into languages another page in the job needs.
 - `retryRun()` re-evaluates every item in a blocking state (failed, blocked, needs review, awaiting translation, skipped), so resolving a review or a translation unblocks its subtree. Translate stages are wired separately.
 - `runs.list(site)` treats a missing runs folder as empty and throws on other failures.
 

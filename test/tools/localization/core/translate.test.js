@@ -148,3 +148,169 @@ describe('runs with translation', () => {
     assert.equal(resumed.items[0].action, 'save');
   });
 });
+
+// g:/global en (root)
+// ├── g:/fr fr  rollout, translate
+// ├── g:/de de  rollout, translate
+// └── h:/en en  (root) -> unrelated
+const GROUP_CONFIGS = {
+  g: [
+    { path: '/global', language: 'en' },
+    {
+      path: '/fr', language: 'fr', source: '/global', actions: 'rollout, translate',
+    },
+    {
+      path: '/de', language: 'de', source: '/global', actions: 'rollout, translate',
+    },
+  ],
+};
+
+const groupSetup = (options = {}) => setup({
+  configs: GROUP_CONFIGS,
+  pages: {
+    'g:/global/x': file('GX', 'v1'),
+    'g:/global/y': file('GY', 'v1'),
+    'g:/global/z': file('GZ', 'v1'),
+  },
+  ...options,
+});
+
+const pagesOf = (paths) => paths.map((path) => ({ site: 'g', path }));
+const frDe = ['/fr/x', '/fr/y', '/de/x', '/de/y'];
+
+describe('grouped translation', () => {
+  it('sends one job for several pages and languages from the same source location', async () => {
+    const world = groupSetup();
+    const results = await world.localization.translateMany(pagesOf(frDe));
+    assert.deepEqual(results.map((result) => result.ok), [true, true, true, true]);
+    assert.equal(world.translator.sent.length, 1);
+    const [{ job, items }] = world.translator.sent;
+    assert.equal(job.src, 'en');
+    assert.deepEqual(job.dests, ['fr', 'de']);
+    assert.deepEqual(items.map((item) => [item.id, item.path]), [['item-1', '/x'], ['item-2', '/y']]);
+    assert.equal(world.jobs.size, 1);
+    const jobIds = ['/fr/x', '/fr/y', '/de/x', '/de/y'].map((path) => {
+      const location = path.startsWith('/fr') ? 'g:/fr' : 'g:/de';
+      return world.index.get(location).pending[path].job.jobId;
+    });
+    assert.equal(new Set(jobIds).size, 1);
+    const after = await world.localization.page('g', '/de/y');
+    assert.deepEqual(after.status.sync, ['translating']);
+  });
+
+  it('splits into several jobs when the connector batch limits are exceeded', async () => {
+    const world = groupSetup();
+    world.translator.limits = { maxBatchItems: 1 };
+    await world.localization.translateMany(pagesOf(['/fr/x', '/fr/y', '/fr/z']));
+    assert.deepEqual(world.translator.sent.map((sent) => sent.items.map((item) => item.path)), [['/x'], ['/y'], ['/z']]);
+    assert.equal(world.jobs.size, 3);
+
+    const bytes = groupSetup();
+    bytes.translator.limits = { maxBatchBytes: '<main>g:/global/x</main>'.length * 2 };
+    await bytes.localization.translateMany(pagesOf(['/fr/x', '/fr/y', '/fr/z']));
+    assert.deepEqual(bytes.translator.sent.map((sent) => sent.items.length), [2, 1]);
+  });
+
+  it('fails only the pages of a refused job', async () => {
+    const world = groupSetup();
+    world.translator.limits = { maxBatchItems: 1 };
+    const send = world.translator.connectors.call;
+    let calls = 0;
+    world.translator.connectors.call = async (method, args) => {
+      if (method === 'send') {
+        calls += 1;
+        if (calls === 2) return { jobState: null, error: { code: 'too-large', message: 'big' } };
+      }
+      return send(method, args);
+    };
+    const results = await world.localization.translateMany(pagesOf(['/fr/x', '/fr/y']));
+    assert.deepEqual(results.map(({ ok, error }) => ({ ok, error })), [{ ok: true, error: undefined }, { ok: false, error: 'big' }]);
+    assert.equal(world.index.get('g:/fr').pending['/fr/y'], undefined);
+  });
+
+  it('polls a shared job once and fans the status out per page and language', async () => {
+    const world = groupSetup();
+    await world.localization.translateMany(pagesOf(frDe));
+    world.translator.statusCalls = 0;
+    assert.deepEqual(await world.localization.checkJobs(pagesOf(frDe)), pagesOf(frDe)
+      .map((ref) => ({ ...ref, state: 'translating', progress: { done: 0, total: 1 } })));
+    assert.equal(world.translator.statusCalls, 1);
+
+    world.translator.ready = true;
+    world.translator.failedLangs = ['de'];
+    const checked = await world.localization.checkJobs(pagesOf(frDe));
+    assert.deepEqual(checked.map((result) => [result.path, result.state]), [
+      ['/fr/x', 'ready'], ['/fr/y', 'ready'], ['/de/x', 'failed'], ['/de/y', 'failed'],
+    ]);
+    assert.equal(world.index.get('g:/fr').pending['/fr/x'].job.state, 'ready');
+    assert.equal(world.index.get('g:/de').pending['/de/x'], undefined);
+    const json = JSON.stringify(checked);
+    assert.equal(json.includes('jobState'), false);
+    assert.equal(json.includes('jobId'), false);
+  });
+
+  it('updates pages that were not asked about when the shared job finishes', async () => {
+    const world = groupSetup();
+    await world.localization.translateMany(pagesOf(['/fr/x', '/fr/y']));
+    world.translator.ready = true;
+    await world.localization.checkJobs(pagesOf(['/fr/x']));
+    assert.equal(world.index.get('g:/fr').pending['/fr/y'].job.state, 'ready');
+  });
+
+  it('saves each page from the shared job, paging results once per language', async () => {
+    const world = groupSetup();
+    world.translator.pageSize = 1;
+    await world.localization.translateMany(pagesOf(frDe));
+    world.translator.ready = true;
+    await world.localization.checkJobs(pagesOf(frDe));
+    const saved = await Promise.all(pagesOf(frDe).map((ref) => world.localization
+      .execute({ ...ref, action: 'save' })));
+    assert.deepEqual(saved.map((result) => result.ok), [true, true, true, true]);
+    assert.deepEqual(world.calls.content.sort(), [
+      '[de] <main>g:/global/x</main>', '[de] <main>g:/global/y</main>',
+      '[fr] <main>g:/global/x</main>', '[fr] <main>g:/global/y</main>',
+    ]);
+    assert.equal(world.translator.resultCalls.filter((call) => call.lang === 'fr').length, 2);
+    const after = await world.localization.page('g', '/de/y');
+    assert.equal(after.status.relationship, 'translation');
+  });
+
+  it('keeps reading single-page job records saved before grouping', async () => {
+    const world = groupSetup();
+    world.files.set('g:/fr/x', file('FX', 'f1'));
+    world.index.set('g:/fr', {
+      pages: { FX: { job: { state: 'translating', jobId: 'old' } } }, pending: {},
+    });
+    world.jobs.set('g:old', {
+      jobState: { n: 9, items: [{ id: 'item-1', content: '<main>old</main>' }], dests: ['fr'] },
+      lang: 'fr',
+      source: { site: 'g', path: '/global/x' },
+      sourceId: 'GX',
+      sourceVersion: 'v1',
+      target: { site: 'g', path: '/fr/x' },
+      option: null,
+      sentAt: 'then',
+    });
+    world.translator.ready = true;
+    assert.equal((await world.localization.checkJobs(pagesOf(['/fr/x'])))[0].state, 'ready');
+    const saved = await world.localization.execute({
+      site: 'g', path: '/fr/x', action: 'save',
+    });
+    assert.equal(saved.ok, true);
+    assert.deepEqual(world.calls.content, ['[fr] <main>old</main>']);
+  });
+});
+
+describe('runs with grouped translation', () => {
+  it('sends one job for all pages translated at the same depth', async () => {
+    const world = groupSetup();
+    const run = await world.localization.propagate({ pages: pagesOf(['/global/x', '/global/y']) });
+    assert.equal(world.translator.sent.length, 1);
+    assert.deepEqual(world.translator.sent[0].job.dests.sort(), ['de', 'fr']);
+    assert.equal(world.translator.sent[0].items.length, 2);
+    assert.deepEqual(run.items.map((item) => item.state), ['translating', 'translating', 'translating', 'translating']);
+    world.translator.ready = true;
+    const resumed = await world.localization.resumeRun(run);
+    assert.deepEqual(resumed.items.map((item) => item.state), ['done', 'done', 'done', 'done']);
+  });
+});

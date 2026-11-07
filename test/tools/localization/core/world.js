@@ -40,9 +40,22 @@ function patchIndex(index, locationId, changes) {
 
 export function createTranslator() {
   const translator = {
-    ready: false, failed: false, sendError: null, sent: [],
+    ready: false,
+    failed: false,
+    failedLangs: [],
+    sendError: null,
+    limits: undefined,
+    pageSize: Infinity,
+    sent: [],
+    statusCalls: 0,
+    resultCalls: [],
+  };
+  const langStatus = (lang) => {
+    if (translator.failed || translator.failedLangs.includes(lang)) return 'failed';
+    return translator.ready ? 'translated' : 'in-progress';
   };
   translator.connectors = {
+    get describe() { return { capabilities: translator.limits ?? {} }; },
     supports: async () => true,
     call: async (method, args) => {
       if (method === 'send') {
@@ -52,17 +65,20 @@ export function createTranslator() {
         return { jobState: { n: translator.sent.length, items: args.items, dests } };
       }
       if (method === 'getStatus') {
-        const status = (translator.failed && 'failed') || (translator.ready ? 'translated' : 'in-progress');
+        translator.statusCalls += 1;
         const langs = Object.fromEntries(args.jobState.dests.map((lang) => [lang, {
-          status, done: translator.ready ? 1 : 0, total: 1,
+          status: langStatus(lang), done: translator.ready ? 1 : 0, total: 1,
         }]));
         return { jobState: args.jobState, langs };
       }
       if (method === 'getResults') {
-        return {
-          jobState: args.jobState,
-          items: args.jobState.items.map((item) => ({ id: item.id, content: `[${args.lang}] ${item.content}` })),
-        };
+        translator.resultCalls.push({ n: args.jobState.n, lang: args.lang, cursor: args.cursor });
+        const start = Number(args.cursor ?? 0);
+        const end = start + translator.pageSize;
+        const items = args.jobState.items.slice(start, end)
+          .map((item) => ({ id: item.id, content: `[${args.lang}] ${item.content}` }));
+        const more = end < args.jobState.items.length;
+        return { jobState: args.jobState, items, ...(more ? { cursor: String(end) } : {}) };
       }
       return { error: { code: 'unknown', message: method } };
     },
