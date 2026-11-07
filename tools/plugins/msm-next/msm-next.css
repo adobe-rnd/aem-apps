@@ -1,0 +1,463 @@
+/*
+ * Copyright 2026 Adobe Systems Incorporated
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 14px 16px 20px;
+  font-family: var(--body-font-family, adobe-clean, system-ui, sans-serif);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--s2-gray-800, #292929);
+}
+
+p,
+h1,
+h2,
+ol,
+ul,
+dl,
+dd {
+  margin: 0;
+  padding: 0;
+}
+
+h1 {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--s2-gray-700, #505050);
+}
+
+section {
+  padding-top: 12px;
+  border-top: 1px solid var(--s2-gray-200, #e1e1e1);
+}
+
+.muted {
+  color: var(--s2-gray-600, #717171);
+}
+
+h2 .muted {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 0;
+}
+
+.error-text {
+  color: var(--s2-red-900, #d31510);
+}
+
+.notice {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--s2-blue-100, #e5f0fe);
+  color: var(--s2-blue-1000, #0d47a1);
+  font-size: 12px;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.head-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.quiet-link {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--s2-blue-900, #3b63fb);
+  text-decoration: none;
+}
+
+.quiet-link:hover {
+  text-decoration: underline;
+}
+
+.path {
+  font-size: 12px;
+  color: var(--s2-gray-600, #717171);
+  overflow-wrap: anywhere;
+}
+
+.where {
+  font-size: 12px;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border: 1px solid var(--s2-gray-400, #b1b1b1);
+  border-radius: 999px;
+  background: var(--s2-gray-50, #f8f8f8);
+  color: var(--s2-gray-800, #292929);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.badge.type {
+  border-color: transparent;
+  background: var(--s2-gray-100, #f3f3f3);
+}
+
+.badge.positive {
+  border-color: var(--s2-green-600, #12b571);
+  background: var(--s2-green-100, #e9f9f1);
+  color: var(--s2-green-1000, #0a6b3d);
+}
+
+.badge.notice {
+  border-color: var(--s2-orange-600, #f68511);
+  background: var(--s2-orange-100, #fff3e6);
+  color: var(--s2-orange-1000, #8a3b00);
+}
+
+.badge.negative {
+  border-color: var(--s2-red-600, #f75c46);
+  background: var(--s2-red-100, #ffebe8);
+  color: var(--s2-red-1000, #a40e0e);
+}
+
+.badge.informative {
+  border-color: var(--s2-blue-600, #5d89ff);
+  background: var(--s2-blue-100, #e5f0fe);
+  color: var(--s2-blue-1000, #0d47a1);
+}
+
+.badge.outline {
+  border-style: dashed;
+  border-color: var(--s2-gray-600, #717171);
+  background: transparent;
+}
+
+.lang {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--s2-gray-700, #505050);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 3px 14px;
+  box-sizing: border-box;
+  border: 2px solid var(--s2-gray-800, #292929);
+  border-radius: 16px;
+  background: var(--s2-gray-25, #fff);
+  color: var(--s2-gray-900, #131313);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--s2-gray-100, #f3f3f3);
+}
+
+.btn.small {
+  min-height: 24px;
+  padding: 1px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.btn.accent {
+  border-color: var(--s2-blue-900, #3b63fb);
+  background: var(--s2-blue-900, #3b63fb);
+  color: #fff;
+}
+
+.btn.accent:hover {
+  background: var(--s2-blue-1000, #274dea);
+}
+
+.btn.destructive {
+  border-color: var(--s2-red-900, #d31510);
+  color: var(--s2-red-900, #d31510);
+}
+
+.btn.quiet {
+  border-color: transparent;
+  color: var(--s2-blue-900, #3b63fb);
+}
+
+.btn[aria-disabled='true'] {
+  border-color: var(--s2-gray-300, #dadada);
+  background: var(--s2-gray-100, #f3f3f3);
+  color: var(--s2-gray-500, #8f8f8f);
+  cursor: default;
+}
+
+.btn-spacer {
+  width: 0;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.group {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  align-items: start;
+  gap: 8px;
+
+  dt {
+    padding-top: 6px;
+    font-size: 12px;
+    color: var(--s2-gray-700, #505050);
+  }
+
+  dd {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+  }
+}
+
+.action {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  max-width: 100%;
+}
+
+.reason {
+  max-width: 220px;
+  font-size: 11px;
+  color: var(--s2-gray-600, #717171);
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--s2-gray-300, #dadada);
+  border-radius: 8px;
+  background: var(--s2-gray-50, #f8f8f8);
+}
+
+.confirm.destructive {
+  border-color: var(--s2-red-600, #f75c46);
+  background: var(--s2-red-100, #ffebe8);
+}
+
+.message {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--s2-gray-100, #f3f3f3);
+}
+
+.message.positive {
+  background: var(--s2-green-100, #e9f9f1);
+  color: var(--s2-green-1000, #0a6b3d);
+}
+
+.message.negative {
+  background: var(--s2-red-100, #ffebe8);
+  color: var(--s2-red-1000, #a40e0e);
+}
+
+.message.notice {
+  background: var(--s2-orange-100, #fff3e6);
+  color: var(--s2-orange-1000, #8a3b00);
+}
+
+.message.informative {
+  background: var(--s2-blue-100, #e5f0fe);
+  color: var(--s2-blue-1000, #0d47a1);
+}
+
+.dismiss {
+  margin-left: auto;
+  padding: 0 4px;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0 6px calc(var(--depth, 0) * 18px);
+  border-bottom: 1px solid var(--s2-gray-100, #f3f3f3);
+}
+
+.item:last-child {
+  border-bottom: none;
+}
+
+.item-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.item-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 50%;
+}
+
+.tree .item {
+  position: relative;
+}
+
+.bulk {
+  margin-bottom: 8px;
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+
+  select {
+    padding: 3px 6px;
+    border: 1px solid var(--s2-gray-400, #b1b1b1);
+    border-radius: 6px;
+    font: inherit;
+  }
+}
+
+.run {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--s2-gray-200, #e1e1e1);
+  border-radius: 8px;
+  background: var(--s2-gray-50, #f8f8f8);
+}
+
+.run-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.issues {
+  padding-left: 16px;
+  font-size: 12px;
+
+  .path {
+    font-weight: 700;
+    color: inherit;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 2px solid var(--s2-gray-300, #dadada);
+  border-top-color: var(--s2-gray-800, #292929);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
