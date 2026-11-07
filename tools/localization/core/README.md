@@ -55,7 +55,7 @@ createLocalization({
 })
 ```
 
-Default providers are built from the `api` (by default, the legacy api over `actions.daFetch`). Any of them can be overridden, e.g. with fakes in tests. Without an `api` or `actions.daFetch`, all three providers must be passed. `content` and `publish` services exist (`content` copies via `actions.loc`, PR 801), but `execute()` isn't built yet. Defaults: `publish` whenever there's an `api`, and `content` when there's both an `api` and `actions.loc`. `services` overrides them per key.
+Default providers are built from the `api` (by default, the legacy api over `actions.daFetch`). Any of them can be overridden, e.g. with fakes in tests. Without an `api` or `actions.daFetch`, all three providers must be passed. `content` copies via `actions.loc` (`{ mergeCopy, overwriteCopy }`; the SDK doesn't provide it, so callers pass an adapter over `nx/public/loc` with `actions.daFetch`). Defaults: `publish` whenever there's an `api`, and `content` when there's both an `api` and `actions.loc`. `services` overrides them per key.
 
 **Providers** supply data. The `index` provider also persists its own data.
 
@@ -63,7 +63,7 @@ Default providers are built from the `api` (by default, the legacy api over `act
 |---|---|---|
 | config | `providers/config.js` | `listSites() → [site]` (`GET /list/{org}`, paginated)<br>`read(site) → rows \| null`: the `locations` sheet of `GET /config/{org}/{site}`; `[]` when there's no config or no sheet; `null` on 401/403 (unreadable) |
 | pageInfo | `providers/page-info.js` | `get(site, path) → { exists, id, version }`: `api.source.getMetadata`; `id` = `X-da-id` (legacy) or `doc-id` (Helix 6), `version` = `ETag` (changes on every save, including saves that don't create a version)<br>`needsReview(site, path) → bool`: fetches the content, parses it (`DOMParser`; `parseHtml` can be injected) and looks for `da-diff-*` / legacy `da-loc-*` elements or `da-diff-*` attributes<br>`list(site, folder) → [{ path, isFolder, lastModified? }]` (`GET /list/...`, paginated; no id/version) |
-| index | `providers/loc-index.js` | File: `/{site}/.da/loc{location path}/index.json` in the location's site (whole site: `/.da/loc/index.json`).<br>`read(locationId) → { pages: { [pageId]: { base, job, overrides } }, pending: { [path]: { job } } }` (`pending` covers pages that don't exist yet, e.g. a first translation). 404 → empty; other failures throw.<br>`write(locationId, changes) → index`: `changes` has the same shape, and a `null` entry deletes it. Read-modify-write guarded by `If-Match` (or `If-None-Match: *` when creating), retried on 412 up to `maxAttempts` (3). |
+| index | `providers/loc-index.js` | File: `/{site}/.da/loc{location path}/index.json` in the location's site (whole site: `/.da/loc/index.json`).<br>`read(locationId) → { pages: { [pageId]: { base, job, overrides } }, pending: { [path]: { job } } }` (`pending` covers pages that don't exist yet, e.g. a first translation). 404 → empty; other failures throw.<br>`write(locationId, changes) → index`: `changes` has the same shape, and a `null` entry deletes it. `patch(locationId, changes)` merges fields into existing entries instead (a `null` field deletes it). Both are a read-modify-write guarded by `If-Match` (or `If-None-Match: *` when creating), retried on 412 up to `maxAttempts` (3). |
 
 **Services** perform operations.
 
@@ -168,8 +168,19 @@ Per-page info comes from providers:
 import { createLocalization } from './core/index.js';
 const localization = createLocalization({ org, actions });
 await localization.page(site, path) // { location, chain: [{ ref, info }], status, actions }
+await localization.execute({ site, path, action, option }) // rollout | reconnect | unlink | relink
+await localization.publish({ site, path, live = true, cascade = false })
+await localization.orgModel()       // parseConfig over every site in the org
 localization.refresh()              // clear all caches
 ```
+
+`execute()` (`execute.js`) refreshes, re-reads the page, and runs only an enabled action; otherwise `{ ok: false, error: 'action-unavailable' | 'action-disabled', reasons }`.
+- **rollout**: merge or overwrite (`option`, default the location's first `conflictBehavior`; others → `option-not-allowed`) from the effective source, then patches the index entry's `base` with `{ sourceId, sourceVersion, via, targetVersion, at }` and clears `pending`. Runs `onComplete`. A failed copy writes nothing to the index.
+- **reconnect**: deletes the copy and its index entry; runs `onComplete`.
+- **unlink**: inherited pages are copied (overwrite) first; then sets `overrides.{ unlinked, unlinkedFrom, unlinkedAt }`.
+- **relink**: removes those override fields.
+
+`publish()` previews or publishes the page; with `cascade`, it also publishes every inherited page below it, across sites, stopping at pages with their own file. Returns `{ ok, results: [{ site, path, ok, status, error? }] }`.
 
 `page()`:
 - Loads the page's site config, then each source site up the location chain as it's discovered (following location sources, even past nested locations). It never scans the other sites.

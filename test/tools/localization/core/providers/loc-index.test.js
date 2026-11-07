@@ -141,3 +141,25 @@ describe('loc-index provider: write', () => {
     await assert.rejects(provider.write('global:/emea/es', { pages: {} }), /500/);
   });
 });
+
+describe('loc-index provider: patch', () => {
+  it('merges fields into existing entries, deleting null fields and null entries', async () => {
+    const existing = {
+      pages: {
+        p1: { base: { sourceId: 's' }, overrides: { unlinked: true } },
+        p2: { base: { sourceId: 't' } },
+      },
+      pending: { '/emea/es/new.html': { job: { state: 'translating' } } },
+    };
+    const store = createStore({ [NESTED_URL]: existing });
+    const result = await providerFor(store).patch('global:/emea/es', {
+      pages: { p1: { base: { sourceId: 'u' }, overrides: null }, p2: null, p3: { overrides: { unlinked: true } } },
+      pending: { '/emea/es/new.html': null },
+    });
+    assert.deepEqual(result, {
+      pages: { p1: { base: { sourceId: 'u' } }, p3: { overrides: { unlinked: true } } },
+      pending: {},
+    });
+    assert.deepEqual(store.stored[NESTED_URL].content, result);
+  });
+});

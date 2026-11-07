@@ -36,6 +36,25 @@ function applyChanges(index, changes) {
   return updated;
 }
 
+function patchChanges(index, changes) {
+  const updated = { pages: { ...index.pages }, pending: { ...index.pending } };
+  SECTIONS.forEach((section) => {
+    Object.entries(changes?.[section] ?? {}).forEach(([key, patch]) => {
+      if (patch === null) {
+        delete updated[section][key];
+        return;
+      }
+      const entry = { ...(updated[section][key] ?? {}) };
+      Object.entries(patch).forEach(([field, value]) => {
+        if (value === null) delete entry[field];
+        else entry[field] = value;
+      });
+      updated[section][key] = entry;
+    });
+  });
+  return updated;
+}
+
 export default function createLocIndexProvider({ org, api, maxAttempts = 3 }) {
   const indexTarget = (locationId) => {
     const separator = locationId.indexOf(':');
@@ -56,9 +75,9 @@ export default function createLocIndexProvider({ org, api, maxAttempts = 3 }) {
     return (await readWithEtag(locationId)).index;
   }
 
-  async function write(locationId, changes, attempt = 1) {
+  async function write(locationId, changes, apply = applyChanges, attempt = 1) {
     const { index, etag } = await readWithEtag(locationId);
-    const updated = applyChanges(index, changes);
+    const updated = apply(index, changes);
     const headers = etag ? { 'If-Match': etag } : { 'If-None-Match': '*' };
     const response = await api.source.save({
       ...indexTarget(locationId), body: JSON.stringify(updated), headers,
@@ -67,11 +86,15 @@ export default function createLocIndexProvider({ org, api, maxAttempts = 3 }) {
       if (attempt >= maxAttempts) {
         throw new Error(`Localization index for ${locationId} kept changing (conflict after ${attempt} attempts)`);
       }
-      return write(locationId, changes, attempt + 1);
+      return write(locationId, changes, apply, attempt + 1);
     }
     if (!response.ok) throw requestFailed(`Writing localization index for ${locationId}`, response);
     return updated;
   }
 
-  return { read, write: (locationId, changes) => write(locationId, changes) };
+  return {
+    read,
+    write: (locationId, changes) => write(locationId, changes),
+    patch: (locationId, changes) => write(locationId, changes, patchChanges),
+  };
 }

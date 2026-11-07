@@ -23,6 +23,7 @@ import createLocIndexProvider from './providers/loc-index.js';
 import createContentService from './services/content.js';
 import createPublishService from './services/publish.js';
 import createLegacyApi, { DA_ORIGIN } from './api/legacy.js';
+import createExecutor from './execute.js';
 
 const siteOf = (id) => id.slice(0, id.indexOf(':'));
 
@@ -178,5 +179,18 @@ export default function createLocalization({
     };
   }
 
-  return { org, page, refresh };
+  async function orgModel() {
+    const snapshot = caches;
+    const sites = await providers.config.listSites();
+    await Promise.all(sites.map((site) => loadSite(snapshot, site)));
+    return buildModel(snapshot);
+  }
+
+  const executor = createExecutor({
+    page, providers, services, refresh, orgModel,
+  });
+
+  return {
+    org, page, refresh, orgModel, execute: executor.execute, publish: executor.publish,
+  };
 }
