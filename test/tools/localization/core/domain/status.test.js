@@ -81,15 +81,15 @@ describe('pageStatus: root', () => {
 });
 
 describe('pageStatus: missing pages', () => {
-  it('is linked when the source has content', () => {
+  it('is inherited when the source has content', () => {
     const result = statusOf('/uk/x', { '/en/x': file('a', '1') });
-    assert.deepEqual(summary(result), { relationship: 'linked', sync: [] });
+    assert.deepEqual(summary(result), { relationship: 'inherited', sync: [] });
     assert.equal(result.effectiveSource.path, '/en/x');
   });
 
-  it('is linked through linked hops', () => {
+  it('is inherited through inherited hops', () => {
     const result = statusOf('/ie/x', { '/en/x': file('a', '1') });
-    assert.deepEqual(summary(result), { relationship: 'linked', sync: [] });
+    assert.deepEqual(summary(result), { relationship: 'inherited', sync: [] });
     assert.equal(result.effectiveSource.path, '/en/x');
   });
 
@@ -106,15 +106,15 @@ describe('pageStatus: missing pages', () => {
     assert.equal(result.effectiveSource, null);
   });
 
-  it('is linked to a none-location page that exists', () => {
+  it('inherits from a none-location page that exists', () => {
     const result = statusOf('/mx/x', { '/en/x': file('a', '1'), '/es/x': file('e', '1') });
-    assert.deepEqual(summary(result), { relationship: 'linked', sync: [] });
+    assert.deepEqual(summary(result), { relationship: 'inherited', sync: [] });
     assert.equal(result.effectiveSource.path, '/es/x');
   });
 
-  it('shows blocked by source review on a linked page', () => {
+  it('shows blocked by source review on an inherited page', () => {
     const result = statusOf('/uk/x', { '/en/x': file('a', '1', { needsReview: true }) });
-    assert.deepEqual(summary(result), { relationship: 'linked', sync: ['blocked by source review'] });
+    assert.deepEqual(summary(result), { relationship: 'inherited', sync: ['blocked by source review'] });
   });
 
   it('shows blocked by source review on a not created page', () => {
@@ -232,5 +232,64 @@ describe('pageStatus: existing pages', () => {
       '/uk/x': file('b', '7', { base: base('a', '1'), job: { state: 'ready' } }),
     });
     assert.deepEqual(result.sync, ['source deleted', 'ready to save']);
+  });
+});
+
+describe('pageStatus: overridden', () => {
+  const base = (targetVersion) => ({
+    sourceId: 'a', sourceVersion: '1', via: 'rollout', targetVersion,
+  });
+
+  it('is overridden when the copy changed since it was written', () => {
+    const result = statusOf('/uk/x', { '/en/x': file('a', '1'), '/uk/x': file('b', '8', { base: base('7') }) });
+    assert.equal(result.overridden, true);
+    assert.deepEqual(result.sync, ['current']);
+  });
+
+  it('is not overridden when the copy is as written', () => {
+    const result = statusOf('/uk/x', { '/en/x': file('a', '2'), '/uk/x': file('b', '7', { base: base('7') }) });
+    assert.equal(result.overridden, false);
+    assert.deepEqual(result.sync, ['behind source']);
+  });
+
+  it('is not overridden without a recorded target version', () => {
+    const result = statusOf('/uk/x', { '/en/x': file('a', '1'), '/uk/x': file('b', '7', { base: base() }) });
+    assert.equal(result.overridden, false);
+  });
+
+  it('is not overridden on pages without a file', () => {
+    assert.equal(statusOf('/uk/x', { '/en/x': file('a', '1') }).overridden, false);
+  });
+});
+
+describe('pageStatus: unlinked', () => {
+  const unlinked = { unlinked: true };
+
+  it('is unlinked when the index flags it, keeping the source for history', () => {
+    const result = statusOf('/uk/x', {
+      '/en/x': file('a', '2'),
+      '/uk/x': file('b', '7', {
+        base: {
+          sourceId: 'a', sourceVersion: '1', via: 'rollout', targetVersion: '6',
+        },
+        overrides: unlinked,
+      }),
+    });
+    assert.deepEqual(summary(result), { relationship: 'unlinked', sync: [] });
+    assert.equal(result.effectiveSource.path, '/en/x');
+    assert.equal(result.overridden, false);
+  });
+
+  it('keeps own review state on an unlinked page', () => {
+    const result = statusOf('/uk/x', {
+      '/en/x': file('a', '1'),
+      '/uk/x': file('b', '7', { overrides: unlinked, needsReview: true }),
+    });
+    assert.deepEqual(summary(result), { relationship: 'unlinked', sync: ['needs review'] });
+  });
+
+  it('ignores the flag when the page has no file', () => {
+    const result = statusOf('/uk/x', { '/en/x': file('a', '1'), '/uk/x': { exists: false, overrides: unlinked } });
+    assert.equal(result.relationship, 'inherited');
   });
 });

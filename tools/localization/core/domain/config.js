@@ -33,7 +33,7 @@ const DEFAULTS = {
 
 const RELATIONSHIP_FIELDS = ['actions', 'missingPages', 'conflictBehavior', 'onComplete'];
 
-const FIELDS = ['path', 'language', 'label', 'source', ...RELATIONSHIP_FIELDS];
+const FIELDS = ['path', 'language', 'label', 'level', 'source', ...RELATIONSHIP_FIELDS];
 const HEADER_MAP = Object.fromEntries(FIELDS.map((field) => [field.toLowerCase(), field]));
 
 const SITE_PATTERN = /^[a-z0-9-]+$/;
@@ -110,6 +110,8 @@ function parseRow(fields, { site, index }, issue) {
     missingPages: null,
     conflictBehavior: [],
     onComplete: null,
+    level: fields.level || '',
+    kind: 'source',
     valid: true,
     resolved: true,
   };
@@ -271,6 +273,18 @@ function propagate(locations, {
   });
 }
 
+function inferKinds(locations) {
+  locations.forEach((location) => {
+    if (!location.source) return;
+    const source = locations.get(location.source);
+    const crossSite = siteOf(location.source) !== location.site;
+    const comparable = source && parseLanguage(source.language) && parseLanguage(location.language);
+    const sameLanguage = !source
+      || Boolean(comparable && isSameBaseLanguage(source.language, location.language));
+    location.kind = crossSite && sameLanguage ? 'variation' : 'localization';
+  });
+}
+
 export function parseConfig({ sites = {} } = {}) {
   const issues = [];
   const issue = (details) => issues.push({ level: 'error', ...details });
@@ -305,6 +319,7 @@ export function parseConfig({ sites = {} } = {}) {
   propagate(locations, {
     issues, unresolved, inCycle, issue,
   });
+  inferKinds(locations);
 
   const invalid = erroredIds(issues);
   invalid.forEach((id) => {

@@ -99,6 +99,7 @@ Each site has a `locations` sheet in its own config. **The target defines the re
 | path | `/folder`, `/` | `/` |
 | language | BCP 47 (`en`, `en-US`, `es-419`) | required |
 | label | text | generated, e.g. "Mexican Spanish" |
+| level | free text, e.g. `Global`, `Region`, `Language`, `Locale`; any row | empty (UI falls back to depth) |
 | source | `site:/path`, or `/path` for the same site; empty for a root | — |
 | actions | `link`, `rollout`, `translate` | `rollout` |
 | missingPages | `linked` · `none` | `none` |
@@ -108,6 +109,7 @@ Each site has a `locations` sheet in its own config. **The target defines the re
 - Headers are matched case-insensitively, ignoring spaces, `-` and `_`.
 - Values are trimmed. Site names and the values of `actions`, `missingPages`, `conflictBehavior` and `onComplete` are lowercased; languages are canonicalized (`en-us` → `en-US`); paths and labels keep their case.
 - A root row must leave the relationship columns empty.
+- Each location gets an inferred `kind`: `source` (no source), `variation` (cross-site, same base language, or the source isn't loaded), else `localization`.
 - Translation service, env, DNT rules and per-target connector options stay in `translate.json`.
 
 Validation produces issues as data (`{ level, code, site, row, id, field, message }`). A location with an error stays in the model with `valid: false`.
@@ -123,22 +125,24 @@ Validation produces issues as data (`{ level, code, site, row, id, field, messag
 
 ## Page state
 
-`pageStatus(chain)`, where `chain` is `[{ ref, info }]` from `sourceChain`, → `{ relationship, sync, effectiveSource, reasons }`, or `null` when there's no page: an empty chain (no location), a missing root page, or a missing page with no content above it.
+`pageStatus(chain)`, where `chain` is `[{ ref, info }]` from `sourceChain`, → `{ relationship, sync, effectiveSource, reasons, overridden }`, or `null` when there's no page: an empty chain (no location), a missing root page, or a missing page with no content above it.
 
-- **relationship**: root · linked · local copy · translation · standalone · not created · unavailable · config error · unknown
+- **relationship**: root · inherited (no file; shows its source) · local copy · translation · unlinked · standalone · not created · unavailable · config error · unknown
 - **sync**, in urgency order: needs review · blocked by source review · source deleted · ready to save · translating · behind source · current
 - **Effective source**: the nearest existing page above, passing only through missing pages in `linked` locations.
 - **No index entry:**
   - the source exists → local copy, behind source (`base-unknown`)
   - no source → standalone
 - **Behind source**: the recorded base (source page ID + version) ≠ the effective source.
+- **Overridden**: the page's version ≠ `base.targetVersion` (the version written by the last rollout/translate). False when unknown.
+- **Unlinked**: index `overrides.unlinked` on an existing page. No sync except own needs review; `effectiveSource` kept as history.
 
 Per-page info comes from providers:
 
 | Info | Provider |
 |---|---|
 | exists, id, version | pageInfo (da-admin) |
-| base, job | index (`/.da/loc`) |
+| base, job, overrides | index (`/.da/loc`) |
 | needsReview | pageInfo.needsReview (in-doc metadata, fetched lazily) |
 
 ## Actions
@@ -147,11 +151,13 @@ Per-page info comes from providers:
 
 | Action | Applies to | Gate |
 |---|---|---|
-| rollout, translate | local copy, translation, linked, not created | the location's `actions` |
+| rollout, translate | local copy, translation, inherited, not created | the location's `actions` |
 | reconnect | local copy, translation | `link` and `missingPages: linked`; destructive |
+| unlink | local copy, translation, inherited (`creates: true`: copy first) | — |
+| relink | unlinked | needs a source page |
 | save | any page with `ready to save` | — |
 
-- There's no detach action: rollout or translate on a linked page has `creates: true`, and the UI can call it "Detach".
+- There's no detach action: rollout or translate on an inherited page has `creates: true`, and the UI can call it "Detach".
 - Rollout and translate don't publish unless `onComplete` says so.
 - Rollout, translate and save use the DA-only copy engine (PR 801). They're disabled with `backend-unsupported` when the page's site or its effective source's site is on Helix 6, and with `copy-engine-unavailable` when there's no `content` service. Reconnect isn't affected.
 - Reason order: language/connector, then backend, then page blockers.

@@ -82,8 +82,8 @@ describe('availableActions: rollout and translate', () => {
     assert.equal(actions.rollout.default, true);
   });
 
-  it('creates on linked and not created pages, without options', () => {
-    ['linked', 'not created'].forEach((relationship) => {
+  it('creates on inherited and not created pages, without options', () => {
+    ['inherited', 'not created'].forEach((relationship) => {
       const actions = actionsByName(statusWith(relationship));
       assert.equal(actions.rollout.creates, true, relationship);
       assert.equal(actions.rollout.options, undefined, relationship);
@@ -96,7 +96,7 @@ describe('availableActions: rollout and translate', () => {
       status: statusWith('local copy', ['current']),
       location: location({ actions: ['rollout'] }),
     });
-    assert.deepEqual(actionNames(actions), ['rollout']);
+    assert.deepEqual(actionNames(actions), ['rollout', 'unlink']);
   });
 
   it('disables when the page needs review', () => {
@@ -107,7 +107,7 @@ describe('availableActions: rollout and translate', () => {
   });
 
   it('disables when the source needs review', () => {
-    const actions = actionsByName(statusWith('linked', ['blocked by source review']));
+    const actions = actionsByName(statusWith('inherited', ['blocked by source review']));
     assert.deepEqual(actions.rollout.reasons, ['source-needs-review']);
     assert.deepEqual(actions.translate.reasons, ['source-needs-review']);
   });
@@ -166,8 +166,8 @@ describe('availableActions: reconnect', () => {
     });
   });
 
-  it('is not offered on linked or not created pages', () => {
-    ['linked', 'not created'].forEach((relationship) => {
+  it('is not offered on inherited or not created pages', () => {
+    ['inherited', 'not created'].forEach((relationship) => {
       assert.equal(actionsByName(statusWith(relationship)).reconnect, undefined, relationship);
     });
   });
@@ -175,6 +175,51 @@ describe('availableActions: reconnect', () => {
   it('is disabled while a translation is in progress', () => {
     const actions = actionsByName(statusWith('translation', ['translating']));
     assert.deepEqual(actions.reconnect.reasons, ['translation-in-progress']);
+  });
+});
+
+describe('availableActions: unlink', () => {
+  it('is offered on local copies and translations', () => {
+    ['local copy', 'translation'].forEach((relationship) => {
+      assert.deepEqual(actionsByName(statusWith(relationship, ['current'])).unlink, {
+        action: 'unlink', enabled: true, reasons: [], creates: false,
+      }, relationship);
+    });
+  });
+
+  it('creates a local copy first on inherited pages', () => {
+    assert.deepEqual(actionsByName(statusWith('inherited')).unlink, {
+      action: 'unlink', enabled: true, reasons: [], creates: true,
+    });
+  });
+
+  it('needs the copy engine to unlink an inherited page', () => {
+    const actions = actionsByName(statusWith('inherited'), {}, { copyEngineAvailable: false });
+    assert.deepEqual(actions.unlink.reasons, ['copy-engine-unavailable']);
+  });
+
+  it('is disabled while a translation is in progress', () => {
+    assert.deepEqual(actionsByName(statusWith('translation', ['translating'])).unlink.reasons, ['translation-in-progress']);
+  });
+
+  it('is not offered on not created, standalone or root pages', () => {
+    ['not created', 'standalone', 'root'].forEach((relationship) => {
+      assert.equal(actionsByName(statusWith(relationship)).unlink, undefined, relationship);
+    });
+  });
+});
+
+describe('availableActions: relink', () => {
+  it('is the only action on an unlinked page', () => {
+    const actions = availableActions({ status: statusWith('unlinked'), location: location() });
+    assert.deepEqual(actions, [{
+      action: 'relink', enabled: true, reasons: [],
+    }]);
+  });
+
+  it('is disabled without a source page', () => {
+    const actions = actionsByName(statusWith('unlinked', [], null));
+    assert.deepEqual(actions.relink.reasons, ['no-source']);
   });
 });
 

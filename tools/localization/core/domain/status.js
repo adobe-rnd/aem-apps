@@ -37,11 +37,14 @@ function findEffectiveSource(chain) {
   return null;
 }
 
-const result = (relationship, { sync = [], effectiveSource = null, reasons = [] } = {}) => ({
+const result = (relationship, {
+  sync = [], effectiveSource = null, reasons = [], overridden = false,
+} = {}) => ({
   relationship,
   sync: SYNC_ORDER.filter((value) => sync.includes(value)),
   effectiveSource: effectiveSource?.ref ?? null,
   reasons,
+  overridden,
 });
 
 function flags(self, effective) {
@@ -55,8 +58,14 @@ function flags(self, effective) {
 
 function existingStatus(self, effective) {
   const { base } = self.info;
+  if (self.info.overrides?.unlinked) {
+    const own = self.info.needsReview ? ['needs review'] : [];
+    return result('unlinked', { sync: own, effectiveSource: effective });
+  }
   const sync = flags(self, effective);
-  const opts = { sync, effectiveSource: effective };
+  const overridden = Boolean(base?.targetVersion && self.info.version
+    && base.targetVersion !== self.info.version);
+  const opts = { sync, effectiveSource: effective, overridden };
 
   if (!base) {
     if (!effective) return result('standalone', opts);
@@ -78,7 +87,7 @@ function existingStatus(self, effective) {
 function missingStatus(self, effective, chain) {
   const opts = { sync: flags(self, effective), effectiveSource: effective };
   const linked = self.ref.location.missingPages === 'linked';
-  if (effective) return result(linked ? 'linked' : 'not created', opts);
+  if (effective) return result(linked ? 'inherited' : 'not created', opts);
   if (linked && chain.slice(1).some(exists)) return result('unavailable', opts);
   return null;
 }

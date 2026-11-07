@@ -50,6 +50,8 @@ describe('parseConfig: locations', () => {
       missingPages: null,
       conflictBehavior: [],
       onComplete: null,
+      level: '',
+      kind: 'source',
       valid: true,
       resolved: true,
     });
@@ -233,6 +235,61 @@ describe('parseConfig: relationship settings', () => {
     const model = global(row({ path: '/en', language: 'en', actions: 'link' }));
     assert.deepEqual(codes(model), ['root-has-relationship-settings']);
     assert.equal(model.locations.get('global:/en').valid, false);
+  });
+});
+
+describe('parseConfig: level', () => {
+  it('keeps an optional free-text level on any row', () => {
+    const model = global(
+      row({ path: '/en', language: 'en', level: 'Global' }),
+      row({
+        path: '/uk', language: 'en-GB', source: '/en', level: ' Locale ',
+      }),
+      row({ path: '/us', language: 'en-US', source: '/en' }),
+    );
+    assert.equal(model.locations.get('global:/en').level, 'Global');
+    assert.equal(model.locations.get('global:/uk').level, 'Locale');
+    assert.equal(model.locations.get('global:/us').level, '');
+    assert.deepEqual(model.issues, []);
+  });
+});
+
+describe('parseConfig: kind', () => {
+  const model = parseConfig({
+    sites: {
+      gamebox: [
+        row({ path: '/global', language: 'en' }),
+        row({ path: '/en-us', language: 'en-US', source: '/global' }),
+        row({ path: '/fr', language: 'fr', source: '/global' }),
+      ],
+      retail: [
+        row({ path: '/bestbuy', language: 'en-US', source: 'gamebox:/en-us' }),
+        row({ path: '/fr', language: 'fr-FR', source: 'gamebox:/en-us' }),
+        row({ path: '/other', language: 'en-US', source: 'missing:/en' }),
+      ],
+    },
+  });
+  const kind = (id) => model.locations.get(id).kind;
+
+  it('is source for a location without a source', () => {
+    assert.equal(kind('gamebox:/global'), 'source');
+  });
+
+  it('is localization within a site', () => {
+    assert.equal(kind('gamebox:/en-us'), 'localization');
+    assert.equal(kind('gamebox:/fr'), 'localization');
+  });
+
+  it('is variation across sites in the same base language', () => {
+    assert.equal(kind('retail:/bestbuy'), 'variation');
+  });
+
+  it('is localization across sites in a different language', () => {
+    assert.equal(kind('retail:/fr'), 'localization');
+  });
+
+  it('is variation across sites when the source is not loaded', () => {
+    assert.equal(kind('retail:/other'), 'variation');
   });
 });
 

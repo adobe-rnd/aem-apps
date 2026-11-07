@@ -15,9 +15,9 @@
  */
 import { canTranslate, defaultRefreshAction } from './language.js';
 
-export const REFRESHABLE = ['local copy', 'translation', 'linked', 'not created'];
+export const REFRESHABLE = ['local copy', 'translation', 'inherited', 'not created'];
 const COPIES = ['local copy', 'translation'];
-const MISSING = ['linked', 'not created'];
+const MISSING = ['inherited', 'not created'];
 
 export function availableActions({
   status,
@@ -78,6 +78,19 @@ export function availableActions({
     && location.actions.includes('link')
     && location.missingPages === 'linked') {
     result.push(entry('reconnect', inProgress ? ['translation-in-progress'] : [], { destructive: true }));
+  }
+
+  if (COPIES.includes(relationship) || relationship === 'inherited') {
+    const unlinkCreates = relationship === 'inherited';
+    const reasons = [
+      ...(unlinkCreates ? backendReasons : []),
+      ...(inProgress ? ['translation-in-progress'] : []),
+    ];
+    result.push(entry('unlink', reasons, { creates: unlinkCreates }));
+  }
+
+  if (relationship === 'unlinked') {
+    result.push(entry('relink', effectiveSource ? [] : ['no-source']));
   }
 
   if (has('ready to save')) {

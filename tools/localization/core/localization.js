@@ -111,6 +111,7 @@ export default function createLocalization({
       version: info?.version,
       base: entry?.base ?? null,
       job: entry?.job ?? null,
+      overrides: entry?.overrides ?? null,
     };
   }
 

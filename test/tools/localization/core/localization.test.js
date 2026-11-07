@@ -151,7 +151,7 @@ describe('page: page info', () => {
     });
     const result = await localizationFor(fixture).page('global', '/uk/x');
     assert.deepEqual(result.chain[0].info, {
-      exists: true, id: 'b', version: '7', base: base('a', '1'), job: null, needsReview: false,
+      exists: true, id: 'b', version: '7', base: base('a', '1'), job: null, overrides: null, needsReview: false,
     });
     assert.equal(result.status.relationship, 'local copy');
     assert.deepEqual(result.status.sync, ['current']);
@@ -163,7 +163,7 @@ describe('page: page info', () => {
       indexes: { 'global:/uk': { pages: {}, pending: { '/uk/x': { job: { state: 'translating' } } } } },
     });
     const result = await localizationFor(fixture).page('global', '/uk/x');
-    assert.equal(result.status.relationship, 'linked');
+    assert.equal(result.status.relationship, 'inherited');
     assert.deepEqual(result.status.sync, ['translating']);
   });
 
@@ -195,13 +195,27 @@ describe('page: page info', () => {
 });
 
 describe('page: actions', () => {
+  it('reads unlinked and target version from the index', async () => {
+    const fixture = createFixture({
+      pages: { 'global:/en/x': file('a', '1'), 'global:/uk/x': file('b', '8') },
+      indexes: {
+        'global:/uk': {
+          pages: { b: { base: { ...base('a', '1'), targetVersion: '7' }, overrides: { unlinked: true } } },
+          pending: {},
+        },
+      },
+    });
+    const result = await localizationFor(fixture).page('global', '/uk/x');
+    assert.equal(result.status.relationship, 'unlinked');
+    assert.deepEqual(actionNames(result), ['relink']);
+  });
   it('derives available actions for the page', async () => {
     const fixture = createFixture({
       pages: { 'global:/en/x': file('a', '1'), 'global:/uk/x': file('b', '7') },
       indexes: { 'global:/uk': { pages: { b: { base: base('a', '1') } }, pending: {} } },
     });
     const result = await localizationFor(fixture).page('global', '/uk/x');
-    assert.deepEqual(actionNames(result), ['rollout', 'translate', 'reconnect']);
+    assert.deepEqual(actionNames(result), ['rollout', 'translate', 'reconnect', 'unlink']);
   });
 
   it('asks the connector whether the language pair is supported', async () => {
