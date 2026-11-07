@@ -69,7 +69,9 @@ export default function createLocIndexProvider({ org, api, maxAttempts = 3 }) {
     if (response.status === 404) return { index: emptyIndex(), etag: null, exists: false };
     if (!response.ok) throw requestFailed(`Reading localization index for ${locationId}`, response);
     return {
-      index: normalize(await response.json()), etag: response.headers.get('ETag'), exists: true,
+      index: normalize(await response.json()),
+      etag: response.headers.get('ETag')?.replace(/^W\//, '') ?? null,
+      exists: true,
     };
   }
 

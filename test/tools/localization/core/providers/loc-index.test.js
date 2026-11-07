@@ -23,7 +23,7 @@ const apiOver = (fetch) => createLegacyApi({ fetch, daOrigin: DA_ORIGIN });
 const NESTED_URL = `${DA_ORIGIN}/source/acme/global/.da/loc/emea/es/index.json`;
 
 function createStore(files = {}) {
-  const store = { hideEtag: false };
+  const store = { hideEtag: false, weakEtag: false };
   const stored = Object.fromEntries(Object.entries(files).map(([url, content], number) => [
     url, { content, etag: `"v${number}"` },
   ]));
@@ -39,7 +39,7 @@ function createStore(files = {}) {
     if (method === 'GET') {
       if (!file) return new Response('', { status: 404 });
       const body = JSON.stringify(file.content);
-      const responseHeaders = store.hideEtag ? {} : { ETag: file.etag };
+      const responseHeaders = store.hideEtag ? {} : { ETag: store.weakEtag ? `W/${file.etag}` : file.etag };
       return new Response(body, { status: 200, headers: responseHeaders });
     }
     if (conflicts.count > 0) {
@@ -145,6 +145,13 @@ describe('loc-index provider: write', () => {
 });
 
 describe('loc-index provider: patch', () => {
+  it('sends a weak ETag back as a strong If-Match', async () => {
+    const store = createStore({ [NESTED_URL]: { pages: {}, pending: {} } });
+    store.weakEtag = true;
+    await providerFor(store).patch('global:/emea/es', { pages: { p1: { job: null } } });
+    const post = store.requests.find((request) => request.method === 'POST');
+    assert.equal(post.headers['If-Match'], '"v0"');
+  });
   it('writes an existing index unconditionally when its ETag is not readable', async () => {
     const store = createStore({ [NESTED_URL]: { pages: { p1: { job: null } }, pending: {} } });
     store.hideEtag = true;
