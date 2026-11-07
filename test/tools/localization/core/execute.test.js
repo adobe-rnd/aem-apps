@@ -15,7 +15,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createLocalization } from '../../../../tools/localization/core/index.js';
+import createSharedWorld from './world.js';
 
 // gamebox:/global  en (root)
 // ├── gamebox:/en-us  en-US  link, rollout; inherited; merge, overwrite
@@ -38,94 +38,7 @@ const CONFIGS = {
   ],
 };
 
-function createWorld({
-  pages = {}, indexes = {}, failCopy = false, copyAvailable = true, loseWrites = false,
-} = {}) {
-  const files = new Map(Object.entries(pages));
-  const index = new Map(Object.entries(indexes));
-  const calls = {
-    merge: [], overwrite: [], remove: [], preview: [], publish: [],
-  };
-  let ids = 0;
-
-  const key = ({ site, path }) => `${site}:${path}`;
-  const copy = (operation) => async ({ source, target }) => {
-    calls[operation].push(`${key(source)}>${key(target)}`);
-    if (failCopy) return { ok: false, status: 500, error: 'boom' };
-    const existing = files.get(key(target));
-    ids += 1;
-    files.set(key(target), existing
-      ? { ...existing, version: `${existing.version}+${operation}` }
-      : { id: `new${ids}`, version: 'v1' });
-    if (loseWrites) files.delete(key(target));
-    return { ok: true, status: 200 };
-  };
-
-  const patchIndex = (locationId, changes) => {
-    const current = index.get(locationId) ?? { pages: {}, pending: {} };
-    const updated = { pages: { ...current.pages }, pending: { ...current.pending } };
-    ['pages', 'pending'].forEach((section) => {
-      Object.entries(changes[section] ?? {}).forEach(([entryKey, patch]) => {
-        if (patch === null) {
-          delete updated[section][entryKey];
-          return;
-        }
-        const entry = { ...(updated[section][entryKey] ?? {}) };
-        Object.entries(patch).forEach(([field, value]) => {
-          if (value === null) delete entry[field];
-          else entry[field] = value;
-        });
-        updated[section][entryKey] = entry;
-      });
-    });
-    index.set(locationId, updated);
-    return updated;
-  };
-
-  const providers = {
-    config: {
-      read: async (site) => CONFIGS[site] ?? null,
-      listSites: async () => Object.keys(CONFIGS),
-    },
-    pageInfo: {
-      get: async (site, path) => {
-        const file = files.get(`${site}:${path}`);
-        return file ? { exists: true, id: file.id, version: file.version } : { exists: false };
-      },
-      needsReview: async () => false,
-    },
-    index: {
-      read: async (locationId) => index.get(locationId) ?? { pages: {}, pending: {} },
-      patch: async (locationId, changes) => patchIndex(locationId, changes),
-    },
-  };
-  const services = {
-    content: {
-      copyAvailable,
-      merge: copy('merge'),
-      overwrite: copy('overwrite'),
-      remove: async (page) => {
-        calls.remove.push(key(page));
-        files.delete(key(page));
-        return { ok: true, status: 204 };
-      },
-    },
-    publish: {
-      preview: async (page) => {
-        calls.preview.push(key(page));
-        return { ok: true, status: 200 };
-      },
-      publish: async (page) => {
-        calls.publish.push(key(page));
-        return { ok: true, status: 200 };
-      },
-    },
-  };
-  const localization = createLocalization({ org: 'acme', providers, services });
-  return {
-    localization, files, index, calls,
-  };
-}
+const createWorld = (options = {}) => createSharedWorld({ configs: CONFIGS, ...options });
 
 const file = (id, version) => ({ id, version });
 const base = (sourceId, sourceVersion, targetVersion) => ({

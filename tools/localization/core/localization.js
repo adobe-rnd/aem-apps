@@ -20,10 +20,12 @@ import { availableActions } from './domain/actions.js';
 import createConfigProvider from './providers/config.js';
 import createPageInfoProvider from './providers/page-info.js';
 import createLocIndexProvider from './providers/loc-index.js';
+import createRunsProvider from './providers/runs.js';
 import createContentService from './services/content.js';
 import createPublishService from './services/publish.js';
 import createLegacyApi, { DA_ORIGIN } from './api/legacy.js';
 import createExecutor from './execute.js';
+import createRunner from './runs.js';
 
 const siteOf = (id) => id.slice(0, id.indexOf(':'));
 
@@ -53,6 +55,7 @@ function defaultProviders({ org, api }) {
     config: createConfigProvider({ org, api }),
     pageInfo: createPageInfoProvider({ org, api }),
     index: createLocIndexProvider({ org, api }),
+    runs: createRunsProvider({ org, api }),
   };
 }
 
@@ -190,8 +193,19 @@ export default function createLocalization({
   const executor = createExecutor({
     page, providers, services, refresh, orgModel,
   });
+  const runner = createRunner({
+    page, execute: executor.execute, orgModel, refresh, runs: providers.runs,
+  });
 
   return {
-    org, page, refresh, orgModel, execute: executor.execute, publish: executor.publish,
+    org,
+    page,
+    refresh,
+    orgModel,
+    execute: executor.execute,
+    publish: executor.publish,
+    propagate: runner.propagate,
+    retryRun: runner.retryRun,
+    runs: providers.runs ?? null,
   };
 }

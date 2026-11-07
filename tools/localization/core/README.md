@@ -171,6 +171,9 @@ const localization = createLocalization({ org, actions });
 await localization.page(site, path) // { location, chain: [{ ref, info }], status, actions }
 await localization.execute({ site, path, action, option }) // rollout | link | reconnect | unlink | relink
 await localization.publish({ site, path, live = true, cascade = false })
+await localization.propagate({ pages, targets?, option?, title?, onProgress? }) // staged run
+await localization.retryRun(run, { onProgress? })
+localization.runs                   // { save, read, list } at /{site}/.da/loc/runs/{id}.json
 await localization.orgModel()       // parseConfig over every site in the org
 localization.refresh()              // clear all caches
 ```
@@ -183,6 +186,13 @@ localization.refresh()              // clear all caches
 - **relink**: removes those override fields.
 
 `publish()` previews or publishes the page; with `cascade`, it also publishes every inherited page below it, across sites, stopping at pages with their own file. Returns `{ ok, results: [{ site, path, ok, status, error? }] }`.
+
+`propagate()` (`runs.js`, plan in `domain/plan.js`) is the one-click multi-level update:
+- **Plan**: every page below `pages` in descendant locations (or only `targets` plus their ancestors), as items `{ key, site, path, locationId, source, parent, depth, state }`.
+- **Run**: depth by depth; each item re-reads its page then settles as `done` (rollout or link), `up to date`, `inherited`, `awaiting translation`, `needs review` (merge left diffs), `skipped` (unlinked, standalone, no action), `blocked` (action disabled, or parent in a blocking state) or `failed`. Blocking states: failed, blocked, needs review, awaiting translation, skipped.
+- `option` (merge/overwrite) applies where the location allows it.
+- Saved through `providers.runs` after each depth; `summary` counts states.
+- `retryRun()` resets failed and blocked items and runs again. Translate stages are wired separately.
 
 `page()`:
 - Loads the page's site config, then each source site up the location chain as it's discovered (following location sources, even past nested locations). It never scans the other sites.
