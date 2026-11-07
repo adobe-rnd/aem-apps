@@ -18,6 +18,7 @@ import assert from 'node:assert/strict';
 import createPublishLoader from '../../../../tools/apps/msm-next/data/publish-states.js';
 
 const nodes = (count) => Array.from({ length: count }, (_, i) => ({ site: 's', path: `/p${i}` }));
+const later = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 const settle = () => new Promise((resolve) => { setTimeout(resolve, 10); });
 
 function fake({ changed = true } = {}) {
@@ -63,6 +64,36 @@ describe('publish loader', () => {
     loader.request([{ site: 's', path: '/vis' }], { priority: true });
     await settle();
     assert.deepEqual(batches.map(([path]) => path), ['/p0', '/vis', '/p1', '/p2', '/p3']);
+  });
+
+  it('holds background pages until the tree is idle, visible pages first', async () => {
+    const { localization, batches } = fake();
+    let idle = false;
+    const loader = createPublishLoader({
+      localization, batch: 1, idle: () => idle, idleRetry: 5,
+    });
+    loader.request(nodes(2));
+    await later(20);
+    assert.deepEqual(batches, []);
+    loader.request([{ site: 's', path: '/vis' }], { priority: true });
+    await later(5);
+    assert.deepEqual(batches, [['/vis']]);
+    idle = true;
+    await later(30);
+    assert.deepEqual(batches, [['/vis'], ['/p0'], ['/p1']]);
+  });
+
+  it('promotes a background page that becomes visible', async () => {
+    const { localization, batches } = fake();
+    const loader = createPublishLoader({
+      localization, batch: 1, idle: () => false, idleRetry: 5,
+    });
+    loader.request(nodes(3));
+    loader.request([{ site: 's', path: '/p2' }], { priority: true });
+    await later(20);
+    assert.deepEqual(batches, [['/p2']]);
+    loader.stop();
+    loader.stop();
   });
 
   it('keeps a failing batch from stopping the queue', async () => {

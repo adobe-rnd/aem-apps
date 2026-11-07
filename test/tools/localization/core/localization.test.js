@@ -16,6 +16,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { DOMParser } from 'linkedom';
+import createPublishService from '../../../../tools/localization/core/services/publish.js';
 import { createLocalization } from '../../../../tools/localization/core/index.js';
 
 // global:/en  en-US (root)
@@ -291,6 +292,20 @@ describe('page: publish state', () => {
     assert.deepEqual((await localizationFor(failing.fixture).page('global', '/uk/x')).status.sync, []);
   });
 
+  it('never fails the page when the real status call throws a missing IMS client id', async () => {
+    const fixture = createFixture({ pages });
+    const status = async () => { throw new Error('Missing IMS Client ID'); };
+    fixture.services.publish = createPublishService({
+      org: 'acme', api: { aem: { status } }, minInterval: 0, retries: 1, backoff: 1,
+    });
+    const localization = localizationFor(fixture);
+    const result = await localization.page('global', '/uk/x');
+    assert.deepEqual(result.status.sync, []);
+    assert.equal(await localization.loadPublishState([{ site: 'global', path: '/uk/x' }]), false);
+    fixture.services.publish.state = () => { throw new Error('Missing IMS Client ID'); };
+    assert.deepEqual((await localization.page('global', '/uk/x')).status.sync, []);
+  });
+
   it('only looks up inherited pages', async () => {
     const { fixture, lookups } = withPublish({}, {
       pages: { ...pages, 'global:/uk/y': file('c', '1') },
@@ -302,6 +317,12 @@ describe('page: publish state', () => {
     assert.deepEqual(lookups, []);
     await localization.page('global', '/uk/x');
     assert.deepEqual(lookups, ['global:/uk/x']);
+  });
+
+  it('keeps the publish cache when refreshing without publish', async () => {
+    const { fixture, cleared } = withPublish({});
+    localizationFor(fixture).refresh({ publish: false });
+    assert.equal(cleared(), 0);
   });
 
   it('clears the publish cache on refresh', async () => {

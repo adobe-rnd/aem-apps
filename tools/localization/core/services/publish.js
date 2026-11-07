@@ -25,19 +25,38 @@ function toResult(operation, response) {
   return { ok: false, status: response.status, error };
 }
 
-const DEFAULT_CONCURRENCY = 4;
+const DEFAULT_CONCURRENCY = 2;
+const DEFAULT_MIN_INTERVAL = 150;
+const DEFAULT_RETRIES = 2;
+const DEFAULT_BACKOFF = 400;
 
-function createLimiter(limit) {
+const NO_RETRY = [401, 403];
+
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+function createLimiter(limit, minInterval) {
   let active = 0;
+  let lastStart = -Infinity;
+  let timer = null;
   const queue = [];
   const next = () => {
-    if (active >= limit || !queue.length) return;
+    if (active >= limit || !queue.length || timer) return;
+    const wait = lastStart + minInterval - Date.now();
+    if (wait > 0) {
+      timer = setTimeout(() => {
+        timer = null;
+        next();
+      }, wait);
+      return;
+    }
     const { task, resolve, reject } = queue.shift();
     active += 1;
+    lastStart = Date.now();
     task().then(resolve, reject).finally(() => {
       active -= 1;
       next();
     });
+    next();
   };
   return (task) => new Promise((resolve, reject) => {
     queue.push({ task, resolve, reject });
@@ -49,29 +68,46 @@ const PUBLISHED = { 200: true, 404: false };
 
 const isPublished = (entry) => PUBLISHED[entry?.status] ?? null;
 
-export default function createPublishService({ org, api, concurrency = DEFAULT_CONCURRENCY }) {
-  const limit = createLimiter(concurrency);
+export default function createPublishService({
+  org,
+  api,
+  concurrency = DEFAULT_CONCURRENCY,
+  minInterval = DEFAULT_MIN_INTERVAL,
+  retries = DEFAULT_RETRIES,
+  backoff = DEFAULT_BACKOFF,
+}) {
+  const limit = createLimiter(concurrency, minInterval);
   let states = new Map();
   const stateKey = ({ site, path }) => `${site}:${toAemPath(path)}`;
 
-  async function fetchState(page) {
+  async function attempt(page) {
     try {
       const response = await api.aem.status?.({ org, site: page.site, path: toAemPath(page.path) });
-      if (!response?.ok) return null;
+      if (!response?.ok) return { retry: !NO_RETRY.includes(response?.status), value: null };
       const data = await response.json();
       const live = isPublished(data?.live);
       const previewed = isPublished(data?.preview);
-      return live === null ? null : { live, preview: previewed };
+      return { retry: false, value: live === null ? null : { live, preview: previewed } };
     } catch {
-      return null;
+      return { retry: true, value: null };
     }
+  }
+
+  async function fetchState(page, remaining = retries) {
+    if (!api.aem.status) return null;
+    const result = await limit(() => attempt(page));
+    if (!result.retry || remaining <= 0) return result.value;
+    await sleep(backoff * 2 ** (retries - remaining));
+    return fetchState(page, remaining - 1);
   }
 
   function state(page) {
     const key = stateKey(page);
-    if (!states.has(key)) states.set(key, limit(() => fetchState(page)));
+    if (!states.has(key)) states.set(key, fetchState(page));
     return states.get(key);
   }
+
+  const invalidate = (page) => { states.delete(stateKey(page)); };
 
   const clear = () => { states = new Map(); };
 
@@ -92,6 +128,6 @@ export default function createPublishService({ org, api, concurrency = DEFAULT_C
   }
 
   return {
-    preview, publish, state, clear,
+    preview, publish, state, clear, invalidate,
   };
 }

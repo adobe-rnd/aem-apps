@@ -16,6 +16,7 @@
 /* eslint-disable import/no-unresolved, no-console */
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from 'da-lit';
+import friendlyError from '../../localization/core/friendly-error.js';
 import { editUrl, OPTION_LABELS } from '../../apps/msm-next/data/display.js';
 import {
   pageKey, pagePathFrom, header, sourceInfo, detailRows, stateCard, menuItems, targetTree,
@@ -143,7 +144,7 @@ class MsmNextPlugin extends LitElement {
       this.phase = this.result?.location ? 'ready' : 'none';
     } catch (e) {
       console.error(e);
-      this.error = e.message || String(e);
+      this.error = friendlyError(e);
       this.phase = 'error';
       return;
     }
@@ -198,7 +199,7 @@ class MsmNextPlugin extends LitElement {
       await task();
     } catch (e) {
       console.error(e);
-      this.say(e.message || String(e), 'negative');
+      this.say(friendlyError(e), 'negative');
     } finally {
       const busy = new Set(this.busy);
       busy.delete(key);

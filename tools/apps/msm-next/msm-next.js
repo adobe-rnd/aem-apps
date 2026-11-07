@@ -16,6 +16,7 @@
 /* eslint-disable import/no-unresolved, no-console */
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from 'da-lit';
+import friendlyError from '../../localization/core/friendly-error.js';
 import createLoader from './data/loader.js';
 import createMockLocalization from './data/mock/mock-localization.js';
 import { MOCK_ORG, MOCK_SITE } from './data/mock/fixture.js';
@@ -172,6 +173,7 @@ class MsmNextApp extends LitElement {
     });
     this.publishLoader = createPublishLoader({
       localization: this.localization,
+      idle: () => this.loader.idle,
       onChange: () => { this.tick += 1; },
     });
     this.unsubscribe = this.localization.subscribe?.(
@@ -217,7 +219,7 @@ class MsmNextApp extends LitElement {
       this.publishLoader.request([...tree.nodes.values()]);
     } catch (e) {
       console.error(e);
-      this.error = e.message || String(e);
+      this.error = friendlyError(e);
       this.phase = 'error';
     }
   }
@@ -363,7 +365,7 @@ class MsmNextApp extends LitElement {
       await task();
     } catch (e) {
       console.error(e);
-      this.showToast(e.message || String(e), 'negative');
+      this.showToast(friendlyError(e), 'negative');
     } finally {
       const busy = new Set(this.busy);
       busy.delete(node.key);
@@ -563,7 +565,7 @@ class MsmNextApp extends LitElement {
     } catch (e) {
       console.error(e);
       this.starting = null;
-      this.showToast(`Could not start the rollout: ${e.message || e}`, 'negative');
+      this.showToast(`Could not start the rollout: ${friendlyError(e)}`, 'negative');
     }
     if (run) this.refreshAfterRollout(run);
   }
@@ -587,7 +589,7 @@ class MsmNextApp extends LitElement {
       if (result?.items) current = result;
     } catch (e) {
       console.error(e);
-      this.showToast(e.message || String(e), 'negative');
+      this.showToast(friendlyError(e), 'negative');
     }
     this.trackRollout(current, false);
     this.refreshAfterRollout(current);
@@ -621,7 +623,7 @@ class MsmNextApp extends LitElement {
       }
     } catch (e) {
       console.error(e);
-      this.showToast(e.message || String(e), 'negative');
+      this.showToast(friendlyError(e), 'negative');
     }
   }
 
@@ -674,7 +676,7 @@ class MsmNextApp extends LitElement {
       }
     } catch (e) {
       console.error(e);
-      this.rolloutsError = `Could not load rollouts: ${e.message || e}`;
+      this.rolloutsError = `Could not load rollouts: ${friendlyError(e)}`;
     } finally {
       this.rolloutsLoading = false;
     }
@@ -751,7 +753,7 @@ class MsmNextApp extends LitElement {
       this.jobInfo = jobInfo;
     } catch (e) {
       console.error(e);
-      this.showToast(`Could not check translations: ${e.message || e}`, 'negative');
+      this.showToast(`Could not check translations: ${friendlyError(e)}`, 'negative');
     } finally {
       const checking = new Set(this.checking);
       nodes.forEach((node) => checking.delete(node.key));

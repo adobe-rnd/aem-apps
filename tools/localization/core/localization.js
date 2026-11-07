@@ -98,6 +98,7 @@ export default function createLocalization({
       publishInflight.clear();
       return;
     }
+    services.publish?.invalidate?.({ site, path });
     publishFresh.delete(publishKey(site, path));
     publishInflight.delete(publishKey(site, path));
   };
@@ -106,7 +107,8 @@ export default function createLocalization({
     const key = publishKey(site, path);
     if (publishFresh.has(key)) return Promise.resolve(false);
     if (publishInflight.has(key)) return publishInflight.get(key);
-    const task = Promise.resolve(services.publish.state({ site, path }))
+    const task = Promise.resolve()
+      .then(() => services.publish.state({ site, path }))
       .catch(() => null)
       .then((state) => {
         if (publishInflight.get(key) !== task) return false;
@@ -132,8 +134,9 @@ export default function createLocalization({
       invalidatePublishState();
     }
   };
-  const refresh = () => {
+  const refresh = ({ publish = true } = {}) => {
     caches = newCaches();
+    if (!publish) return;
     services.publish?.clear?.();
     invalidatePublishState();
   };
@@ -219,7 +222,9 @@ export default function createLocalization({
 
     const [self] = chain;
     if (draft?.relationship === 'inherited' && services.publish?.state) {
-      const published = await services.publish.state({ site, path }).catch(() => null);
+      const published = await Promise.resolve()
+        .then(() => services.publish.state({ site, path }))
+        .catch(() => null);
       if (published) self.info.published = published;
     }
     const reviewed = chain.filter((entry) => (entry === self && entry.info.exists)

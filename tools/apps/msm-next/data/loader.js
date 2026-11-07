@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import friendlyError from '../../../localization/core/friendly-error.js';
 import createPool from './pool.js';
 import { listLocationPages } from './listing.js';
 import {
@@ -48,7 +49,7 @@ export default function createLoader({
       errors.delete(node.key);
     } catch (error) {
       if (current !== generation) return;
-      errors.set(node.key, error.message || String(error));
+      errors.set(node.key, friendlyError(error));
     } finally {
       refreshing.delete(node.key);
     }
@@ -84,8 +85,11 @@ export default function createLoader({
   }
 
   async function refreshNodes(nodes) {
-    localization.refresh();
-    nodes.forEach((node) => refreshing.add(node.key));
+    localization.refresh({ publish: false });
+    nodes.forEach((node) => {
+      localization.invalidatePublishState?.(node.site, node.path);
+      refreshing.add(node.key);
+    });
     notify();
     await Promise.all(nodes.map((node) => fetchStatus(node, generation)));
   }
@@ -96,6 +100,7 @@ export default function createLoader({
     load,
     refreshNodes,
     refreshSubtree,
+    get idle() { return !pool.active && !pool.pending && !refreshing.size; },
     get model() { return model; },
     get tree() { return tree; },
     results,

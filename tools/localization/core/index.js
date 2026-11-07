@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 export { default as createLocalization } from './localization.js';
+export { default as friendlyError, SESSION_EXPIRED } from './friendly-error.js';
 export { SYNC_ORDER } from './domain/status.js';
 export {
   ACTIONS, MISSING_PAGES, CONFLICT_BEHAVIORS, ON_COMPLETE, MAX_DEPTH,

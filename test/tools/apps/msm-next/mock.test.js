@@ -158,6 +158,47 @@ describe('loader with publish lookups', () => {
   });
 });
 
+describe('loader errors and refresh', () => {
+  const settleLater = () => new Promise((resolve) => { setTimeout(resolve, 60); });
+
+  it('shows a session message for a thrown missing IMS client id', async () => {
+    const localization = createMockLocalization({ latency: false });
+    const failing = {
+      ...localization,
+      page: async () => { throw new Error('Missing IMS Client ID'); },
+    };
+    const loader = createLoader({ localization: failing, list: localization.list, site: 'gamebox' });
+    await loader.load();
+    await settleLater();
+    assert.ok(loader.errors.size > 0);
+    assert.ok([...loader.errors.values()].every((message) => message.includes('session has expired')));
+  });
+
+  it('refreshes a subtree without clearing every publish state', async () => {
+    const localization = createMockLocalization({ latency: false });
+    const calls = { refresh: [], invalidate: [] };
+    const spy = {
+      ...localization,
+      refresh: (...args) => calls.refresh.push(args),
+      invalidatePublishState: (...args) => calls.invalidate.push(args),
+    };
+    const loader = createLoader({ localization: spy, list: localization.list, site: 'gamebox' });
+    await loader.load();
+    await settleLater();
+    calls.refresh.length = 0;
+    const [node] = loader.tree.top;
+    await loader.refreshNodes([node]);
+    assert.deepEqual(calls.refresh, [[{ publish: false }]]);
+    assert.deepEqual(calls.invalidate, [[node.site, node.path]]);
+  });
+
+  it('reports idle once statuses are loaded', async () => {
+    const { loader } = await loaded();
+    await settleLater();
+    assert.equal(loader.idle, true);
+  });
+});
+
 describe('mock publish state', () => {
   const site = 'gamebox';
   const path = '/de-at/hardware/console.html';

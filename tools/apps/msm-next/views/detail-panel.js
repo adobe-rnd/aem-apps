@@ -15,6 +15,7 @@
  */
 /* eslint-disable import/no-unresolved */
 import { html, nothing } from 'da-lit';
+import { SESSION_EXPIRED } from '../../../localization/core/friendly-error.js';
 import {
   pageType, syncBadges, nextStep, actionButtons, editUrl, formatRelative, levelLabel, refLabel,
   isRealPage, primarySync, publishNotice,
@@ -173,7 +174,7 @@ export default function renderDetailPanel(node, ctx) {
         ${overriddenBadge(result)}
       </div>
     </header>
-    ${error ? html`<p class="error-text">Could not load status: ${error}</p>` : nothing}
+    ${error ? html`<p class="error-text">${error === SESSION_EXPIRED ? error : `Could not load status: ${error}`}</p>` : nothing}
     ${!result && !error ? html`<p class="loading-text">${spinner('Loading')} Checking status…</p>` : nothing}
     ${result ? html`
       ${renderFacts(node, result, ctx)}

@@ -14,19 +14,39 @@
  * limitations under the License.
  */
 const BATCH = 4;
+const IDLE_RETRY = 750;
 
-export default function createPublishLoader({ localization, onChange, batch = BATCH }) {
+export default function createPublishLoader({
+  localization, onChange, batch = BATCH, idle = () => true, idleRetry = IDLE_RETRY,
+}) {
   const queue = [];
+  const background = [];
   const queued = new Set();
   let running = false;
   let stopped = false;
+  let timer = null;
   const supported = typeof localization?.loadPublishState === 'function';
   const keyOf = (page) => `${page.site}:${page.path}`;
 
+  function take() {
+    if (queue.length) return queue.splice(0, batch);
+    if (background.length && idle()) return background.splice(0, batch);
+    return [];
+  }
+
   async function pump() {
-    if (running) return;
+    if (running || stopped) return;
+    const pages = take();
+    if (!pages.length) {
+      if (!timer && background.length) {
+        timer = setTimeout(() => {
+          timer = null;
+          pump();
+        }, idleRetry);
+      }
+      return;
+    }
     running = true;
-    const pages = queue.splice(0, batch);
     pages.forEach((page) => queued.delete(keyOf(page)));
     let changed = false;
     try {
@@ -36,18 +56,28 @@ export default function createPublishLoader({ localization, onChange, batch = BA
     }
     running = false;
     if (changed && !stopped) onChange?.();
-    if (queue.length && !stopped) pump();
+    pump();
+  }
+
+  function promote(pages) {
+    const keys = new Set(pages.map(keyOf));
+    const moved = background.filter((page) => keys.has(keyOf(page)));
+    if (!moved.length) return;
+    const rest = background.filter((page) => !keys.has(keyOf(page)));
+    background.length = 0;
+    background.push(...rest);
+    queue.unshift(...moved);
   }
 
   function request(nodes, { priority = false } = {}) {
     if (!supported || stopped) return;
-    const fresh = nodes
-      .map((node) => ({ site: node.site, path: node.path }))
-      .filter((page) => !queued.has(keyOf(page)));
+    const pages = nodes.map((node) => ({ site: node.site, path: node.path }));
+    if (priority) promote(pages);
+    const fresh = pages.filter((page) => !queued.has(keyOf(page)));
     fresh.forEach((page) => queued.add(keyOf(page)));
     if (priority) queue.unshift(...fresh);
-    else queue.push(...fresh);
-    if (fresh.length) pump();
+    else background.push(...fresh);
+    if (fresh.length || priority) pump();
   }
 
   function invalidate(nodes) {
@@ -56,7 +86,13 @@ export default function createPublishLoader({ localization, onChange, batch = BA
     else nodes.forEach((node) => localization.invalidatePublishState?.(node.site, node.path));
   }
 
-  const stop = () => { stopped = true; queue.length = 0; queued.clear(); };
+  const stop = () => {
+    stopped = true;
+    queue.length = 0;
+    background.length = 0;
+    queued.clear();
+    clearTimeout(timer);
+  };
 
   return { request, invalidate, stop };
 }
