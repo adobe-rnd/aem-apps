@@ -47,12 +47,13 @@ export default function createWorld({
   loseWrites = false,
   review = [],
   reviewAfterMerge = [],
+  runs = null,
   services: extraServices = {},
 } = {}) {
   const files = new Map(Object.entries(pages));
   const index = new Map(Object.entries(indexes));
   const needsReview = new Set(review);
-  const files404 = new Set();
+  let world;
   const calls = {
     merge: [], overwrite: [], remove: [], preview: [], publish: [],
   };
@@ -89,8 +90,12 @@ export default function createWorld({
     },
     index: {
       read: async (locationId) => index.get(locationId) ?? { pages: {}, pending: {} },
-      patch: async (locationId, changes) => patchIndex(index, locationId, changes),
+      patch: async (locationId, changes) => {
+        if (world.failIndex) throw new Error('index down');
+        return patchIndex(index, locationId, changes);
+      },
     },
+    runs,
   };
   const services = {
     content: {
@@ -116,7 +121,8 @@ export default function createWorld({
     ...extraServices,
   };
   const localization = createLocalization({ org: 'acme', providers, services });
-  return {
-    localization, files, index, calls, needsReview, files404,
+  world = {
+    localization, files, index, calls, needsReview, failIndex: false,
   };
+  return world;
 }

@@ -30,12 +30,13 @@ export default function createExecutor({
     return { ok: true };
   }
 
-  async function copyFromSource(current, target, option) {
+  async function copyFromSource(current, target, option, progress) {
     const source = current.status.effectiveSource;
     const sourceInfo = infoOf(current, source);
     const copy = option === 'overwrite' ? services.content.overwrite : services.content.merge;
     const copied = await copy({ source, target, label: `${LABEL} rollout` });
     if (!copied?.ok) return { ok: false, status: copied?.status, error: copied?.error };
+    Object.assign(progress, { wrote: true });
     const written = await providers.pageInfo.get(target.site, target.path);
     if (!written?.exists || !written.id || !written.version) {
       return { ok: false, error: 'target-unreadable' };
@@ -58,39 +59,49 @@ export default function createExecutor({
     return { ok: true, id: written.id };
   }
 
-  async function rollout(current, target, entry, option) {
-    const chosen = option ?? entry.options?.[0] ?? current.location.conflictBehavior[0] ?? 'merge';
-    if (entry.options && !entry.options.includes(chosen)) return { ok: false, error: 'option-not-allowed' };
-    const copied = await copyFromSource(current, target, chosen);
+  async function rollout(current, target, entry, option, progress) {
+    const allowed = entry.options ?? current.location.conflictBehavior;
+    const chosen = option ?? allowed[0] ?? 'merge';
+    if (!allowed.includes(chosen)) return { ok: false, error: 'option-not-allowed' };
+    const copied = await copyFromSource(current, target, chosen, progress);
     if (!copied.ok) return copied;
     const completed = await runOnComplete(current.location, target);
-    return { ok: true, onComplete: completed };
+    return completed.ok
+      ? { ok: true, onComplete: completed }
+      : { ok: true, onComplete: completed, warnings: ['onComplete-failed'] };
   }
 
-  async function reconnect(current, target) {
+  async function reconnect(current, target, entry, option, progress) {
     if (!services.content?.remove) return { ok: false, error: 'content-unavailable' };
     const removed = await services.content.remove(target);
     if (!removed?.ok) return { ok: false, status: removed?.status, error: 'remove-failed' };
+    Object.assign(progress, { wrote: true });
     const { id } = current.chain[0].info;
     const changes = { pending: { [target.path]: null } };
     if (id) changes.pages = { [id]: null };
     await providers.index.patch(current.location.id, changes);
     const completed = await runOnComplete(current.location, target);
-    return { ok: true, onComplete: completed };
+    return completed.ok
+      ? { ok: true, onComplete: completed }
+      : { ok: true, onComplete: completed, warnings: ['onComplete-failed'] };
   }
 
   async function link(current, target) {
     await providers.index.patch(current.location.id, {
       pending: { [target.path]: { linked: true, at: now() } },
     });
-    const published = await services.publish.publish(target);
-    return { ok: Boolean(published?.ok), publish: published };
+    const published = await services.publish.publish(target).catch((error) => ({
+      ok: false, error: error.message,
+    }));
+    if (published?.ok) return { ok: true, publish: published };
+    await providers.index.patch(current.location.id, { pending: { [target.path]: null } });
+    return { ok: false, status: published?.status, error: published?.error ?? 'publish-failed' };
   }
 
-  async function unlink(current, target, entry) {
+  async function unlink(current, target, entry, option, progress) {
     let { id } = current.chain[0].info;
     if (entry.creates) {
-      const copied = await copyFromSource(current, target, 'overwrite');
+      const copied = await copyFromSource(current, target, 'overwrite', progress);
       if (!copied.ok) return copied;
       id = copied.id;
     }
@@ -128,8 +139,11 @@ export default function createExecutor({
       return { ok: false, error: 'action-unavailable', reasons: entry?.reasons ?? [] };
     }
     if (!entry.enabled) return { ok: false, error: 'action-disabled', reasons: entry.reasons };
+    const progress = { wrote: false };
     try {
-      return await HANDLERS[action](current, { site, path }, entry, option);
+      return await HANDLERS[action](current, { site, path }, entry, option, progress);
+    } catch (error) {
+      return { ok: false, error: error.message, partial: progress.wrote };
     } finally {
       refresh();
     }

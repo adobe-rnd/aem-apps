@@ -162,6 +162,27 @@ describe('runs: propagate', () => {
     assert.equal(seen.at(-1)['g:/en-gb/x'], 'done');
   });
 
+  it('retries below a needs-review parent once the review is resolved', async () => {
+    const state = world({ ...staleChain(), reviewAfterMerge: ['g:/emea/x'] });
+    const run = await state.localization.propagate({
+      pages: [{ site: 'g', path: '/global/x' }], targets: ['g:/en-gb'],
+    });
+    assert.deepEqual(states(run), { 'g:/emea/x': 'needs review', 'g:/en-gb/x': 'blocked' });
+    state.needsReview.delete('g:/emea/x');
+    const retried = await state.localization.retryRun(run);
+    assert.deepEqual(states(retried), { 'g:/emea/x': 'up to date', 'g:/en-gb/x': 'done' });
+  });
+
+  it('keeps going and records the error when the run store fails', async () => {
+    const failing = { save: async () => { throw new Error('store down'); } };
+    const { localization } = world({ ...staleChain(), runs: failing });
+    const run = await localization.propagate({
+      pages: [{ site: 'g', path: '/global/x' }], targets: ['g:/emea'],
+    });
+    assert.equal(run.items[0].state, 'done');
+    assert.equal(run.saveError, 'store down');
+  });
+
   it('creates missing pages in none locations with rollout when translate is not allowed', async () => {
     const configs = structuredClone(CONFIGS);
     configs.g.find((row) => row.path === '/fr').actions = 'rollout';

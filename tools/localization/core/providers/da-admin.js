@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
-export const requestFailed = (what, response) => new Error(`${what} failed with status ${response.status}`);
+export const requestFailed = (what, response) => Object.assign(
+  new Error(`${what} failed with status ${response.status}`),
+  { status: response.status },
+);
 
 export async function listAll(api, target, description, continuationToken = null, collected = []) {
   const result = await api.source.list({ ...target, continuationToken });

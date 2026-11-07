@@ -132,6 +132,45 @@ describe('execute: rollout', () => {
     assert.deepEqual(result, { ok: false, error: 'target-unreadable' });
   });
 
+  it('rejects an option the location does not allow when creating the page', async () => {
+    const world = createWorld({ pages: { 'gamebox:/en-us/x': file('u', '1') } });
+    const result = await world.localization.execute({
+      site: 'gamebox', path: '/fr/x', action: 'rollout', option: 'overwrite',
+    });
+    assert.deepEqual(result, { ok: false, error: 'option-not-allowed' });
+    const bogus = await world.localization.execute({
+      site: 'retail', path: '/bestbuy/x', action: 'rollout', option: 'bogus',
+    });
+    assert.deepEqual(bogus, { ok: false, error: 'option-not-allowed' });
+    assert.deepEqual(world.calls.overwrite, []);
+  });
+
+  it('reports an index write failure after a successful copy', async () => {
+    const world = createWorld({
+      pages: { 'gamebox:/global/x': file('g', '2'), 'gamebox:/en-us/x': file('u', '5') },
+    });
+    world.failIndex = true;
+    const result = await world.localization.execute({ site: 'gamebox', path: '/en-us/x', action: 'rollout' });
+    assert.equal(result.ok, false);
+    assert.equal(result.error, 'index down');
+    assert.equal(result.partial, true);
+  });
+
+  it('warns when onComplete publishing fails', async () => {
+    const world = createWorld({
+      pages: { 'gamebox:/en-us/x': file('u', '1') },
+      services: {
+        publish: {
+          preview: async () => ({ ok: true }),
+          publish: async () => ({ ok: false, status: 503, error: 'down' }),
+        },
+      },
+    });
+    const result = await world.localization.execute({ site: 'gamebox', path: '/fr/x', action: 'rollout' });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.warnings, ['onComplete-failed']);
+  });
+
   it('does not record a base when the copy fails', async () => {
     const world = createWorld({
       pages: { 'gamebox:/global/x': file('g', '2'), 'gamebox:/en-us/x': file('u', '5') },
@@ -150,6 +189,32 @@ describe('execute: rollout', () => {
 });
 
 describe('execute: link', () => {
+  it('rolls back the linked flag when publishing fails, so link can be retried', async () => {
+    let publishOk = false;
+    const world = createWorld({
+      pages: { 'gamebox:/en-us/x': file('u', '1') },
+      services: {
+        publish: {
+          preview: async () => ({ ok: true }),
+          publish: async () => (publishOk ? { ok: true } : { ok: false, status: 503, error: 'down' }),
+        },
+      },
+    });
+    const fr = CONFIGS.gamebox.find((row) => row.path === '/fr');
+    fr.actions = 'link, rollout';
+    try {
+      const failed = await world.localization.execute({ site: 'gamebox', path: '/fr/x', action: 'link' });
+      assert.deepEqual(failed, { ok: false, status: 503, error: 'down' });
+      assert.equal(world.index.get('gamebox:/fr').pending['/fr/x'], undefined);
+      const before = await world.localization.page('gamebox', '/fr/x');
+      assert.equal(before.status.relationship, 'not created');
+      publishOk = true;
+      const retried = await world.localization.execute({ site: 'gamebox', path: '/fr/x', action: 'link' });
+      assert.equal(retried.ok, true);
+    } finally {
+      fr.actions = 'rollout';
+    }
+  });
   it('links a not created page and publishes it', async () => {
     const world = createWorld({
       pages: { 'gamebox:/en-us/x': file('u', '1') },

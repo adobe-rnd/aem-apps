@@ -41,10 +41,11 @@ export default function createRunner({
       site: item.site, path: item.path, action: 'rollout', option: chosen,
     });
     if (!result.ok) return settle(item, 'failed', { action: 'rollout', error: result.error ?? 'failed' });
+    const warnings = result.warnings ? { warnings: result.warnings } : {};
     refresh();
     const after = await page(item.site, item.path);
-    if (after.status?.sync.includes('needs review')) return settle(item, 'needs review', { action: 'rollout' });
-    return settle(item, 'done', { action: 'rollout' });
+    if (after.status?.sync.includes('needs review')) return settle(item, 'needs review', { action: 'rollout', ...warnings });
+    return settle(item, 'done', { action: 'rollout', ...warnings });
   }
 
   async function processItem(run, item) {
@@ -75,6 +76,16 @@ export default function createRunner({
     return rollout(item, chosen, run.option);
   }
 
+  async function save(run) {
+    if (!runs) return;
+    try {
+      await runs.save(run);
+      Object.assign(run, { saveError: undefined });
+    } catch (error) {
+      Object.assign(run, { saveError: error.message });
+    }
+  }
+
   async function process(run, onProgress) {
     const depths = [...new Set(run.items.map((item) => item.depth))].sort((a, b) => a - b);
     await depths.reduce(async (previous, depth) => {
@@ -92,11 +103,11 @@ export default function createRunner({
         onProgress?.(run);
       }));
       run.summary = summarize(run.items);
-      if (runs) await runs.save(run);
+      await save(run);
     }, Promise.resolve());
     run.summary = summarize(run.items);
     run.updatedAt = new Date().toISOString();
-    if (runs) await runs.save(run);
+    await save(run);
     refresh();
     return run;
   }
@@ -123,8 +134,10 @@ export default function createRunner({
 
   async function retryRun(run, { onProgress } = {}) {
     run.items.forEach((item) => {
-      if (item.state === 'failed' || item.state === 'blocked') {
-        Object.assign(item, { state: 'pending', reasons: [], error: undefined });
+      if (BLOCKING.has(item.state)) {
+        Object.assign(item, {
+          state: 'pending', reasons: [], error: undefined, warnings: undefined,
+        });
       }
     });
     return process(run, onProgress);

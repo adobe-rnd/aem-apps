@@ -55,4 +55,16 @@ describe('runs provider', () => {
     assert.equal(await runs.read('gamebox', 'missing'), null);
     assert.deepEqual((await runs.list('gamebox')).map((entry) => entry.id), ['run-b', 'run-a']);
   });
+
+  it('lists nothing when the runs folder does not exist', async () => {
+    const fetch = async () => new Response('', { status: 404 });
+    const runs = createRunsProvider({ org: 'acme', api: createLegacyApi({ fetch, daOrigin: DA_ORIGIN }) });
+    assert.deepEqual(await runs.list('gamebox'), []);
+  });
+
+  it('throws other listing failures', async () => {
+    const fetch = async () => new Response('', { status: 401 });
+    const runs = createRunsProvider({ org: 'acme', api: createLegacyApi({ fetch, daOrigin: DA_ORIGIN }) });
+    await assert.rejects(runs.list('gamebox'), /401/);
+  });
 });

@@ -36,7 +36,10 @@ export default function createRunsProvider({ org, api }) {
 
   async function list(site) {
     const items = await listAll(api, { org, site, path: FOLDER }, `Listing runs for ${org}/${site}`)
-      .catch(() => []);
+      .catch((error) => {
+        if (error.status === 404) return [];
+        throw error;
+      });
     return items
       .filter((item) => item.ext === 'json')
       .map((item) => ({ id: item.name, lastModified: item.lastModified }))

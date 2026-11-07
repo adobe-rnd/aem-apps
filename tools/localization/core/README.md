@@ -180,10 +180,12 @@ localization.refresh()              // clear all caches
 
 `execute()` (`execute.js`) refreshes, re-reads the page, and runs only an enabled action; otherwise `{ ok: false, error: 'action-unavailable' | 'action-disabled', reasons }`.
 - **rollout**: merge or overwrite (`option`, default the location's first `conflictBehavior`; others → `option-not-allowed`) from the effective source. The written page must be readable with an id and version (else `target-unreadable`, index untouched). Then patches the index entry's `base` with `{ sourceId, sourceVersion, via, targetVersion, at }`, clears the path's `pending` entry, and runs `onComplete`. A failed copy writes nothing to the index.
-- **link**: on a not created page; sets `pending[path].linked` (status becomes inherited) and publishes the target. Delivery must honor it in `none` locations.
+- **link**: on a not created page; sets `pending[path].linked` (status becomes inherited) and publishes the target. If publishing fails or throws, the flag is removed so link can be retried. Delivery must honor it in `none` locations.
 - **reconnect**: deletes the copy, its index entry and any `pending` entry; runs `onComplete`. Works without a copy engine (content service `copyAvailable: false`).
 - **unlink**: inherited pages are copied (overwrite) first; then sets `overrides.{ unlinked, unlinkedFrom, unlinkedAt }`.
 - **relink**: removes those override fields.
+
+Failures: `option` is always checked against the location's `conflictBehavior` (`option-not-allowed`), also when the page is created. Any thrown error (e.g. an index write) returns `{ ok: false, error, partial }`, where `partial: true` means content was already written or deleted; rollout again to repair. A failed `onComplete` keeps `ok: true` and adds `warnings: ['onComplete-failed']`.
 
 `publish()` previews or publishes the page; with `cascade`, it also publishes every inherited page below it, across sites, stopping at pages with their own file. Returns `{ ok, results: [{ site, path, ok, status, error? }] }`.
 
@@ -191,8 +193,9 @@ localization.refresh()              // clear all caches
 - **Plan**: every page below `pages` in descendant locations (or only `targets` plus their ancestors), as items `{ key, site, path, locationId, source, parent, depth, state }`.
 - **Run**: depth by depth; each item re-reads its page then settles as `done` (rollout or link), `up to date`, `inherited`, `awaiting translation`, `needs review` (merge left diffs), `skipped` (unlinked, standalone, no action), `blocked` (action disabled, or parent in a blocking state) or `failed`. Blocking states: failed, blocked, needs review, awaiting translation, skipped.
 - `option` (merge/overwrite) applies where the location allows it.
-- Saved through `providers.runs` after each depth; `summary` counts states.
-- `retryRun()` resets failed and blocked items and runs again. Translate stages are wired separately.
+- Saved through `providers.runs` after each depth; `summary` counts states. A failed save doesn't stop the run; it's recorded in `run.saveError`.
+- `retryRun()` re-evaluates every item in a blocking state (failed, blocked, needs review, awaiting translation, skipped), so resolving a review or a translation unblocks its subtree. Translate stages are wired separately.
+- `runs.list(site)` treats a missing runs folder as empty and throws on other failures.
 
 `page()`:
 - Loads the page's site config, then each source site up the location chain as it's discovered (following location sources, even past nested locations). It never scans the other sites.
