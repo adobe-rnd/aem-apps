@@ -66,9 +66,11 @@ export default function createLocIndexProvider({ org, api, maxAttempts = 3 }) {
 
   async function readWithEtag(locationId) {
     const response = await api.source.get(indexTarget(locationId));
-    if (response.status === 404) return { index: emptyIndex(), etag: null };
+    if (response.status === 404) return { index: emptyIndex(), etag: null, exists: false };
     if (!response.ok) throw requestFailed(`Reading localization index for ${locationId}`, response);
-    return { index: normalize(await response.json()), etag: response.headers.get('ETag') };
+    return {
+      index: normalize(await response.json()), etag: response.headers.get('ETag'), exists: true,
+    };
   }
 
   async function read(locationId) {
@@ -76,9 +78,11 @@ export default function createLocIndexProvider({ org, api, maxAttempts = 3 }) {
   }
 
   async function write(locationId, changes, apply = applyChanges, attempt = 1) {
-    const { index, etag } = await readWithEtag(locationId);
+    const { index, etag, exists } = await readWithEtag(locationId);
     const updated = apply(index, changes);
-    const headers = etag ? { 'If-Match': etag } : { 'If-None-Match': '*' };
+    let headers = {};
+    if (etag) headers = { 'If-Match': etag };
+    else if (!exists) headers = { 'If-None-Match': '*' };
     const response = await api.source.save({
       ...indexTarget(locationId), body: JSON.stringify(updated), headers,
     });

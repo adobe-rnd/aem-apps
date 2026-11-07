@@ -50,6 +50,15 @@ describe('page-info provider: get', () => {
     assert.equal(requests[0].options.cache, 'no-store');
   });
 
+  it('falls back to Last-Modified when ETag is not exposed', async () => {
+    const { provider } = providerFor({
+      [`HEAD ${SOURCE}`]: { headers: { 'X-da-id': 'page-1', 'Last-Modified': 'Sat, 07 Nov 2026 01:17:29 GMT' } },
+    });
+    assert.deepEqual(await provider.get('global', '/en/x.html'), {
+      exists: true, id: 'page-1', version: 'Sat, 07 Nov 2026 01:17:29 GMT',
+    });
+  });
+
   it('falls back to the Helix 6 doc-id header', async () => {
     const api = {
       source: {

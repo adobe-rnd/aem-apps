@@ -34,7 +34,11 @@ export default function createPageInfoProvider({ org, api, parseHtml = browserPa
     if (response.status === 404) return { exists: false };
     if (!response.ok) throw requestFailed(`Reading ${org}/${site}${path}`, response);
     const id = ID_HEADERS.map((header) => response.headers.get(header)).find(Boolean) ?? null;
-    return { exists: true, id, version: response.headers.get('ETag') };
+    return {
+      exists: true,
+      id,
+      version: response.headers.get('ETag') ?? response.headers.get('Last-Modified'),
+    };
   }
 
   async function needsReview(site, path) {

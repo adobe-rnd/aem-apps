@@ -23,6 +23,7 @@ const apiOver = (fetch) => createLegacyApi({ fetch, daOrigin: DA_ORIGIN });
 const NESTED_URL = `${DA_ORIGIN}/source/acme/global/.da/loc/emea/es/index.json`;
 
 function createStore(files = {}) {
+  const store = { hideEtag: false };
   const stored = Object.fromEntries(Object.entries(files).map(([url, content], number) => [
     url, { content, etag: `"v${number}"` },
   ]));
@@ -38,7 +39,8 @@ function createStore(files = {}) {
     if (method === 'GET') {
       if (!file) return new Response('', { status: 404 });
       const body = JSON.stringify(file.content);
-      return new Response(body, { status: 200, headers: { ETag: file.etag } });
+      const responseHeaders = store.hideEtag ? {} : { ETag: file.etag };
+      return new Response(body, { status: 200, headers: responseHeaders });
     }
     if (conflicts.count > 0) {
       conflicts.count -= 1;
@@ -53,9 +55,9 @@ function createStore(files = {}) {
     stored[url] = { content, etag: `"w${writes}"` };
     return new Response('', { status: 201 });
   };
-  return {
+  return Object.assign(store, {
     fetch, stored, requests, conflicts,
-  };
+  });
 }
 
 const providerFor = (store, extra = {}) => createLocIndexProvider({
@@ -143,6 +145,14 @@ describe('loc-index provider: write', () => {
 });
 
 describe('loc-index provider: patch', () => {
+  it('writes an existing index unconditionally when its ETag is not readable', async () => {
+    const store = createStore({ [NESTED_URL]: { pages: { p1: { job: null } }, pending: {} } });
+    store.hideEtag = true;
+    const result = await providerFor(store).patch('global:/emea/es', { pages: { p2: { overrides: { unlinked: true } } } });
+    assert.deepEqual(Object.keys(result.pages), ['p1', 'p2']);
+    const post = store.requests.find((request) => request.method === 'POST');
+    assert.deepEqual(post.headers, {});
+  });
   it('merges fields into existing entries, deleting null fields and null entries', async () => {
     const existing = {
       pages: {
