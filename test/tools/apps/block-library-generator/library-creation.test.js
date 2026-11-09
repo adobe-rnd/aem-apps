@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 import { CARDS_SOURCE_PATHS, createCardsRequest } from '../../../../tools/apps/block-library-generator/cards-analysis.js';
 import { createAnalysisRequest } from '../../../../tools/apps/block-library-generator/block-analysis.js';
@@ -28,6 +29,7 @@ const root = 'https://admin.da.live';
 const configURL = `${root}/config/msagolj/ew`;
 const pageURL = `${root}/source/msagolj/ew/docs/library/blocks/cards.html`;
 const indexURL = `${root}/source/msagolj/ew/docs/library/blocks.json`;
+const multisheetIndex = JSON.parse(await readFile(new URL('./fixtures/multisheet-library.json', import.meta.url), 'utf8'));
 const jsonResponse = (value, etag = '"v1"') => new Response(JSON.stringify(value), {
   headers: { 'Content-Type': 'application/json', ETag: etag },
 });
@@ -38,7 +40,7 @@ const parseHTML = () => {
   return { children: [p], childNodes: [p], querySelectorAll: () => [p] };
 };
 
-async function fixture({ starter = false } = {}) {
+async function fixture({ starter = false, multisheet = false } = {}) {
   const request = (starter ? createAnalysisRequest : createCardsRequest)({
     environment: 'prod',
     input: {
@@ -95,6 +97,7 @@ async function fixture({ starter = false } = {}) {
   const state = {
     page: null, index, config, indexETag: 'W/"v1"', calls: [], progress: [],
   };
+  if (multisheet) state.index = { ...structuredClone(multisheetIndex), data: index };
   const daFetch = async (url, options) => {
     state.calls.push({ url, ...options });
     if (options.method === 'GET') {
@@ -137,6 +140,33 @@ async function fixture({ starter = false } = {}) {
 }
 
 describe('Conditional library creation', () => {
+  it('creates a page while preserving multisheet extensions and changing only data-sheet rows/counts', async () => {
+    const { state, options } = await fixture({ multisheet: true });
+    const before = structuredClone(state.index);
+    const outcome = await createCardsLibrary(options);
+    assert.equal(outcome.status, 'completed');
+    assert.equal(outcome.page, 'verified');
+    assert.equal(outcome.index, 'verified');
+    assert.deepEqual(state.index, {
+      ...before,
+      data: {
+        ...before.data,
+        total: 2,
+        limit: 2,
+        data: [...before.data.data, { name: 'Cards', path: options.proposal.destinations.pageURL }],
+      },
+    });
+    assert.deepEqual(state.calls.filter(({ method }) => method === 'PUT').map(({ url }) => url), [pageURL, indexURL]);
+  });
+
+  it('refuses a multisheet extension edit made after the Create proposal without writing a page', async () => {
+    const { state, options } = await fixture({ multisheet: true });
+    state.index.editor.data[0].property = 'author edit';
+    await assert.rejects(createCardsLibrary(options), /proposal|changed|review/i);
+    assert.equal(state.page, null);
+    assert.ok(state.calls.every(({ method }) => method === 'GET'));
+  });
+
   it('creates a clearly unfinished inferred starter with normal conditions and immutable blocked analysis', async () => {
     const { state, options } = await fixture({ starter: true });
     const before = JSON.stringify(options.analysis);

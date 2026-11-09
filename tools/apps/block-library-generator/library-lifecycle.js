@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 import {
-  getCardsLibraryPaths, readLibraryJSON, readLibraryText, readLibraryResource, validateLibraryIndex,
+  getCardsLibraryPaths, readLibraryJSON, readLibraryText, readLibraryResource,
+  validateLibraryIndex, updateLibraryIndexRows,
 } from './library-dry-run.js';
 import { librarySourcePath } from './library-inventory.js';
 import {
@@ -52,11 +53,11 @@ export async function prepareLibraryAction({
     readLibraryJSON(daFetch, `${root(target)}${paths.indexPath}`, signal),
     readLibraryText(daFetch, `${root(target)}${pagePath}`, signal, /text\/html/i),
   ]);
-  validateLibraryIndex(index.value);
-  const matches = index.value.data.filter((row) => (
+  const sheet = validateLibraryIndex(index.value);
+  const matches = sheet.data.filter((row) => (
     librarySourcePath(row.path, paths, target) === pagePath
   ));
-  if (index.value.data.some((row) => row.name.trim().toLowerCase() === name
+  if (sheet.data.some((row) => row.name.trim().toLowerCase() === name
     && librarySourcePath(row.path, paths, target) !== pagePath)) {
     throw new Error('This block name is already registered at another destination.');
   }
@@ -179,9 +180,10 @@ async function runAction(options, mode) {
     }
     const current = await readLibraryJSON(options.daFetch, `${root(target)}${paths.indexPath}`, options.signal);
     if (!same(current.value, snapshot.index)) throw new Error('The index changed after the page action; manual reconciliation is required.');
+    const sheet = validateLibraryIndex(current.value);
     const data = mode === 'delete'
-      ? current.value.data.filter((row) => librarySourcePath(row.path, paths, target) !== pagePath)
-      : [...current.value.data];
+      ? sheet.data.filter((row) => librarySourcePath(row.path, paths, target) !== pagePath)
+      : [...sheet.data];
     if (mode === 'recreate' && !snapshot.registered) {
       if (data.some((row) => row.name.trim().toLowerCase() === snapshot.name)) {
         throw new Error('An index name conflict prevents registering the replacement.');
@@ -191,9 +193,7 @@ async function runAction(options, mode) {
         path: `${new URL(paths.indexURL).origin}/${target.org}/${target.site}${pagePath.slice(0, -5)}`,
       });
     }
-    const after = {
-      ...current.value, data, total: data.length, limit: Math.max(data.length, current.value.limit),
-    };
+    const after = updateLibraryIndexRows(current.value, data);
     if (!same(after, current.value)) {
       progress({ index: 'attempted' });
       await putLibrarySource(

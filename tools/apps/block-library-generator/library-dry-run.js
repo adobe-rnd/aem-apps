@@ -148,23 +148,41 @@ export function getBlockLibraryPaths(config, target, blockName = 'cards') {
 }
 
 export function validateLibraryIndex(index) {
-  if (!index || index[':type'] !== 'sheet' || index[':names'] !== undefined
-    || !Array.isArray(index.data)
-    || index.offset !== 0 || index.total !== index.data.length
-    || !Number.isInteger(index.limit) || index.limit < index.data.length
-    || index.data.some((row) => !row || typeof row.name !== 'string' || !row.name.trim()
-      || typeof row.path !== 'string' || !row.path.trim())) {
-    throw new Error('Dry run requires a complete root-sheet index; partial or unsupported formats are not rebuilt.');
+  const multisheet = index?.[':type'] === 'multi-sheet';
+  const names = index?.[':names'];
+  if (multisheet && (!Array.isArray(names) || !names.includes('data')
+    || new Set(names).size !== names.length
+    || names.some((name) => typeof name !== 'string' || !Object.hasOwn(index, name)
+      || !index[name] || typeof index[name] !== 'object' || Array.isArray(index[name])))) {
+    throw new Error('Multisheet library indexes require a complete sheet list including data.');
   }
-  return index;
+  const sheet = multisheet ? index.data : index;
+  if (!sheet || (multisheet
+    ? sheet[':type'] !== undefined && sheet[':type'] !== 'sheet' : sheet[':type'] !== 'sheet')
+    || sheet[':names'] !== undefined || !Array.isArray(sheet.data)
+    || sheet.offset !== 0 || sheet.total !== sheet.data.length
+    || !Number.isInteger(sheet.limit) || sheet.limit < sheet.data.length
+    || sheet.data.some((row) => !row || typeof row.name !== 'string' || !row.name.trim()
+      || typeof row.path !== 'string' || !row.path.trim())) {
+    throw new Error('Library indexes require a complete root sheet or multisheet data sheet; partial or unsupported formats are not rebuilt.');
+  }
+  return sheet;
+}
+
+export function updateLibraryIndexRows(index, data) {
+  const sheet = validateLibraryIndex(index);
+  const after = {
+    ...sheet, data, total: data.length, limit: Math.max(sheet.limit, data.length),
+  };
+  return sheet === index ? after : { ...index, data: after };
 }
 
 export function mergeBlockIndex(index, paths, { allowRegistered = false } = {}) {
-  validateLibraryIndex(index);
+  const sheet = validateLibraryIndex(index);
   const blockName = assertBlockName(paths.pagePath.split('/').at(-1).replace(/\.html$/, ''));
   const displayName = blockName.split('-').map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   const plannedURL = new URL(paths.pageURL);
-  const alreadyRegistered = index.data.some((row) => {
+  const alreadyRegistered = sheet.data.some((row) => {
     if (row.name.trim().toLowerCase().replace(/\s+/g, '-') === blockName) return true;
     let url;
     try {
@@ -176,25 +194,23 @@ export function mergeBlockIndex(index, paths, { allowRegistered = false } = {}) 
     return url.origin === plannedURL.origin && path === plannedURL.pathname;
   });
   if (alreadyRegistered && allowRegistered) {
-    const matching = index.data.filter((row) => {
+    const matching = sheet.data.filter((row) => {
       const url = new URL(row.path, paths.indexURL);
       return url.origin === plannedURL.origin
         && url.pathname.replace(/\/$/, '').replace(/\.html$/, '') === plannedURL.pathname;
     });
     const sameName = (row) => row.name.trim().toLowerCase().replace(/\s+/g, '-') === blockName;
-    if (matching.length === 1 && index.data.filter(sameName).length <= 1
-      && !index.data.some((row) => sameName(row) && row !== matching[0])) {
-      return { addedRow: null, after: { ...index, data: [...index.data] } };
+    if (matching.length === 1 && sheet.data.filter(sameName).length <= 1
+      && !sheet.data.some((row) => sameName(row) && row !== matching[0])) {
+      return { addedRow: null, after: updateLibraryIndexRows(index, [...sheet.data]) };
     }
   }
   if (alreadyRegistered) throw new Error(`${displayName} is already registered; refusing to propose a duplicate or replacement.`);
   const addedRow = { name: displayName, path: paths.pageURL };
-  const data = [...index.data, addedRow];
+  const data = [...sheet.data, addedRow];
   return {
     addedRow,
-    after: {
-      ...index, data, total: data.length, limit: Math.max(index.limit, data.length),
-    },
+    after: updateLibraryIndexRows(index, data),
   };
 }
 

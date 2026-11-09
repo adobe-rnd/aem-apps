@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 import { getProbeTarget } from '../../../../tools/apps/block-library-generator/jobs.js';
 import inspectBlockLibrary from '../../../../tools/apps/block-library-generator/library-inventory.js';
 
 const target = getProbeTarget('prod');
+const multisheetIndex = JSON.parse(await readFile(new URL('./fixtures/multisheet-library.json', import.meta.url), 'utf8'));
 function fixture() {
   const calls = [];
   const index = {
@@ -58,6 +60,38 @@ function fixture() {
 }
 
 describe('Read-only existing library inventory', () => {
+  it('discovers the supplied multisheet library from its data sheet without setup or writes', async () => {
+    const selected = getProbeTarget({
+      ...target, org: 'hannessolo', site: 'author-kit',
+    });
+    const before = structuredClone(multisheetIndex);
+    const calls = [];
+    const value = await inspectBlockLibrary({
+      target: selected,
+      blockNames: ['hero', 'card', 'columns', 'new-block'],
+      daFetch: async (url, init) => {
+        calls.push({ url, method: init.method });
+        if (url.includes('/config/')) {
+          return Response.json({
+            library: { data: [{ title: 'Blocks', path: 'https://content.da.live/hannessolo/author-kit/docs/library/blocks.json' }] },
+          });
+        }
+        if (url.endsWith('blocks.json')) return Response.json(multisheetIndex);
+        return new Response(null, { status: url.endsWith('/new-block.html') ? 404 : 200 });
+      },
+    });
+    assert.equal(value.setup.status, 'ready');
+    assert.equal(value.blocks.hero.status, 'existing');
+    assert.equal(value.blocks.card.status, 'existing');
+    assert.equal(value.blocks.columns.status, 'existing');
+    assert.equal(value.blocks['new-block'].status, 'absent');
+    assert.equal(value.blocks['section-metadata'].status, 'existing');
+    assert.equal(value.blocks.style, undefined);
+    assert.deepEqual(value.setup.indexBefore, before);
+    assert.deepEqual(multisheetIndex, before);
+    assert.ok(calls.every(({ method }) => method === 'GET'));
+  });
+
   it('reports existing examples with exact editor locations and missing blocks without writes', async () => {
     const { options, calls } = fixture();
     const value = await inspectBlockLibrary(options);

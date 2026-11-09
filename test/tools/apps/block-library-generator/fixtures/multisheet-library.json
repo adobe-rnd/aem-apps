@@ -1,0 +1,38 @@
+{
+  "data": {
+    "total": 6,
+    "limit": 6,
+    "offset": 0,
+    "data": [
+      { "name": "Hero", "path": "https://content.da.live/hannessolo/author-kit/docs/library/blocks/hero" },
+      { "name": "Card", "path": "https://content.da.live/hannessolo/author-kit/docs/library/blocks/card" },
+      { "name": "Section Metadata", "path": "https://content.da.live/hannessolo/author-kit/docs/library/blocks/section-metadata" },
+      { "name": "Columns", "path": "https://content.da.live/hannessolo/author-kit/docs/library/blocks/columns" },
+      { "name": "Metadata", "path": "https://content.da.live/hannessolo/author-kit/docs/library/blocks/metadata" },
+      { "name": "Table", "path": "https://content.da.live/hannessolo/author-kit/docs/library/blocks/table" }
+    ],
+    ":colWidths": [137, 689]
+  },
+  "options": {
+    "total": 4,
+    "limit": 4,
+    "offset": 0,
+    "data": [
+      { "key": "style", "blocks": "section-metadata", "values": "container | center | light-scheme | dark-scheme" },
+      { "key": "gap", "blocks": "section-metadata", "values": "xs | s | m | l | xl | xxl" },
+      { "key": "spacing", "blocks": "ALL", "values": "xs | s | m | l | xl | xxl" },
+      { "key": "background", "blocks": "section-metadata", "values": "dark-grey=#676767 | light-grey=#EFEFEF | adobe-red=#FF0000 | blue=#0077B6 | green=#00A36C | express-gradient=linear-gradient(90deg, rgba(63,94,251,1) 0%, rgba(252,70,107,1) 100%)" }
+    ],
+    ":colWidths": [105, 202, 806]
+  },
+  "editor": {
+    "total": 1,
+    "limit": 1,
+    "offset": 0,
+    "data": [{ "block": "card", "property": "multi" }],
+    ":colWidths": [180, 316]
+  },
+  ":names": ["data", "options", "editor"],
+  ":version": 3,
+  ":type": "multi-sheet"
+}

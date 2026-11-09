@@ -31,6 +31,8 @@ import * as librarySetupAPI from '../../../../tools/apps/block-library-generator
 import * as placeholderImages from '../../../../tools/apps/block-library-generator/placeholder-images.js';
 import * as libraryPreviewAPI from '../../../../tools/apps/block-library-generator/library-preview.js';
 
+const multisheetIndex = JSON.parse(await readFile(new URL('./fixtures/multisheet-library.json', import.meta.url), 'utf8'));
+
 const source = await readFile(new URL(
   '../../../../tools/apps/block-library-generator/block-library-generator.js',
   import.meta.url,
@@ -386,7 +388,7 @@ describe('Apps docked chat and scoped completion checks', () => {
   const noWrites = (data) => assert.ok(data.calls.every(({ method }) => method === 'GET'));
 
   function automaticInputs(data, h, {
-    failIndex = false, registered = false, existing = false, etag = true,
+    failIndex = false, registered = false, existing = false, etag = true, multisheet = false,
   } = {}) {
     const root = 'https://admin.da.live/source/example-org/demo';
     const pageURL = `${root}/docs/library/blocks/hero.html`;
@@ -409,9 +411,13 @@ describe('Apps docked chat and scoped completion checks', () => {
     h.app.libraryOverview.paths = destinations;
     h.app.libraryOverview.blocks.hero.pagePath = destinations.pagePath;
     const rows = registered ? [{ name: 'Hero', path: heroURL }] : [];
-    data.files.set(indexURL, Response.json({
+    const index = {
       ':type': 'sheet', total: rows.length, limit: rows.length, offset: 0, data: rows,
-    }, { headers: { ETag: '"auto-index1"' } }));
+    };
+    data.files.set(indexURL, Response.json(multisheet
+      ? { ...structuredClone(multisheetIndex), data: index } : index, {
+      headers: { ETag: '"auto-index1"' },
+    }));
     if (existing) {
       h.app.libraryOverview.blocks.hero.status = registered ? 'existing' : 'unregistered';
       data.files.set(pageURL, new Response('<body>Author edits</body>', {
@@ -492,6 +498,44 @@ describe('Apps docked chat and scoped completion checks', () => {
     const writes = data.calls.filter(({ method }) => method === 'PUT').length;
     await data.emitTurn(turn({ turnId: 'duplicate-after-save' }));
     assert.equal(data.calls.filter(({ method }) => method === 'PUT').length, writes);
+  });
+
+  it('automatically creates and previews a multisheet library page without changing extension sheets', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h, { multisheet: true });
+    const before = await data.files.get(paths.indexURL).clone().json();
+    await h.app.beginPageAction('create');
+    const request = h.app.cardsRequest;
+    result(data, request);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow, null);
+    assert.equal(h.app.libraryError, '');
+    assert.equal(h.app.libraryCreationReceipt.status, 'completed');
+    assert.equal(h.app.jobCleanupReceipt.status, 'completed');
+    assert.deepEqual(await data.files.get(paths.indexURL).clone().json(), {
+      ...before,
+      data: {
+        ...before.data, total: 1, limit: 1, data: [{ name: 'Hero', path: paths.heroURL }],
+      },
+    });
+    assert.equal(data.files.has(paths.pageURL), true);
+    assert.ok(data.calls.some(({ url }) => url.startsWith('https://admin.hlx.page/preview/')
+      && url.endsWith('/docs/library/blocks.json')));
+  });
+
+  it('automatically recreates a multisheet library page while keeping the complete index unchanged', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h, { registered: true, existing: true, multisheet: true });
+    const before = await data.files.get(paths.indexURL).clone().json();
+    await h.app.beginPageAction('recreate');
+    await h.app.confirmAutomaticRecreate();
+    result(data, h.app.cardsRequest);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow, null);
+    assert.equal(h.app.libraryError, '');
+    assert.match(await data.files.get(paths.pageURL).clone().text(), /Hero baseline/);
+    assert.deepEqual(await data.files.get(paths.indexURL).clone().json(), before);
+    assert.equal(data.calls.filter(({ method, url }) => method === 'PUT' && url === paths.indexURL).length, 0);
   });
 
   it('automatically saves an inferred blocked starter and retains the blocked job', async () => {

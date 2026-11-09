@@ -14,12 +14,15 @@
  * limitations under the License.
  */
 import { describe, it } from 'node:test';
+import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { CARDS_SOURCE_PATHS, createCardsRequest } from '../../../../tools/apps/block-library-generator/cards-analysis.js';
 import {
   getCardsLibraryPaths, buildCardsPage, mergeCardsIndex, prepareCardsLibraryDryRun,
-  buildBlockStarterPage,
+  buildBlockStarterPage, validateLibraryIndex,
 } from '../../../../tools/apps/block-library-generator/library-dry-run.js';
+
+const multisheetIndex = JSON.parse(await readFile(new URL('./fixtures/multisheet-library.json', import.meta.url), 'utf8'));
 
 const request = () => createCardsRequest({
   environment: 'prod',
@@ -200,6 +203,62 @@ describe('Cards library page construction', () => {
 });
 
 describe('Preserving the complete existing index', () => {
+  it('reads the supplied multisheet data sheet and preserves the full envelope when adding a block', () => {
+    const current = structuredClone(multisheetIndex);
+    current[':custom'] = { extension: 'keep' };
+    current[':names'].push('extension');
+    current.extension = {
+      total: 1, limit: 1, offset: 0, data: [{ unrelated: 'Keep extension-specific columns' }],
+    };
+    const before = structuredClone(current);
+    const libraryPaths = {
+      indexPath: '/docs/library/blocks.json',
+      pagePath: '/docs/library/blocks/cards.html',
+      indexURL: 'https://content.da.live/hannessolo/author-kit/docs/library/blocks.json',
+      pageURL: 'https://content.da.live/hannessolo/author-kit/docs/library/blocks/cards',
+    };
+    assert.deepEqual(validateLibraryIndex(current).data, before.data.data);
+    const merged = mergeCardsIndex(current, libraryPaths);
+    assert.deepEqual(current, before);
+    assert.deepEqual(merged.after, {
+      ...before,
+      data: {
+        ...before.data, total: 7, limit: 7, data: [...before.data.data, merged.addedRow],
+      },
+    });
+    assert.deepEqual(merged.addedRow, { name: 'Cards', path: libraryPaths.pageURL });
+    const repeated = mergeCardsIndex(merged.after, libraryPaths, { allowRegistered: true });
+    assert.equal(repeated.addedRow, null);
+    assert.deepEqual(repeated.after, merged.after);
+  });
+
+  it('accepts an explicitly typed nested data sheet without changing its metadata', () => {
+    const current = structuredClone(multisheetIndex);
+    current.data[':type'] = 'sheet';
+    assert.equal(validateLibraryIndex(current), current.data);
+    assert.equal(current.data[':type'], 'sheet');
+  });
+
+  it('rejects missing, ambiguous or partial multisheet data instead of choosing another sheet', () => {
+    const variants = [
+      (value) => { delete value.data; },
+      (value) => { value[':names'] = ['options', 'editor']; },
+      (value) => { value[':names'].push('data'); },
+      (value) => { value[':names'].push('missing'); },
+      (value) => { value[':names'] = 'data'; },
+      (value) => { value.data.offset = 1; },
+      (value) => { value.data.total = 7; },
+      (value) => { value.data.limit = 5; },
+      (value) => { value.data.data[0] = { name: 'Missing path' }; },
+      (value) => { value.data[':type'] = 'multi-sheet'; },
+    ];
+    variants.forEach((change) => {
+      const current = structuredClone(multisheetIndex);
+      change(current);
+      assert.throws(() => validateLibraryIndex(current), /complete|sheet/i);
+    });
+  });
+
   it('adds one Cards row while preserving every prior row and extension field', () => {
     const current = index();
     current.data.push({ name: 'Header', path: '/header', extra: 'preserve infrastructure too' });

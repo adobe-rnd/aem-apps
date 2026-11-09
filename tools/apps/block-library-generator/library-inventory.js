@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 import {
-  readLibraryResource,
+  readLibraryResource, validateLibraryIndex,
 } from './library-dry-run.js';
 import { getProbeTarget } from './jobs.js';
 import { inspectLibrarySetup } from './library-setup.js';
@@ -58,7 +58,7 @@ export default async function inspectBlockLibrary({
     };
   }
   const root = `${target.adminOrigin}/source/${target.org}/${target.site}`;
-  const index = setup.indexBefore;
+  const index = validateLibraryIndex(setup.indexBefore);
   const directory = paths.pagePath.slice(0, paths.pagePath.lastIndexOf('/'));
   const rows = index.data.map((row) => {
     let path;

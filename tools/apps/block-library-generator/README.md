@@ -58,6 +58,10 @@ Default locations:
 An existing valid Blocks registration is used instead, including a custom
 library location.
 
+Indexes can be a single root sheet or a multisheet document with block rows on
+the **data** sheet. Other sheets, such as **options** and **editor**, and their
+metadata are preserved when pages are created, recreated or deleted.
+
 ## Create an example page
 
 1. Select a block without an example page and choose **Create**.

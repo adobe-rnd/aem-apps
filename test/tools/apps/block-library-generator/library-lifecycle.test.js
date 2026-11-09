@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 import { getProbeTarget } from '../../../../tools/apps/block-library-generator/jobs.js';
 import {
@@ -23,7 +24,8 @@ import {
 const target = getProbeTarget('prod');
 const pageURL = `${target.adminOrigin}/source/msagolj/ew/docs/library/blocks/cards.html`;
 const indexURL = `${target.adminOrigin}/source/msagolj/ew/docs/library/blocks.json`;
-async function fixture({ registered = true } = {}) {
+const multisheetIndex = JSON.parse(await readFile(new URL('./fixtures/multisheet-library.json', import.meta.url), 'utf8'));
+async function fixture({ registered = true, multisheet = false } = {}) {
   const state = {
     page: '<body>Author edits</body>',
     pageETag: 'W/"page1"',
@@ -43,6 +45,7 @@ async function fixture({ registered = true } = {}) {
     calls: [],
     receipts: [],
   };
+  if (multisheet) state.index = { ...structuredClone(multisheetIndex), data: state.index };
   const config = { library: { data: [{ title: 'Blocks', path: 'https://content.da.live/msagolj/ew/docs/library/blocks.json' }] } };
   const daFetch = async (url, options) => {
     state.calls.push({ url, method: options.method, headers: options.headers });
@@ -86,6 +89,74 @@ async function fixture({ registered = true } = {}) {
 }
 
 describe('One-shot page lifecycle', () => {
+  it('deletes only the matching multisheet data row and preserves all other sheets and metadata', async () => {
+    const f = await fixture({ multisheet: true });
+    const before = structuredClone(f.state.index);
+    const outcome = await deleteLibraryPage(f);
+    assert.equal(outcome.status, 'completed');
+    assert.equal(f.state.page, null);
+    assert.deepEqual(f.state.index, {
+      ...before,
+      data: { ...before.data, total: 1, data: [before.data.data[0]] },
+    });
+  });
+
+  it('recreates a registered multisheet page without rewriting any part of the index', async () => {
+    const f = await fixture({ multisheet: true });
+    const before = structuredClone(f.state.index);
+    const outcome = await replaceLibraryPage({ ...f, html: '<body>New examples</body>' });
+    assert.equal(outcome.status, 'completed');
+    assert.equal(f.state.page, '<body>New examples</body>');
+    assert.deepEqual(f.state.index, before);
+    assert.deepEqual(f.state.calls.filter(({ method }) => method === 'PUT').map(({ url }) => url), [pageURL]);
+  });
+
+  it('registers a recreated orphan in the multisheet data sheet without touching extensions', async () => {
+    const f = await fixture({ registered: false, multisheet: true });
+    const before = structuredClone(f.state.index);
+    const outcome = await replaceLibraryPage({ ...f, html: '<body>New examples</body>' });
+    assert.equal(outcome.status, 'completed');
+    assert.deepEqual(f.state.index, {
+      ...before,
+      data: {
+        ...before.data,
+        total: 2,
+        limit: 2,
+        data: [...before.data.data, { name: 'Cards', path: 'https://content.da.live/msagolj/ew/docs/library/blocks/cards' }],
+      },
+    });
+  });
+
+  it('stops Delete and Recreate if an extension sheet changes after consent', async () => {
+    await Promise.all([deleteLibraryPage, replaceLibraryPage].map(async (operation) => {
+      const f = await fixture({ multisheet: true });
+      f.state.index.options.data[0].values = 'Author options';
+      await assert.rejects(operation({ ...f, html: '<body>New examples</body>' }), /changed/);
+      assert.equal(f.state.page, '<body>Author edits</body>');
+      assert.ok(f.state.calls.every(({ method }) => method === 'GET'));
+    }));
+  });
+
+  it('reports a partial Delete rather than overwriting an extension edit made after page deletion', async () => {
+    const f = await fixture({ multisheet: true });
+    const before = structuredClone(f.state.index);
+    const original = f.daFetch;
+    f.daFetch = async (url, options) => {
+      const response = await original(url, options);
+      if (options.method === 'DELETE') f.state.index.editor.data[0].property = 'Author edit';
+      return response;
+    };
+    await assert.rejects(deleteLibraryPage(f), (error) => {
+      assert.equal(error.outcome.status, 'partial');
+      assert.equal(error.outcome.page, 'deleted');
+      assert.equal(error.outcome.index, 'not-attempted');
+      return true;
+    });
+    assert.deepEqual(f.state.index.data, before.data);
+    assert.equal(f.state.index.editor.data[0].property, 'Author edit');
+    assert.equal(f.state.calls.filter(({ method }) => method === 'PUT').length, 0);
+  });
+
   it('deletes exactly the page and removes only its index row, preserving metadata', async () => {
     const f = await fixture();
     const result = await deleteLibraryPage(f);
