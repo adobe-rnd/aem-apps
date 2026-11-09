@@ -11,7 +11,7 @@ block-library-generator-app {
   padding: 24px;
   overflow: hidden;
   color: var(--s2-gray-900, #242424);
-  background: var(--s2-gray-100, #f5f5f5);
+  background: var(--s2-gray-25, #fff);
   font-family: var(--s2-font-family, "Adobe Clean", sans-serif);
 }
 
