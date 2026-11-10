@@ -16,14 +16,6 @@
 import { LitElement, html } from '../../deps/lit/dist/index.js';
 import {
   getProbeTarget,
-  createProbeRequest,
-  getProbeBlockReason,
-  persistProbeRequest,
-  readProbeRequest,
-  readProbeResult,
-  createProbePrompt,
-  loadProbePointer,
-  saveProbePointer,
   persistJobRequest,
   readJobRequest,
   readJobResult,
@@ -34,10 +26,9 @@ import {
   saveJobCleanupReceipt,
   loadJobCleanupReceipt,
 } from './jobs.js';
-import { parseManualBlocks } from './discovery.js';
 import discoverCachedBlocks from './discovery-cache.js';
 import {
-  collectAnalysisInput as collectCardsInput,
+  collectAnalysisInput,
   createAnalysisRequest as createCardsRequest,
   createAnalysisPrompt as createCardsPrompt,
   validateAnalysisRequest as validateCardsRequest,
@@ -93,19 +84,8 @@ class BlockLibraryGeneratorApp extends LitElement {
     context: { state: true },
     hasToken: { state: true },
     connectionState: { state: true },
-    probeConfirmed: { state: true },
-    probeBusy: { state: true },
-    probeRequest: { state: true },
-    probeResult: { state: true },
-    probeState: { state: true },
-    probeError: { state: true },
-    savedProbe: { state: true },
-    handoffRequested: { state: true },
-    newProbeConfirmed: { state: true },
     probeEnvironment: { state: true },
     discoveryRef: { state: true },
-    githubRepository: { state: true },
-    manualBlockNames: { state: true },
     discoveryBusy: { state: true },
     discoveryResult: { state: true },
     discoveryError: { state: true },
@@ -161,19 +141,8 @@ class BlockLibraryGeneratorApp extends LitElement {
     this.connectionState = 'waiting';
     this.hostContext = {};
     this.hostActions = {};
-    this.probeConfirmed = false;
-    this.probeBusy = false;
-    this.probeRequest = null;
-    this.probeResult = null;
-    this.probeState = 'idle';
-    this.probeError = '';
-    this.savedProbe = null;
-    this.handoffRequested = false;
-    this.newProbeConfirmed = false;
     this.probeEnvironment = 'prod';
     this.discoveryRef = 'main';
-    this.githubRepository = '';
-    this.manualBlockNames = '';
     this.discoveryBusy = false;
     this.discoveryResult = null;
     this.discoveryError = '';
@@ -240,7 +209,6 @@ class BlockLibraryGeneratorApp extends LitElement {
     super.disconnectedCallback();
     this.stopChatNotifications();
     window.clearTimeout(this.connectionTimer);
-    this.probeController?.abort();
     this.discoveryController?.abort();
     this.resetLibraryOverview();
     this.resetCardsAnalysis();
@@ -261,39 +229,30 @@ class BlockLibraryGeneratorApp extends LitElement {
 
       this.stopChatNotifications();
       this.chatTurnSupported = capabilities?.chatTurnCompleted === 1;
-      const site = context?.site || context?.repo;
       this.hasToken = Boolean(token);
       this.hostContext = {
         view: typeof context?.view === 'string' ? context.view : '',
-        branch: typeof context?.branch === 'string' ? context.branch : '',
         daOrigin: typeof context?.daOrigin === 'string' ? context.daOrigin : '',
-        editorOrg: typeof context?.org === 'string' ? context.org : '',
-        editorSite: typeof site === 'string' ? site : '',
         hash: typeof context?.hash === 'string' ? context.hash : '',
       };
       this.hostActions = {
         daFetch: actions?.daFetch,
         setPrompt: actions?.setPrompt,
-        closeLibrary: actions?.closeLibrary,
         subscribeChatTurnCompleted: actions?.subscribeChatTurnCompleted,
       };
       if (this.hostContext.daOrigin && this.hostContext.daOrigin !== 'https://admin.da.live') {
         throw new Error('This release supports Production DA only. No request was redirected to another service.');
       }
       this.context = {
-        org: this.isEditorContext && typeof context?.org === 'string' ? context.org : '',
-        site: this.isEditorContext && typeof site === 'string' ? site : '',
-        path: this.isEditorContext && typeof context?.path === 'string' ? context.path : '',
+        org: '',
+        site: '',
+        path: '',
         ref: typeof context?.ref === 'string' ? context.ref : '',
       };
-      if (this.isEditorContext && this.hostContext.branch) {
-        this.discoveryRef = this.hostContext.branch;
-      }
-      if (this.isEditorContext) getProbeTarget('prod', { ...this.context, branch: this.discoveryRef });
       this.connectionState = 'ready';
-      this.choosingSite = !this.isEditorContext;
+      this.choosingSite = true;
       let useAppsLinkTarget = false;
-      if (!this.isEditorContext) {
+      if (this.isAppsContext) {
         const hash = ['fullscreen', 'apps'].includes(this.hostContext.view)
           ? window.location.hash : '';
         if (hash && hash !== '#') {
@@ -320,7 +279,6 @@ class BlockLibraryGeneratorApp extends LitElement {
           }
         }
       }
-      this.restoreProbePointer();
       this.restoreCardsPointer();
       this.restoreCreationReceipt();
       this.restorePageFlow();
@@ -341,11 +299,6 @@ class BlockLibraryGeneratorApp extends LitElement {
   get probeTarget() {
     if (!this.context.org || !this.context.site) return null;
     return getProbeTarget(this.probeEnvironment, { ...this.context, branch: this.discoveryRef });
-  }
-
-  get isEditorContext() {
-    return ['edit', 'canvas'].includes(this.hostContext.view)
-      && Boolean(this.hostContext.editorOrg && this.hostContext.editorSite);
   }
 
   get isAppsContext() {
@@ -375,7 +328,7 @@ class BlockLibraryGeneratorApp extends LitElement {
   }
 
   beginSiteSelection() {
-    if (this.isEditorContext || this.workflowBusy || this.discoveryBusy || this.librarySetupProposal
+    if (!this.isAppsContext || this.workflowBusy || this.discoveryBusy || this.librarySetupProposal
       || this.libraryOverviewBusy || this.pageFlow) return;
     this.manualOrg = this.context.org || this.manualOrg;
     this.manualSite = this.context.site || this.manualSite;
@@ -385,7 +338,7 @@ class BlockLibraryGeneratorApp extends LitElement {
   }
 
   cancelSiteSelection() {
-    if (this.isEditorContext || !this.context.org || !this.context.site
+    if (!this.isAppsContext || !this.context.org || !this.context.site
       || this.workflowBusy || this.discoveryBusy || this.libraryOverviewBusy) return;
     this.manualOrg = this.context.org;
     this.manualSite = this.context.site;
@@ -402,7 +355,7 @@ class BlockLibraryGeneratorApp extends LitElement {
     }
     this.targetError = '';
     try {
-      if (this.isEditorContext || this.connectionState !== 'ready' || !this.hasToken
+      if (!this.isAppsContext || this.connectionState !== 'ready' || !this.hasToken
         || typeof this.hostActions.daFetch !== 'function') {
         throw new Error('Open this app through DA Apps with an authenticated session to choose a site.');
       }
@@ -545,69 +498,10 @@ class BlockLibraryGeneratorApp extends LitElement {
     return check;
   }
 
-  get probeEnvironmentLabel() {
-    return this.probeEnvironment === 'prod' ? 'Production' : 'Stage';
-  }
-
-  get probeBlockReason() {
-    return getProbeBlockReason({
-      context: { ...this.context, ...this.hostContext },
-      actions: this.hostActions,
-      embedded: window.parent !== window,
-      hasToken: this.hasToken,
-      environment: this.probeEnvironment,
-    });
-  }
-
-  restoreProbePointer() {
-    if (this.probeBlockReason) return;
-    try {
-      this.savedProbe = loadProbePointer(window.localStorage, this.probeEnvironment);
-    } catch (error) {
-      this.probeError = error.message;
-      this.probeState = 'error';
-    }
-  }
-
-  selectProbeEnvironment(environment) {
-    if (this.libraryCreating) {
-      this.libraryError = 'Wait for creation to finish before switching environments.';
-      return;
-    }
-    try {
-      getProbeTarget(environment);
-    } catch (error) {
-      this.probeError = error.message;
-      return;
-    }
-    if (environment === this.probeEnvironment) return;
-    this.resetDiscovery();
-    this.resetCardsAnalysis();
-    this.probeController?.abort();
-    this.probeController = null;
-    this.probeBusy = false;
-    this.probeEnvironment = environment;
-    this.probeConfirmed = false;
-    this.newProbeConfirmed = false;
-    this.probeRequest = null;
-    this.probeResult = null;
-    this.savedProbe = null;
-    this.handoffRequested = false;
-    this.probeError = '';
-    this.probeState = 'idle';
-    this.restoreProbePointer();
-    this.restoreCardsPointer();
-    this.libraryCreationReceipt = null;
-    this.restoreCreationReceipt();
-    this.pageFlow = null;
-    this.restorePageFlow();
-    this.librarySetupReceipt = null;
-    this.restoreLibrarySetupReceipt();
-  }
-
   get discoveryBlockReason() {
     if (this.connectionError) return this.connectionError;
     if (this.probeEnvironment !== 'prod') return 'This release supports Production DA only.';
+    if (!this.isAppsContext) return 'Open the generator from DA Apps to access a site.';
     if (this.connectionState !== 'ready' || window.parent === window) {
       return 'Open this app from DA Apps to use an authenticated site session.';
     }
@@ -633,25 +527,9 @@ class BlockLibraryGeneratorApp extends LitElement {
     this.discoveryResult = null;
     this.discoveryError = '';
     this.discoveryCacheWarning = '';
-    this.manualBlockNames = '';
     this.selectedBlock = '';
     this.detailOpen = false;
     this.resetLibraryOverview();
-  }
-
-  changeDiscoveryInput(field, value) {
-    if (this.libraryCreating) {
-      this.discoveryError = 'Wait for library creation to finish before changing the code reference.';
-      return;
-    }
-    if (!['ref', 'repository'].includes(field)) {
-      this.discoveryError = 'Invalid discovery input.';
-      return;
-    }
-    this.resetDiscovery();
-    if (field === 'ref') this.resetCardsAnalysis();
-    if (field === 'ref') this.discoveryRef = value;
-    else this.githubRepository = value;
   }
 
   async discoverInventory({ forceRefresh = false } = {}) {
@@ -670,7 +548,6 @@ class BlockLibraryGeneratorApp extends LitElement {
       const result = await discoverCachedBlocks({
         target: this.probeTarget,
         forceRefresh,
-        githubRepository: this.githubRepository,
         daFetch: this.hostActions.daFetch,
         fetchPublic: (url, options) => window.fetch(url, options),
         signal: controller.signal,
@@ -703,26 +580,8 @@ class BlockLibraryGeneratorApp extends LitElement {
     }
   }
 
-  useManualBlocks() {
-    try {
-      const reason = this.discoveryBlockReason;
-      if (reason) throw new Error(reason);
-      const result = parseManualBlocks(this.manualBlockNames);
-      result.diagnostics = this.discoveryResult?.diagnostics || [];
-      this.discoveryController?.abort();
-      this.discoveryController = null;
-      this.discoveryBusy = false;
-      this.discoveryResult = result;
-      this.discoveryError = '';
-      this.discoveryCacheWarning = '';
-      this.chooseInitialBlock();
-    } catch (error) {
-      this.discoveryError = error instanceof Error ? error.message : String(error);
-    }
-  }
-
   get workflowBusy() {
-    return this.cardsBusy || this.probeBusy || this.libraryBusy;
+    return this.cardsBusy || this.libraryBusy;
   }
 
   get automaticPageActionActive() {
@@ -1971,118 +1830,6 @@ class BlockLibraryGeneratorApp extends LitElement {
     `;
   }
 
-  assertProbeAllowed() {
-    const reason = this.probeBlockReason;
-    if (reason) throw new Error(reason);
-    if (!this.probeConfirmed) {
-      throw new Error(`Confirm the ${this.probeEnvironmentLabel} target and main branch first.`);
-    }
-    if (this.probeRequest && this.probeRequest.target?.environment !== this.probeEnvironment) {
-      throw new Error('The loaded probe belongs to a different environment. Resume the selected environment.');
-    }
-  }
-
-  async runProbeOperation(operation, onSuccess) {
-    if (this.probeBusy || this.cardsBusy || this.libraryBusy) {
-      this.probeError = 'Another probe operation is still in progress.';
-      return;
-    }
-    const controller = new AbortController();
-    this.probeController = controller;
-    try {
-      this.assertProbeAllowed();
-      this.probeBusy = true;
-      this.probeError = '';
-      this.probeResult = null;
-      const value = await operation(controller.signal);
-      if (this.isConnected && this.probeController === controller && !controller.signal.aborted) {
-        onSuccess(value);
-      }
-    } catch (error) {
-      if (this.isConnected && this.probeController === controller && !controller.signal.aborted) {
-        this.probeError = error instanceof Error ? error.message : String(error);
-        this.probeState = 'error';
-      }
-    } finally {
-      if (this.probeController === controller) {
-        this.probeBusy = false;
-        this.probeController = null;
-      }
-    }
-  }
-
-  async prepareProbe() {
-    await this.runProbeOperation(async (signal) => {
-      if (this.savedProbe && !this.newProbeConfirmed) {
-        throw new Error('Confirm replacing the saved resume pointer before preparing a new probe.');
-      }
-      const request = createProbeRequest({ environment: this.probeEnvironment });
-      saveProbePointer(window.localStorage, request);
-      this.savedProbe = { jobId: request.jobId, handoffRequested: false };
-      this.probeRequest = null;
-      this.handoffRequested = false;
-      this.newProbeConfirmed = false;
-      this.probeState = 'preparing';
-      return persistProbeRequest(this.hostActions.daFetch, request, { signal });
-    }, (request) => {
-      this.probeRequest = request;
-      this.probeState = 'prepared';
-    });
-  }
-
-  async resumeProbe() {
-    await this.runProbeOperation(async (signal) => {
-      const environment = this.probeEnvironment;
-      const pointer = loadProbePointer(window.localStorage, environment);
-      if (!pointer) throw new Error('No saved probe is available on this app origin.');
-      const request = await readProbeRequest(this.hostActions.daFetch, pointer.jobId, {
-        signal, environment,
-      });
-      return { pointer, request };
-    }, ({ pointer, request }) => {
-      this.savedProbe = pointer;
-      this.probeRequest = request;
-      this.handoffRequested = pointer.handoffRequested;
-      this.probeState = pointer.handoffRequested ? 'requested' : 'prepared';
-    });
-  }
-
-  sendProbe() {
-    try {
-      this.assertProbeAllowed();
-      if (this.probeBusy || !this.probeRequest) throw new Error('Prepare or resume the probe first.');
-      if (this.handoffRequested) {
-        throw new Error('Handoff was already requested. Check chat instead of resending this job.');
-      }
-      const prompt = createProbePrompt(this.probeRequest);
-      saveProbePointer(window.localStorage, this.probeRequest, true);
-      this.handoffRequested = true;
-      this.savedProbe = { jobId: this.probeRequest.jobId, handoffRequested: true };
-      this.probeError = '';
-      this.probeState = 'requested';
-      this.hostActions.setPrompt(prompt, { autoSend: false });
-      this.hostActions.closeLibrary();
-    } catch (error) {
-      this.probeError = error instanceof Error ? error.message : String(error);
-      if (!this.handoffRequested) this.probeState = 'error';
-    }
-  }
-
-  async checkProbeResult() {
-    await this.runProbeOperation((signal) => {
-      if (!this.probeRequest) throw new Error('Prepare or resume the probe first.');
-      return readProbeResult(this.hostActions.daFetch, this.probeRequest, { signal });
-    }, (result) => {
-      this.probeResult = result;
-      if (!result) this.probeState = 'pending';
-      else if (result.status === 'completed') this.probeState = 'received';
-      else {
-        this.probeState = 'agent-error';
-        this.probeError = result.error;
-      }
-    });
-  }
-
   get cardsBlockReason() {
     if (this.discoveryBlockReason) return this.discoveryBlockReason;
     if (this.isAppsContext) {
@@ -2096,21 +1843,7 @@ class BlockLibraryGeneratorApp extends LitElement {
       if (!this.chatUnsubscribe) return this.chatError || 'Apps chat notifications are not connected. Reload the app.';
       return '';
     }
-    if (!this.isEditorContext) {
-      return this.hostContext.view === 'fullscreen'
-        ? 'Create and Recreate require the editor extension. Chat integration is not available in Apps yet.'
-        : 'Open the generator from a document of the selected site to create or recreate pages.';
-    }
-    if (this.context.org !== this.hostContext.editorOrg
-      || this.context.site !== this.hostContext.editorSite) {
-      return 'The selected site does not match the editor. Reopen from a document of that site.';
-    }
-    if (['setPrompt', 'closeLibrary'].some((name) => typeof this.hostActions[name] !== 'function')) {
-      return 'This editor does not provide the required chat handoff. Open a supported editor.';
-    }
-    if (!this.context.path?.startsWith('/')) return 'Open an editor document before creating examples.';
-    return this.hostContext.branch && this.discoveryRef.trim() !== this.hostContext.branch
-      ? 'The code reference must match the editor site branch.' : '';
+    return 'Open the generator from DA Apps to create or recreate pages.';
   }
 
   parseAnalysisHTML(markup) {
@@ -2343,7 +2076,7 @@ class BlockLibraryGeneratorApp extends LitElement {
   }
 
   async runCardsOperation(operation, onSuccess, { readOnly = false } = {}) {
-    if (this.cardsBusy || this.probeBusy || this.libraryBusy) {
+    if (this.cardsBusy || this.libraryBusy) {
       this.cardsError = 'Another job operation is in progress.';
       return;
     }
@@ -2379,7 +2112,7 @@ class BlockLibraryGeneratorApp extends LitElement {
         throw new Error('Confirm replacing the saved analysis pointer first.');
       }
       this.cardsState = 'collecting';
-      const input = await collectCardsInput({
+      const input = await collectAnalysisInput({
         blockName: this.selectedBlock || 'cards',
         entryPaths: this.discoveryResult?.blocks
           .find((block) => block.name === (this.selectedBlock || 'cards'))?.files.map((file) => file.path),
@@ -2482,7 +2215,7 @@ class BlockLibraryGeneratorApp extends LitElement {
   sendCardsAnalysis() {
     try {
       this.assertCardsAllowed();
-      if (this.cardsBusy || this.probeBusy || this.libraryBusy || !this.cardsRequest) {
+      if (this.cardsBusy || this.libraryBusy || !this.cardsRequest) {
         throw new Error('Prepare or resume the analysis request first.');
       }
       if (this.cardsHandoff) throw new Error('Chat handoff already requested; do not resend this job.');
@@ -2502,7 +2235,6 @@ class BlockLibraryGeneratorApp extends LitElement {
       this.cardsState = 'requested';
       this.cardsError = '';
       this.hostActions.setPrompt(prompt, { autoSend });
-      if (this.isEditorContext) this.hostActions.closeLibrary();
     } catch (error) {
       this.cardsError = error instanceof Error ? error.message : String(error);
     }
@@ -2618,7 +2350,7 @@ class BlockLibraryGeneratorApp extends LitElement {
   }
 
   async generateLibraryDryRun({ starter = false } = {}) {
-    if (this.libraryBusy || this.cardsBusy || this.probeBusy) {
+    if (this.libraryBusy || this.cardsBusy) {
       this.libraryError = 'Another job operation is in progress.';
       return;
     }
@@ -2681,7 +2413,7 @@ class BlockLibraryGeneratorApp extends LitElement {
   }
 
   async runCreationOperation(verifyOnly, { starter = false } = {}) {
-    if (this.libraryBusy || this.cardsBusy || this.probeBusy) {
+    if (this.libraryBusy || this.cardsBusy) {
       this.libraryError = 'Another job operation is in progress.';
       return;
     }
@@ -2757,376 +2489,6 @@ class BlockLibraryGeneratorApp extends LitElement {
     return this.runCreationOperation(true);
   }
 
-  renderCreationReceipt() {
-    const receipt = this.libraryCreationReceipt;
-    if (!receipt) return '';
-    const disabled = Boolean(this.cardsBlockReason)
-      || this.libraryBusy || this.cardsBusy || this.probeBusy;
-    return html`
-      <div class="library-creation-receipt">
-        <h3>Saved library creation outcome</h3>
-        <p role="status">${receipt.target.environment}: ${receipt.status}.
-          Page: ${receipt.page}. Index: ${receipt.index}.</p>
-        ${receipt.error ? html`<p class="probe-error" role="alert">${receipt.error}</p>` : ''}
-        <p>These two writes are not atomic. If interrupted or partial, content may exist.
-          Check the saved outcome before further action. No automatic retry, rollback or deletion.
-          Closing the dialog may interrupt readback, not undo an accepted write.</p>
-        <button class="nx-action-btn" type="button" ?disabled=${disabled}
-          @click=${this.verifyLibraryCreation}>Check saved creation outcome (read only)</button>
-        <details>
-          <summary>Creation receipt</summary>
-          <pre>${JSON.stringify(receipt, null, 2)}</pre>
-        </details>
-      </div>
-    `;
-  }
-
-  renderLibraryDryRun() {
-    const existing = this.libraryOverview?.blocks[this.selectedBlock || 'cards'];
-    if (this.cardsAlreadyExists) {
-      return html`
-        <div class="existing-library">
-          <h3>Existing library stays unchanged</h3>
-          <p>This preview does not update the existing Cards page. Overwriting is not supported.</p>
-          <a href=${existing.editorURL} target="_blank" rel="noopener noreferrer">Open existing Cards page</a>
-          ${this.libraryError ? html`<p class="probe-error" role="alert">${this.libraryError}</p>` : ''}
-        </div>
-      `;
-    }
-    if (this.cardsState !== 'completed' || !this.cardsResult) {
-      return html`
-        ${this.libraryError ? html`<p class="probe-error" role="alert">${this.libraryError}</p>` : ''}
-        ${this.renderCreationReceipt()}
-      `;
-    }
-    const disabled = Boolean(this.cardsBlockReason)
-      || this.workflowBusy || this.libraryOverview?.blocks[this.selectedBlock || 'cards']?.status !== 'absent';
-    const preview = this.libraryPreview;
-    let status = 'Dry run does not write. Creation requires separate approval; publication is not enabled.';
-    if (this.libraryBusy) status = 'Reading current library state.';
-    if (this.libraryCreating) status = 'Creating the approved page/index with conditional writes.';
-    return html`
-      <div class="library-dry-run">
-        <h3>Create the selected examples</h3>
-        <p>Preview the library output, then prepare the destination changes.
-          Creation still requires a separate approval.</p>
-        ${!this.libraryOverview ? html`
-          <p class="probe-notice">Check the current library before proposing creation.</p>
-          <button class="nx-action-btn" type="button" ?disabled=${this.workflowBusy || this.libraryOverviewBusy}
-            @click=${this.refreshLibraryOverview}>Check library status</button>
-        ` : ''}
-        <label class="probe-confirmation">
-          <input type="checkbox" .checked=${this.libraryReviewConfirmed}
-            ?disabled=${disabled || !this.outputPreviewReady}
-            @change=${(event) => {
-    this.libraryReviewConfirmed = event.target.checked;
-    if (!this.libraryReviewConfirmed) this.libraryPreview = null;
-  }}>
-          I reviewed the selected examples. Prepare a proposal only; do not write or publish.
-        </label>
-        <div class="probe-actions">
-          <button class="nx-action-btn" type="button" ?disabled=${disabled || !this.libraryReviewConfirmed || !this.outputPreviewReady}
-            @click=${this.generateLibraryDryRun}>Review proposed changes</button>
-        </div>
-        <p role="status">${status}</p>
-        ${this.libraryError ? html`<p class="probe-error" role="alert">${this.libraryError}</p>` : ''}
-        ${preview ? html`
-          <h4>Proposed changes - no writes performed</h4>
-          <p>Create <code>${preview.destinations.pagePath}</code> and add one Cards row to
-            <code>${preview.destinations.indexPath}</code>. Preserve all existing rows and metadata.
-            No library registration change is proposed.</p>
-          <details class="technical-details">
-            <summary>Developer diagnostics: generated source and index (not example content)</summary>
-            <h4>Generated HTML</h4><pre>${preview.operations[0].content}</pre>
-            <h4>Index before</h4><pre>${JSON.stringify(preview.operations[1].before, null, 2)}</pre>
-            <h4>Index after</h4><pre>${JSON.stringify(preview.operations[1].after, null, 2)}</pre>
-          </details>
-          <ul>${preview.warnings.map((warning) => html`<li>${warning}</li>`)}</ul>
-          <label class="probe-confirmation">
-            <input type="checkbox" .checked=${this.libraryCreationConfirmed}
-              ?disabled=${disabled}
-              @change=${(event) => { this.libraryCreationConfirmed = event.target.checked; }}>
-            I approve creating ${preview.destinations.pagePath} and adding the Cards row to
-            ${preview.destinations.indexPath} in ${this.probeEnvironmentLabel}.
-            No overwrite, configuration change, deletion or publication.
-          </label>
-          <button class="nx-action-btn" type="button" ?disabled=${disabled || !this.libraryCreationConfirmed}
-            @click=${this.createApprovedLibrary}>Create Cards page and register</button>
-        ` : ''}
-      </div>
-    `;
-  }
-
-  renderFindings(value) {
-    if (value === null || value === undefined) return html`<p>Not supplied.</p>`;
-    if (Array.isArray(value)) {
-      return value.length ? html`<ul class="findings-list">
-        ${value.map((entry) => html`<li>${this.renderFindings(entry)}</li>`)}</ul>` : html`<p>None reported.</p>`;
-    }
-    if (typeof value !== 'object') return html`<span>${String(value)}</span>`;
-    return html`<dl class="findings">
-      ${Object.entries(value).map(([key, entry]) => html`
-        <div><dt>${readableLabel(key)}</dt><dd>${this.renderFindings(entry)}</dd></div>
-      `)}
-    </dl>`;
-  }
-
-  renderExampleReview() {
-    if (this.cardsResult?.status !== 'completed') return '';
-    let analysis;
-    try {
-      analysis = JSON.parse(this.libraryDraft);
-      if (!Array.isArray(analysis.examples)
-        || analysis.examples.some((example) => !example
-          || typeof example.name !== 'string' || typeof example.description !== 'string'
-          || !Array.isArray(example.options) || !Array.isArray(example.body)
-          || example.body.some((row) => !Array.isArray(row)))) {
-        throw new Error('Examples must contain names, descriptions, options and row/cell arrays.');
-      }
-    } catch (error) {
-      return html`<p class="probe-error" role="alert">Cannot display this draft: ${error.message}.
-        Correct it under Advanced: edit analysis JSON below.</p>`;
-    }
-    let copies;
-    try {
-      copies = this.ensureLibraryCopy(analysis);
-    } catch (error) {
-      return html`<p class="probe-error" role="alert">Cannot prepare library copy: ${error.message}</p>`;
-    }
-    return html`
-      <section class="workflow-card example-review" aria-labelledby="example-review-heading">
-        <h3 id="example-review-heading">Choose examples</h3>
-        <p>The names and descriptions below are library content. Analysis notes stay separate
-          and are not copied to the library.</p>
-        <p class="review-caution">Suggestions still need review. Advanced structures are optional.</p>
-        <p>${this.selectedExampleIds.length}
-          of ${analysis.examples.length} examples selected</p>
-        ${copies.filter((copy) => !copy.advanced).map((copy) => this.renderLibraryChoice(copy, analysis))}
-        ${copies.some((copy) => copy.advanced) ? html`
-          <details class="advanced-examples">
-            <summary>Optional advanced examples (not selected by default)</summary>
-            <p>These contain images and text in the same cell. This is a content grouping,
-              not a claim that every mixed structure is a recommended default.</p>
-            ${copies.filter((copy) => copy.advanced).map((copy) => this.renderLibraryChoice(copy, analysis))}
-          </details>
-        ` : ''}
-        <button class="primary-action nx-btn-accent" type="button" ?disabled=${this.workflowBusy || !this.selectedExampleIds.length}
-          @click=${this.previewLibraryOutput}>Preview library output</button>
-        ${this.libraryError ? html`<p class="probe-error" role="alert">${this.libraryError}</p>` : ''}
-      </section>
-    `;
-  }
-
-  renderLibraryChoice(copy, analysis) {
-    const example = analysis.examples.find((item) => item.id === copy.id);
-    return html`
-          <article class="example-card">
-            <label class="example-select">
-              <input type="checkbox"
-                .checked=${this.selectedExampleIds.includes(example.id)}
-                ?disabled=${this.workflowBusy}
-                @change=${(event) => this.toggleExample(example.id, event.target.checked)}>
-              <strong>${copy.name}</strong>
-            </label>
-            <p>${copy.description}</p>
-            <details><summary>Edit library name and description</summary>
-            <label class="example-field">Library name
-              <input type="text" .value=${copy.name} ?disabled=${this.workflowBusy}
-                @input=${(event) => this.editExample(example.id, 'name', event.target.value)}>
-            </label>
-            <label class="example-field">Library description
-              <textarea rows="2" .value=${copy.description} ?disabled=${this.workflowBusy}
-                @input=${(event) => this.editExample(example.id, 'description', event.target.value)}></textarea>
-            </label>
-            </details>
-          </article>
-    `;
-  }
-
-  renderOutputNode(node) {
-    if (node.nodeType === 3) return node.textContent;
-    if (node.nodeType !== 1) return '';
-    const children = [...node.childNodes].map((child) => this.renderOutputNode(child));
-    switch (node.tagName) {
-      case 'IMG': {
-        const src = node.getAttribute('src');
-        if (!this.cardsRequest.input.images.some((image) => image.src === src)) {
-          return html`<p class="probe-error">Image is not in the approved asset set.</p>`;
-        }
-        const alt = node.getAttribute('alt') || 'Decorative image';
-        return html`<figure class="output-image" role="img" aria-label=${alt} data-image-src=${src}>
-          <span aria-hidden="true">Image</span><figcaption>${alt}</figcaption>
-        </figure>`;
-      }
-      case 'H1': case 'H2': case 'H3': case 'H4': case 'H5': case 'H6':
-        return html`<p class="output-content-heading">${children}</p>`;
-      case 'P': return html`<p>${children}</p>`;
-      case 'UL': return html`<ul>${children}</ul>`;
-      case 'OL': return html`<ol>${children}</ol>`;
-      case 'LI': return html`<li>${children}</li>`;
-      case 'STRONG': case 'B': return html`<strong>${children}</strong>`;
-      case 'EM': case 'I': return html`<em>${children}</em>`;
-      case 'PRE': return html`<pre>${children}</pre>`;
-      case 'CODE': return html`<code>${children}</code>`;
-      case 'BLOCKQUOTE': return html`<blockquote>${children}</blockquote>`;
-      case 'A': return html`<span class="output-link">${children}</span>
-        <small class="output-link-destination"> (${node.getAttribute('href')})</small>`;
-      case 'BR': return html`<br>`;
-      default: return children;
-    }
-  }
-
-  renderLibraryOutput() {
-    if (!this.outputPreviewReady) return '';
-    const analysis = this.selectedAnalysis();
-    return html`
-      <section class="workflow-card library-output" aria-labelledby="library-output-heading">
-        <span class="output-label">Library content only</span>
-        <h3 id="library-output-heading" tabindex="-1">This will appear in your library</h3>
-        <p>Only these selected names, descriptions and block contents are proposed.
-          Source reasoning, analysis warnings, prompts and job details are not included.</p>
-        <p class="review-caution">Content preview with labelled image placeholders, not a live site render.
-          Original image URLs are kept in the generated page. Your existing library is unchanged.</p>
-        ${analysis.examples.map((example) => html`
-          <article class="output-example">
-            <h4>${example.name}</h4><p>${example.description}</p>
-            <div class="output-rows">
-              ${example.body.map((row) => html`<div class="output-row">
-                ${row.map((markup) => html`<div class="output-cell">
-                  ${[...this.parseAnalysisHTML(markup).childNodes].map((node) => this.renderOutputNode(node))}
-                </div>`)}
-              </div>`)}
-            </div>
-          </article>
-        `)}
-        ${this.renderLibraryDryRun()}
-      </section>
-    `;
-  }
-
-  renderCardsAnalysis() {
-    const disabled = Boolean(this.cardsBlockReason) || !this.cardsConfirmed || this.workflowBusy;
-    const readDisabled = Boolean(this.cardsBlockReason) || this.workflowBusy;
-    const analysis = this.cardsResult?.payload?.analysis;
-    const complete = this.cardsState === 'completed' && Boolean(analysis);
-    const saved = Boolean(this.cardsSaved);
-    let analysisSummary = 'Get example suggestions';
-    if (saved) analysisSummary = 'Start a new analysis (optional)';
-    if (complete) analysisSummary = 'Analysis details (not included in library)';
-    const states = {
-      idle: 'Start a new analysis or resume your saved job.',
-      restoring: 'Loading saved suggestions (read only).',
-      collecting: 'Collecting sources and approved assets; preparing the scratch request.',
-      prepared: 'Inputs verified. Review the prompt in chat before submitting.',
-      requested: 'Prompt handed to chat. Submit and approve there, then reopen and resume.',
-      pending: 'No result yet. Check again after chat finishes writing.',
-      completed: 'Draft received. Review its examples, warnings and evidence below.',
-      error: 'Analysis needs attention.',
-    };
-    return html`
-      ${!complete && saved ? html`
-        <section class="workflow-card saved-suggestions">
-          <h3>Saved example suggestions</h3>
-          <p role="status">${this.cardsState === 'restoring'
-    ? 'Loading the saved analysis. No new analysis or content write is started.'
-    : states[this.cardsState]}</p>
-          <p>Viewing a saved result does not require write approval.</p>
-          ${this.cardsError ? html`<p class="probe-error" role="alert">${this.cardsError}</p>` : ''}
-          <button class="nx-action-btn" type="button" ?disabled=${readDisabled}
-            @click=${this.loadSavedCardsDraft}>Load saved suggestions (read only)</button>
-        </section>
-      ` : ''}
-      ${complete ? html`<p class="saved-suggestions-note review-caution">
-        Saved suggestions loaded from the earlier analysis. They are not a live read of the existing
-        library page, and viewing them does not update it.</p>` : ''}
-      ${complete ? this.renderExampleReview() : ''}
-      ${complete ? this.renderLibraryOutput() : ''}
-      ${this.libraryCreationReceipt && this.libraryCreationReceipt.status !== 'completed'
-    ? this.renderCreationReceipt() : ''}
-      <details class="analysis-details" ?open=${!complete && !saved}>
-      <summary>${analysisSummary}</summary>
-      <section class="workflow-card cards-analysis">
-        <h3>${complete ? 'Analysis job' : 'Get Cards examples'}</h3>
-        <p>Analyse Cards JS/CSS and shared styles on <strong>${this.discoveryRef}</strong>.
-          Uses up to six existing images and the verified <code>/index</code> example link.
-          Only job request/result files are written at this step.</p>
-        ${this.cardsBlockReason ? html`<p class="probe-notice">${this.cardsBlockReason}</p>` : ''}
-        <label class="probe-confirmation">
-          <input type="checkbox" .checked=${this.cardsConfirmed}
-            ?disabled=${Boolean(this.cardsBlockReason) || this.workflowBusy}
-            @change=${(event) => { this.cardsConfirmed = event.target.checked; }}>
-          I confirm ${this.probeEnvironmentLabel} msagolj/ew/main for this analysis.
-          Authorize only scratch request/result writes, not library changes.
-        </label>
-        <div class="probe-actions">
-          ${this.cardsSaved ? html`
-            <button class="nx-action-btn" type="button" ?disabled=${readDisabled}
-              @click=${this.resumeCardsAnalysis}>Resume saved analysis</button>
-          ` : ''}
-          <button class="primary-action nx-btn-accent" type="button"
-            ?disabled=${disabled || (this.cardsSaved && !this.cardsNewConfirmed)}
-            @click=${this.prepareCardsAnalysis}>${this.cardsSaved ? 'Prepare new analysis' : 'Prepare analysis'}</button>
-          <button class="nx-action-btn" type="button" ?disabled=${disabled || !this.cardsRequest || this.cardsHandoff}
-            @click=${this.sendCardsAnalysis}>Review prompt in chat</button>
-          <button class="nx-action-btn" type="button" ?disabled=${readDisabled || !this.cardsRequest}
-            @click=${this.checkCardsAnalysis}>Check analysis result</button>
-        </div>
-        ${this.cardsSaved ? html`
-          <details><summary>Start another analysis</summary>
-            <label class="probe-confirmation">
-              <input type="checkbox" .checked=${this.cardsNewConfirmed} ?disabled=${disabled}
-                @change=${(event) => { this.cardsNewConfirmed = event.target.checked; }}>
-              Replace the saved resume pointer. Previous files remain; earlier chat is not cancelled.
-            </label>
-          </details>
-        ` : ''}
-        <p role="status">${this.cardsBusy ? 'Analysis operation in progress.' : states[this.cardsState]}</p>
-        ${this.cardsError ? html`<p class="probe-error" role="alert">${this.cardsError}</p>` : ''}
-        ${complete ? html`
-          <p>Everything in this section is review-only, not library copy.</p>
-          <div class="analysis-summary">
-            ${[['Options', analysis.optionAnalysis], ['Structure', analysis.structure],
-    ['Content rules', analysis.contentRules], ['Derived behavior', analysis.derivedBehavior],
-    ['Shared behavior', analysis.sharedBehavior], ['Warnings', analysis.warnings],
-    ['Unknowns', analysis.unknowns]].map(([label, value]) => html`
-              <details><summary>${label}</summary>${this.renderFindings(value)}</details>
-            `)}
-            <details><summary>Example reasoning (not library descriptions)</summary>
-              ${analysis.examples.map((example) => html`
-                <h4>${example.name}</h4>
-                ${this.renderFindings({
-    implementationNotes: example.description,
-    assumptions: example.assumptions,
-    evidence: example.evidence,
-  })}
-              `)}
-            </details>
-          </div>
-        ` : ''}
-        <details class="technical-details"><summary>Developer diagnostics (not included in library)</summary>
-          ${this.cardsSaved ? html`<p>Job: <code>${this.cardsSaved.jobId}</code></p>` : ''}
-          ${this.cardsRequest ? html`
-            <details><summary>Captured inputs</summary><pre>${JSON.stringify(this.cardsRequest, null, 2)}</pre></details>
-            <details><summary>Chat prompt</summary><pre>${createCardsPrompt(this.cardsRequest)}</pre></details>
-          ` : ''}
-          ${this.cardsResult ? html`<pre>${JSON.stringify(this.cardsResult, null, 2)}</pre>` : ''}
-          ${complete ? html`
-            <details><summary>Advanced: edit analysis JSON (local copy)</summary>
-              <p>This edits analysis notes/recipes, not library copy. It resets local names,
-                descriptions and example selection; review them again afterward.</p>
-              <label class="library-draft-label">Reviewed analysis JSON
-                <textarea rows="12" .value=${this.libraryDraft} ?disabled=${this.libraryBusy}
-                  @input=${(event) => this.changeLibraryDraft(event.target.value)}></textarea>
-              </label>
-            </details>
-          ` : ''}
-          ${this.renderCreationReceipt()}
-        </details>
-      </section>
-      </details>
-    `;
-  }
-
   renderSiteTarget() {
     if (window.parent !== window && this.connectionState !== 'ready') return '';
     if (window.parent === window || !this.isAppsContext) {
@@ -3138,13 +2500,13 @@ class BlockLibraryGeneratorApp extends LitElement {
       `;
     }
     if (this.connectionState !== 'ready') return '';
-    if (!this.isEditorContext && this.choosingSite) return this.renderSiteChooser();
+    if (this.choosingSite) return this.renderSiteChooser();
     const refreshing = this.discoveryBusy || this.libraryOverviewBusy;
     return html`
       <section class="target-bar" aria-label="Current target">
         <div><span class="eyebrow">Site</span><strong>${this.context.org && this.context.site
     ? `${this.context.org}/${this.context.site}` : 'No site selected'}</strong></div>
-        ${!this.isEditorContext && this.context.org ? html`
+        ${this.context.org ? html`
           <button class="target-change nx-action-btn" type="button"
             ?disabled=${this.workflowBusy || Boolean(this.pageFlow)
               || Boolean(this.librarySetupProposal) || refreshing}
@@ -3162,7 +2524,7 @@ class BlockLibraryGeneratorApp extends LitElement {
 
   renderSiteChooser() {
     if (window.parent === window || this.connectionState !== 'ready'
-      || this.isEditorContext || !this.choosingSite) return '';
+      || !this.isAppsContext || !this.choosingSite) return '';
     return html`
       <section class="site-chooser" aria-labelledby="site-chooser-heading">
         <h2 id="site-chooser-heading">Choose a site</h2>
@@ -3259,199 +2621,6 @@ class BlockLibraryGeneratorApp extends LitElement {
         ${!creating && this.libraryBusy ? html`<p role="status">${this.libraryCreating
     ? 'Saving changes...' : 'Checking the current page and library...'}</p>` : ''}
         ${this.renderPageAction()}
-      </section>
-    `;
-  }
-
-  renderDiscovery() {
-    const result = this.discoveryResult;
-    const blocked = this.discoveryBlockReason;
-    const providers = {
-      'code-bus': 'Synced code (Helix 6)',
-      github: 'Repository source (public GitHub)',
-      manual: 'Manually supplied names',
-    };
-    return html`
-      <section class="discovery" aria-labelledby="discovery-heading">
-        <h2 id="discovery-heading">Available blocks</h2>
-        <p>
-          Discover entry files for ${this.context.org || 'the editor organization'}/${this.context.site || 'site'}.
-          Code inspection is read-only. Complete inventories are saved as shared metadata under
-          this site's <code>/.da/block-library-generator/cache/</code> folder.
-          No code sync, migration, publishing or chat submission.
-          Code metadata uses the global Admin/API services and your existing permissions.
-        </p>
-        <div class="discovery-inputs">
-          <p>Site code branch: <strong>${this.discoveryRef}</strong> (not the plugin reference).</p>
-          <label>
-            Public GitHub fallback repository (optional override)
-            <input type="text" .value=${this.githubRepository} placeholder="owner/repository"
-              @input=${(event) => this.changeDiscoveryInput('repository', event.target.value)}>
-          </label>
-        </div>
-        ${blocked ? html`<p class="discovery-notice">${blocked}</p>` : ''}
-        <button class="nx-action-btn" type="button" ?disabled=${Boolean(blocked) || this.discoveryBusy}
-          @click=${() => this.discoverInventory({ forceRefresh: true })}>Discover blocks</button>
-        <p role="status">
-          ${this.discoveryBusy ? 'Discovering blocks and checking entry files.' : ''}
-          ${result?.provider ? `${result.blocks.length} block candidates from ${providers[result.provider]}.` : ''}
-          ${result && !result.provider ? 'Automatic discovery is unavailable. Review the errors, retry with a public repository, or enter names below.' : ''}
-        </p>
-        ${result?.cache ? html`<p>Code inventory last refreshed: ${result.cache.updatedAt}.
-          ${result.cache.fromCache ? 'Loaded from the shared saved list.' : 'Discovered in this session.'}
-          Refresh blocks checks for code changes. Library-page checks are always fresh.</p>` : ''}
-        ${this.discoveryError ? html`<p class="discovery-error" role="alert">${this.discoveryError}</p>` : ''}
-        ${result?.diagnostics.length ? html`
-          <div class="discovery-notice">
-            <strong>Provider diagnostics</strong>
-            <ul>${result.diagnostics.map((entry) => html`<li>${entry.provider}: ${entry.message}</li>`)}</ul>
-          </div>
-        ` : ''}
-        ${result?.provider ? html`
-          <p>
-            ${result.provider === 'code-bus' ? 'Complete entry-file inventory of the listed synced code, not an authorability guarantee.' : ''}
-            ${result.provider === 'github' ? 'Repository inventory, not proof that these files are synced or available on the site.' : ''}
-            ${result.provider === 'manual' ? 'Completeness and source-file availability are unverified.' : ''}
-          </p>
-          ${result.coordinates ? html`
-            <p>
-              Code repository: ${result.coordinates.owner || 'unresolved'}/${result.coordinates.repo || 'unresolved'};
-              GitHub: ${result.coordinates.githubRepository || 'unresolved'};
-              branch/reference: ${result.coordinates.ref}.
-            </p>
-          ` : ''}
-          ${result.revision ? html`<p>GitHub revision: <code>${result.revision}</code></p>` : ''}
-          <ul class="discovery-blocks">
-            ${result.blocks.map((block) => html`
-              <li>
-                <strong>${block.name}</strong>
-                ${block.files.length ? html`
-                  <ul>${block.files.map((file) => html`<li><code>${file.path}</code></li>`)}</ul>
-                ` : html`<p>Names only; no entry files verified.</p>`}
-              </li>
-            `)}
-          </ul>
-          ${!result.blocks.length ? html`<p>No conventional block entry files were found.</p>` : ''}
-        ` : ''}
-        <details ?open=${Boolean(result && !result.provider)}>
-          <summary>Manual block names</summary>
-          <label>
-            Names separated by commas, spaces, or new lines; no options or paths
-            <textarea rows="4" .value=${this.manualBlockNames}
-              @input=${(event) => { this.manualBlockNames = event.target.value; }}></textarea>
-          </label>
-          <button class="nx-action-btn" type="button" ?disabled=${Boolean(blocked) || this.discoveryBusy}
-            @click=${this.useManualBlocks}>Use manual block names</button>
-        </details>
-      </section>
-    `;
-  }
-
-  renderProbe() {
-    const target = this.probeTarget;
-    const label = this.probeEnvironmentLabel;
-    const blocked = this.probeBlockReason;
-    const disabled = Boolean(blocked) || !this.probeConfirmed || this.probeBusy;
-    const statuses = {
-      idle: 'No probe prepared.',
-      preparing: `Writing and reading back the ${label} request.`,
-      prepared: 'Request readback verified. Ready to review the prompt in chat.',
-      requested: 'Handoff requested; submission and execution are not acknowledged. Check chat.',
-      pending: 'No result received yet (HTTP 404). Refresh after the chat write completes.',
-      received: 'Matching probe result received. Confirm the actual write tool operation in chat.',
-      'agent-error': 'The agent reported a probe error.',
-      error: 'Probe operation failed.',
-    };
-    return html`
-      <section class="probe" aria-labelledby="probe-heading">
-        <h2 id="probe-heading">${label} storage / chat probe</h2>
-        ${this.probeEnvironment === 'prod' ? html`
-          <p class="probe-notice">
-            <strong>Production test:</strong> preparing this probe creates a real production
-            scratch request. Submitting in chat may create its production result.
-            Only msagolj/ew is allowed; there is no fallback to Stage.
-          </p>
-        ` : ''}
-        <p>
-          Target: ${label} <strong>msagolj/ew</strong>, site code branch <strong>main</strong>.
-          Only this run's scratch files under <code>/.da/block-library-generator/jobs/</code>
-          may be written. No Cards analysis, library writes, or publication.
-        </p>
-        <dl class="context-fields" aria-label="Probe target">
-          <div class="context-field">
-            <dt>DA admin</dt><dd>${target.adminOrigin}</dd>
-          </div>
-          <div class="context-field">
-            <dt>Host environment</dt>
-            <dd>${this.hostContext.daOrigin || `Not supplied; verify the editor and chat use ${label} before confirming.`}</dd>
-          </div>
-          <div class="context-field">
-            <dt>Site code branch</dt>
-            <dd>${this.hostContext.branch || 'Not supplied; explicitly confirm main below. Plugin ref is not used.'}</dd>
-          </div>
-        </dl>
-        ${blocked ? html`<p class="probe-notice">${blocked}</p>` : ''}
-        <label class="probe-confirmation">
-          <input type="checkbox"
-            .checked=${this.probeConfirmed}
-            ?disabled=${Boolean(blocked) || this.probeBusy}
-            @change=${(event) => { this.probeConfirmed = event.target.checked; }}>
-          I confirm that the parent editor and chat are using ${label} msagolj/ew,
-          the site code branch is main, and I authorize only this run's scratch request/result
-          in ${label}. If chat cannot target ${label}, it must not write.
-        </label>
-        ${this.savedProbe ? html`
-          <label class="probe-confirmation">
-            <input type="checkbox"
-              .checked=${this.newProbeConfirmed}
-              ?disabled=${disabled}
-              @change=${(event) => { this.newProbeConfirmed = event.target.checked; }}>
-            Preparing a new probe replaces the resume pointer, keeps previous scratch files,
-            and does not cancel any previous chat task.
-          </label>
-        ` : ''}
-        <div class="probe-actions">
-          <button class="nx-action-btn" type="button"
-            ?disabled=${disabled || (this.savedProbe && !this.newProbeConfirmed)}
-            @click=${this.prepareProbe}>
-            ${this.savedProbe ? 'Prepare new probe' : 'Prepare probe'}
-          </button>
-          <button class="nx-action-btn" type="button"
-            ?disabled=${disabled || !this.savedProbe}
-            @click=${this.resumeProbe}>Resume saved probe</button>
-          <button class="nx-action-btn" type="button"
-            ?disabled=${disabled || !this.probeRequest || this.handoffRequested}
-            @click=${this.sendProbe}>Review in chat</button>
-          <button class="nx-action-btn" type="button"
-            ?disabled=${disabled || !this.probeRequest}
-            @click=${this.checkProbeResult}>Check result</button>
-        </div>
-        <p role="status">${this.probeBusy ? 'Probe operation in progress.' : statuses[this.probeState]}</p>
-        ${this.probeError ? html`<p class="probe-error" role="alert">${this.probeError}</p>` : ''}
-        ${this.savedProbe ? html`<p>Saved job: <code>${this.savedProbe.jobId}</code></p>` : ''}
-        ${this.probeRequest ? html`
-          <p>Request: <code>${this.probeRequest.requestPath}</code></p>
-          <p>Result: <code>${this.probeRequest.resultPath}</code></p>
-          <details>
-            <summary>Prepared request</summary>
-            <pre>${JSON.stringify(this.probeRequest, null, 2)}</pre>
-          </details>
-          <details>
-            <summary>Prompt to review in chat</summary>
-            <pre>${createProbePrompt(this.probeRequest)}</pre>
-          </details>
-        ` : ''}
-        ${this.probeResult ? html`
-          <h3>Returned JSON</h3>
-          <pre>${JSON.stringify(this.probeResult, null, 2)}</pre>
-        ` : ''}
-        <p>
-          Review in chat closes this dialog without auto-sending. Submit and approve there,
-          then reopen, confirm the target, resume, and check the result.
-          Closing the dialog stops its requests, not the chat task. No polling is enabled yet.
-          Switching environments clears confirmation and loaded results, but does not undo
-          an in-flight write or cancel a chat task. After reopening, select the same environment.
-        </p>
       </section>
     `;
   }

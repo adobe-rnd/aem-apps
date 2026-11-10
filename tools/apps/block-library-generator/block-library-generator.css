@@ -111,19 +111,6 @@ block-library-generator-app .startup-spinner {
   }
 }
 
-block-library-generator-app .context-fields {
-  margin: 0;
-  border-top: 1px solid var(--s2-gray-300, #dedede);
-}
-
-block-library-generator-app .context-field {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--s2-gray-300, #dedede);
-}
-
 block-library-generator-app dt {
   color: var(--s2-gray-700, #646464);
   font-size: 14px;
@@ -148,39 +135,6 @@ block-library-generator-app .probe code {
   overflow-wrap: anywhere;
 }
 
-block-library-generator-app .probe-environment {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-top: 24px;
-}
-
-block-library-generator-app .probe-environment select {
-  max-width: 100%;
-  padding: 8px;
-  font: inherit;
-}
-
-block-library-generator-app .probe-confirmation {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 24px 0;
-  line-height: 1.5;
-}
-
-block-library-generator-app .probe-confirmation input {
-  flex-shrink: 0;
-  margin-top: 5px;
-}
-
-block-library-generator-app .probe-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
 block-library-generator-app .probe-notice,
 block-library-generator-app .probe-error {
   padding: 12px;
@@ -198,11 +152,6 @@ block-library-generator-app .probe details {
 
 block-library-generator-app .probe summary {
   cursor: pointer;
-}
-
-block-library-generator-app .library-draft-label {
-  display: grid;
-  gap: 8px;
 }
 
 block-library-generator-app .library-dry-run textarea {
@@ -236,12 +185,6 @@ block-library-generator-app .discovery label {
   gap: 8px;
 }
 
-block-library-generator-app .discovery-inputs {
-  display: grid;
-  gap: 16px;
-  margin: 16px 0;
-}
-
 block-library-generator-app .discovery input,
 block-library-generator-app .discovery textarea {
   box-sizing: border-box;
@@ -254,22 +197,10 @@ block-library-generator-app .discovery summary {
   cursor: pointer;
 }
 
-block-library-generator-app .discovery-notice,
-block-library-generator-app .discovery-error {
-  padding: 12px;
-  border-left: 3px solid var(--s2-gray-500, #808080);
-  background: var(--s2-gray-100, #f5f5f5);
-}
-
-block-library-generator-app .discovery-error {
-  border-color: var(--s2-red-800, #c9252d);
-}
-
 block-library-generator-app .discovery code {
   overflow-wrap: anywhere;
 }
 
-block-library-generator-app .discovery-blocks > li,
 block-library-generator-app .discovery details {
   margin: 16px 0;
 }
@@ -291,14 +222,10 @@ block-library-generator-app .target-bar {
   background: var(--s2-gray-75, #fff);
 }
 
-block-library-generator-app .target-bar > div,
-block-library-generator-app .target-field {
+block-library-generator-app .target-bar > div {
   display: grid;
   gap: 8px;
   min-width: 0;
-}
-
-block-library-generator-app .target-bar > div {
   flex: 1;
   overflow-wrap: anywhere;
 }
@@ -410,9 +337,7 @@ block-library-generator-app .discovery details label {
 }
 
 block-library-generator-app .target-bar input,
-block-library-generator-app .target-bar select,
-block-library-generator-app .example-card input[type="text"],
-block-library-generator-app .example-card textarea {
+block-library-generator-app .target-bar select {
   box-sizing: border-box;
   max-width: 100%;
   padding: 10px 12px;
@@ -423,104 +348,9 @@ block-library-generator-app .example-card textarea {
   font: inherit;
 }
 
-block-library-generator-app .analysis-details {
-  margin-top: 24px;
-  padding: 16px;
-  border: 1px solid var(--s2-gray-300, #dedede);
-  border-radius: 10px;
-}
-
-block-library-generator-app .analysis-details > summary {
-  font-weight: 600;
-  cursor: pointer;
-}
-
 block-library-generator-app .review-caution {
   color: var(--s2-gray-700, #646464);
   font-size: 13px;
-}
-
-block-library-generator-app .advanced-examples {
-  margin: 20px 0;
-  padding: 12px;
-  border: 1px dashed var(--s2-gray-400, #b8b8b8);
-  border-radius: 8px;
-}
-
-block-library-generator-app .output-label {
-  display: inline-block;
-  padding: 5px 10px;
-  border-radius: 12px;
-  color: var(--s2-green-900, #096b42);
-  background: var(--s2-green-100, #e8f5ec);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-block-library-generator-app .output-example {
-  margin: 24px 0;
-  padding-bottom: 24px;
-  border-bottom: 1px solid var(--s2-gray-300, #dedede);
-}
-
-block-library-generator-app .output-example > h4 {
-  margin-bottom: 8px;
-  font-size: 20px;
-}
-
-block-library-generator-app .output-rows {
-  display: grid;
-  gap: 16px;
-}
-
-block-library-generator-app .output-row {
-  display: flex;
-  gap: 16px;
-  padding: 16px;
-  border: 1px solid var(--s2-gray-300, #dedede);
-  border-radius: 8px;
-}
-
-block-library-generator-app .output-cell {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-block-library-generator-app .output-image {
-  display: flex;
-  box-sizing: border-box;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  width: 100%;
-  margin: 0;
-  padding: 16px;
-  border: 1px dashed var(--s2-gray-400, #b8b8b8);
-  border-radius: 8px;
-  color: var(--s2-gray-700, #646464);
-  background: var(--s2-gray-100, #f5f5f5);
-  font-size: 13px;
-  text-align: center;
-  aspect-ratio: 4 / 3;
-}
-
-block-library-generator-app .output-content-heading {
-  font-size: 18px;
-  font-weight: 600;
-}
-
-block-library-generator-app .output-link,
-block-library-generator-app .output-link-destination {
-  color: var(--s2-blue-800, #0265dc);
-}
-
-block-library-generator-app .existing-library {
-  margin-top: 24px;
-  padding: 16px;
-  border-radius: 8px;
-  background: var(--s2-gray-100, #f5f5f5);
 }
 
 block-library-generator-app .page-actions {
@@ -578,13 +408,6 @@ block-library-generator-app .eyebrow {
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-}
-
-block-library-generator-app .scope-notice {
-  margin: 16px 0 24px;
-  color: var(--s2-gray-700, #646464);
-  font-size: 14px;
-  line-height: 1.6;
 }
 
 block-library-generator-app .block-workspace {
@@ -703,64 +526,15 @@ block-library-generator-app .block-nav-item .status-badge {
   justify-self: start;
 }
 
-block-library-generator-app .workflow-steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: 24px 0;
-  padding: 16px 16px 16px 32px;
-  border-block: 1px solid var(--s2-gray-300, #dedede);
-  font-size: 13px;
-}
-
-block-library-generator-app .workflow-steps li {
-  margin-right: 20px;
-}
-
-block-library-generator-app .workflow-card,
-block-library-generator-app .example-card {
+block-library-generator-app .workflow-card {
   margin: 20px 0;
   padding: 20px;
   border: 1px solid var(--s2-gray-300, #dedede);
   border-radius: 10px;
 }
 
-block-library-generator-app .workflow-card > h3,
-block-library-generator-app .example-card > h3 {
+block-library-generator-app .workflow-card > h3 {
   margin-top: 0;
-}
-
-block-library-generator-app .example-field {
-  display: grid;
-  gap: 8px;
-  margin: 16px 0;
-}
-
-block-library-generator-app .example-card > .example-select {
-  display: flex;
-  align-items: flex-start;
-}
-
-block-library-generator-app .example-card textarea {
-  width: 100%;
-  resize: vertical;
-}
-
-block-library-generator-app .findings > div {
-  margin: 16px 0;
-}
-
-block-library-generator-app .findings dt {
-  margin-bottom: 6px;
-  font-weight: 600;
-}
-
-block-library-generator-app .findings-list {
-  padding-left: 20px;
-}
-
-block-library-generator-app .findings-list > li {
-  margin: 10px 0;
 }
 
 block-library-generator-app .block-nav-item:disabled {
@@ -813,10 +587,6 @@ block-library-generator-app .empty-state {
   block-library-generator-app .target-bar > div {
     flex-basis: 100%;
   }
-
-  block-library-generator-app .output-row {
-    flex-direction: column;
-  }
 }
 
 @media (width >= 600px) {
@@ -824,10 +594,5 @@ block-library-generator-app .empty-state {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
-  }
-
-  block-library-generator-app .context-field {
-    grid-template-columns: 160px minmax(0, 1fr);
-    gap: 24px;
   }
 }

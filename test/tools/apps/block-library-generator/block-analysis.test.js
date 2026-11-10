@@ -437,6 +437,18 @@ describe('Discovered source collection', () => {
     assert.ok(f.reads.every((url) => new URL(url).hostname.endsWith('.preview.da.live')));
   });
 
+  it('never restores the retired document-image collector through old source-page options', async () => {
+    const f = options('hero');
+    const value = await collectAnalysisInput({
+      ...f.args,
+      sourcePage: '/old-editor-document',
+      parseHTML: () => { throw new Error('Editor document parsing was retired'); },
+    });
+    assert.equal(value.sourcePage, null);
+    assert.deepEqual(value.images, []);
+    assert.ok(f.reads.every((url) => !url.includes('/source/')));
+  });
+
   ['/styles/lazy-styles.css', '/styles/styles.css', 'both'].forEach((missing) => {
     it(`collects verified block entries when conventional shared styles are absent: ${missing}`, async () => {
       const f = options('hero');

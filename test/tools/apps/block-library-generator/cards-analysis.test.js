@@ -16,10 +16,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import ANALYSIS_PROMPT from '../../../../tools/apps/block-library-generator/block-analysis-prompt.js';
 import {
   CARDS_SOURCE_PATHS, createCardsRequest, createCardsPrompt, validateCardsAnalysis,
-  collectCardsInput, validateCellHTML,
+  validateCellHTML,
 } from '../../../../tools/apps/block-library-generator/cards-analysis.js';
 import { loadJobPointer, saveJobPointer, loadProbePointer } from '../../../../tools/apps/block-library-generator/jobs.js';
 
@@ -246,97 +245,6 @@ describe('HTML element policy', () => {
     validateCellHTML('<p>Example</p>', [image], parseText);
     validateCellHTML('<picture><img></picture>', [image], () => fragment(element('picture'), element('img', { src: image, alt: '' })));
     validateCellHTML('', [image], () => { throw new Error('Empty cells need no parser'); });
-  });
-
-  describe('Cards input collection', () => {
-    function options() {
-      return {
-        environment: 'prod',
-        sourcePage: '/index',
-        fetchLocal: async () => new Response('Saved prompt.', {
-          headers: { 'Content-Type': 'text/plain' },
-        }),
-        daFetch: async (url) => {
-          const extension = url.split('.').at(-1);
-          const types = { html: 'text/html', css: 'text/css', js: 'text/javascript' };
-          return new Response(extension === 'html' ? '<body></body>' : '', {
-            headers: { 'Content-Type': types[extension] },
-          });
-        },
-        parseHTML: () => ({
-          querySelectorAll: () => [element('img', { src: image, alt: '' })],
-        }),
-      };
-    }
-
-    it('retains empty source files, exact image URLs and the original saved prompt', async () => {
-      const value = await collectCardsInput(options());
-      assert.equal(value.sourcePage, '/index.html');
-      assert.equal(value.prompt, ANALYSIS_PROMPT);
-      assert.ok(value.sources.every((source) => source.content === ''));
-      assert.equal(value.images[0].src, image);
-      assert.deepEqual(value.links, []);
-    });
-
-    it('reads only the explicitly supplied legacy document, not a second homepage', async () => {
-      const reads = [];
-      const base = options();
-      const value = await collectCardsInput({
-        ...base,
-        sourcePage: '/another',
-        daFetch: async (url, init) => {
-          reads.push(url);
-          if (url.endsWith('/index.html')) throw new Error('An unselected homepage must not be read');
-          return base.daFetch(url, init);
-        },
-      });
-      assert.equal(value.sourcePage, '/another.html');
-      assert.deepEqual(reads.filter((url) => url.includes('/source/')), [
-        'https://admin.da.live/source/msagolj/ew/another.html',
-      ]);
-      assert.deepEqual(value.links, []);
-    });
-
-    it('still fails if an explicitly supplied legacy source page is missing or inaccessible', async () => {
-      const base = options();
-      const responses = [new Response('', { status: 404 }), new Response('', { status: 403 })];
-      await Promise.all(responses.map((response) => assert.rejects(collectCardsInput({
-        ...base,
-        sourcePage: '/another',
-        daFetch: async (url, init) => (url.endsWith('/another.html')
-          ? response : base.daFetch(url, init)),
-      }), /404|403/i)));
-    });
-
-    it('fails explicitly if the launch document supplies no approved site images', async () => {
-      await assert.rejects(collectCardsInput({
-        ...options(),
-        parseHTML: () => ({
-          querySelectorAll: () => [element('img', { src: 'https://untrusted.example/image.jpg' })],
-        }),
-      }), /images/i);
-    });
-
-    it('does not mistake a 200 HTML error page for JavaScript or CSS', async () => {
-      await assert.rejects(collectCardsInput({
-        ...options(),
-        daFetch: async () => new Response('<html>Error</html>', {
-          headers: { 'Content-Type': 'text/html' },
-        }),
-      }), /content type/i);
-    });
-
-    it('honors cancellation before starting collection', async () => {
-      const controller = new AbortController();
-      controller.abort();
-      let called = false;
-      await assert.rejects(collectCardsInput({
-        ...options(),
-        signal: controller.signal,
-        daFetch: async () => { called = true; return new Response(''); },
-      }), /abort/i);
-      assert.equal(called, false);
-    });
   });
 
   it('rejects executable elements and unsupported attributes', () => {

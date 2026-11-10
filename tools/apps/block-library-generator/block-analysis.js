@@ -189,8 +189,7 @@ function importPaths(content, source, origin) {
 
 export async function collectAnalysisInput({
   target: selectedTarget, environment = selectedTarget?.environment,
-  blockName, entryPaths, sourcePage = null, daFetch, fetchCode, signal,
-  parseHTML = parseInertHTML, includeImports = true,
+  blockName, entryPaths, daFetch, fetchCode, signal, includeImports = true,
 }) {
   assertBlockName(blockName);
   if (!Array.isArray(entryPaths) || !entryPaths.length
@@ -200,18 +199,12 @@ export async function collectAnalysisInput({
   }
   const target = getProbeTarget(selectedTarget || environment);
   if (environment !== target.environment) throw new Error('The source collection target and environment do not match.');
-  const page = sourcePage === null ? null : sourcePagePath(sourcePage);
   const previewDomain = environment === 'prod' ? 'preview.da.live' : 'stage-preview.da.live';
   const codeOrigin = `https://${target.branch}--${target.site}--${target.org}.${previewDomain}`;
   const codeFetcher = fetchCode
     ? (url, options) => fetchCode(url, { ...options, credentials: 'omit' }) : daFetch;
-  const sourceOrigin = `${target.adminOrigin}/source/${target.org}/${target.site}`;
-  const pageRead = page === null ? Promise.resolve('')
-    : readText(daFetch, `${sourceOrigin}${page}`, signal, /text\/html/);
-  const [prompt, pageHTML, collected] = await Promise.all([
-    Promise.resolve(ANALYSIS_PROMPT),
-    pageRead,
-    Promise.all([...entryPaths, ...CARDS_SOURCE_PATHS.slice(2)].map(async (id) => ({
+  const collected = await Promise.all(
+    [...entryPaths, ...CARDS_SOURCE_PATHS.slice(2)].map(async (id) => ({
       id,
       content: await readText(
         codeFetcher,
@@ -220,22 +213,10 @@ export async function collectAnalysisInput({
         id.endsWith('.css') ? /text\/css/ : /(?:java|ecma)script/,
         { allowMissing: !entryPaths.includes(id) },
       ),
-    }))),
-  ]);
+    })),
+  );
   signal?.throwIfAborted();
   const sources = collected.filter((source) => source.content !== null);
-  const contentOrigin = environment === 'prod' ? 'https://content.da.live' : 'https://stage-content.da.live';
-  const siteRoot = `/${target.org}/${target.site}/`;
-  const images = new Map();
-  const pageImages = page === null ? [] : parseHTML(pageHTML).querySelectorAll('img[src]');
-  pageImages.forEach((img) => {
-    const src = img.getAttribute('src');
-    if (!src?.startsWith('https://')) return;
-    const url = new URL(src);
-    if (url.origin !== contentOrigin || !url.pathname.startsWith(siteRoot)
-      || url.username || url.password || url.search || url.hash || images.has(url.href)) return;
-    images.set(url.href, { src: url.href, alt: img.getAttribute('alt') || '' });
-  });
   const dependencyIssues = collected.filter((source) => source.content === null).map(({ id }) => ({
     source: 'site shared styles',
     dependency: id,
@@ -279,41 +260,16 @@ export async function collectAnalysisInput({
   const input = {
     blockName,
     entryPaths: [...entryPaths],
-    prompt,
-    sourcePage: page,
+    prompt: ANALYSIS_PROMPT,
+    sourcePage: null,
     sources,
-    images: [...images.values()].slice(0, 6),
+    images: [],
     links: [],
     helperContext: FRAMEWORK,
     dependencyIssues,
   };
   validateInput(input);
   return input;
-}
-
-export async function collectCardsInput({
-  environment, sourcePage, daFetch, signal, parseHTML = parseInertHTML,
-}) {
-  const page = sourcePagePath(sourcePage);
-  const input = await collectAnalysisInput({
-    environment,
-    sourcePage: page,
-    daFetch,
-    signal,
-    parseHTML,
-    blockName: 'cards',
-    entryPaths: CARDS_SOURCE_PATHS.slice(0, 2),
-    includeImports: false,
-  });
-  const legacy = {
-    prompt: input.prompt,
-    sourcePage: input.sourcePage,
-    sources: input.sources,
-    images: input.images,
-    links: input.links,
-  };
-  validateInput(legacy, true);
-  return legacy;
 }
 
 function safeLink(href) {

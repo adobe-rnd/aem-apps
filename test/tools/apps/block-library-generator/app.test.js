@@ -49,6 +49,14 @@ function fixtures() {
   const codeCalls = [];
   const turnSubscribers = new Set();
   const subscriptions = [];
+  const responseBodies = new WeakMap();
+  const readResponse = async (response) => {
+    if (!responseBodies.has(response)) responseBodies.set(response, response.clone().text());
+    const text = await responseBodies.get(response);
+    return new Response(response.body === null ? null : text, {
+      status: response.status, headers: response.headers,
+    });
+  };
   return {
     files,
     calls,
@@ -58,6 +66,7 @@ function fixtures() {
     codeCalls,
     turnSubscribers,
     subscriptions,
+    readResponse,
     async emitTurn(detail) {
       await Promise.all([...turnSubscribers].map((callback) => callback(detail)));
     },
@@ -94,7 +103,12 @@ function fixtures() {
         if (files.get(url) instanceof Uint8Array) {
           return new Response(files.get(url), { headers: { 'Content-Type': 'image/png' } });
         }
-        if (files.get(url) instanceof Response) return files.get(url).clone();
+        if (files.get(url) instanceof Response) {
+          const response = files.get(url);
+          assert.equal(response.bodyUsed, false, `Stored fixture body was consumed: ${url}`);
+          assert.equal(response.body?.locked ?? false, false, `Stored fixture body was locked: ${url}`);
+          return readResponse(response);
+        }
         return files.has(url)
           ? new Response(JSON.stringify(files.get(url)), {
             headers: {
@@ -254,6 +268,13 @@ async function harness(data, {
   });
   await module.evaluate();
   const app = new App();
+  const { refreshWorkspace } = app;
+  const initialRefresh = async () => {
+    app.restoreCardsPointer();
+    app.restoreCreationReceipt();
+    app.restoreLibraryPreview();
+  };
+  app.refreshWorkspace = initialRefresh;
   app.connectedCallback();
   await settle();
   return {
@@ -263,15 +284,28 @@ async function harness(data, {
     reloads,
     location: window.location,
     async connect(overrides = {}) {
+      if (app.refreshWorkspace === initialRefresh
+        && (app.discoverInventory !== App.prototype.discoverInventory
+          || app.refreshLibraryOverview !== App.prototype.refreshLibraryOverview)) {
+        app.refreshWorkspace = refreshWorkspace;
+      }
+      if (!overrides.context && !window.location.hash) window.location.hash = '#/msagolj/ew';
       resolveSdk({
         context: {
-          org: 'msagolj', site: 'ew', path: '/index', view: 'edit', ref: 'blocklibgen',
+          org: 'adobe-rnd',
+          repo: 'aem-apps',
+          path: 'tools/apps/block-library-generator/block-library-generator',
+          view: 'fullscreen',
+          ref: 'blocklibgen',
+          hash: window.location.hash,
         },
+        capabilities: { chatTurnCompleted: 1 },
         token: 'test-token-do-not-persist',
         actions: data.actions,
         ...overrides,
       });
       await settle();
+      if (app.refreshWorkspace === initialRefresh) app.refreshWorkspace = refreshWorkspace;
     },
     disconnect() {
       app.isConnected = false;
@@ -434,9 +468,9 @@ describe('Apps docked chat and scoped completion checks', () => {
     h.app.hostActions.daFetch = async (url, options) => {
       if (options.method === 'GET' && url === pageURL && data.files.get(url) instanceof Response) {
         const page = data.files.get(url);
-        return new Response(await page.clone().text(), {
-          status: page.status, headers: page.headers,
-        });
+        assert.equal(page.bodyUsed, false, 'Stored page fixture body was consumed');
+        assert.equal(page.body?.locked ?? false, false, 'Stored page fixture body was locked');
+        return data.readResponse(page);
       }
       if (options.method !== 'PUT' || ![pageURL, indexURL].includes(url)) {
         return original(url, options);
@@ -1572,13 +1606,33 @@ describe('Apps-only launch restrictions', () => {
     return typeof value === 'string' ? value : '';
   };
 
+  it('does not expose retired probe/editor screens, service switches or close-dialog actions', async () => {
+    const data = fixtures();
+    const h = await harness(data);
+    await h.connect();
+    ['renderProbe', 'renderCardsAnalysis', 'renderDiscovery', 'renderLibraryDryRun',
+      'prepareProbe', 'resumeProbe', 'sendProbe', 'checkProbeResult', 'selectProbeEnvironment',
+      'changeDiscoveryInput', 'useManualBlocks'].forEach((name) => {
+      assert.equal(h.app[name], undefined, name);
+    });
+    assert.equal(h.app.hostActions.closeLibrary, undefined);
+    assert.equal(h.app.probeEnvironment, 'prod');
+    assert.equal(h.app.context.path, '');
+    assert.equal(data.closed.length, 0);
+    assert.ok(data.calls.every(({ method }) => method === 'GET'));
+  });
+
   it('rejects old editor registrations without a migration screen or workspace', async () => {
     const data = fixtures();
     const h = await harness(data);
     let refreshed = 0;
     h.app.refreshWorkspace = async () => { refreshed += 1; };
     h.app.updateComplete = Promise.resolve();
-    await h.connect();
+    await h.connect({
+      context: {
+        org: 'msagolj', site: 'ew', path: '/index', view: 'edit',
+      },
+    });
     const view = markup(h.app.render());
     assert.match(view, /DA Apps required/);
     assert.match(view, /only be opened from DA Apps/);
@@ -1700,7 +1754,7 @@ describe('General site UI and lifecycle', () => {
     return typeof value === 'string' ? value : '';
   };
 
-  it('shows only startup loading until editor context arrives, without flashing the site chooser', async () => {
+  it('shows only startup loading until Apps context arrives, without flashing the site chooser', async () => {
     const data = fixtures();
     const h = await harness(data);
     let refreshed = 0;
@@ -1717,8 +1771,8 @@ describe('General site UI and lifecycle', () => {
     assert.equal(data.calls.length, 0);
     await h.connect();
     assert.doesNotMatch(text(h.app.render()), /Connecting to DA|startup-spinner|Choose a site/);
-    assert.match(text(h.app.renderSiteTarget()), /DA Apps required/);
-    assert.equal(refreshed, 0);
+    assert.match(text(h.app.renderSiteTarget()), /Current target/);
+    assert.equal(refreshed, 1);
     assert.equal(data.prompts.length, 0);
   });
 
@@ -1745,21 +1799,27 @@ describe('General site UI and lifecycle', () => {
     assert.doesNotMatch(text(failed.app.render()), /startup-spinner|Choose a site|Use site/);
   });
 
-  it('uses Production without an environment picker and follows the actual editor target', async () => {
-    const h = await harness(fixtures());
+  it('uses the Production Apps target without inheriting an editor branch or document', async () => {
+    const h = await harness(fixtures(), { hash: '#/example-org/demo' });
     let refreshed = 0;
     h.app.updateComplete = Promise.resolve();
     h.app.refreshWorkspace = async () => { refreshed += 1; };
     await h.connect({
       context: {
-        org: 'example-org', site: 'demo', branch: 'release', path: '/welcome', view: 'canvas',
+        org: 'adobe-rnd',
+        repo: 'aem-apps',
+        hash: '#/example-org/demo',
+        branch: 'release',
+        path: '/welcome',
+        view: 'fullscreen',
       },
     });
     assert.equal(h.app.probeEnvironment, 'prod');
     assert.equal(h.app.probeTarget.org, 'example-org');
-    assert.equal(h.app.probeTarget.branch, 'release');
+    assert.equal(h.app.probeTarget.branch, 'main');
     assert.equal(h.app.cardsBlockReason, '');
-    assert.equal(refreshed, 0);
+    assert.equal(h.app.context.path, '');
+    assert.equal(refreshed, 1);
     assert.doesNotMatch(text(h.app.render()), /Stage \(default\)|Environment\s/);
   });
 
@@ -1886,7 +1946,7 @@ describe('General site UI and lifecycle', () => {
     assert.equal(h.app.targetError, '');
     assert.equal(targets.length, 1);
     assert.equal(targets[0].site, 'frescopa');
-    assert.equal(h.app.isEditorContext, false);
+    assert.equal(h.app.isAppsContext, true);
     assert.match(h.app.cardsBlockReason, /canonical Apps/);
     assert.match(text(h.app.renderSiteTarget()), /Change site/);
     assert.equal(JSON.parse(data.storage.getItem('block-library-generator:last-site:prod')).site, 'frescopa');
@@ -1939,10 +1999,11 @@ describe('General site UI and lifecycle', () => {
         org: 'msagolj', site: 'ew', path: '/index', branch: 'release', view: 'canvas',
       },
     });
-    assert.equal(editor.app.context.org, 'msagolj');
-    assert.equal(editor.app.context.site, 'ew');
-    assert.equal(editor.app.discoveryRef, 'release');
-    assert.equal(editor.app.isEditorContext, true);
+    assert.equal(editor.app.context.org, '');
+    assert.equal(editor.app.context.site, '');
+    assert.equal(editor.app.discoveryRef, 'main');
+    assert.equal(editor.app.isAppsContext, false);
+    assert.match(text(editor.app.render()), /DA Apps required/);
     assert.equal(data.calls.length, 0);
   });
 
@@ -1987,16 +2048,19 @@ describe('General site UI and lifecycle', () => {
     assert.doesNotMatch(text(h.app.render()), /class="site-chooser"/);
   });
 
-  it('keeps an editor-bound site in summary mode without a Change site control', async () => {
+  it('rejects editor-bound site selection without exposing workspace controls', async () => {
     const h = await harness(fixtures());
-    await h.connect();
+    await h.connect({
+      context: {
+        org: 'msagolj', site: 'ew', path: '/index', view: 'canvas',
+      },
+    });
     h.app.beginSiteSelection();
-    assert.equal(h.app.choosingSite, false);
     assert.match(text(h.app.renderSiteTarget()), /DA Apps required/);
     assert.doesNotMatch(text(h.app.renderSiteTarget()), /Change site|class="site-chooser"/);
   });
 
-  it('offers manual selection when an editor host omits its site, without inventing chat context', async () => {
+  it('rejects an editor host without a site instead of offering a legacy selection path', async () => {
     const h = await harness(fixtures());
     await h.connect({ context: { view: 'canvas', path: '/index', daOrigin: 'https://admin.da.live' } });
     assert.equal(h.app.connectionState, 'ready');
@@ -2005,19 +2069,20 @@ describe('General site UI and lifecycle', () => {
     h.app.manualSite = 'demo';
     h.app.refreshWorkspace = async () => {};
     await h.app.applySiteTarget();
-    assert.equal(h.app.probeTarget.site, 'demo');
-    assert.match(h.app.cardsBlockReason, /editor|document/);
+    assert.equal(h.app.probeTarget, null);
+    assert.match(h.app.targetError, /DA Apps/);
+    assert.match(h.app.cardsBlockReason, /DA Apps/);
   });
 
   it('blocks unsupported editor chat actions before preparing any scratch request', async () => {
     const data = fixtures();
     const h = await harness(data);
     await h.connect({ actions: { daFetch: data.actions.daFetch } });
-    assert.match(h.app.cardsBlockReason, /chat handoff/);
+    assert.match(h.app.cardsBlockReason, /Apps chat|nx2/);
     h.app.cardsConfirmed = true;
     await h.app.prepareCardsAnalysis();
     assert.equal(data.calls.length, 0);
-    assert.match(h.app.cardsError, /chat handoff/);
+    assert.match(h.app.cardsError, /Apps chat|nx2/);
   });
 
   it('rejects unsafe manual targets before reading or retaining them', async () => {
@@ -2032,12 +2097,16 @@ describe('General site UI and lifecycle', () => {
     assert.equal(data.calls.length, 0);
   });
 
-  it('prepares analysis from the selected editor site, not the legacy test site', async () => {
+  it('prepares analysis from the selected Apps site, not the app host or legacy test site', async () => {
     const data = fixtures();
-    const h = await harness(data);
+    const h = await harness(data, { hash: '#/example-org/demo' });
     await h.connect({
       context: {
-        org: 'example-org', site: 'demo', path: '/index', view: 'canvas', branch: 'main',
+        org: 'adobe-rnd',
+        repo: 'aem-apps',
+        hash: '#/example-org/demo',
+        path: 'tools/apps/block-library-generator/block-library-generator',
+        view: 'fullscreen',
       },
     });
     const entryPaths = ['/blocks/hero/hero.js', '/blocks/hero/hero.css'];
@@ -2264,6 +2333,7 @@ describe('Confirmed library initialization UI', () => {
     const h = await harness(data);
     await h.connect(apps ? {
       context: { view: 'fullscreen', daOrigin: 'https://admin.da.live', hash: '#/msagolj/ew' },
+      capabilities: {},
     } : {});
     if (apps) {
       h.app.manualOrg = 'msagolj';
@@ -2371,11 +2441,7 @@ describe('Confirmed library initialization UI', () => {
     const writes = data.calls.filter((call) => call.method !== 'GET').length;
     h.disconnect();
     const reopened = await harness(data);
-    await reopened.connect({
-      context: {
-        org: h.app.context.org, site: h.app.context.site, path: '/index', view: 'canvas',
-      },
-    });
+    await reopened.connect();
     await reopened.app.refreshLibraryOverview();
     assert.match(text(reopened.app.renderLibraryPreviewWarning()), /403/);
     assert.equal(data.calls.filter((call) => call.method !== 'GET').length, writes);
@@ -2428,7 +2494,6 @@ describe('Block-list/detail workflow', () => {
     return typeof value === 'string' ? value : '';
   };
   function configure(app) {
-    app.selectProbeEnvironment('prod');
     app.hostContext = { ...app.hostContext, view: 'fullscreen', hash: '#/msagolj/ew' };
     app.chatTurnSupported = true;
     app.connectChatNotifications();
@@ -2557,7 +2622,7 @@ describe('Block-list/detail workflow', () => {
     h.app.libraryReviewConfirmed = true;
     h.app.cardsState = 'completed';
     h.app.cardsResult = { status: 'completed', payload: { analysis: {} } };
-    assert.doesNotMatch(visibleText(h.app.renderLibraryDryRun()), /Create Cards page and register/);
+    assert.doesNotMatch(visibleText(h.app.renderBlockDetail()), /Create Cards page and register/);
     await h.app.generateLibraryDryRun();
     assert.match(h.app.libraryError, /already|overwrite/i);
     assert.equal(data.calls.length, 0);
@@ -2613,106 +2678,40 @@ describe('Block-list/detail workflow', () => {
     h.app.selectBlock('cards');
     assert.equal(h.app.selectedBlock, 'hero');
   });
-
-  it('resets library overview and selected examples on target changes and discards late GETs', async () => {
-    const h = await harness(fixtures());
-    await h.connect();
-    configure(h.app);
-    let resolve;
-    h.app.hostActions.daFetch = () => new Promise((done) => { resolve = done; });
-    const pending = h.app.refreshLibraryOverview();
-    h.app.selectProbeEnvironment('stage');
-    resolve(Response.json({}));
-    await pending;
-    assert.equal(h.app.libraryOverview, null);
-    assert.equal(h.app.selectedBlock, '');
-    assert.equal(h.app.libraryOverviewError, '');
-    assert.equal(h.app.selectedExampleIds, null);
-  });
-
-  it('shows readable nested findings without executing model markup', async () => {
-    const h = await harness(fixtures());
-    const text = visibleText(h.app.renderFindings({
-      rowMapping: { classification: 'observed', evidence: ['cards.js:6'], explanation: '<script>not executable</script>' },
-      warnings: ['Review before creating'],
-    }));
-    assert.match(text, /Row mapping/);
-    assert.match(text, /observed/);
-    assert.match(text, /not executable/);
-    assert.match(text, /cards.js:6/);
-  });
-
-  it('shows an explicit draft-format error instead of breaking the detail render', async () => {
-    const h = await harness(fixtures());
-    h.app.cardsResult = { status: 'completed' };
-    h.app.libraryDraft = JSON.stringify({ examples: [{ name: 'Bad', body: [42] }] });
-    assert.match(visibleText(h.app.renderExampleReview()), /Cannot display this draft/);
-  });
-
-  it('keeps technical analysis under a labelled disclosure and offers an explicit output preview', async () => {
-    const h = await harness(fixtures());
-    await h.connect();
-    h.app.cardsResult = {
-      status: 'completed',
-      payload: {
-        analysis: {
-          examples: [{
-            id: 'sample',
-            name: 'Technical name',
-            description: 'children.length === 1',
-            body: [['<p>Text</p>']],
-            options: [],
-            assumptions: [],
-            evidence: [],
-          }],
-        },
-      },
-    };
-    h.app.cardsState = 'completed';
-    h.app.libraryDraft = JSON.stringify(h.app.cardsResult.payload.analysis);
-    h.app.parseAnalysisHTML = () => ({ querySelectorAll: () => [], textContent: 'Text' });
-    const choices = visibleText(h.app.renderExampleReview());
-    assert.match(choices, /Choose examples/);
-    assert.match(choices, /Preview library output/);
-    assert.match(choices, /Text cards/);
-    assert.doesNotMatch(choices, /children\.length|Technical name/);
-    const workflow = visibleText(h.app.renderCardsAnalysis());
-    assert.match(workflow, /Analysis details \(not included in library\)/);
-    assert.match(workflow, /Example reasoning \(not library descriptions\)/);
-    assert.equal(h.app.outputPreviewReady, false);
-    assert.equal(h.app.renderLibraryOutput(), '');
-  });
-
-  it('uses explicit approved-image placeholders in the content preview, without loading raw model resources', async () => {
-    const h = await harness(fixtures());
-    const src = 'https://content.da.live/msagolj/ew/.index/image.jpg';
-    h.app.cardsRequest = { input: { images: [{ src }] } };
-    const imageNode = {
-      nodeType: 1,
-      tagName: 'IMG',
-      childNodes: [],
-      getAttribute: (name) => ({ src, alt: 'Example image' }[name] || null),
-    };
-    const view = h.app.renderOutputNode(imageNode);
-    assert.match(view.strings.join(''), /role="img"/);
-    assert.doesNotMatch(view.strings.join(''), /<img\b|onerror/);
-    assert.match(visibleText(view), /Example image/);
-    const unapproved = { ...imageNode, getAttribute: () => 'https://other.example/image.jpg' };
-    assert.match(visibleText(h.app.renderOutputNode(unapproved)), /not in the approved asset set/);
-  });
 });
 
-describe('One-shot page actions', () => {
+describe('Page lifecycle guards and saved manual actions', () => {
   const text = (value) => {
     if (Array.isArray(value)) return value.map(text).join(' ');
     if (value?.strings) return value.strings.join(' ') + value.values.map(text).join(' ');
     return typeof value === 'string' ? value : '';
   };
+  async function restoreManualAction(app, mode) {
+    if (mode === 'recreate') {
+      await app.beginPageAction(mode);
+      if (app.pageFlow?.status !== 'confirm') return;
+      const { autoRecreate, ...saved } = app.pageFlow;
+      app.savePageFlow(saved);
+    } else {
+      app.savePageFlow({
+        mode,
+        name: app.selectedBlock,
+        environment: 'prod',
+        target: app.probeTarget,
+        status: 'confirm',
+        startedAt: new Date().toISOString(),
+        snapshot: null,
+        error: '',
+      });
+    }
+    app.restorePageFlow();
+  }
+
   async function setup() {
     const data = fixtures();
     const h = await harness(data);
     await h.connect();
-    h.app.selectProbeEnvironment('prod');
+
     h.app.discoveryResult = {
       complete: true,
       provider: 'code-bus',
@@ -2813,12 +2812,12 @@ describe('One-shot page actions', () => {
     const view = text(h.app.renderBlockDetail());
     assert.match(view, />Create<\/button>/);
     assert.doesNotMatch(view, />Delete<\/button>/);
-    await h.app.beginPageAction('create');
+    await restoreManualAction(h.app, 'create');
     assert.equal(h.app.pageFlow?.mode, 'create');
     assert.equal(data.calls.length, 0);
     h.app.cancelPageAction();
     await h.app.selectBlock('retired');
-    await h.app.beginPageAction('recreate');
+    await restoreManualAction(h.app, 'recreate');
     assert.match(h.app.libraryError, /verified block code|Generation/);
     assert.equal(data.calls.length, 0);
   });
@@ -2827,7 +2826,7 @@ describe('One-shot page actions', () => {
     const { data, h } = await setup();
     await h.app.selectBlock('hero');
     assert.match(text(h.app.renderBlockDetail()), />Create<\/button>/);
-    await h.app.beginPageAction('create');
+    await restoreManualAction(h.app, 'create');
     const view = text(h.app.renderBlockDetail());
     assert.match(view, /Prepare examples/);
     assert.match(view, /Save library page/);
@@ -2846,7 +2845,7 @@ describe('One-shot page actions', () => {
   it('shows actionable waiting and result-not-ready states without claiming chat started or creating a page', async () => {
     const { data, h } = await setup();
     await h.app.selectBlock('hero');
-    await h.app.beginPageAction('create');
+    await restoreManualAction(h.app, 'create');
     h.app.pageFlow = { ...h.app.pageFlow, status: 'waiting' };
     let view = text(h.app.renderPageAction());
     assert.match(view, /Review and send/);
@@ -2861,13 +2860,20 @@ describe('One-shot page actions', () => {
     assert.equal(data.prompts.length, 0);
   });
 
-  it('retries blocked Create through a fresh confirmation without changing the prior job or starting chat', async () => {
+  it('retries a saved blocked Create with a new automatic job while preserving the previous files', async () => {
     const { data, h } = await setup();
     await h.app.selectBlock('hero');
     const previous = jobs.createJobRequest({
       target: h.app.probeTarget, kind: 'analysis', input: { blockName: 'hero' },
     });
     const root = 'https://admin.da.live/source/msagolj/ew';
+    h.app.libraryOverview.paths = library.getBlockLibraryPaths({
+      library: { data: [{ title: 'Blocks', path: 'https://content.da.live/msagolj/ew/docs/library/blocks.json' }] },
+    }, h.app.probeTarget, 'hero');
+    h.app.discoveryResult.blocks.find(({ name }) => name === 'hero').files = [{ path: '/blocks/hero/hero.js' }];
+    data.files.set('https://main--ew--msagolj.preview.da.live/blocks/hero/hero.js', new Response('', {
+      headers: { 'Content-Type': 'text/javascript' },
+    }));
     const result = { status: 'completed', payload: { generation: 'blocked' } };
     data.files.set(`${root}${previous.requestPath}`, previous);
     data.files.set(`${root}${previous.resultPath}`, result);
@@ -2886,24 +2892,25 @@ describe('One-shot page actions', () => {
     await h.app.retryPageGeneration();
     assert.equal(h.app.libraryError, '');
     assert.equal(h.app.pageFlow.mode, 'create');
-    assert.equal(h.app.pageFlow.status, 'confirm');
-    assert.equal(h.app.pageFlow.jobId, undefined);
+    assert.equal(h.app.pageFlow.status, 'waiting');
+    assert.equal(h.app.pageFlow.autoCreate, true);
+    assert.notEqual(h.app.pageFlow.jobId, previous.jobId);
     assert.equal(h.app.pageFlow.error, '');
-    assert.equal(h.app.cardsRequest, null);
-    assert.equal(h.app.cardsResult, null);
-    assert.match(text(h.app.renderPageAction()), /Continue in chat/);
+    assert.equal(h.app.cardsRequest.jobId, h.app.pageFlow.jobId);
+    assert.doesNotMatch(text(h.app.renderPageAction()), /Continue in chat/);
     assert.doesNotMatch(text(h.app.renderPageAction()), /Confirm create page/);
-    assert.equal(data.calls.length, 0);
-    assert.equal(data.prompts.length, 0);
+    assert.equal(data.files.has(`${root}/docs/library/blocks/hero.html`), false);
+    assert.equal(data.prompts.length, 1);
+    assert.equal(data.prompts[0].options.autoSend, true);
     assert.equal(data.files.get(`${root}${previous.requestPath}`), previous);
     assert.equal(data.files.get(`${root}${previous.resultPath}`), result);
-    assert.equal(jobs.loadJobPointer(data.storage, previous.target, 'analysis', 'hero').jobId, previous.jobId);
+    assert.equal(jobs.loadJobPointer(data.storage, previous.target, 'analysis', 'hero').jobId, h.app.pageFlow.jobId);
   });
 
   it('keeps blocked Recreate recoverable and shows a retry error when the current page cannot be read', async () => {
     const { data, h } = await setup();
     await h.app.selectBlock('cards');
-    await h.app.beginPageAction('recreate');
+    await restoreManualAction(h.app, 'recreate');
     h.app.savePageFlow({
       ...h.app.pageFlow, status: 'blocked', error: 'External content is required.',
     });
@@ -2947,7 +2954,7 @@ describe('One-shot page actions', () => {
   it('separates preparation, result checks and page saving without contradictory controls or messages', async () => {
     const { h } = await setup();
     await h.app.selectBlock('hero');
-    await h.app.beginPageAction('create');
+    await restoreManualAction(h.app, 'create');
     h.app.cardsBusy = true;
     h.app.cardsState = 'collecting';
     let view = text(h.app.renderPageAction());
@@ -2970,7 +2977,7 @@ describe('One-shot page actions', () => {
   it('keeps final Create consent separate and reports the selected example count without listing recipes', async () => {
     const { data, h } = await setup();
     await h.app.selectBlock('hero');
-    await h.app.beginPageAction('create');
+    await restoreManualAction(h.app, 'create');
     h.app.pageFlow = { ...h.app.pageFlow, status: 'ready' };
     h.app.selectedExampleIds = ['first', 'second'];
     const view = text(h.app.renderPageAction());
@@ -2986,7 +2993,7 @@ describe('One-shot page actions', () => {
   it('distinguishes an analysis failure from a potentially partial page save', async () => {
     const { h } = await setup();
     await h.app.selectBlock('hero');
-    await h.app.beginPageAction('create');
+    await restoreManualAction(h.app, 'create');
     h.app.pageFlow = { ...h.app.pageFlow, status: 'failed', error: 'Analysis request failed' };
     let view = text(h.app.renderPageAction());
     assert.match(view, /No library page was saved/);
@@ -3006,7 +3013,7 @@ describe('One-shot page actions', () => {
   it('preserves partial creation status when the internal writer has already recorded a partial receipt', async () => {
     const { h } = await setup();
     await h.app.selectBlock('hero');
-    await h.app.beginPageAction('create');
+    await restoreManualAction(h.app, 'create');
     h.app.pageFlow = { ...h.app.pageFlow, status: 'ready', jobId: 'new-job' };
     h.app.cardsRequest = {
       jobId: 'new-job', kind: 'analysis', input: { blockName: 'hero' }, target: h.app.probeTarget,
@@ -3044,7 +3051,7 @@ describe('One-shot page actions', () => {
   it('cleans the fresh recreation job only after verified replacement and returns to normal actions', async () => {
     const { data, h } = await setup();
     await h.app.selectBlock('cards');
-    await h.app.beginPageAction('recreate');
+    await restoreManualAction(h.app, 'recreate');
     const request = cards.createCardsRequest({
       target: h.app.probeTarget,
       input: {
@@ -3235,7 +3242,7 @@ describe('One-shot page actions', () => {
   it('does not overwrite on Recreate click; requires fresh generation and explicit final confirmation', async () => {
     const { data, h } = await setup();
     await h.app.selectBlock('cards');
-    await h.app.beginPageAction('recreate');
+    await restoreManualAction(h.app, 'recreate');
     assert.equal(h.app.pageFlow.status, 'confirm');
     h.app.pageFlow.snapshot.pageETag = null;
     const confirmation = text(h.app.renderPageAction());
@@ -3254,7 +3261,7 @@ describe('One-shot page actions', () => {
   it('restores the same site action on reopening without loading an old analysis', async () => {
     const { data, h } = await setup();
     await h.app.selectBlock('cards');
-    await h.app.beginPageAction('recreate');
+    await restoreManualAction(h.app, 'recreate');
     const flow = h.app.pageFlow;
     h.disconnect();
     const reopened = await harness(data);
@@ -3265,7 +3272,7 @@ describe('One-shot page actions', () => {
     assert.ok(data.calls.every((call) => call.method === 'GET'));
   });
 
-  it('retries blocked recreation with a fresh snapshot/job and waits for final replacement confirmation', async () => {
+  it('retries blocked recreation with a fresh snapshot and upfront replacement confirmation', async () => {
     const { data, h } = await setup();
     const image = 'https://content.da.live/msagolj/ew/.index/image.jpg';
     h.app.discoveryResult.blocks[0].files = cards.CARDS_SOURCE_PATHS.slice(0, 2)
@@ -3289,7 +3296,7 @@ describe('One-shot page actions', () => {
         : [{ tagName: 'P', attributes: [] }]),
     });
     await h.app.selectBlock('cards');
-    await h.app.beginPageAction('recreate');
+    await restoreManualAction(h.app, 'recreate');
     const previous = jobs.createJobRequest({
       target: h.app.probeTarget, kind: 'analysis', input: { blockName: 'cards' },
     });
@@ -3314,7 +3321,7 @@ describe('One-shot page actions', () => {
     assert.equal(h.app.pageFlow.jobId, undefined);
     assert.ok(data.calls.every((call) => call.method === 'GET'));
     assert.equal(data.prompts.length, 0);
-    await h.app.generatePageSuggestions();
+    await h.app.confirmAutomaticRecreate();
     assert.equal(h.app.pageFlow.status, 'waiting');
     assert.equal(h.app.pageFlow.jobId, h.app.cardsRequest.jobId);
     assert.notEqual(h.app.cardsRequest.jobId, previous.jobId);
@@ -3322,49 +3329,16 @@ describe('One-shot page actions', () => {
     assert.equal(data.files.get(`${root}${previous.requestPath}`), previous);
     assert.equal(data.files.get(`${root}${previous.resultPath}`), previousResult);
     assert.equal(data.prompts.length, 1);
-    assert.equal(data.prompts[0].options.autoSend, false);
+    assert.equal(data.prompts[0].options.autoSend, true);
     assert.ok(data.calls.filter((call) => call.method !== 'GET')
       .every((call) => call.url.includes('/.da/block-library-generator/jobs/')
         || call.url.includes('/docs/library/media/block-library-generator/')));
-    const request = h.app.cardsRequest;
-    data.files.set(`https://admin.da.live/source/msagolj/ew${request.resultPath}`, {
-      schemaVersion: 1,
-      kind: request.kind,
-      jobId: request.jobId,
-      target: request.target,
-      status: 'completed',
-      payload: {
-        analysis: {
-          blockName: 'cards',
-          generation: { status: 'ready', reason: '' },
-          analysisScope: {},
-          structure: {},
-          contentRules: {},
-          derivedBehavior: {},
-          sharedBehavior: {},
-          warnings: [],
-          unknowns: [],
-          optionAnalysis: { status: 'none-found', supportedOptions: [] },
-          examples: [{
-            id: 'fresh',
-            name: 'Fresh',
-            description: 'Fresh output',
-            body: [['<p>Content</p>']],
-            options: [],
-            assumptions: [],
-            evidence: [cards.CARDS_SOURCE_PATHS[0]],
-          }],
-        },
-      },
-    });
-    const count = data.calls.length;
-    await h.app.loadPageGeneration();
-    assert.equal(h.app.pageFlow.status, 'ready');
-    assert.ok(data.calls.slice(count).every((call) => call.method === 'GET'));
-    assert.match(text(h.app.renderPageAction()), /Confirm replace entire page/);
+    assert.doesNotMatch(text(h.app.renderPageAction()), /Confirm replace entire page/);
     assert.doesNotMatch(text(h.app.renderBlockDetail()), /class="example-card"|Choose examples/);
     const page = data.files.get('https://admin.da.live/source/msagolj/ew/docs/library/blocks/cards.html');
     assert.equal(await page.clone().text(), '<body>Author changes</body>');
+    h.app.cancelPageAction();
+    assert.equal(h.app.pageFlow, null);
   });
 
   it('rejects a prior request as the result of a newly confirmed recreation', async () => {
@@ -3380,7 +3354,7 @@ describe('One-shot page actions', () => {
       },
     });
     await h.app.selectBlock('cards');
-    await h.app.beginPageAction('recreate');
+    await restoreManualAction(h.app, 'recreate');
     h.app.savePageFlow({ ...h.app.pageFlow, status: 'waiting', jobId: old.jobId });
     data.files.set(`https://admin.da.live/source/msagolj/ew${old.requestPath}`, old);
     await h.app.loadPageGeneration();
@@ -3438,7 +3412,7 @@ describe('One-shot page actions', () => {
         querySelectorAll: (selector) => (selector === 'img[src]' ? [] : [{ tagName: 'P', attributes: [] }]),
       });
       await h.app.selectBlock(name);
-      await h.app.beginPageAction('create');
+      await restoreManualAction(h.app, 'create');
       await h.app.generatePageSuggestions();
       assert.equal(h.app.cardsError, '', name);
       assert.equal(h.app.pageFlow.status, 'waiting', name);
@@ -3482,7 +3456,7 @@ describe('One-shot page actions', () => {
       }
       return fetcher(url, options);
     };
-    await h.app.beginPageAction('create');
+    await restoreManualAction(h.app, 'create');
     await h.app.generatePageSuggestions();
     assert.match(h.app.cardsError, /403/);
     assert.equal(h.app.cardsRequest, null);
@@ -3643,7 +3617,7 @@ describe('Diagnostic saved Cards readers (not the page landing view)', () => {
     }
     const h = await harness(data);
     await h.connect();
-    h.app.selectProbeEnvironment('prod');
+
     h.app.discoveryResult = { blocks: [{ name: 'cards', files: [] }, { name: 'hero', files: [] }] };
     h.app.parseAnalysisHTML = () => ({
       children: [{}], querySelectorAll: () => [], textContent: 'Example',
@@ -3672,7 +3646,7 @@ describe('Diagnostic saved Cards readers (not the page landing view)', () => {
     h.disconnect();
     const fresh = await harness(data);
     await fresh.connect();
-    fresh.app.selectProbeEnvironment('prod');
+
     fresh.app.discoveryResult = { blocks: [{ name: 'cards', files: [] }] };
     fresh.app.parseAnalysisHTML = () => ({
       children: [{}], querySelectorAll: () => [], textContent: 'Example',
@@ -3760,7 +3734,7 @@ describe('app connection regressions', () => {
   it('keeps standalone opening read-only and handles an unavailable SDK', async () => {
     const direct = await harness(fixtures(), { embedded: false });
     assert.equal(direct.app.connectionState, 'unavailable');
-    assert.match(direct.app.probeBlockReason, /editor/i);
+    assert.match(direct.app.discoveryBlockReason, /DA Apps/i);
     const failed = await harness(fixtures(), { sdkFails: true });
     assert.equal(failed.app.connectionState, 'error');
   });
@@ -3769,7 +3743,6 @@ describe('app connection regressions', () => {
     const configURL = 'https://admin.da.live/config/msagolj/ew';
     const indexURL = 'https://admin.da.live/source/msagolj/ew/docs/library/blocks.json';
     function configure(data, app) {
-      app.selectProbeEnvironment('prod');
       app.cardsConfirmed = true;
       app.cardsRequest = cards.createCardsRequest({
         environment: 'prod',
@@ -4508,7 +4481,7 @@ describe('app connection regressions', () => {
       h.disconnect();
       const reopened = await harness(data);
       await reopened.connect();
-      reopened.app.selectProbeEnvironment('prod');
+
       reopened.app.cardsConfirmed = true;
       reopened.app.hostActions.daFetch = fetcher;
       assert.equal(reopened.app.libraryCreationReceipt.status, 'completed');
@@ -4543,13 +4516,13 @@ describe('app connection regressions', () => {
       const h = await harness(data);
       await h.connect();
       configure(data, h.app);
+      const { choosingSite } = h.app;
       h.app.libraryCreating = true;
-      h.app.selectProbeEnvironment('stage');
-      h.app.changeDiscoveryInput('ref', 'other');
+      h.app.libraryBusy = true;
+      h.app.beginSiteSelection();
       assert.equal(h.app.probeEnvironment, 'prod');
       assert.equal(h.app.discoveryRef, 'main');
-      assert.match(h.app.libraryError, /Wait/);
-      assert.match(h.app.discoveryError, /Wait/);
+      assert.equal(h.app.choosingSite, choosingSite);
     });
 
     it('reports an existing Cards page as a conflict, not a proposed overwrite', async () => {
@@ -4564,32 +4537,11 @@ describe('app connection regressions', () => {
       assert.match(h.app.libraryError, /already exists/i);
       assert.ok(data.calls.every(({ method }) => method === 'GET'));
     });
-
-    it('discards in-flight proposals when the environment changes', async () => {
-      const data = fixtures();
-      const h = await harness(data);
-      await h.connect();
-      configure(data, h.app);
-      let resolveConfig;
-      h.app.hostActions.daFetch = () => new Promise((resolve) => { resolveConfig = resolve; });
-      h.app.libraryReviewConfirmed = true;
-      const pending = h.app.generateLibraryDryRun();
-      h.app.selectProbeEnvironment('stage');
-      resolveConfig(new Response(JSON.stringify(data.files.get(configURL)), {
-        headers: { 'Content-Type': 'application/json' },
-      }));
-      await pending;
-      assert.equal(h.app.libraryPreview, null);
-      assert.equal(h.app.libraryReviewConfirmed, false);
-      assert.equal(h.app.libraryDraft, '');
-      assert.equal(h.app.libraryError, '');
-    });
   });
 
   describe('Cards analysis app flow with mocked sources and HTML elements', () => {
     const image = 'https://content.da.live/msagolj/ew/.index/example.jpg';
     function configure(data, app) {
-      app.selectProbeEnvironment('prod');
       app.discoveryResult = {
         complete: true,
         provider: 'code-bus',
@@ -4615,8 +4567,7 @@ describe('app connection regressions', () => {
       const data = fixtures();
       const h = await harness(data);
       await h.connect();
-      h.app.selectProbeEnvironment('prod');
-      h.app.probeConfirmed = true;
+
       await h.app.prepareCardsAnalysis();
       assert.match(h.app.cardsError, /Confirm/);
       assert.equal(data.calls.length, 0);
@@ -4628,7 +4579,7 @@ describe('app connection regressions', () => {
       const h = await harness(data);
       await h.connect();
       configure(data, h.app);
-      h.app.selectProbeEnvironment('prod');
+
       h.app.cardsConfirmed = true;
       await h.app.prepareCardsAnalysis();
       assert.equal(h.app.cardsState, 'prepared');
@@ -4679,18 +4630,18 @@ describe('app connection regressions', () => {
       const first = await harness(data);
       await first.connect();
       configure(data, first.app);
-      first.app.selectProbeEnvironment('prod');
+
       first.app.cardsConfirmed = true;
       await first.app.prepareCardsAnalysis();
       const request = first.app.cardsRequest;
       first.app.sendCardsAnalysis();
       assert.equal(data.prompts[0].options.autoSend, false);
-      assert.equal(data.closed.length, 1);
+      assert.equal(data.closed.length, 0);
       first.disconnect();
       const reopened = await harness(data);
       await reopened.connect();
       configure(data, reopened.app);
-      reopened.app.selectProbeEnvironment('prod');
+
       assert.equal(reopened.app.cardsSaved.jobId, request.jobId);
       reopened.app.cardsConfirmed = true;
       await reopened.app.resumeCardsAnalysis();
@@ -4741,7 +4692,7 @@ describe('app connection regressions', () => {
       await h.connect();
       configure(data, h.app);
       data.files.delete('https://main--ew--msagolj.preview.da.live/blocks/cards/cards.js');
-      h.app.selectProbeEnvironment('prod');
+
       h.app.cardsConfirmed = true;
       await h.app.prepareCardsAnalysis();
       assert.equal(h.app.cardsState, 'error');
@@ -4750,27 +4701,12 @@ describe('app connection regressions', () => {
       assert.equal(data.prompts.length, 0);
     });
 
-    it('clears Cards confirmation, loaded state and request on environment/ref change', async () => {
-      const data = fixtures();
-      const h = await harness(data);
-      await h.connect();
-      h.app.cardsConfirmed = true;
-      h.app.cardsRequest = { target: jobs.PROBE_TARGETS.stage };
-      h.app.selectProbeEnvironment('stage');
-      assert.equal(h.app.cardsConfirmed, false);
-      assert.equal(h.app.cardsRequest, null);
-      h.app.cardsConfirmed = true;
-      h.app.changeDiscoveryInput('ref', 'other');
-      assert.equal(h.app.cardsConfirmed, false);
-      assert.match(h.app.cardsBlockReason, /Production/);
-    });
-
     it('rejects an invalid completed result without displaying success or unvalidated JSON', async () => {
       const data = fixtures();
       const h = await harness(data);
       await h.connect();
       configure(data, h.app);
-      h.app.selectProbeEnvironment('prod');
+
       h.app.cardsConfirmed = true;
       await h.app.prepareCardsAnalysis();
       const request = h.app.cardsRequest;
@@ -4800,29 +4736,6 @@ describe('app connection regressions', () => {
       assert.equal(h.app.cardsResult, null);
       assert.equal(h.app.cardsState, 'idle');
     });
-
-    it('discards late source collection on an environment change without writing', async () => {
-      const data = fixtures();
-      const h = await harness(data);
-      await h.connect();
-      configure(data, h.app);
-      let finishSource;
-      const readSource = data.actions.daFetch;
-      data.actions.daFetch = (url, options) => (url.endsWith('/blocks/cards/cards.js')
-        ? new Promise((resolve) => { finishSource = () => resolve(readSource(url, options)); })
-        : readSource(url, options));
-      h.app.selectProbeEnvironment('prod');
-      h.app.cardsConfirmed = true;
-      const pending = h.app.prepareCardsAnalysis();
-      h.app.selectProbeEnvironment('stage');
-      finishSource();
-      await pending;
-      assert.equal(h.app.cardsRequest, null);
-      assert.equal(h.app.cardsConfirmed, false);
-      assert.equal(h.app.cardsState, 'idle');
-      assert.equal(jobs.loadJobPointer(data.storage, 'prod', 'cards'), null);
-      assert.equal(data.calls.filter(({ method }) => method === 'PUT').length, 0);
-    });
   });
 
   it('still allows a late handshake after the ten-second context timeout', async () => {
@@ -4833,153 +4746,11 @@ describe('app connection regressions', () => {
     assert.equal(h.app.connectionState, 'unavailable');
     await h.connect();
     assert.equal(h.app.connectionState, 'ready');
-    assert.equal(h.app.probeBlockReason, '');
-  });
-});
-
-describe('app probe workflow with mocked host and storage', () => {
-  it('requires confirmation before any storage write or authenticated request', async () => {
-    const data = fixtures();
-    const h = await harness(data);
-    await h.connect();
-    await h.app.prepareProbe();
-    assert.match(h.app.probeError, /Confirm/);
-    assert.equal(data.calls.length, 0);
-    assert.equal(jobs.loadProbePointer(data.storage), null);
-  });
-
-  it('prepares and reads back the request without sending chat or retaining the token', async () => {
-    const data = fixtures();
-    const h = await harness(data);
-    await h.connect();
-    h.app.probeConfirmed = true;
-    await h.app.prepareProbe();
-    assert.equal(h.app.probeState, 'prepared');
-    assert.equal(h.app.probeBusy, false);
-    assert.equal(data.prompts.length, 0);
-    assert.deepEqual(data.calls.map(({ method }) => method), ['GET', 'PUT', 'GET']);
-    assert.equal(JSON.stringify(h.app).includes('test-token-do-not-persist'), false);
-    assert.equal(jobs.loadProbePointer(data.storage, 'prod').jobId, h.app.probeRequest.jobId);
-  });
-
-  it('hands off once, closes, resumes without resending, and checks a final result', async () => {
-    const data = fixtures();
-    const first = await harness(data);
-    await first.connect();
-    first.app.probeConfirmed = true;
-    await first.app.prepareProbe();
-    const request = first.app.probeRequest;
-    first.app.sendProbe();
-    assert.equal(data.prompts.length, 1);
-    assert.equal(data.prompts[0].options.autoSend, false);
-    assert.equal(data.closed.length, 1);
-    first.disconnect();
-
-    const resumed = await harness(data);
-    await resumed.connect();
-    assert.equal(resumed.app.savedProbe.jobId, request.jobId);
-    assert.equal(resumed.app.probeRequest, null);
-    resumed.app.probeConfirmed = true;
-    await resumed.app.resumeProbe();
-    assert.equal(resumed.app.probeRequest.jobId, request.jobId);
-    resumed.app.sendProbe();
-    assert.match(resumed.app.probeError, /already requested/);
-    assert.equal(data.prompts.length, 1);
-
-    await resumed.app.checkProbeResult();
-    assert.equal(resumed.app.probeState, 'pending');
-    const resultUrl = `${jobs.PROBE_TARGETS.prod.adminOrigin}/source/msagolj/ew${request.resultPath}`;
-    data.files.set(resultUrl, {
-      schemaVersion: 1,
-      jobId: request.jobId,
-      kind: 'probe',
-      target: { ...jobs.PROBE_TARGETS.prod },
-      status: 'completed',
-      payload: { message: jobs.PROBE_MARKER },
-    });
-    await resumed.app.checkProbeResult();
-    assert.equal(resumed.app.probeState, 'received');
-    assert.equal(data.prompts.length, 1);
-  });
-
-  it('rejects a wrong-job result instead of displaying success', async () => {
-    const data = fixtures();
-    const h = await harness(data);
-    await h.connect();
-    h.app.probeConfirmed = true;
-    await h.app.prepareProbe();
-    const resultUrl = `${jobs.PROBE_TARGETS.prod.adminOrigin}/source/msagolj/ew${h.app.probeRequest.resultPath}`;
-    data.files.set(resultUrl, { jobId: 'a different job' });
-    await h.app.checkProbeResult();
-    assert.equal(h.app.probeState, 'error');
-    assert.equal(h.app.probeResult, null);
-    assert.match(h.app.probeError, /identity/);
-  });
-
-  it('does not replace the resume pointer without a second explicit confirmation', async () => {
-    const data = fixtures();
-    const h = await harness(data);
-    await h.connect();
-    h.app.probeConfirmed = true;
-    await h.app.prepareProbe();
-    const firstId = h.app.savedProbe.jobId;
-    await h.app.prepareProbe();
-    assert.match(h.app.probeError, /replacing/);
-    assert.equal(h.app.savedProbe.jobId, firstId);
-    assert.equal(data.calls.length, 3);
-  });
-
-  it('aborts a detached operation before it can advance to a PUT', async () => {
-    const data = fixtures();
-    let resolveRead;
-    data.actions.daFetch = (url, options) => {
-      data.calls.push({ url, method: options.method });
-      return new Promise((resolve) => { resolveRead = resolve; });
-    };
-    const h = await harness(data);
-    await h.connect();
-    h.app.probeConfirmed = true;
-    const operation = h.app.prepareProbe();
-    h.disconnect();
-    resolveRead(new Response(null, { status: 404 }));
-    await operation;
-    assert.equal(data.calls.length, 1);
-    assert.equal(h.app.probeRequest, null);
-    assert.equal(h.app.probeBusy, false);
+    assert.equal(h.app.discoveryBlockReason, '');
   });
 });
 
 describe('Production UI and legacy developer service controls', () => {
-  it('requires fresh confirmation when explicitly switching the legacy developer service', async () => {
-    const data = fixtures();
-    const h = await harness(data);
-    await h.connect();
-    assert.equal(h.app.probeEnvironment, 'prod');
-    h.app.selectProbeEnvironment('stage');
-    h.app.probeConfirmed = true;
-    await h.app.prepareProbe();
-    const stageId = h.app.probeRequest.jobId;
-    h.app.probeResult = { status: 'completed' };
-    h.app.newProbeConfirmed = true;
-    h.app.selectProbeEnvironment('prod');
-    assert.equal(h.app.probeEnvironment, 'prod');
-    assert.equal(h.app.probeConfirmed, false);
-    assert.equal(h.app.newProbeConfirmed, false);
-    assert.equal(h.app.probeRequest, null);
-    assert.equal(h.app.probeResult, null);
-    assert.equal(h.app.savedProbe, null);
-    assert.equal(h.app.handoffRequested, false);
-    await h.app.prepareProbe();
-    assert.match(h.app.probeError, /Confirm/);
-    assert.equal(data.calls.length, 3);
-    h.app.probeConfirmed = true;
-    await h.app.prepareProbe();
-    assert.equal(h.app.probeRequest.target.environment, 'prod');
-    assert.notEqual(h.app.probeRequest.jobId, stageId);
-    assert.ok(data.calls.slice(3).every(({ url }) => url.startsWith('https://admin.da.live/')));
-    assert.equal(jobs.loadProbePointer(data.storage, 'stage').jobId, stageId);
-  });
-
   describe('app block discovery', () => {
     function addInventory(data) {
       data.files.set('https://admin.hlx.page/config/msagolj/aggregated/ew.json', {
@@ -4998,8 +4769,8 @@ describe('Production UI and legacy developer service controls', () => {
       addInventory(data);
       const h = await harness(data);
       await h.connect();
-      h.app.selectProbeEnvironment('prod');
-      assert.equal(h.app.probeConfirmed, false);
+
+      assert.equal(h.app.prepareProbe, undefined);
       await h.app.discoverInventory();
       assert.equal(h.app.discoveryResult.provider, 'code-bus');
       assert.equal(h.app.discoveryResult.blocks[0].name, 'cards');
@@ -5010,23 +4781,6 @@ describe('Production UI and legacy developer service controls', () => {
       }]);
       assert.equal(data.prompts.length, 0);
       assert.equal(jobs.loadProbePointer(data.storage, 'prod'), null);
-    });
-
-    it('shows provider failures before accepting clearly labelled manual names', async () => {
-      const data = fixtures();
-      const h = await harness(data);
-      await h.connect();
-      await h.app.discoverInventory();
-      assert.equal(h.app.discoveryResult.provider, null);
-      assert.ok(h.app.discoveryResult.diagnostics.length > 0);
-      h.app.manualBlockNames = 'Cards, hero';
-      h.app.useManualBlocks();
-      assert.equal(h.app.discoveryResult.provider, 'manual');
-      assert.equal(h.app.discoveryResult.complete, false);
-      assert.equal(h.app.discoveryResult.diagnostics.length > 0, true);
-      h.app.manualBlockNames = '../invalid';
-      h.app.useManualBlocks();
-      assert.match(h.app.discoveryError, /Invalid/);
     });
 
     it('blocks a standalone Apps context from discovering the app-code repository', async () => {
@@ -5043,134 +4797,5 @@ describe('Production UI and legacy developer service controls', () => {
       assert.match(h.app.discoveryError, /Choose a site/i);
       assert.equal(data.calls.length, 0);
     });
-
-    it('clears discovery and cancels pending reads when the environment changes', async () => {
-      const data = fixtures();
-      let resolveRead;
-      data.actions.daFetch = (url, options) => {
-        data.calls.push({ url, method: options.method });
-        return new Promise((resolve) => { resolveRead = resolve; });
-      };
-      const h = await harness(data);
-      await h.connect();
-      const pending = h.app.discoverInventory();
-      h.app.selectProbeEnvironment('stage');
-      resolveRead(new Response(null, { status: 404 }));
-      await pending;
-      assert.equal(h.app.discoveryResult, null);
-      assert.equal(h.app.discoveryBusy, false);
-      assert.equal(h.app.discoveryError, '');
-      assert.equal(data.calls.length, 1);
-      assert.equal(data.publicCalls.length, 0);
-    });
-
-    it('clears inventory on ref/repository changes and blocks pending results after disconnect', async () => {
-      const data = fixtures();
-      addInventory(data);
-      const h = await harness(data);
-      await h.connect();
-      await h.app.discoverInventory();
-      h.app.changeDiscoveryInput('ref', 'feature');
-      assert.equal(h.app.discoveryRef, 'feature');
-      assert.equal(h.app.discoveryResult, null);
-      h.app.changeDiscoveryInput('repository', 'owner/repo');
-      assert.equal(h.app.githubRepository, 'owner/repo');
-      let resolveRead;
-      h.app.hostActions.daFetch = () => new Promise((resolve) => { resolveRead = resolve; });
-      const pending = h.app.discoverInventory();
-      h.disconnect();
-      resolveRead(new Response(null, { status: 404 }));
-      await pending;
-      assert.equal(h.app.discoveryResult, null);
-      assert.equal(data.publicCalls.length, 0);
-    });
-  });
-
-  it('reopens the production pointer but still requires confirmation before probe submission', async () => {
-    const data = fixtures();
-    const first = await harness(data);
-    await first.connect();
-    first.app.selectProbeEnvironment('prod');
-    first.app.probeConfirmed = true;
-    await first.app.prepareProbe();
-    const request = first.app.probeRequest;
-    first.app.sendProbe();
-    first.disconnect();
-    const reopened = await harness(data);
-    await reopened.connect();
-    assert.equal(reopened.app.probeEnvironment, 'prod');
-    assert.equal(reopened.app.savedProbe.jobId, request.jobId);
-    assert.equal(reopened.app.probeConfirmed, false);
-    reopened.app.probeConfirmed = true;
-    await reopened.app.resumeProbe();
-    assert.equal(reopened.app.probeRequest.jobId, request.jobId);
-    assert.equal(reopened.app.handoffRequested, true);
-    assert.equal(data.prompts.length, 1);
-    const resultUrl = `${jobs.PROBE_TARGETS.prod.adminOrigin}/source/msagolj/ew${request.resultPath}`;
-    data.files.set(resultUrl, {
-      schemaVersion: 1,
-      jobId: request.jobId,
-      kind: 'probe',
-      target: { ...jobs.PROBE_TARGETS.prod },
-      status: 'completed',
-      payload: { message: jobs.PROBE_MARKER },
-    });
-    await reopened.app.checkProbeResult();
-    assert.equal(reopened.app.probeState, 'received');
-    reopened.app.sendProbe();
-    assert.match(reopened.app.probeError, /already requested/);
-    assert.equal(data.prompts.length, 1);
-  });
-
-  it('blocks dispatch and result reads for a loaded job from another environment', async () => {
-    const data = fixtures();
-    const h = await harness(data);
-    await h.connect();
-    h.app.selectProbeEnvironment('prod');
-    h.app.probeConfirmed = true;
-    h.app.probeRequest = jobs.createProbeRequest();
-    h.app.sendProbe();
-    assert.match(h.app.probeError, /environment/i);
-    assert.equal(data.prompts.length, 0);
-    assert.equal(data.closed.length, 0);
-    await h.app.checkProbeResult();
-    assert.match(h.app.probeError, /environment/i);
-    assert.equal(data.calls.length, 0);
-  });
-
-  it('discards an in-flight environment operation without writing or overwriting new state', async () => {
-    const data = fixtures();
-    let resolveRead;
-    data.actions.daFetch = (url, options) => {
-      data.calls.push({ url, method: options.method });
-      return new Promise((resolve) => { resolveRead = resolve; });
-    };
-    const h = await harness(data);
-    await h.connect();
-    h.app.probeConfirmed = true;
-    const pending = h.app.prepareProbe();
-    h.app.selectProbeEnvironment('stage');
-    assert.equal(h.app.probeBusy, false);
-    assert.equal(h.app.probeConfirmed, false);
-    resolveRead(new Response(null, { status: 404 }));
-    await pending;
-    assert.equal(h.app.probeEnvironment, 'stage');
-    assert.equal(h.app.probeState, 'idle');
-    assert.equal(h.app.probeRequest, null);
-    assert.equal(h.app.probeError, '');
-    assert.equal(data.calls.length, 1);
-  });
-
-  it('does not reset an active operation when selecting the same environment', async () => {
-    const data = fixtures();
-    const h = await harness(data);
-    await h.connect();
-    h.app.probeConfirmed = true;
-    h.app.selectProbeEnvironment('prod');
-    assert.equal(h.app.probeConfirmed, true);
-    h.app.selectProbeEnvironment('not-an-environment');
-    assert.equal(h.app.probeEnvironment, 'prod');
-    assert.match(h.app.probeError, /environment/i);
-    assert.equal(data.calls.length, 0);
   });
 });

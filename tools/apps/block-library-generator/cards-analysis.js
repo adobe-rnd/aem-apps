@@ -15,5 +15,5 @@
  */
 export {
   CARDS_SOURCE_PATHS, parseInertHTML, createCardsRequest, validateCardsRequest,
-  collectCardsInput, validateCellHTML, validateCardsAnalysis, createCardsPrompt,
+  validateCellHTML, validateCardsAnalysis, createCardsPrompt,
 } from './block-analysis.js';
