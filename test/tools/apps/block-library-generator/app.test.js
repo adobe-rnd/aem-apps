@@ -281,6 +281,15 @@ async function harness(data, {
 }
 
 describe('Apps docked chat and scoped completion checks', () => {
+  it('loads the shared DA button stylesheet and leaves ordinary actions on shared variants', async () => {
+    const entry = await readFile(new URL('../../../../tools/apps/block-library-generator/block-library-generator.html', import.meta.url), 'utf8');
+    assert.match(entry, /href="https:\/\/da\.live\/nx2\/styles\/buttons\.css"/);
+    assert.doesNotMatch(source, /<button type=(?!"button" class="block-nav-item")/);
+    assert.match(source, /class="target-change nx-action-btn"/);
+    assert.match(source, /class="target-refresh primary-action nx-btn-accent"/);
+    assert.match(source, /class="page-open primary-action nx-btn-accent"/);
+  });
+
   const appsContext = {
     view: 'fullscreen',
     org: 'adobe-rnd',
@@ -2758,7 +2767,7 @@ describe('One-shot page actions', () => {
     ['existing', 'unregistered'].forEach((status) => {
       h.app.libraryOverview.blocks.cards.status = status;
       const view = text(h.app.renderBlockDetail());
-      assert.match(view, /<a class="page-open primary-action"/);
+      assert.match(view, /<a class="page-open primary-action nx-btn-accent"/);
       assert.match(view, /target="_blank" rel="noopener noreferrer">Open<\/a>/);
       const buttons = view.match(/<button[^>]*>[^<]*<\/button>/g) || [];
       ['Delete', 'Recreate'].forEach((label) => {

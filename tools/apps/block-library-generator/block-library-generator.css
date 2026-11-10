@@ -20,6 +20,7 @@ block-library-generator-app main {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  gap: var(--s2-spacing-400, 24px);
   max-width: 1200px;
   margin: 0 auto;
 }
@@ -180,14 +181,6 @@ block-library-generator-app .probe-actions {
   gap: 12px;
 }
 
-block-library-generator-app .probe button {
-  padding: 8px 12px;
-  border: 1px solid var(--s2-gray-500, #8a8a8a);
-  border-radius: 8px;
-  font: inherit;
-  cursor: pointer;
-}
-
 block-library-generator-app .probe-notice,
 block-library-generator-app .probe-error {
   padding: 12px;
@@ -250,15 +243,13 @@ block-library-generator-app .discovery-inputs {
 }
 
 block-library-generator-app .discovery input,
-block-library-generator-app .discovery textarea,
-block-library-generator-app .discovery button {
+block-library-generator-app .discovery textarea {
   box-sizing: border-box;
   max-width: 100%;
   padding: 8px 12px;
   font: inherit;
 }
 
-block-library-generator-app .discovery button,
 block-library-generator-app .discovery summary {
   cursor: pointer;
 }
@@ -312,18 +303,6 @@ block-library-generator-app .target-bar > div {
   overflow-wrap: anywhere;
 }
 
-block-library-generator-app .target-bar button,
-block-library-generator-app .site-chooser button,
-block-library-generator-app .pending-action button {
-  padding: 10px 14px;
-  border: 1px solid var(--s2-gray-500, #8a8a8a);
-  border-radius: 8px;
-  color: inherit;
-  background: var(--s2-gray-75, #fff);
-  font: inherit;
-  cursor: pointer;
-}
-
 block-library-generator-app .site-chooser,
 block-library-generator-app .library-setup,
 block-library-generator-app .launch-notice,
@@ -358,16 +337,6 @@ block-library-generator-app .library-setup {
 
 block-library-generator-app .library-setup code {
   overflow-wrap: anywhere;
-}
-
-block-library-generator-app .library-setup button {
-  padding: 10px 14px;
-  border: 1px solid var(--s2-gray-500, #8a8a8a);
-  border-radius: 8px;
-  color: inherit;
-  background: var(--s2-gray-75, #fff);
-  font: inherit;
-  cursor: pointer;
 }
 
 block-library-generator-app .library-setup .setup-actions {
@@ -436,22 +405,12 @@ block-library-generator-app .problem-panel details {
   overflow-wrap: anywhere;
 }
 
-block-library-generator-app .probe button:disabled,
-block-library-generator-app .discovery button:disabled,
-block-library-generator-app .site-chooser button:disabled,
-block-library-generator-app .library-setup button:disabled,
-block-library-generator-app .pending-action button:disabled,
-block-library-generator-app .target-bar button:disabled {
-  cursor: not-allowed;
-}
-
 block-library-generator-app .discovery details label {
   margin: 16px 0;
 }
 
 block-library-generator-app .target-bar input,
 block-library-generator-app .target-bar select,
-block-library-generator-app .target-refresh,
 block-library-generator-app .example-card input[type="text"],
 block-library-generator-app .example-card textarea {
   box-sizing: border-box;
@@ -573,10 +532,6 @@ block-library-generator-app .page-actions {
 }
 
 block-library-generator-app .page-open {
-  padding: 8px 16px;
-  border: 1px solid var(--s2-gray-500, #8a8a8a);
-  border-radius: 8px;
-  color: inherit;
   text-decoration: none;
 }
 
@@ -808,24 +763,7 @@ block-library-generator-app .findings-list > li {
   margin: 10px 0;
 }
 
-block-library-generator-app .primary-action {
-  border-radius: 8px;
-  color: #fff;
-  background: var(--s2-blue-800, #0265dc);
-}
-
-block-library-generator-app .target-bar .primary-action,
-block-library-generator-app .library-setup .primary-action,
-block-library-generator-app .site-chooser .primary-action {
-  color: #fff;
-  background: var(--s2-blue-800, #0265dc);
-}
-
-block-library-generator-app .target-refresh:disabled,
-block-library-generator-app .block-nav-item:disabled,
-block-library-generator-app .site-chooser button:disabled,
-block-library-generator-app .pending-action button:disabled,
-block-library-generator-app .probe button:disabled {
+block-library-generator-app .block-nav-item:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -834,7 +772,8 @@ block-library-generator-app .back-to-blocks {
   display: none;
 }
 
-block-library-generator-app :focus-visible {
+block-library-generator-app .block-nav-item:focus-visible,
+block-library-generator-app :focus-visible:not(button, .page-open) {
   outline: 2px solid var(--s2-blue-600, #1473e6);
   outline-offset: 3px;
 }
