@@ -78,7 +78,8 @@ export async function publishPage(org, site, pagePath, ext = 'html') {
 export async function copyFromSource(org, sourceSite, targetSite, pagePath, ext = 'html') {
   const clean = cleanPath(pagePath, ext);
   const sourceUrl = `${DA_ORIGIN}/source/${org}/${sourceSite}${clean}.${ext}`;
-  const resp = await daFetch(sourceUrl);
+  // Bypass the browser HTTP cache so the copy reflects the latest source save.
+  const resp = await daFetch(sourceUrl, { cache: 'no-store' });
   if (!resp.ok) return { error: `Failed to fetch source content (${resp.status})` };
 
   const content = await resp.blob();

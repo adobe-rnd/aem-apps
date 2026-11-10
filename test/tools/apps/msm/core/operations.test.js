@@ -18,13 +18,66 @@ import {
 } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  mergeFromSource, setMergeCopy, setEditUrlOrigin,
+  copyFromSource, mergeFromSource, setMergeCopy, setEditUrlOrigin,
 } from '../../../../../tools/apps/msm/core/operations.js';
 import { setDaFetch, daFetch, DA_ORIGIN } from '../../../../../tools/apps/msm/core/fetch.js';
 
 after(() => {
   setDaFetch(undefined);
   setMergeCopy(undefined);
+});
+
+describe('MSM copy from source', () => {
+  beforeEach(() => {
+    setDaFetch(undefined);
+  });
+
+  it('reads the source with no-store and writes it to the target', async () => {
+    const requests = [];
+    setDaFetch(async (url, opts) => {
+      requests.push({ url, opts });
+      if (!opts?.method) {
+        return { ok: true, blob: async () => new Blob(['<main>source</main>']) };
+      }
+      return { ok: true };
+    });
+    assert.deepEqual(await copyFromSource('org', 'source', 'target', '/en/page'), { ok: true });
+    assert.equal(requests.length, 2);
+    assert.deepEqual(requests[0], {
+      url: `${DA_ORIGIN}/source/org/source/en/page.html`,
+      opts: { cache: 'no-store' },
+    });
+    assert.equal(requests[1].url, `${DA_ORIGIN}/source/org/target/en/page.html`);
+    assert.equal(requests[1].opts.method, 'PUT');
+    assert.equal(requests[1].opts.cache, undefined);
+    const data = requests[1].opts.body.get('data');
+    assert.equal(data.type, 'text/html');
+    assert.equal(await data.text(), '<main>source</main>');
+  });
+
+  it('does not write when the source read fails', async () => {
+    const requests = [];
+    setDaFetch(async (url, opts) => {
+      requests.push({ url, opts });
+      return { ok: false, status: 404 };
+    });
+    assert.deepEqual(await copyFromSource('org', 'source', 'target', '/page'), {
+      error: 'Failed to fetch source content (404)',
+    });
+    assert.deepEqual(requests, [{
+      url: `${DA_ORIGIN}/source/org/source/page.html`,
+      opts: { cache: 'no-store' },
+    }]);
+  });
+
+  it('reports a failed target write', async () => {
+    setDaFetch(async (url, opts) => (opts?.method === 'PUT'
+      ? { ok: false, status: 403 }
+      : { ok: true, blob: async () => new Blob(['{}']) }));
+    assert.deepEqual(await copyFromSource('org', 'source', 'target', '/data', 'json'), {
+      error: 'Failed to copy from source (403)',
+    });
+  });
 });
 
 describe('MSM public loc merge', () => {
