@@ -903,17 +903,17 @@ class BlockLibraryGeneratorApp extends LitElement {
           <div class="page-actions setup-actions">
             ${setup?.status === 'required' ? html`
               ${proposal ? html`
-                <button class="primary-action nx-btn-accent" type="button" ?disabled=${disabled}
+                <button class="primary-action nx-form-btn-primary" type="button" ?disabled=${disabled}
                   @click=${this.commitLibrarySetup}>Confirm initialize library</button>
-                <button class="nx-action-btn" type="button" ?disabled=${this.workflowBusy}
+                <button class="nx-form-btn-secondary" type="button" ?disabled=${this.workflowBusy}
                   @click=${this.cancelLibrarySetup}>Cancel</button>
               ` : html`
-                <button class="primary-action nx-btn-accent" type="button" ?disabled=${disabled}
+                <button class="primary-action nx-form-btn-primary" type="button" ?disabled=${disabled}
                   @click=${this.beginLibrarySetup}>Initialize library</button>
               `}
             ` : ''}
             ${interrupted ? html`
-              <button class="nx-action-btn" type="button" ?disabled=${this.workflowBusy || this.libraryOverviewBusy}
+              <button class="nx-form-btn-secondary" type="button" ?disabled=${this.workflowBusy || this.libraryOverviewBusy}
                 @click=${this.refreshWorkspace}>Refresh library status</button>
             ` : ''}
           </div>
@@ -1242,9 +1242,9 @@ class BlockLibraryGeneratorApp extends LitElement {
         <div><strong>${readableLabel(flow.name)}</strong>: ${this.blockStatus(flow.name)}.
           <p>Finish or cancel this action before starting another.</p></div>
         ${flow.jobId ? html`<p>Cancelling this action does not stop chat.</p>` : ''}
-        <button class="nx-action-btn" type="button" ?disabled=${this.workflowBusy}
+        <button class="nx-form-btn-secondary" type="button" ?disabled=${this.workflowBusy}
           @click=${() => this.selectBlock(flow.name)}>Resume</button>
-        <button class="nx-action-btn" type="button" ?disabled=${this.workflowBusy}
+        <button class="nx-form-btn-secondary" type="button" ?disabled=${this.workflowBusy}
           @click=${this.cancelPageAction}>Cancel action</button>
       </section>
     `;
@@ -1530,10 +1530,10 @@ class BlockLibraryGeneratorApp extends LitElement {
         The saved page and index will be previewed. Nothing is published.
         The blocked analysis is retained.</p>
       <div class="page-actions">
-        <button class="primary-action nx-btn-accent" type="button" ?disabled=${disabled || !blocked}
+        <button class="primary-action nx-form-btn-primary" type="button" ?disabled=${disabled || !blocked}
           @click=${this.commitPageAction}>${replacing
   ? 'Confirm replace with starter page' : 'Confirm create starter page'}</button>
-        <button class="nx-action-btn" type="button" ?disabled=${disabled}
+        <button class="nx-form-btn-secondary" type="button" ?disabled=${disabled}
           @click=${this.backToBlockedAnalysis}>Back</button>
       </div>
       ${renderProblem(this.libraryError, 'The starter page action could not be completed. Review the details.')}
@@ -1557,9 +1557,12 @@ class BlockLibraryGeneratorApp extends LitElement {
           <p class="probe-error">This page has no ETag. Replacement uses a final content-hash
             check and is not atomic. Avoid editing the page while Recreate runs.</p>
         ` : ''}
-        <button class="primary-action nx-btn-accent" type="button" ?disabled=${disabled}
-          @click=${this.confirmAutomaticRecreate}>Confirm replace entire page</button>
-        <button class="nx-action-btn" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Cancel</button>
+        <div class="page-actions">
+          <button class="primary-action nx-form-btn-primary" type="button" ?disabled=${disabled}
+            @click=${this.confirmAutomaticRecreate}>Confirm replace entire page</button>
+          <button class="nx-form-btn-secondary" type="button" ?disabled=${disabled}
+            @click=${this.cancelPageAction}>Cancel</button>
+        </div>
         ${renderProblem(this.libraryError, 'Recreate could not be started. Review the details.')}
       </section>
     `;
@@ -1605,19 +1608,19 @@ class BlockLibraryGeneratorApp extends LitElement {
           <summary>Recovery options</summary>
           ${mayHaveSaved ? html`
             <p>A save may have been attempted. No automatic retry or rollback is performed.</p>
-            <button class="nx-action-btn" type="button" ?disabled=${this.workflowBusy || this.libraryOverviewBusy}
+            <button class="nx-form-btn-secondary" type="button" ?disabled=${this.workflowBusy || this.libraryOverviewBusy}
               @click=${this.refreshWorkspace}>Refresh current state</button>
           ` : html`
             <p>If chat has finished but the page is not saved, check for pending approvals
               and check the result. If preparation was interrupted, cancel and choose ${action} again.</p>
             ${flow.jobId ? html`
-              <button class="nx-action-btn" type="button" ?disabled=${this.workflowBusy || this.libraryOverviewBusy}
+              <button class="nx-form-btn-secondary" type="button" ?disabled=${this.workflowBusy || this.libraryOverviewBusy}
                 @click=${this.loadPageGeneration}>Check result</button>
             ` : ''}
           `}
         </details>
         <p>Cancelling this action does not stop chat.</p>
-        <button class="nx-action-btn" type="button" ?disabled=${!canCancel}
+        <button class="nx-form-btn-secondary" type="button" ?disabled=${!canCancel}
           @click=${this.cancelPageAction}>${mayHaveSaved && failed
   ? 'Dismiss saved action' : cancelLabel}</button>
       </section>
@@ -1665,9 +1668,9 @@ class BlockLibraryGeneratorApp extends LitElement {
             added to this site's library media folder. Existing files are never overwritten.</p>
           <p>No library page will be saved until you confirm the next step.</p>
           <div class="page-actions">
-            <button class="primary-action nx-btn-accent" type="button" ?disabled=${disabled}
+            <button class="primary-action nx-form-btn-primary" type="button" ?disabled=${disabled}
               @click=${this.generatePageSuggestions}>Continue in chat</button>
-            <button class="nx-action-btn" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Cancel</button>
+            <button class="nx-form-btn-secondary" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Cancel</button>
           </div>
         ` : ''}
         ${!this.workflowBusy && flow.status === 'waiting' ? html`
@@ -1681,9 +1684,9 @@ class BlockLibraryGeneratorApp extends LitElement {
           ` : ''}
           <p>No library page has been saved. Cancelling creation does not stop chat.</p>
           <div class="page-actions">
-            <button class="primary-action nx-btn-accent" type="button" ?disabled=${disabled}
+            <button class="primary-action nx-form-btn-primary" type="button" ?disabled=${disabled}
               @click=${this.loadPageGeneration}>Check result</button>
-            <button class="nx-action-btn" type="button" ?disabled=${disabled}
+            <button class="nx-form-btn-secondary" type="button" ?disabled=${disabled}
               @click=${this.cancelPageAction}>Cancel creation</button>
           </div>
         ` : ''}
@@ -1694,9 +1697,9 @@ class BlockLibraryGeneratorApp extends LitElement {
             Nothing is published.</p>
           <p>After saving, open the page to review and edit the examples.</p>
           <div class="page-actions">
-            <button class="primary-action nx-btn-accent" type="button" ?disabled=${disabled}
+            <button class="primary-action nx-form-btn-primary" type="button" ?disabled=${disabled}
               @click=${this.commitPageAction}>Confirm create page</button>
-            <button class="nx-action-btn" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Cancel</button>
+            <button class="nx-form-btn-secondary" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Cancel</button>
           </div>
         ` : ''}
         ${!this.workflowBusy && flow.status === 'ready' && flow.starter
@@ -1710,14 +1713,14 @@ class BlockLibraryGeneratorApp extends LitElement {
             Alternatively, create a default example page as a starting point,
             then edit the block in DA to provide usable values.</p>
           <div class="page-actions">
-            <button class="primary-action nx-btn-accent" type="button"
+            <button class="primary-action nx-form-btn-primary" type="button"
               ?disabled=${disabled || Boolean(this.cardsBlockReason) || !this.hasBlockCode(flow.name)}
               @click=${this.retryPageGeneration}>Retry analysis</button>
-            <button class="nx-action-btn" type="button"
+            <button class="nx-form-btn-secondary" type="button"
               ?disabled=${disabled || Boolean(this.cardsBlockReason) || !this.hasBlockCode(flow.name)
                 || !['absent', 'missing-page'].includes(this.libraryOverview?.blocks[flow.name]?.status)}
               @click=${this.prepareDefaultExample}>Create a default example page</button>
-            <button class="nx-action-btn" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Dismiss</button>
+            <button class="nx-form-btn-secondary" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Dismiss</button>
           </div>
           ${renderProblem(this.libraryError, 'The requested action could not be completed. Review the details, then try again.')}
         ` : ''}
@@ -1725,10 +1728,10 @@ class BlockLibraryGeneratorApp extends LitElement {
           ${problem ? renderProblem(problem, failureSummary) : html`<p role="alert">${failureSummary}</p>`}
           ${mayHaveSaved ? html`
             <p>No automatic retry or rollback.</p>
-            <button class="nx-action-btn" type="button" ?disabled=${disabled}
+            <button class="nx-form-btn-secondary" type="button" ?disabled=${disabled}
               @click=${this.refreshWorkspace}>Refresh current state</button>
           ` : ''}
-          <button class="nx-action-btn" type="button" ?disabled=${disabled}
+          <button class="nx-form-btn-secondary" type="button" ?disabled=${disabled}
             @click=${this.cancelPageAction}>${mayHaveSaved ? 'Dismiss saved action' : 'Cancel creation'}</button>
         ` : ''}
         ${!failed && flow.status !== 'blocked' ? renderProblem(
@@ -1769,11 +1772,14 @@ class BlockLibraryGeneratorApp extends LitElement {
             The current page stays in place until replacement is ready and you confirm.</p>` : ''}
         `}
         ${flow.status === 'confirm' ? html`
-          <button class=${flow.mode === 'delete' ? 'nx-action-btn' : 'primary-action nx-btn-accent'} type="button" ?disabled=${disabled}
-            @click=${flow.mode === 'delete' ? this.commitPageAction : this.generatePageSuggestions}>
-            ${flow.mode === 'delete' ? 'Confirm delete page and index entry' : 'Continue in chat'}
-          </button>
-          <button class="nx-action-btn" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Cancel</button>
+          <div class="page-actions">
+            <button class="primary-action nx-form-btn-primary" type="button" ?disabled=${disabled}
+              @click=${flow.mode === 'delete' ? this.commitPageAction : this.generatePageSuggestions}>
+              ${flow.mode === 'delete' ? 'Confirm delete page and index entry' : 'Continue in chat'}
+            </button>
+            <button class="nx-form-btn-secondary" type="button" ?disabled=${disabled}
+              @click=${this.cancelPageAction}>Cancel</button>
+          </div>
         ` : ''}
         ${flow.status === 'waiting' ? html`
           <p>Chat handoff requested. Review and submit the prompt in chat, then approve the result
@@ -1781,22 +1787,22 @@ class BlockLibraryGeneratorApp extends LitElement {
     ? 'The app checks the saved result after a chat turn ends.'
     : 'Reopen this app to check it.'} No library page has been changed.
             Cancelling this action does not stop chat.</p>
-          <button class="nx-action-btn" type="button" ?disabled=${disabled} @click=${this.loadPageGeneration}>Check result</button>
-          <button class="nx-action-btn" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Cancel page action</button>
+          <button class="nx-form-btn-secondary" type="button" ?disabled=${disabled} @click=${this.loadPageGeneration}>Check result</button>
+          <button class="nx-form-btn-secondary" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Cancel page action</button>
         ` : ''}
         ${flow.status === 'ready' && !flow.starter ? html`
           ${!this.libraryBusy ? html`<p>Fresh output is ready. It is not yet saved to the library.
             ${flow.mode === 'recreate' ? 'Confirm to discard the current page contents and replace it.' : ''}
             The verified page and index will be previewed. Nothing is published.</p>` : ''}
-          <button class="primary-action nx-btn-accent" type="button" ?disabled=${disabled}
+          <button class="primary-action nx-form-btn-primary" type="button" ?disabled=${disabled}
             @click=${this.commitPageAction}>${flow.mode === 'recreate' ? 'Confirm replace entire page' : 'Confirm create page'}</button>
-          <button class="nx-action-btn" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Cancel</button>
+          <button class="nx-form-btn-secondary" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Cancel</button>
         ` : ''}
         ${!this.workflowBusy && flow.status === 'ready' && flow.starter
     ? this.renderStarterConfirmation(flow) : ''}
         ${flow.starter && this.libraryBusy ? html`<p role="status">Saving starter page...</p>` : ''}
         ${flow.status === 'completed' ? html`<p role="status">Page action completed and readback verified.</p>
-          <button class="nx-action-btn" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Dismiss</button>` : ''}
+          <button class="nx-form-btn-secondary" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Dismiss</button>` : ''}
         ${flow.status === 'blocked' ? html`
             ${renderProblem(
     flow.error,
@@ -1806,15 +1812,15 @@ class BlockLibraryGeneratorApp extends LitElement {
               Alternatively, start again with a default example by replacing the existing page.</p>
             <div class="page-actions">
               ${flow.mode === 'recreate' ? html`
-                <button class="primary-action nx-btn-accent" type="button"
+                <button class="primary-action nx-form-btn-primary" type="button"
                   ?disabled=${disabled || Boolean(this.cardsBlockReason) || !this.hasBlockCode(flow.name)}
                   @click=${this.retryPageGeneration}>Retry analysis</button>
-                <button class="nx-action-btn" type="button"
+                <button class="nx-form-btn-secondary" type="button"
                   ?disabled=${disabled || Boolean(this.cardsBlockReason) || !this.hasBlockCode(flow.name)
                     || !['existing', 'unregistered'].includes(this.libraryOverview?.blocks[flow.name]?.status)}
                   @click=${this.prepareDefaultExample}>Replace with a default example page</button>
               ` : ''}
-              <button class="nx-action-btn" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Dismiss</button>
+              <button class="nx-form-btn-secondary" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Dismiss</button>
             </div>
             ${renderProblem(this.libraryError, 'The requested action could not be completed. Review the details, then try again.')}
         ` : ''}
@@ -1822,8 +1828,8 @@ class BlockLibraryGeneratorApp extends LitElement {
           <p role="alert">Outcome: ${flow.status}. ${flow.error}
             A page or index change may have succeeded. Refresh and inspect before another action.
             No automatic retry or rollback.</p>
-          <button class="nx-action-btn" type="button" ?disabled=${disabled} @click=${this.refreshWorkspace}>Refresh current state</button>
-          <button class="nx-action-btn" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Dismiss saved action</button>
+          <button class="nx-form-btn-secondary" type="button" ?disabled=${disabled} @click=${this.refreshWorkspace}>Refresh current state</button>
+          <button class="nx-form-btn-secondary" type="button" ?disabled=${disabled} @click=${this.cancelPageAction}>Dismiss saved action</button>
         ` : ''}
         ${renderProblem(this.cardsError, 'The analysis could not be checked. Review the details before starting another job.')}
       </section>
@@ -2507,7 +2513,7 @@ class BlockLibraryGeneratorApp extends LitElement {
         <div><span class="eyebrow">Site</span><strong>${this.context.org && this.context.site
     ? `${this.context.org}/${this.context.site}` : 'No site selected'}</strong></div>
         ${this.context.org ? html`
-          <button class="target-change nx-action-btn" type="button"
+          <button class="target-change nx-form-btn-secondary" type="button"
             ?disabled=${this.workflowBusy || Boolean(this.pageFlow)
               || Boolean(this.librarySetupProposal) || refreshing}
             @click=${this.beginSiteSelection}>Change site</button>
@@ -2515,7 +2521,7 @@ class BlockLibraryGeneratorApp extends LitElement {
         ${this.isAppsContext && this.context.org && !this.appsTargetMatches() ? html`
           <a href=${this.appsSiteURL()} target="_top">Open this site in Apps for chat</a>
         ` : ''}
-        <button class="target-refresh primary-action nx-btn-accent" type="button"
+        <button class="target-refresh primary-action nx-form-btn-primary" type="button"
           ?disabled=${Boolean(this.discoveryBlockReason) || refreshing || this.workflowBusy}
           @click=${this.refreshBlocks}>${refreshing ? 'Refreshing...' : 'Refresh blocks'}</button>
       </section>
@@ -2544,11 +2550,11 @@ class BlockLibraryGeneratorApp extends LitElement {
           </div>
           ${this.targetError ? html`<p class="probe-error" role="alert">${this.targetError}</p>` : ''}
           <div class="site-actions">
-            <button class="primary-action nx-btn-accent" type="submit"
+            <button class="primary-action nx-form-btn-primary" type="submit"
               ?disabled=${this.connectionState !== 'ready' || !this.hasToken || this.workflowBusy
                 || this.discoveryBusy || this.libraryOverviewBusy}>Use site</button>
             ${this.context.org && this.context.site ? html`
-              <button class="nx-action-btn" type="button"
+              <button class="nx-form-btn-secondary" type="button"
                 ?disabled=${this.workflowBusy || this.discoveryBusy || this.libraryOverviewBusy}
                 @click=${this.cancelSiteSelection}>Cancel</button>
             ` : ''}
@@ -2573,7 +2579,7 @@ class BlockLibraryGeneratorApp extends LitElement {
       && this.pageFlow.status !== 'completed';
     return html`
       <section class="block-detail probe" aria-labelledby="block-detail-heading">
-        <button class="back-to-blocks nx-action-btn-quiet" type="button"
+        <button class="back-to-blocks nx-form-btn-secondary" type="button"
           @click=${this.backToBlocks}>Back to blocks</button>
         <header class="detail-header">
           <div><p class="eyebrow">Selected block</p><h2 id="block-detail-heading" tabindex="-1">${readableLabel(name)}</h2></div>
@@ -2595,10 +2601,10 @@ class BlockLibraryGeneratorApp extends LitElement {
           Block code status is unknown because discovery was unavailable or incomplete.</p>` : ''}
         ${entry && ['existing', 'unregistered'].includes(entry.status) ? html`
           <div class="page-actions">
-            <a class="page-open primary-action nx-btn-accent" href=${entry.editorURL} target="_blank" rel="noopener noreferrer">Open</a>
-            <button class="nx-action-btn" type="button" ?disabled=${actionDisabled}
+            <a class="page-open primary-action nx-form-btn-primary" href=${entry.editorURL} target="_blank" rel="noopener noreferrer">Open</a>
+            <button class="nx-form-btn-secondary" type="button" ?disabled=${actionDisabled}
               @click=${() => this.beginPageAction('delete')}>Delete</button>
-            <button class="nx-action-btn" type="button" ?disabled=${actionDisabled || !supported}
+            <button class="nx-form-btn-secondary" type="button" ?disabled=${actionDisabled || !supported}
               @click=${() => this.beginPageAction('recreate')}>Recreate</button>
           </div>
         ` : ''}
@@ -2607,7 +2613,7 @@ class BlockLibraryGeneratorApp extends LitElement {
             If working examples cannot be generated, an unfinished default page is saved.
             Chat may ask you to approve its result write. Nothing is published.</p>` : ''}
           <div class="page-actions">
-            <button class="primary-action nx-btn-accent" type="button"
+            <button class="primary-action nx-form-btn-primary" type="button"
               ?disabled=${actionDisabled || !supported}
               @click=${() => this.beginPageAction('create')}>Create</button>
           </div>

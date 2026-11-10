@@ -57,6 +57,13 @@ function fixtures() {
       status: response.status, headers: response.headers,
     });
   };
+  const store = files.set.bind(files);
+  files.set = (url, value) => {
+    if (value instanceof Response && !responseBodies.has(value)) {
+      responseBodies.set(value, value.clone().text());
+    }
+    return store(url, value);
+  };
   return {
     files,
     calls,
@@ -105,8 +112,6 @@ function fixtures() {
         }
         if (files.get(url) instanceof Response) {
           const response = files.get(url);
-          assert.equal(response.bodyUsed, false, `Stored fixture body was consumed: ${url}`);
-          assert.equal(response.body?.locked ?? false, false, `Stored fixture body was locked: ${url}`);
           return readResponse(response);
         }
         return files.has(url)
@@ -314,14 +319,36 @@ async function harness(data, {
   };
 }
 
+describe('Mocked HTTP source persistence', () => {
+  it('snapshots stored response bytes before inspection and serves independent repeated reads', async () => {
+    const data = fixtures();
+    const url = 'https://admin.da.live/source/example-org/demo/docs/library/blocks.json';
+    const value = {
+      ':type': 'sheet', total: 0, limit: 0, offset: 0, data: [],
+    };
+    const response = Response.json(value, { headers: { ETag: '"index1"' } });
+    data.files.set(url, response);
+    await response.json();
+    const first = await data.actions.daFetch(url, { method: 'GET' });
+    assert.deepEqual(await first.json(), value);
+    const cancelled = await data.actions.daFetch(url, { method: 'GET' });
+    await cancelled.body.cancel();
+    const last = await data.actions.daFetch(url, { method: 'GET' });
+    assert.deepEqual(await last.json(), value);
+    assert.equal(last.headers.get('ETag'), '"index1"');
+  });
+});
+
 describe('Apps docked chat and scoped completion checks', () => {
-  it('loads the shared DA button stylesheet and leaves ordinary actions on shared variants', async () => {
+  it('uses only shared primary and secondary form variants for ordinary actions', async () => {
     const entry = await readFile(new URL('../../../../tools/apps/block-library-generator/block-library-generator.html', import.meta.url), 'utf8');
-    assert.match(entry, /href="https:\/\/da\.live\/nx2\/styles\/buttons\.css"/);
+    assert.match(entry, /href="https:\/\/da\.live\/nx2\/styles\/form\.css"/);
+    assert.doesNotMatch(entry, /styles\/buttons\.css/);
     assert.doesNotMatch(source, /<button type=(?!"button" class="block-nav-item")/);
-    assert.match(source, /class="target-change nx-action-btn"/);
-    assert.match(source, /class="target-refresh primary-action nx-btn-accent"/);
-    assert.match(source, /class="page-open primary-action nx-btn-accent"/);
+    assert.match(source, /class="target-change nx-form-btn-secondary"/);
+    assert.match(source, /class="target-refresh primary-action nx-form-btn-primary"/);
+    assert.match(source, /class="page-open primary-action nx-form-btn-primary"/);
+    assert.doesNotMatch(source, /\bnx-(?:action-btn|btn-accent|btn-primary)\b/);
   });
 
   const appsContext = {
@@ -468,8 +495,6 @@ describe('Apps docked chat and scoped completion checks', () => {
     h.app.hostActions.daFetch = async (url, options) => {
       if (options.method === 'GET' && url === pageURL && data.files.get(url) instanceof Response) {
         const page = data.files.get(url);
-        assert.equal(page.bodyUsed, false, 'Stored page fixture body was consumed');
-        assert.equal(page.body?.locked ?? false, false, 'Stored page fixture body was locked');
         return data.readResponse(page);
       }
       if (options.method !== 'PUT' || ![pageURL, indexURL].includes(url)) {
@@ -2766,7 +2791,7 @@ describe('Page lifecycle guards and saved manual actions', () => {
     ['existing', 'unregistered'].forEach((status) => {
       h.app.libraryOverview.blocks.cards.status = status;
       const view = text(h.app.renderBlockDetail());
-      assert.match(view, /<a class="page-open primary-action nx-btn-accent"/);
+      assert.match(view, /<a class="page-open primary-action nx-form-btn-primary"/);
       assert.match(view, /target="_blank" rel="noopener noreferrer">Open<\/a>/);
       const buttons = view.match(/<button[^>]*>[^<]*<\/button>/g) || [];
       ['Delete', 'Recreate'].forEach((label) => {
@@ -3038,7 +3063,10 @@ describe('Page lifecycle guards and saved manual actions', () => {
     assert.equal(h.app.pageFlow.status, 'confirm');
     assert.equal(h.app.pageFlow.snapshot.pageETag, '"page1"');
     assert.ok(data.calls.every((call) => call.method === 'GET'));
-    const confirmation = text(h.app.renderPageAction());
+    const rendered = h.app.renderPageAction();
+    const confirmation = text(rendered);
+    assert.match(confirmation, /<button class="primary-action nx-form-btn-primary"/);
+    assert.match(confirmation, /<button class="nx-form-btn-secondary"/);
     assert.match(confirmation, /Confirm delete page and index entry/);
     assert.match(confirmation, /deletes the example page and removes its library-index entry/);
     assert.match(confirmation, /Block code, images and unrelated entries are not deleted/);
