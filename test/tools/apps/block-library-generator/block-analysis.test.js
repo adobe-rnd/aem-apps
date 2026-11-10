@@ -30,9 +30,9 @@ const input = (name) => ({
   blockName: name,
   entryPaths: [sourcePath(name)],
   prompt: 'Source-based analysis.',
-  sourcePage: '/index.html',
+  sourcePage: null,
   images: [],
-  links: [{ href: '/index', label: 'Home' }],
+  links: [],
   sources: [sourcePath(name), '/styles/styles.css', '/styles/lazy-styles.css']
     .map((id) => ({ id, content: id.endsWith('.js') ? '' : '/* CSS */' })),
   dependencyIssues: [],
@@ -79,6 +79,51 @@ const storage = () => {
 };
 
 describe('Current-site generic block contracts', () => {
+  it('saves and restores explicit empty approved links without injecting a homepage', async () => {
+    const saved = request('hero');
+    const before = JSON.stringify(saved);
+    const restored = await readJobRequest(async () => Response.json(saved), saved.jobId, {
+      target: saved.target, environment: 'prod', kind: 'analysis',
+    });
+    validateAnalysisRequest(restored);
+    assert.deepEqual(restored.input.links, []);
+    assert.equal(restored.input.sourcePage, null);
+    const prompt = createAnalysisPrompt(restored);
+    assert.match(prompt, /No approved link destinations/);
+    assert.match(prompt, /Omit.*(?:A elements|anchors)/);
+    assert.doesNotMatch(prompt, /"href": "\/index"/);
+    assert.equal(JSON.stringify(saved), before);
+  });
+
+  it('rejects generated anchors when no links were approved, including the former homepage default', () => {
+    const saved = request('hero');
+    const withLink = {
+      ...analysis('hero'),
+      examples: [{
+        ...analysis('hero').examples[0], body: [['<p><a href="/index">Home</a></p>']],
+      }],
+    };
+    const anchor = {
+      tagName: 'A',
+      attributes: [{ name: 'href', value: '/index' }],
+      getAttribute: (name) => (name === 'href' ? '/index' : null),
+    };
+    assert.throws(() => validateBlockAnalysis(withLink, saved, () => ({
+      children: [anchor], querySelectorAll: () => [anchor],
+    })), /approved link/);
+  });
+
+  it('preserves previously saved document and verified-homepage snapshots without rereading them', () => {
+    const saved = createAnalysisRequest({
+      environment: 'prod',
+      input: { ...input('hero'), sourcePage: '/index.html', links: [{ href: '/index', label: 'Home' }] },
+    });
+    const before = JSON.stringify(saved);
+    validateAnalysisRequest(saved);
+    assert.match(createAnalysisPrompt(saved), /"href": "\/index"/);
+    assert.equal(JSON.stringify(saved), before);
+  });
+
   it('supports all seven names with isolated job identities and generic prompts', () => {
     const store = storage();
     const requests = names.map(request);
@@ -333,7 +378,6 @@ describe('Discovered source collection', () => {
         environment: 'prod',
         blockName: name,
         entryPaths: paths,
-        sourcePage: '/index',
         fetchLocal: async () => new Response('Semantic prompt.', { headers: { 'Content-Type': 'text/plain' } }),
         parseHTML: () => ({ querySelectorAll: () => [] }),
         daFetch: async (url) => {
@@ -370,11 +414,27 @@ describe('Discovered source collection', () => {
     });
     assert.equal(value.sourcePage, null);
     assert.deepEqual(value.images, []);
-    assert.equal(f.reads.filter((url) => url.includes('/source/')).length, 1);
-    assert.ok(f.reads.includes('https://admin.da.live/source/msagolj/ew/index.html'));
+    assert.equal(f.reads.filter((url) => url.includes('/source/')).length, 0);
+    assert.deepEqual(value.links, []);
     const saved = createAnalysisRequest({ environment: 'prod', input: value });
     assert.equal(validateAnalysisRequest(saved).input.sourcePage, null);
     assert.ok(createAnalysisPrompt(saved).includes('blockName must be hero.'));
+  });
+
+  it('requires no DA document access when collecting code for an Apps analysis', async () => {
+    const f = options('hero');
+    const original = f.args.daFetch;
+    const value = await collectAnalysisInput({
+      ...f.args,
+      daFetch: async () => { throw new Error('No document reads are allowed'); },
+      fetchCode: original,
+      parseHTML: () => { throw new Error('No document image parsing is allowed'); },
+    });
+    assert.equal(value.sourcePage, null);
+    assert.deepEqual(value.images, []);
+    assert.deepEqual(value.links, []);
+    assert.equal(value.sources.length, 4);
+    assert.ok(f.reads.every((url) => new URL(url).hostname.endsWith('.preview.da.live')));
   });
 
   it('uses the supplied public reader for code and imports without attaching DA credentials', async () => {
@@ -413,7 +473,7 @@ describe('Discovered source collection', () => {
       },
       fetchCode: async () => new Response(null, { status: 403 }),
     }), /Source read failed.*403/);
-    assert.ok(reads.every((url) => url.endsWith('/index.html')));
+    assert.equal(reads.length, 0);
   });
 
   it('uses the packaged semantic prompt without fetching a protected text-content route', async () => {

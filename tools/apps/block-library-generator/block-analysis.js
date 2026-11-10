@@ -30,7 +30,7 @@ const ANALYSIS_FIELDS = [
 ];
 const RECIPE_FIELDS = ['id', 'name', 'description', 'options', 'body', 'evidence', 'assumptions'];
 const NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const CARDS_LINK = Object.freeze({ href: '/index', label: 'Test site home' });
+const LEGACY_LINK_HREF = '/index';
 const TAGS = new Set([
   'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'LI', 'PRE', 'CODE',
   'BLOCKQUOTE', 'STRONG', 'EM', 'B', 'I', 'U', 'S', 'A', 'BR', 'PICTURE', 'IMG',
@@ -100,10 +100,10 @@ function validateInput(input, legacy = false) {
           || typeof image.alt !== 'string';
       } catch { return true; }
     })) throw new Error('Block analysis requires valid approved site images.');
-  if (input.links !== undefined && (!Array.isArray(input.links) || input.links.length !== 1
-    || input.links[0]?.href !== CARDS_LINK.href
-    || typeof input.links[0]?.label !== 'string' || !input.links[0].label.trim())) {
-    throw new Error('Analysis requires /index as its approved link destination.');
+  if (input.links !== undefined && (!Array.isArray(input.links) || input.links.length > 1
+    || input.links.some((link) => link?.href !== LEGACY_LINK_HREF
+      || typeof link.label !== 'string' || !link.label.trim()))) {
+    throw new Error('Analysis links must be empty or contain the verified legacy link snapshot.');
   }
 }
 
@@ -203,12 +203,9 @@ export async function collectAnalysisInput({
   const sourceOrigin = `${target.adminOrigin}/source/${target.org}/${target.site}`;
   const pageRead = page === null ? Promise.resolve('')
     : readText(daFetch, `${sourceOrigin}${page}`, signal, /text\/html/);
-  const linkPageRead = page === '/index.html' ? pageRead
-    : readText(daFetch, `${sourceOrigin}/index.html`, signal, /text\/html/);
-  const [prompt, pageHTML, linkHTML, sources] = await Promise.all([
+  const [prompt, pageHTML, sources] = await Promise.all([
     Promise.resolve(ANALYSIS_PROMPT),
     pageRead,
-    linkPageRead,
     Promise.all([...entryPaths, ...CARDS_SOURCE_PATHS.slice(2)].map(async (id) => ({
       id,
       content: await readText(
@@ -220,7 +217,6 @@ export async function collectAnalysisInput({
     }))),
   ]);
   signal?.throwIfAborted();
-  if (!linkHTML.trim()) throw new Error('The approved link destination /index has empty DA source.');
   const contentOrigin = environment === 'prod' ? 'https://content.da.live' : 'https://stage-content.da.live';
   const siteRoot = `/${target.org}/${target.site}/`;
   const images = new Map();
@@ -276,7 +272,7 @@ export async function collectAnalysisInput({
     sourcePage: page,
     sources,
     images: [...images.values()].slice(0, 6),
-    links: [{ ...CARDS_LINK }],
+    links: [],
     helperContext: FRAMEWORK,
     dependencyIssues,
   };
@@ -492,9 +488,12 @@ Structural image support in the block does not make an unavailable image usable.
     const lines = source.content.split('\n').map((line, index) => `L${index + 1}: ${line}`);
     return `SOURCE ${source.id}\n${lines.join('\n')}`;
   }).join('\n\n');
-  const linkPolicy = request.input.links
-    ? 'Recipe links may use only an exact approved link href from the list below. Do not invent paths, fragments, queries or external destinations.'
-    : 'Legacy request: no approved link snapshot was recorded. Omit recipe links rather than invent working destinations.';
+  let linkPolicy = 'No approved link destinations were supplied. Omit A elements and anchors from recipes; do not invent a homepage, fragment, query or external destination.';
+  if (request.input.links === undefined) {
+    linkPolicy = 'Legacy request: no approved link snapshot was recorded. Omit recipe links rather than invent working destinations.';
+  } else if (request.input.links.length) {
+    linkPolicy = 'Recipe links may use only an exact approved link href from the list below. Do not invent paths, fragments, queries or external destinations.';
+  }
   const generationContract = request.kind === 'analysis' ? `
 Inside the analysis object, return generation: { "status": "ready" | "blocked", "reason": "..." }.
 Its exact location is payload.analysis.generation, alongside blockName and examples.

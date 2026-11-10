@@ -399,9 +399,6 @@ describe('Apps docked chat and scoped completion checks', () => {
         headers: { 'Content-Type': path.endsWith('.js') ? 'text/javascript' : 'text/css' },
       }));
     });
-    data.files.set(`${root}/index.html`, new Response('<main>Home</main>', {
-      headers: { 'Content-Type': 'text/html' },
-    }));
     data.files.set('https://admin.da.live/config/example-org/demo', {
       library: { data: [{ title: 'Blocks', path: 'https://content.da.live/example-org/demo/docs/library/blocks.json' }] },
     });
@@ -469,11 +466,39 @@ describe('Apps docked chat and scoped completion checks', () => {
     await h.app.beginPageAction('create');
     assert.equal(h.app.pageFlow.status, 'waiting');
     assert.equal(h.app.pageFlow.autoCreate, true);
+    assert.deepEqual(h.app.cardsRequest.input.links, []);
+    assert.equal(h.app.cardsRequest.input.sourcePage, null);
+    assert.ok(data.calls.every(({ url }) => !url.endsWith('/index.html')));
     assert.equal(data.prompts.length, 1);
     assert.equal(data.prompts[0].options.autoSend, true);
     assert.equal(data.closed.length, 0);
     assert.equal(data.files.has(paths.pageURL), false);
     assert.equal(data.calls.filter(({ method, url }) => method === 'PUT' && url === paths.indexURL).length, 0);
+  });
+
+  it('does not save a new Apps result that invents the former homepage link', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    await h.app.beginPageAction('create');
+    const saved = result(data, h.app.cardsRequest);
+    saved.payload.analysis.examples[0].body = [['<p><a href="/index">Home</a></p>']];
+    const originalParser = h.app.parseAnalysisHTML;
+    h.app.parseAnalysisHTML = (markup) => {
+      if (!markup.includes('/index')) return originalParser(markup);
+      const anchor = {
+        tagName: 'A',
+        attributes: [{ name: 'href', value: '/index' }],
+        getAttribute: (name) => (name === 'href' ? '/index' : null),
+      };
+      return { children: [anchor], querySelectorAll: () => [anchor] };
+    };
+    await data.emitTurn(turn());
+    assert.match(h.app.cardsError, /approved link/);
+    assert.equal(data.files.has(paths.pageURL), false);
+    assert.equal(data.calls.filter(({ method, url }) => (
+      method === 'PUT' && [paths.pageURL, paths.indexURL].includes(url)
+    )).length, 0);
+    assert.equal(data.closed.length, 0);
   });
 
   it('validates, saves, previews and cleans a ready Create without another user action', async () => {
@@ -1191,6 +1216,17 @@ describe('Apps docked chat and scoped completion checks', () => {
     assert.match(h.app.cardsError, /chat|nx2/i);
     assert.equal(data.calls.length, 0);
     assert.equal(data.subscriptions.length, 0);
+  });
+
+  it('does not direct users back to the retired editor launch when Apps authentication is unavailable', async () => {
+    const { data, h } = await setup();
+    delete h.app.hostActions.daFetch;
+    assert.match(h.app.discoveryBlockReason, /DA Apps/);
+    assert.doesNotMatch(h.app.discoveryBlockReason, /editor/i);
+    h.app.connectionState = 'unavailable';
+    assert.match(h.app.discoveryBlockReason, /DA Apps/);
+    assert.doesNotMatch(h.app.discoveryBlockReason, /editor/i);
+    noWrites(data);
   });
 
   it('requires the parent canonical hash, not merely a selected iframe target', async () => {
@@ -4579,7 +4615,7 @@ describe('app connection regressions', () => {
         alt: asset.alt,
       }));
       assert.deepEqual(h.app.cardsRequest.input.images, expectedImages);
-      assert.equal(h.app.cardsRequest.input.links[0].href, '/index');
+      assert.deepEqual(h.app.cardsRequest.input.links, []);
       assert.equal(jobs.loadProbePointer(data.storage, 'prod'), null);
       assert.equal(jobs.loadJobPointer(data.storage, 'prod', 'analysis', 'cards').jobId, h.app.cardsRequest.jobId);
       assert.equal(data.calls.filter(({ method }) => method === 'PUT').length, 4);
@@ -4602,6 +4638,7 @@ describe('app connection regressions', () => {
       assert.ok(h.app.cardsRequest.input.images.every((asset) => asset.src.includes('/docs/library/media/block-library-generator/')));
       assert.ok(h.app.cardsRequest.input.images.every((asset) => asset.src !== image));
       assert.ok(data.calls.every((call) => !call.url.includes('not-readable-from-launch')));
+      assert.ok(data.calls.every((call) => !call.url.endsWith('/index.html')));
       const originalAssets = h.app.cardsRequest.input.images;
       h.app.cardsNewConfirmed = true;
       await h.app.prepareCardsAnalysis();

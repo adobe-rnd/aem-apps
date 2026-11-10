@@ -609,13 +609,13 @@ class BlockLibraryGeneratorApp extends LitElement {
     if (this.connectionError) return this.connectionError;
     if (this.probeEnvironment !== 'prod') return 'This release supports Production DA only.';
     if (this.connectionState !== 'ready' || window.parent === window) {
-      return 'Open this app from the DA editor or Apps to use an authenticated site session.';
+      return 'Open this app from DA Apps to use an authenticated site session.';
     }
     if (!this.hasToken) {
       return 'Sign in to DA and reopen the generator to access a site.';
     }
     if (typeof this.hostActions.daFetch !== 'function') {
-      return 'This DA host does not provide authenticated access. Open the generator from the editor or Apps.';
+      return 'This DA host does not provide authenticated access. Open the generator from DA Apps.';
     }
     if (!this.context.org || !this.context.site) {
       return 'Choose a site to read its blocks and existing library.';

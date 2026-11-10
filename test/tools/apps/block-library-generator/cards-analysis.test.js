@@ -135,7 +135,7 @@ describe('Cards analysis protocol', () => {
   });
 
   it('rejects malformed or unapproved trial-link snapshots', () => {
-    [[], null, [{ href: '/invented', label: 'Invented' }], [{ href: '/index' }]].forEach((links) => {
+    [null, [{ href: '/invented', label: 'Invented' }], [{ href: '/index' }]].forEach((links) => {
       assert.throws(() => createCardsRequest({ input: { ...input(), links } }), /link/i);
     });
   });
@@ -275,33 +275,37 @@ describe('HTML element policy', () => {
       assert.equal(value.prompt, ANALYSIS_PROMPT);
       assert.ok(value.sources.every((source) => source.content === ''));
       assert.equal(value.images[0].src, image);
-      assert.deepEqual(value.links, [{ href: '/index', label: 'Test site home' }]);
+      assert.deepEqual(value.links, []);
     });
 
-    it('verifies the approved destination through DA source when launched from another page', async () => {
+    it('reads only the explicitly supplied legacy document, not a second homepage', async () => {
       const reads = [];
       const base = options();
       const value = await collectCardsInput({
         ...base,
         sourcePage: '/another',
-        daFetch: async (url, init) => { reads.push(url); return base.daFetch(url, init); },
+        daFetch: async (url, init) => {
+          reads.push(url);
+          if (url.endsWith('/index.html')) throw new Error('An unselected homepage must not be read');
+          return base.daFetch(url, init);
+        },
       });
       assert.equal(value.sourcePage, '/another.html');
-      assert.ok(reads.includes('https://admin.da.live/source/msagolj/ew/index.html'));
-      assert.equal(value.links[0].href, '/index');
+      assert.deepEqual(reads.filter((url) => url.includes('/source/')), [
+        'https://admin.da.live/source/msagolj/ew/another.html',
+      ]);
+      assert.deepEqual(value.links, []);
     });
 
-    it('fails rather than substituting links when the approved source page is missing or empty', async () => {
+    it('still fails if an explicitly supplied legacy source page is missing or inaccessible', async () => {
       const base = options();
-      const responses = [new Response('', { status: 404 }), new Response('', {
-        headers: { 'Content-Type': 'text/html' },
-      })];
+      const responses = [new Response('', { status: 404 }), new Response('', { status: 403 })];
       await Promise.all(responses.map((response) => assert.rejects(collectCardsInput({
         ...base,
         sourcePage: '/another',
-        daFetch: async (url, init) => (url.endsWith('/index.html')
+        daFetch: async (url, init) => (url.endsWith('/another.html')
           ? response : base.daFetch(url, init)),
-      }), /404|approved link/i)));
+      }), /404|403/i)));
     });
 
     it('fails explicitly if the launch document supplies no approved site images', async () => {

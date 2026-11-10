@@ -132,6 +132,10 @@ New analyses use three bundled placeholder images, not images from an editor
 document. Missing copies are added to the site's library media folder; existing
 conflicting files are not overwritten.
 
+No homepage or editor document is read to prepare a new analysis. New examples
+have no approved link destinations, so they omit links rather than inventing
+URLs. Previously saved analyses retain their original approved resources.
+
 Real video, fragment, form or catalog references cannot be replaced by those
 images. Blocks that need unavailable resources may only support a default page.
 
