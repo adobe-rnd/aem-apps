@@ -437,6 +437,55 @@ describe('Discovered source collection', () => {
     assert.ok(f.reads.every((url) => new URL(url).hostname.endsWith('.preview.da.live')));
   });
 
+  ['/styles/lazy-styles.css', '/styles/styles.css', 'both'].forEach((missing) => {
+    it(`collects verified block entries when conventional shared styles are absent: ${missing}`, async () => {
+      const f = options('hero');
+      const absent = missing === 'both' ? ['/styles/styles.css', '/styles/lazy-styles.css'] : [missing];
+      absent.forEach((id) => f.contents.delete(id));
+      const value = await collectAnalysisInput(f.args);
+      assert.deepEqual(value.sources.map(({ id }) => id).sort(), [
+        ...f.args.entryPaths, ...['/styles/styles.css', '/styles/lazy-styles.css'].filter((id) => !absent.includes(id)),
+      ].sort());
+      absent.forEach((id) => {
+        assert.ok(value.dependencyIssues.some((issue) => issue.dependency === id && /optional.*404/i.test(issue.reason)));
+      });
+      const saved = createAnalysisRequest({ environment: 'prod', input: value });
+      validateAnalysisRequest(saved);
+      const prompt = createAnalysisPrompt(saved);
+      assert.match(prompt, /optional conventional stylesheets/i);
+      assert.doesNotMatch(prompt, /SOURCE \/styles\/(?:lazy-)?styles\.css\n(?=SOURCE)/);
+    });
+  });
+
+  it('can validate a code-only request while preserving the original four-source Cards contract', async () => {
+    const f = options('hero');
+    f.contents.delete('/styles/styles.css');
+    f.contents.delete('/styles/lazy-styles.css');
+    const value = await collectAnalysisInput({ ...f.args, entryPaths: [sourcePath('hero')] });
+    const saved = createAnalysisRequest({ environment: 'prod', input: value });
+    assert.equal(saved.input.sources.length, 1);
+    assert.doesNotThrow(() => validateBlockAnalysis(analysis('hero'), saved, parseHTML));
+    const wrongEvidence = analysis('hero');
+    wrongEvidence.examples[0].evidence = ['/styles/styles.css'];
+    assert.throws(() => validateBlockAnalysis(wrongEvidence, saved, parseHTML), /evidence/);
+  });
+
+  it('does not classify optional-style access, server, MIME or network failures as absence', async () => {
+    await Promise.all([401, 403, 429, 500, 'mime', 'network'].map(async (failure) => {
+      const f = options('hero');
+      const original = f.args.daFetch;
+      const fetchCode = async (url, opts) => {
+        if (!url.endsWith('/styles/lazy-styles.css')) return original(url, opts);
+        if (failure === 'network') throw new Error('Stylesheet network failed');
+        return new Response('Error', {
+          status: typeof failure === 'number' ? failure : 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      };
+      await assert.rejects(collectAnalysisInput({ ...f.args, fetchCode }), /401|403|429|500|content type|network/);
+    }));
+  });
+
   it('uses the supplied public reader for code and imports without attaching DA credentials', async () => {
     const f = options('footer');
     f.contents.set(sourcePath('footer'), "import { loadFragment } from '../fragment/fragment.js';");

@@ -501,6 +501,22 @@ describe('Apps docked chat and scoped completion checks', () => {
     assert.equal(data.closed.length, 0);
   });
 
+  it('automatically creates examples without either conventional shared stylesheet', async () => {
+    const { data, h } = await setup();
+    const paths = automaticInputs(data, h);
+    ['/styles/styles.css', '/styles/lazy-styles.css'].forEach((path) => {
+      data.files.delete(`https://main--demo--example-org.preview.da.live${path}`);
+    });
+    await h.app.beginPageAction('create');
+    assert.equal(h.app.pageFlow.status, 'waiting');
+    assert.deepEqual(h.app.cardsRequest.input.sources.map(({ id }) => id), ['/blocks/hero/hero.js']);
+    result(data, h.app.cardsRequest);
+    await data.emitTurn(turn());
+    assert.equal(h.app.pageFlow, null);
+    assert.equal(h.app.libraryError, '');
+    assert.equal(data.files.has(paths.pageURL), true);
+  });
+
   it('validates, saves, previews and cleans a ready Create without another user action', async () => {
     const { data, h } = await setup();
     const paths = automaticInputs(data, h);

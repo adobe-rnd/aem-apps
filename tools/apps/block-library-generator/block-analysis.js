@@ -87,7 +87,7 @@ function validateInput(input, legacy = false) {
     || input.sources.some((source) => typeof source.content !== 'string'
       || !/^\/(?:blocks|styles|scripts)\/[a-z0-9/_.-]+\.(?:js|css)$/i.test(source.id)
       || source.id.includes('..'))
-    || [...entryPaths, ...CARDS_SOURCE_PATHS.slice(2)].some((id) => (
+    || (legacy ? CARDS_SOURCE_PATHS : entryPaths).some((id) => (
       input.sources.filter((source) => source.id === id).length !== 1
     )) || (legacy && input.sources.length !== 4)) {
     throw new Error('The block source bundle is incomplete or invalid.');
@@ -137,7 +137,7 @@ export function createAnalysisRequest({ input, ...options }) {
   return validateAnalysisRequest(request);
 }
 
-async function readText(fetcher, url, signal, expectedType) {
+async function readText(fetcher, url, signal, expectedType, { allowMissing = false } = {}) {
   const timeout = AbortSignal.timeout(15000);
   const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
   combined.throwIfAborted();
@@ -145,6 +145,11 @@ async function readText(fetcher, url, signal, expectedType) {
     method: 'GET', cache: 'no-store', redirect: 'error', signal: combined,
   });
   combined.throwIfAborted();
+  if (allowMissing && response.status === 404) {
+    await response.body?.cancel();
+    combined.throwIfAborted();
+    return null;
+  }
   if (!response.ok) throw new Error(`Source read failed (HTTP ${response.status}): ${url}`);
   if (!expectedType.test(response.headers.get('content-type') || '')) {
     throw new Error(`Unexpected source content type: ${url}`);
@@ -203,7 +208,7 @@ export async function collectAnalysisInput({
   const sourceOrigin = `${target.adminOrigin}/source/${target.org}/${target.site}`;
   const pageRead = page === null ? Promise.resolve('')
     : readText(daFetch, `${sourceOrigin}${page}`, signal, /text\/html/);
-  const [prompt, pageHTML, sources] = await Promise.all([
+  const [prompt, pageHTML, collected] = await Promise.all([
     Promise.resolve(ANALYSIS_PROMPT),
     pageRead,
     Promise.all([...entryPaths, ...CARDS_SOURCE_PATHS.slice(2)].map(async (id) => ({
@@ -213,10 +218,12 @@ export async function collectAnalysisInput({
         `${codeOrigin}${id}`,
         signal,
         id.endsWith('.css') ? /text\/css/ : /(?:java|ecma)script/,
+        { allowMissing: !entryPaths.includes(id) },
       ),
     }))),
   ]);
   signal?.throwIfAborted();
+  const sources = collected.filter((source) => source.content !== null);
   const contentOrigin = environment === 'prod' ? 'https://content.da.live' : 'https://stage-content.da.live';
   const siteRoot = `/${target.org}/${target.site}/`;
   const images = new Map();
@@ -229,7 +236,11 @@ export async function collectAnalysisInput({
       || url.username || url.password || url.search || url.hash || images.has(url.href)) return;
     images.set(url.href, { src: url.href, alt: img.getAttribute('alt') || '' });
   });
-  const dependencyIssues = [];
+  const dependencyIssues = collected.filter((source) => source.content === null).map(({ id }) => ({
+    source: 'site shared styles',
+    dependency: id,
+    reason: 'Optional conventional stylesheet not found (HTTP 404). Its absence alone is not a missing author input.',
+  }));
   const seen = new Set(sources.map((source) => source.id));
   const queue = sources.filter((source) => source.id.startsWith('/blocks/'))
     .map((source) => ({ ...source, depth: 0 }));
@@ -552,6 +563,8 @@ The examples array becomes normal author-facing library content, not a diagnosti
 gallery. Keep known-unusable cases (for example same-color text and background)
 in warnings, not examples, even if the DOM shape is structurally accepted.
 Review dependencyIssues and report unresolved helper/asset behavior honestly.
+Optional conventional stylesheets may be absent from this project. Those files
+were not analysed; do not cite them. Their absence alone is not a reason to block.
 Local import snapshots are source evidence only; no code has been executed.
 ` : '';
   const analysisFields = request.kind === 'analysis' ? [...ANALYSIS_FIELDS, 'generation'] : ANALYSIS_FIELDS;

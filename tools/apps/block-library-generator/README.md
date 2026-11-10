@@ -126,6 +126,11 @@ The discovered block list is cached. Use **Refresh blocks** after repository
 changes. Library configuration and page status are checked again when opening
 the app.
 
+The conventional shared stylesheets (`styles/styles.css` and
+`styles/lazy-styles.css`) are included when present; a missing file is recorded
+without blocking analysis. Missing verified block files and access/server errors
+still stop preparation.
+
 ### Example content
 
 New analyses use three bundled placeholder images, not images from an editor
