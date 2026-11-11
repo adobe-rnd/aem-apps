@@ -1,0 +1,30 @@
+/* The text input's box, plus a disclosure chevron at the inline-end. */
+select.form-control {
+  padding-right: calc(var(--s2-spacing-300) + 10px);
+  appearance: none;
+  cursor: pointer;
+}
+
+/* Reserve room for the alert icon ahead of the disclosure chevron. */
+.form-field.has-error .form-control {
+  padding-right: 52px;
+}
+
+.form-picker-chevron {
+  position: absolute;
+  top: 50%;
+  right: var(--s2-spacing-200);
+  width: 16px;
+  height: 16px;
+  transform: translateY(-50%);
+  color: var(--s2-gray-700);
+  pointer-events: none;
+}
+
+.form-control-wrap:has(select:disabled) .form-picker-chevron {
+  color: var(--s2-gray-400);
+}
+
+.form-field.has-error .form-field-icon {
+  inset-inline-end: 30px;
+}

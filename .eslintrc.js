@@ -33,5 +33,15 @@ module.exports = {
         }],
       },
     },
+    {
+      // Lit elements: `_` marks private members and reactive state.
+      files: ['tools/apps/schema-editor/*.js', 'tools/apps/schema-editor/ui/**/*.js'],
+      rules: {
+        'no-underscore-dangle': 'off',
+        'import/no-unresolved': ['error', { ignore: ['^da-lit$', '^https://'] }],
+        'import/prefer-default-export': 'off',
+        'class-methods-use-this': 'off',
+      },
+    },
   ],
 };
