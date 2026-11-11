@@ -20,6 +20,7 @@ const CI_WORKER_URL = 'https://publish-requests-ci.aem-poc-lab.workers.dev';
 const LOCAL_WORKER_URL = 'http://localhost:8787';
 
 const CORS_PROXY = 'https://da-etc.adobeaem.workers.dev/cors';
+const DA_ADMIN = 'https://admin.da.live';
 
 // daFetch ensures a fresh IMS token is used on every request (handles token expiry)
 const { daFetch } = await import('https://da.live/nx/utils/daFetch.js');
@@ -137,6 +138,65 @@ export async function fetchAccentSettings(org, site, token) {
   } catch (error) {
     console.warn('Failed to fetch accent settings:', error);
     return { accentColor: null, accentColorHover: null };
+  }
+}
+
+// ===========================================================================
+// Site onboarding: DA existence + config (admin.da.live), worker registration
+// ===========================================================================
+
+async function getDaJson(url) {
+  try {
+    const resp = await daFetch(url);
+    return resp.ok ? await resp.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchDaConfigs(org, site) {
+  const [siteConfig, orgConfig] = await Promise.all([
+    getDaJson(`${DA_ADMIN}/config/${org}/${site}/`),
+    getDaJson(`${DA_ADMIN}/config/${org}/`),
+  ]);
+  return { siteConfig, orgConfig };
+}
+
+// False only when the org listing loads without the site; an unreadable listing doesn't block.
+export async function checkSiteExists(org, site) {
+  const items = await getDaJson(`${DA_ADMIN}/list/${org}`);
+  return !Array.isArray(items) || items.some((item) => item.name === site);
+}
+
+/**
+ * 'registered', 'unregistered' (with the email providers the org may choose),
+ * or 'unknown' when the worker can't say (no access, or no /api/site-config
+ * route yet). Callers proceed on 'unknown'; every worker call gates anyway.
+ */
+export async function checkSiteRegistration(org, site, token) {
+  try {
+    const url = `${getWorkerUrl()}/api/site-config?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
+    const resp = await fetch(url, getOpts(token));
+    if (resp.ok) return { status: 'registered' };
+    const { availableProviders } = await resp.json().catch(() => ({}));
+    if (Array.isArray(availableProviders)) return { status: 'unregistered', availableProviders };
+  } catch { /* unknown */ }
+  return { status: 'unknown' };
+}
+
+/**
+ * Register org/site with the worker (POST /api/site-config).
+ * @param {Object} settings - { emailProvider, apiUrl?, apiKey?, fromAddress?, fromName?,
+ *   allowedEmailDomains? }
+ */
+export async function registerSite(org, site, settings, token) {
+  try {
+    const resp = await fetch(`${getWorkerUrl()}/api/site-config`, getOpts(token, 'POST', { org, site, ...settings }));
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { success: false, error: result.error || `Registration failed (${resp.status})` };
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message || 'Registration failed' };
   }
 }
 

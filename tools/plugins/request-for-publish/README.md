@@ -67,17 +67,15 @@ The plugin clearly shows which approvers and CC recipients will receive the requ
 - **Config-based**: "Approvers and CC determined by content path rules" — matched from the workflow config
 - **Error**: If no matching rule is found or the config is missing, an error message is shown instead of the form
 
-### 6. Missing Configuration
+### 6. Site Not Set Up
 
-If the `publish-workflow-config` tab is not found in the DA config at either the site level (`/config/{org}/{site}/`) or the org level (`/config/{org}/`), the plugin displays an error:
+If the worker reports the site as unregistered, or the site has no `publish-workflow-config`, the plugin shows **Site Not Registered** or **Setup Incomplete** with a link to the Publish Requests Inbox, where an administrator can register the site and check its configuration.
 
-> *"Publish workflow configuration not found. Please ensure the "publish-workflow-config" tab exists in the DA config for site "{org}/{site}" or org "{org}"."*
-
-Similarly, if the config exists but no rule matches the current content path, an error is shown:
+If the config exists but no rule matches the current content path, an error is shown:
 
 > *"No approver rule found matching path "{path}". Please add a matching pattern to the "publish-workflow-config" tab."*
 
-In both cases, the submission form is not rendered and the author cannot submit a request.
+In all cases, the submission form is not rendered and the author cannot submit a request.
 
 ### 7. Session/Auth Issues
 

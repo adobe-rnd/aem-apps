@@ -33,7 +33,33 @@ import {
   fetchSiteConfig,
   getLiveHostFromConfig,
   fetchAccentSettings,
+  fetchDaConfigs,
+  checkSiteExists,
+  checkSiteRegistration,
+  registerSite,
 } from './api.js';
+import { inspectDaConfig, isSetupBlocked } from './setup.js';
+
+const SETUP_GUIDE_URL = 'https://docs.da.live/about/early-access/request-publish';
+
+const PROVIDER_LABELS = { default: 'Default (Adobe)', 'custom-api': 'Custom API' };
+
+const SETUP_ROWS = [
+  ['workflowConfig', 'publish-workflow-config', 'Approver rules. Required.'],
+  ['library', 'library', 'Request Publish plugin, so authors can submit.'],
+  ['apps', 'apps', 'This inbox, so approvers can find it.'],
+  ['settings', 'publish-workflow-settings', 'Comments, support contact and theme. Optional.'],
+  ['groups', 'publish-workflow-groups-to-email', 'Distribution list addresses. Optional.'],
+];
+
+const INFO_ICON = html`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 15a1 1 0 1 1 1-1 1 1 0 0 1-1 1Zm1-4.5a1 1 0 0 1-2 0v-4a1 1 0 0 1 2 0Z" fill="currentColor"/></svg>`;
+
+function describeSetup({ state, source }) {
+  if (state === 'ok') return { tone: 'positive', text: `Configured (${source})` };
+  if (state === 'default') return { tone: 'neutral', text: 'Using defaults' };
+  if (state === 'not-needed') return { tone: 'neutral', text: 'Not needed' };
+  return { tone: 'negative', text: 'Missing' };
+}
 
 // Super Lite (sl-*) — Spectrum-aligned controls for DA; pairs with S2 tokens in CSS.
 // NX style pipeline matches other da.live shell apps (e.g. MSM): nx.js loadStyle + getStyle.
@@ -84,7 +110,8 @@ class PublishRequestsApp extends LitElement {
     context: { attribute: false },
     token: { attribute: false },
     // view states: 'loading', 'idle', 'inbox', 'review', 'approved',
-    //               'rejected', 'error', 'unauthorized', 'no-request'
+    //               'rejected', 'error', 'unauthorized', 'no-request',
+    //               'site-not-found', 'unregistered', 'config-missing'
     _state: { state: true },
     _isProcessing: { state: true },
     _message: { state: true },
@@ -109,6 +136,11 @@ class PublishRequestsApp extends LitElement {
     _orgSiteValue: { state: true },
     // Inline reject error
     _rejectError: { state: true },
+    // Onboarding
+    _availableProviders: { state: true },
+    _regProvider: { state: true },
+    _registering: { state: true },
+    _setupStatus: { state: true },
   };
 
   constructor() {
@@ -131,6 +163,10 @@ class PublishRequestsApp extends LitElement {
     this._requester = false;
     this._myRequestActions = new Map();
     this._orgSiteValue = '';
+    this._availableProviders = [];
+    this._regProvider = '';
+    this._registering = false;
+    this._setupStatus = null;
   }
 
   connectedCallback() {
@@ -232,25 +268,49 @@ class PublishRequestsApp extends LitElement {
       return;
     }
 
-    await this.loadSiteSettings(this._org, this._site);
-
     // Sample RUM enhancer if the RUM script is loaded
     window.hlx?.rum?.sampleRUM?.enhance?.();
 
     sampleRUM('publish-requests-app:loaded', { source: window.location.href });
 
-    // If no path specified → inbox or my-requests mode
-    if (!this._path) {
-      if (this._requester) {
-        await this.initMyRequests();
-      } else {
-        await this.initInbox();
-      }
-      return;
-    }
+    await this.loadSite();
+  }
 
-    // Path specified → single-request review mode
-    await this.initReview();
+  /** Returns false when the site still needs onboarding; `_state` then shows that step. */
+  async checkOnboarding() {
+    const [exists, registration, { siteConfig, orgConfig }] = await Promise.all([
+      checkSiteExists(this._org, this._site),
+      checkSiteRegistration(this._org, this._site, this.token),
+      fetchDaConfigs(this._org, this._site),
+    ]);
+    if (!exists) {
+      this._state = 'site-not-found';
+      return false;
+    }
+    if (registration.status === 'unregistered') {
+      this._availableProviders = registration.availableProviders;
+      this._regProvider = registration.availableProviders[0] || 'custom-api';
+      this._state = 'unregistered';
+      return false;
+    }
+    this._setupStatus = inspectDaConfig(siteConfig, orgConfig);
+    if (isSetupBlocked(this._setupStatus)) {
+      this._state = 'config-missing';
+      return false;
+    }
+    return true;
+  }
+
+  async loadSite() {
+    if (!await this.checkOnboarding()) return;
+    await this.loadSiteSettings(this._org, this._site);
+    if (this._path) {
+      await this.initReview();
+    } else if (this._requester) {
+      await this.initMyRequests();
+    } else {
+      await this.initInbox();
+    }
   }
 
   /**
@@ -385,18 +445,43 @@ class PublishRequestsApp extends LitElement {
     this._path = '';
     this._pendingRequests = [];
 
-    await this.loadSiteSettings(org, site);
-
     const urlParams = { org, site };
     if (this._requester) urlParams.requester = 'true';
     this.updateUrl(urlParams);
 
-    // Load inbox inline — these methods set _state to 'inbox'/'my-requests' when done
-    if (this._requester) {
-      await this.initMyRequests();
-    } else {
-      await this.initInbox();
+    await this.loadSite();
+  }
+
+  async handleRecheck() {
+    this._message = null;
+    this._state = 'loading';
+    await this.loadSite();
+  }
+
+  async handleRegister(e) {
+    e.preventDefault();
+    if (this._registering) return;
+    // Empty fields are dropped so the worker keeps any existing value.
+    const fields = Object.fromEntries([...new FormData(e.target)]
+      .map(([key, value]) => [key, value.trim()])
+      .filter(([, value]) => value));
+    const { allowedEmailDomains, ...settings } = fields;
+    settings.emailProvider = this._regProvider;
+    if (allowedEmailDomains) {
+      settings.allowedEmailDomains = allowedEmailDomains.split(',').map((d) => d.trim()).filter(Boolean);
     }
+
+    this._registering = true;
+    this._message = null;
+    const result = await registerSite(this._org, this._site, settings, this.token);
+    this._registering = false;
+    if (!result.success) {
+      this._message = { type: 'error', text: result.error };
+      return;
+    }
+    this._message = { type: 'success', text: `Registered ${this._org}/${this._site}.` };
+    this._state = 'loading';
+    await this.loadSite();
   }
 
   // ======== Inline review — opens detail view without page navigation ========
@@ -726,6 +811,12 @@ class PublishRequestsApp extends LitElement {
         return this.renderUnauthorized();
       case 'no-request':
         return this.renderNoRequest();
+      case 'site-not-found':
+        return this.renderSiteNotFound();
+      case 'unregistered':
+        return this.renderUnregistered();
+      case 'config-missing':
+        return this.renderConfigMissing();
       case 'inbox':
         return this.renderInbox();
       case 'my-requests':
@@ -739,6 +830,100 @@ class PublishRequestsApp extends LitElement {
       default:
         return nothing;
     }
+  }
+
+  // ======== Onboarding renders ========
+
+  renderSiteNotFound() {
+    return html`
+      <div class="status-page">
+        <div class="status-icon status-icon--error">${INFO_ICON}</div>
+        <h2 class="status-heading">Site Not Found</h2>
+        <p class="status-body">
+          <strong>${this._org}/${this._site}</strong> doesn't exist.
+          Check the organization and site names and try again.
+        </p>
+      </div>
+    `;
+  }
+
+  renderUnregistered() {
+    const providers = this._availableProviders;
+    return html`
+      <div class="status-page">
+        <div class="status-icon status-icon--neutral">${INFO_ICON}</div>
+        <h2 class="status-heading">Register This Site</h2>
+        <p class="status-body">
+          <strong>${this._org}/${this._site}</strong> isn't registered for the publish workflow yet.
+          Register it to enable publish requests and approval emails.
+        </p>
+
+        <form class="review-card setup-form" @submit=${this.handleRegister}>
+          <h3 class="review-card-title">Email Notifications</h3>
+          ${providers.length > 1 ? html`
+            <sl-select name="emailProvider" label="Email provider" .value=${this._regProvider}
+              @change=${(e) => { this._regProvider = e.target.value; }}>
+              ${providers.map((p) => html`<option value=${p}>${PROVIDER_LABELS[p] || p}</option>`)}
+            </sl-select>
+          ` : nothing}
+          ${this._regProvider === 'custom-api' ? html`
+            <sl-input name="apiUrl" id="apiUrl" label="API URL" placeholder="https://example.com/api/send-email" autocomplete="off" required></sl-input>
+            <sl-input name="apiKey" id="apiKey" label="API key" type="password" autocomplete="off" required></sl-input>
+            <sl-input name="fromAddress" id="fromAddress" label="From address" placeholder="noreply@example.com" autocomplete="off" required></sl-input>
+            <sl-input name="fromName" id="fromName" label="From name" placeholder="Example Web Team" autocomplete="off" required></sl-input>
+          ` : nothing}
+          <div>
+            <sl-input name="allowedEmailDomains" id="allowedEmailDomains" label="Allowed email domains" placeholder="example.com, example.org" autocomplete="off"></sl-input>
+            <p class="form-hint">Comma-separated. Emails only go to these domains. Leave empty for the default list.</p>
+          </div>
+          ${this.renderMessage()}
+          <div class="form-actions">
+            <sl-button type="submit" class="pw-fill-accent" ?disabled=${this._registering}>
+              ${this._registering ? 'Registering...' : 'Register Site'}
+            </sl-button>
+          </div>
+        </form>
+      </div>
+    `;
+  }
+
+  renderConfigMissing() {
+    const configUrl = (scope) => `https://da.live/config#/${scope}/`;
+    return html`
+      <div class="status-page">
+        <div class="status-icon status-icon--warning">${INFO_ICON}</div>
+        <h2 class="status-heading">Finish Setup</h2>
+        <p class="status-body">
+          <strong>${this._org}/${this._site}</strong> is registered, but it has no approver rules yet.
+          Add the missing configuration, then check again.
+        </p>
+
+        <section class="review-card">
+          <h3 class="review-card-title">Configuration</h3>
+          <ul class="setup-list">
+            ${SETUP_ROWS.map(([key, tab, hint]) => {
+              const { tone, text } = describeSetup(this._setupStatus[key]);
+              return html`
+                <li class="setup-row">
+                  <span class="setup-tab"><code>${tab}</code><span class="setup-hint">${hint}</span></span>
+                  <span class="status-light status-light--${tone}">${text}</span>
+                </li>
+              `;
+            })}
+          </ul>
+          <p class="review-card-body">
+            Edit the <a href=${configUrl(`${this._org}/${this._site}`)} target="_blank" rel="noopener">site config</a>
+            or the <a href=${configUrl(this._org)} target="_blank" rel="noopener">org config</a>.
+            <code>library</code> and <code>apps</code> must be in the site config. Workflow tabs can go in either;
+            a site <code>publish-workflow-config</code> replaces the org's.
+            The <a href=${SETUP_GUIDE_URL} target="_blank" rel="noopener">setup guide</a> lists the rows each tab needs.
+          </p>
+          <div class="form-actions">
+            <sl-button class="pw-fill-accent" @click=${this.handleRecheck}>Check Again</sl-button>
+          </div>
+        </section>
+      </div>
+    `;
   }
 
   // ======== Inbox renders ========
@@ -1186,7 +1371,7 @@ class PublishRequestsApp extends LitElement {
     }
     return html`
       ${this.renderToolbar()}
-      ${this.renderMessage()}
+      ${this._state === 'unregistered' ? nothing : this.renderMessage()}
       <div class="pw-content">
         ${this.renderContent()}
       </div>

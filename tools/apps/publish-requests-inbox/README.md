@@ -107,13 +107,15 @@ If a user is not an authorized approver for the given content path (after group 
 
 If the user has no pending requests to act on, the inbox displays an empty state message.
 
-### 11. Missing Configuration
+### 11. Site Onboarding
 
-If the `publish-workflow-config` tab is not found in the DA config at either the site level (`/config/{org}/{site}/`) or the org level (`/config/{org}/`), the app displays an error message:
+Before loading requests, the app checks the site in parallel:
 
-> *"Publish workflow configuration not found. Please ensure the "publish-workflow-config" tab exists in the DA config for site "{org}/{site}" or org "{org}"."*
+- **Site not found**: the org listing (`admin.da.live/list/{org}`) loads but has no such site. An unreadable listing doesn't block.
+- **Unregistered**: `GET /api/site-config` reports the site as unregistered. The app shows a registration form (email provider, custom API fields, allowed email domains) that posts to `POST /api/site-config`. The worker only offers the `default` provider to internal orgs.
+- **Finish setup**: the DA config has no `publish-workflow-config` rules. The app lists each tab's status (`publish-workflow-config`, `library`, `apps`, `publish-workflow-settings`, `publish-workflow-groups-to-email`) with links to the site and org config editors, and a **Check Again** button.
 
-This prevents the app from operating without proper approver rules.
+Workflow tabs resolve like the worker: the site config wins when it has `publish-workflow-config`, otherwise the org's. `library` and `apps` are only read from the site config. Only missing approver rules block the inbox; if the config can't be read, or the worker has no `/api/site-config` route, the app carries on and lets the worker gate each call.
 
 ### 12. Session/Login Issues
 
@@ -126,6 +128,7 @@ If the user's email cannot be determined from the Adobe IMS token, a warning is 
 | `publish-requests-inbox.html` | Entry HTML that loads DA SDK and the app module |
 | `publish-requests-inbox.js` | Main LitElement component with inbox and review modes, all UI states and event handlers |
 | `publish-requests-inbox.css` | Styles for all component states (inbox, review, approved, rejected, error, etc.) |
+| `setup.js` | Pure DA config inspection for the finish-setup screen (tested in `test/tools/apps/publish-requests-inbox/`) |
 | `api.js` | Thin REST client over `publish-requests-worker` (list/approve/reject/withdraw/resend, approvers/config) + client-side Helix publish (single & bulk) + job polling + IMS profile fetch |
 
 ## Configuration
@@ -161,4 +164,7 @@ The app renders one of these states at any time:
 | `rejected` | Request successfully rejected and notifications sent |
 | `no-request` | No pending request found for the given path |
 | `unauthorized` | Current user is not an authorized approver (after group resolution) |
-| `error` | Missing required URL parameters, auth failure, or missing workflow configuration |
+| `site-not-found` | The org exists but has no such site |
+| `unregistered` | The worker reports the site as unregistered; shows the registration form |
+| `config-missing` | No `publish-workflow-config` rules; shows the setup checklist |
+| `error` | Missing required URL parameters or auth failure |
