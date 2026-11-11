@@ -1,0 +1,481 @@
+:host {
+  display: block;
+}
+
+.canvas {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.tree {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  container-type: inline-size;
+}
+
+/* Cards ------------------------------------------------------------------- */
+
+/* Like the da-live structured content form, cards are unboxed rows joined
+   by 1px tree lines (see Containers below), each led by its type icon. */
+
+.card {
+  position: relative;
+  border-radius: 8px;
+  outline: none;
+}
+
+.card-head {
+  box-sizing: border-box;
+  min-height: 56px;
+  padding: 6px 8px 6px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* The head's first row is 44px, so its centre stays at 28px even when a
+   component use's line sits below it. */
+.card-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+
+/* Nested rows move by dragging their head. Once a native drag starts the
+   browser draws its own move cursor. */
+.card-head[draggable="true"] {
+  cursor: grab;
+}
+
+.card-head[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.card-head:hover {
+  background: var(--s2-gray-75);
+}
+
+.card.is-selected > .card-head {
+  background: var(--s2-blue-100);
+}
+
+.card:focus-visible > .card-head {
+  outline: 2px solid var(--s2-blue-800);
+  outline-offset: -2px;
+}
+
+/* Groups, lists and components open and close from a chevron in front of
+   their label. Its 28px box is centred at 58px, over the child icons (36px
+   indent + 22px), which leaves equal space around the 13px glyph. */
+.tree-toggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 32px;
+  margin-inline: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--s2-gray-700);
+  background: transparent;
+  cursor: pointer;
+}
+
+.tree-toggle svg {
+  width: 20px;
+  height: 20px;
+  transition: rotate 130ms ease-out;
+}
+
+.tree-toggle.is-expanded svg {
+  rotate: 90deg;
+}
+
+.tree-toggle:hover {
+  color: var(--s2-gray-900);
+  background: var(--s2-gray-200);
+}
+
+.card.is-selected > .card-head .tree-toggle {
+  color: var(--s2-blue-900);
+}
+
+.card-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--s2-gray-800);
+  background: var(--s2-gray-100);
+}
+
+.card-names {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.card-title {
+  overflow: hidden;
+  font-weight: 700;
+  color: var(--s2-gray-900);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card.is-selected > .card-head .card-title {
+  color: var(--s2-blue-800);
+}
+
+.card.is-top > .card-head .card-title {
+  font-size: var(--s2-heading-xs-size, 16px);
+}
+
+.card-key {
+  overflow: hidden;
+  font-size: var(--s2-body-xs-size, 12px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-kind {
+  flex: none;
+  margin-inline-start: auto;
+  font-size: var(--s2-body-s-size, 14px);
+  white-space: nowrap;
+}
+
+.card-chips {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.card-chips.is-compact {
+  display: none;
+}
+
+.card-issue {
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.card-issue.is-error {
+  color: var(--s2-red-900);
+}
+
+.card-issue.is-warning {
+  color: var(--s2-orange-900);
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.card-lock {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 32px;
+  color: var(--s2-gray-600);
+}
+
+.card-lock .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.card-actions-space {
+  flex: none;
+  inline-size: 32px;
+}
+
+/* Containers -------------------------------------------------------------- */
+
+/* Tree lines, like a file tree: an open group runs one 1px guide down the
+   side of its rows, under its icon's centre, and the rows are listed along it
+   without branches. --spine is the parent icon's centre (head padding 6px +
+   half the 32px icon), --indent the space from the guide to the child rows,
+   --gap the space the .gap rows leave between children. The guides are
+   light, as the indent already carries the nesting. */
+.children {
+  --spine: 22px;
+  --indent: 14px;
+  --gap: 8px;
+  --line: var(--s2-gray-300);
+
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0 0 8px calc(var(--spine) + var(--indent));
+}
+
+.children::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc(-1 * var(--indent) - 0.5px);
+  width: 1px;
+  background: var(--line);
+  pointer-events: none;
+}
+
+.card.is-top > .children {
+  margin-block-end: 16px;
+}
+
+/* A component use's guide takes the component colour. */
+.card.is-use > .children {
+  --line: var(--s2-indigo-500);
+}
+
+.card.is-selected > .children {
+  --line: var(--s2-blue-500);
+}
+
+.gap {
+  position: relative;
+  height: 8px;
+}
+
+.gap.is-target::after {
+  content: "";
+  position: absolute;
+  inset: 1px 0 auto;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--s2-blue-800);
+}
+
+.drop-zone {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 44px;
+  margin-block-start: 8px;
+  padding: 4px 12px;
+  border: 1px dashed var(--s2-gray-300);
+  border-radius: 10px;
+  font-size: var(--s2-body-s-size, 14px);
+}
+
+.tree.is-dragging .drop-zone {
+  border-color: var(--s2-blue-500, #8fbcff);
+}
+
+.tree.is-dragging .drop-zone.is-target {
+  border-color: var(--s2-blue-800);
+  background: var(--s2-blue-100);
+}
+
+.slot.is-target > .card {
+  background: var(--s2-blue-100);
+  box-shadow: 0 0 0 2px var(--s2-blue-800);
+}
+
+.gap.is-invalid::after {
+  content: "";
+  position: absolute;
+  inset: 1px 0 auto;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--s2-red-900, #d31510);
+}
+
+.tree.is-dragging .drop-zone.is-invalid {
+  border-color: var(--s2-red-900, #d31510);
+  background: var(--s2-red-100);
+}
+
+.slot.is-invalid > .card {
+  background: var(--s2-red-100);
+  box-shadow: 0 0 0 2px var(--s2-red-900, #d31510);
+}
+
+.slot {
+  position: relative;
+}
+
+/* A hovered zone's note: a blue hint of what the drop does there (insert,
+   move, replace), or a red reason why it is refused. */
+:is(.drop-reason, .drop-hint) {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: 6px;
+  inset-inline-end: 8px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  color: var(--s2-gray-25, #fff);
+  background: var(--s2-red-900, #d31510);
+  font-size: var(--s2-body-xs-size, 12px);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.drop-hint {
+  background: var(--s2-blue-900);
+}
+
+/* On a gap the note sits on the insertion line; on a List's item, on its
+   top edge: both clear of the rows' content. */
+.gap > :is(.drop-reason, .drop-hint) {
+  inset-block-start: -7px;
+}
+
+.slot > :is(.drop-reason, .drop-hint) {
+  inset-block-start: -10px;
+}
+
+.drop-zone :is(.drop-reason, .drop-hint) {
+  position: static;
+}
+
+/* A component's fields, previewed under a use, take no drops (it is edited
+   on its own page): a drag over them marks the whole preview with the S2
+   notice colour (orange), a warning rather than an error. */
+.card.is-drop-blocked > .children {
+  --line: var(--s2-orange-700, #e86a00);
+
+  border-radius: 8px;
+  background: var(--s2-orange-100);
+  box-shadow: 0 0 0 2px var(--s2-orange-700, #e86a00);
+}
+
+/* The reason sits on the top edge, clear of the first row's content; it
+   takes the darker orange so its white text keeps its contrast. */
+.card.is-drop-blocked > .children > .drop-reason {
+  inset-block-start: -10px;
+  background: var(--s2-orange-900, #c24e00);
+  max-inline-size: calc(100% - 16px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.children.is-slot {
+  margin-block-start: 0;
+}
+
+.add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* A component use wears the component colour (indigo, as in the panel) on
+   its icon and the guide along its rows; its kind names the component and
+   how often it is used (its menu opens it on the Components page). Its kind
+   gives way first on a narrow row. */
+.card-kind.is-use-kind {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A component's fields preview read-only where it is used (it is edited on
+   the Components page): greyed, not draggable, without actions. */
+.card.is-locked > .card-head {
+  cursor: default;
+}
+
+.card.is-locked > .card-head :is(.card-title, .card-kind, .chip) {
+  color: var(--s2-gray-600);
+}
+
+/* Outlined rather than filled, so the dimmed text keeps its contrast. */
+.card.is-locked > .card-head .chip {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--s2-gray-300);
+}
+
+.card.is-locked > .card-head .card-icon {
+  color: var(--s2-gray-600);
+  background: var(--s2-gray-75);
+}
+
+/* Also inside a preview, a use's icon keeps the component colour. */
+.card.is-use > .card-head .card-icon {
+  color: var(--s2-indigo-900);
+  background: var(--s2-indigo-200);
+}
+
+.spacer {
+  height: var(--gap);
+}
+
+.drop-zone.is-static {
+  justify-content: flex-start;
+  min-height: 36px;
+  border-style: dotted;
+}
+
+.card.is-unsupported {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--s2-gray-25),
+    var(--s2-gray-25) 8px,
+    var(--s2-gray-75) 8px,
+    var(--s2-gray-75) 16px
+  );
+}
+
+.unsupported-note {
+  margin: 0 12px 10px 48px;
+  font-size: var(--s2-body-s-size, 14px);
+}
+
+/* Tree tools ------------------------------------------------------------ */
+
+/* The Expand all switch caps the tree at its end, in line with the card
+   heads' end padding. */
+.tree-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-block-size: 24px;
+  padding-inline-end: 8px;
+}
+
+/* Components page ------------------------------------------------------- */
+
+/* Its head row is <se-component-head> (component-head.css). */
+
+.no-components {
+  padding-block: 64px;
+}
+
+.no-components button {
+  margin-block-start: 8px;
+}
+
+/* Narrow canvas (chat and panel open): keep the label readable, drop the
+   key and keep only the chips that change what authors do, with a count of
+   the rest. */
+@container (width < 640px) {
+  .card-key,
+  .card-chips {
+    display: none;
+  }
+
+  .card-chips.is-compact {
+    display: flex;
+  }
+
+  .card-kind-more {
+    display: none;
+  }
+}

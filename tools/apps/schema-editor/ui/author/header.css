@@ -1,0 +1,179 @@
+/* Same chrome as the da.live canvas header (ew-canvas-header): a fixed 48px
+ * bar that never wraps. Start and end share the free space equally so the
+ * view switch stays centered and nothing shifts when text changes. */
+:host {
+  display: block;
+  container-type: inline-size;
+}
+
+.bar {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: var(--se-bar-height, 48px);
+  padding: 0 12px;
+  border-block-end: 1px solid var(--s2-gray-200);
+  background: light-dark(#fff, var(--s2-gray-25));
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.group-start,
+.group-end {
+  flex: 1 1 0;
+}
+
+.group-center {
+  flex: none;
+}
+
+.group-end {
+  justify-content: flex-end;
+}
+
+.group-end > *,
+.group-start > :not(.title, .status) {
+  flex: none;
+}
+
+.divider {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--s2-gray-300);
+}
+
+.back {
+  box-sizing: border-box;
+  color: var(--s2-gray-700);
+  text-decoration: none;
+}
+
+.title {
+  overflow: hidden;
+  min-width: 48px;
+  max-width: 40ch;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--s2-corner-radius-400, 8px);
+  background: none;
+  font: inherit;
+  font-size: var(--s2-component-l-bold-font-size, 16px);
+  font-weight: 800;
+  line-height: 20px;
+  color: var(--s2-gray-900);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.title:hover {
+  background: var(--s2-gray-100);
+}
+
+.title:focus-visible {
+  outline: 2px solid var(--s2-blue-800);
+  outline-offset: 0;
+}
+
+.key {
+  overflow: hidden;
+  font-size: var(--s2-body-xs-size, 12px);
+  max-width: 24ch;
+  margin-inline-end: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--s2-gray-700);
+  background: var(--s2-gray-100);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status {
+  display: inline-flex;
+  flex: 0 1000 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-inline-start: 4px;
+  font-size: var(--s2-body-xs-size, 12px);
+  color: var(--s2-gray-700);
+  white-space: nowrap;
+}
+
+.status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status.is-error {
+  color: var(--s2-red-900);
+}
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--s2-orange-700, var(--s2-orange-800));
+}
+
+.issues {
+  height: 32px;
+  padding-inline: 8px;
+}
+
+.issues.is-error {
+  color: var(--s2-red-900);
+}
+
+.issues.is-warning {
+  color: var(--s2-orange-900);
+}
+
+.save {
+  min-width: 64px;
+  margin-inline-start: 4px;
+}
+
+/* S2 disabled accent: neutral fill instead of a washed-out blue. */
+.save:disabled {
+  opacity: 1;
+  color: var(--s2-gray-400);
+  background: var(--s2-gray-100);
+}
+
+/* Narrow canvas (chat and panel open): drop secondary text, never wrap. */
+@container (width < 900px) {
+  .key {
+    display: none;
+  }
+}
+
+/* Too narrow to keep the switch dead center: the start group keeps its room
+ * and the switch centers in what is left, as in the da.live canvas header. */
+@container (width < 760px) {
+  .status-text {
+    display: none;
+  }
+
+  .group-start {
+    flex: 0 1 auto;
+  }
+
+  .group-center {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .group-end {
+    flex: none;
+  }
+}
