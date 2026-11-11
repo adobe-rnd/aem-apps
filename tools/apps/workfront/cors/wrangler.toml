@@ -1,0 +1,8 @@
+name = "cashubv2workfront-cors"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+WORKFRONT_ORIGIN = "https://cashubv2workfront.my.workfront.com"
+# Comma-separated origins allowed to call the proxy. "*" matches one hostname label.
+ALLOWED_ORIGINS = "https://main--eds-apps--andreas-haller.preview.da.live, https://main--eds-apps--andreas-haller.aem.live, http://localhost:3000"

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Workfront | Experience Workspace</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="./styles.css">
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="workspace-brand">
+          <span class="brand-mark"><span class="icon" data-icon="workflow" aria-hidden="true"></span></span>
+          <span>Workfront</span>
+        </div>
+        <div class="topbar-account">
+          <span id="connection-status" class="connection-status"><span class="status-dot"></span><span>Connecting</span></span>
+          <span id="current-user" class="avatar avatar-teal" title="Current user">--</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <div class="page-heading">
+        <div class="heading-text">
+          <p class="eyebrow">CONTENT OPERATIONS</p>
+          <h1>Workfront<span class="heading-period">.</span></h1>
+        </div>
+        <div class="heading-actions">
+          <button id="refresh" class="icon-button" type="button" title="Refresh Workfront" aria-label="Refresh Workfront"><span class="icon" data-icon="refresh-cw" aria-hidden="true"></span></button>
+          <button id="new-task" class="button button-primary" type="button" disabled><span class="icon" data-icon="plus" aria-hidden="true"></span>New task</button>
+        </div>
+      </div>
+
+      <section class="page-context" aria-label="Current page">
+        <div id="page-thumbnail" class="page-thumbnail"><span class="icon" data-icon="file-text" aria-hidden="true"></span></div>
+        <div class="page-context-text">
+          <p class="eyebrow">CURRENT PAGE</p>
+          <a id="page-title" class="current-page-title" target="_blank" rel="noopener noreferrer">Getting page context</a>
+          <p id="page-path" class="page-path">Waiting for Experience Workspace</p>
+        </div>
+        <div id="page-link-count" class="context-link-count"><span class="icon" data-icon="link" aria-hidden="true"></span><span>-- linked tasks</span></div>
+      </section>
+
+      <div class="filter-toolbar">
+        <div class="context-controls">
+          <fieldset class="context-filter">
+            <legend class="sr-only">Context filter</legend>
+            <label><input type="radio" name="context" value="all"><span><span class="icon" data-icon="layers" aria-hidden="true"></span>All</span></label>
+            <label><input type="radio" name="context" value="site"><span><span class="icon" data-icon="globe-2" aria-hidden="true"></span>This site</span></label>
+            <label><input type="radio" name="context" value="page" checked><span><span class="icon" data-icon="file-text" aria-hidden="true"></span>This page</span></label>
+            <label><input type="radio" name="context" value="me"><span><span class="icon" data-icon="user-round" aria-hidden="true"></span>Assigned to me</span></label>
+          </fieldset>
+          <div class="user-filter-wrap">
+            <span class="icon" data-icon="users-round" aria-hidden="true"></span>
+            <select id="user-filter" aria-label="Filter by selected user" disabled><option value="">Select a user</option></select>
+            <span class="icon select-arrow" data-icon="chevron-down" aria-hidden="true"></span>
+          </div>
+        </div>
+        <div class="search-wrap">
+          <span class="icon" data-icon="search" aria-hidden="true"></span>
+          <input id="search" type="search" placeholder="Search projects and tasks" aria-label="Search projects and tasks" autocomplete="off">
+          <button id="clear-search" type="button" class="icon-button small" title="Clear search" aria-label="Clear search" hidden><span class="icon" data-icon="x" aria-hidden="true"></span></button>
+        </div>
+      </div>
+
+      <div class="split-view">
+        <section class="items-pane" aria-label="Workfront items">
+          <div class="results-tabs" role="tablist" aria-label="Item type">
+            <button id="tab-all" role="tab" type="button" data-tab="all" aria-selected="true" aria-controls="results">All items<span id="count-all" class="count-badge">0</span></button>
+            <button id="tab-projects" role="tab" type="button" data-tab="projects" aria-selected="false" aria-controls="results" tabindex="-1">Projects<span id="count-projects" class="count-badge">0</span></button>
+            <button id="tab-tasks" role="tab" type="button" data-tab="tasks" aria-selected="false" aria-controls="results" tabindex="-1">Tasks<span id="count-tasks" class="count-badge">0</span></button>
+          </div>
+          <div id="results" role="tabpanel" aria-labelledby="tab-all" aria-busy="true">
+            <div class="loading-state" role="status"><span class="sr-only">Loading Workfront projects and tasks</span><div class="skeleton skeleton-heading"></div><div class="skeleton-projects"><div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>
+          </div>
+          <p id="results-summary" class="results-summary" aria-live="polite"></p>
+        </section>
+        <aside id="detail-pane" class="detail-pane" aria-label="Item details"></aside>
+      </div>
+
+    </main>
+
+    <dialog id="create-dialog" class="dialog create-dialog" aria-labelledby="create-title">
+      <form id="create-form">
+        <div class="dialog-heading"><div><p class="eyebrow">WORKFRONT</p><h2 id="create-title">New task</h2></div><button type="button" class="icon-button" data-close="create-dialog" aria-label="Close new task" title="Close"><span class="icon" data-icon="x" aria-hidden="true"></span></button></div>
+        <div class="dialog-fields">
+          <label class="field">Project <select id="task-project" name="projectId" required></select></label>
+          <label class="field">Task name <input id="task-name" name="name" type="text" maxlength="255" required></label>
+          <label class="field">Brief <textarea id="task-brief" name="description" rows="4" maxlength="4000"></textarea></label>
+          <label class="field field-page"><span><span class="icon" data-icon="link" aria-hidden="true"></span>Page link</span><textarea id="task-page" rows="2" readonly></textarea></label>
+          <p id="create-error" class="inline-error" role="alert" hidden></p>
+        </div>
+        <div class="dialog-footer"><button id="cancel-create" type="button" class="button button-secondary" data-close="create-dialog">Cancel</button><button id="submit-task" type="submit" class="button button-primary"><span class="icon" data-icon="plus" aria-hidden="true"></span>Create task</button></div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true" hidden><span id="toast-icon"></span><span id="toast-text"></span><button id="dismiss-toast" class="icon-button small" type="button" title="Dismiss notification" aria-label="Dismiss notification"><span class="icon" data-icon="x" aria-hidden="true"></span></button></div>
+    <noscript><p class="noscript">JavaScript is required to connect to Workfront.</p></noscript>
+  </body>
+</html>
