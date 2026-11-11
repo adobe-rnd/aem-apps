@@ -21,5 +21,17 @@ module.exports = {
       files: ['test/**/*.js'],
       env: { node: true },
     },
+    {
+      files: ['tools/apps/schema-editor/core/**/*.js'],
+      env: { browser: false, 'shared-node-browser': true },
+      rules: {
+        'no-restricted-imports': ['error', {
+          patterns: [{
+            group: ['../../**/*.js', '*:*'],
+            message: 'Schema editor core is pure: it only imports other core modules.',
+          }],
+        }],
+      },
+    },
   ],
 };
