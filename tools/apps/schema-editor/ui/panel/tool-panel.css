@@ -1,0 +1,113 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  container-type: inline-size;
+  font-family: var(--s2-font-family);
+  background: var(--s2-gray-25, #fff);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: var(--se-bar-height, 48px);
+  padding: 0 12px;
+  border-bottom: 1px solid var(--s2-gray-200);
+  box-sizing: border-box;
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--s2-spacing-75, 4px);
+  min-width: 0;
+  padding: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab {
+  flex-shrink: 0;
+  max-width: 120px;
+  min-height: 32px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--s2-corner-radius-400, 8px);
+  background: transparent;
+  color: var(--s2-gray-800);
+  font: inherit;
+  font-size: var(--s2-component-s-regular-font-size, 14px);
+  line-height: var(--s2-component-s-regular-line-height, 18px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+
+  &:hover {
+    background-color: var(--s2-gray-75);
+  }
+
+  &[aria-selected="true"] {
+    background-color: var(--s2-gray-900);
+    color: var(--s2-gray-50);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--s2-blue-800);
+    outline-offset: 2px;
+  }
+}
+
+.divider {
+  flex-shrink: 0;
+  width: 1px;
+  height: 20px;
+  margin: 0 var(--s2-spacing-100, 8px) 0 auto;
+  background: var(--s2-gray-300);
+}
+
+/* Same button and spot as the header's open toggle (se-header). */
+.close {
+  flex-shrink: 0;
+
+  .icon {
+    display: block;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+
+  > * {
+    display: block;
+    min-height: 100%;
+  }
+}
+
+/* A narrow panel (beside the chat panel) keeps all four tabs in view. */
+@container (width < 360px) {
+  .header {
+    padding-inline: 8px 4px;
+  }
+
+  .tabs {
+    gap: 0;
+    padding-inline: 0;
+  }
+
+  .tab {
+    padding-inline: 6px;
+  }
+
+  .divider {
+    margin-inline: auto 4px;
+  }
+}

@@ -1,0 +1,76 @@
+.def {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 8px;
+}
+
+.def.is-current {
+  background: var(--s2-blue-100);
+}
+
+.def-main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  font: inherit;
+  text-align: start;
+  color: var(--s2-gray-900);
+  background: transparent;
+}
+
+button.def-main {
+  cursor: pointer;
+}
+
+button.def-main:hover {
+  background: var(--s2-gray-100);
+}
+
+.def-main:focus-visible {
+  outline: 2px solid var(--s2-blue-800);
+  outline-offset: -2px;
+}
+
+.def-text {
+  display: grid;
+  min-width: 0;
+}
+
+.def-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.def-meta {
+  font-size: var(--s2-body-xs-size, 12px);
+  color: var(--s2-gray-700);
+}
+
+.def-rename {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  padding: 4px;
+}
+
+.rename {
+  height: 32px;
+  padding: 0 8px;
+  border: 2px solid var(--s2-blue-800);
+  border-radius: 8px;
+  font: inherit;
+  color: var(--s2-gray-900);
+  background: var(--s2-gray-25, #fff);
+  outline: none;
+}
+
+.rename[aria-invalid='true'] {
+  border-color: var(--s2-red-900, #d31510);
+}
