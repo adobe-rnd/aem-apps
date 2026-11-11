@@ -1,0 +1,300 @@
+.inspector-head {
+  align-items: flex-start;
+}
+
+.inspector-title {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.view-switch {
+  flex: none;
+}
+
+.trail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Settings: the panel's own grid, so sections keep their rhythm. */
+
+.settings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.settings[inert] {
+  opacity: 0.6;
+}
+
+/* JSON tab */
+
+.json-view {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.json-section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.json-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.callout .notice-text {
+  flex: 1;
+}
+
+/* Key */
+
+.key-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 4px;
+}
+
+.key-btn {
+  margin-top: 24px;
+}
+
+/* Pattern tester */
+
+.tester {
+  margin: 0;
+  font-size: var(--s2-body-xs-size, 12px);
+  color: var(--s2-gray-700);
+}
+
+.tester.is-match {
+  color: var(--s2-green-900, #05834e);
+}
+
+.tester.is-nomatch,
+.tester.is-invalid {
+  color: var(--s2-red-900, #d31510);
+}
+
+/* Choices */
+
+.choices {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.choice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.choice-grip {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 32px;
+  color: var(--s2-gray-600);
+  cursor: grab;
+  user-select: none;
+}
+
+.choice-grip:hover {
+  color: var(--s2-gray-900);
+}
+
+.choice-grip:active {
+  cursor: grabbing;
+}
+
+.choice.is-drag-source {
+  opacity: 0.4;
+}
+
+/* The drop line sits in the 4px gap between rows, like the canvas's. */
+.choice:is(.is-drop-before, .is-drop-after)::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--s2-blue-800);
+}
+
+.choice.is-drop-before::after {
+  top: -3.5px;
+}
+
+.choice.is-drop-after::after {
+  bottom: -3.5px;
+}
+
+.choice-input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 2px solid var(--s2-gray-300);
+  border-radius: 8px;
+  font: inherit;
+  color: var(--s2-gray-900);
+  background: var(--s2-gray-25, #fff);
+}
+
+.choice-input:hover {
+  border-color: var(--s2-gray-400);
+}
+
+.choice-input:focus-visible {
+  border-color: var(--s2-blue-800);
+  outline: none;
+}
+
+.paste {
+  display: grid;
+  gap: 8px;
+}
+
+/* Fields / list item rows */
+
+.node-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.node-row-main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  font: inherit;
+  text-align: start;
+  color: var(--s2-gray-900);
+  background: transparent;
+  cursor: pointer;
+}
+
+.node-row-main:hover {
+  background: var(--s2-gray-100);
+}
+
+.node-row-main:focus-visible {
+  outline: 2px solid var(--s2-blue-800);
+  outline-offset: -2px;
+}
+
+.node-row-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.node-row-label,
+.node-row-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-row-meta {
+  font-size: var(--s2-body-xs-size, 12px);
+  color: var(--s2-gray-700);
+}
+
+.node-row-main .chevron {
+  color: var(--s2-gray-600);
+}
+
+.required-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--s2-body-xs-size, 12px);
+  color: var(--s2-gray-700);
+  cursor: pointer;
+}
+
+/* Component / root */
+
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.name-row .name-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Where a component is used: each use a link back to it. */
+
+.usages {
+  display: grid;
+  gap: 4px;
+}
+
+.usage {
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  margin-inline-start: -8px;
+  padding-inline: 8px;
+}
+
+.usage-name {
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-where {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 400;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--s2-gray-700);
+}
+
+/* Advanced */
+
+.advanced summary {
+  cursor: pointer;
+}
+
+.extras {
+  display: grid;
+  gap: 8px;
+}
+
+.extra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
