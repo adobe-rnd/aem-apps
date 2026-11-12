@@ -26,6 +26,9 @@ How to extend the editor without breaking its layering (see the
    `ui/img/icons/`.
 5. **Test the round trip** in `core/model/parse-serialize.test.js`:
    JSON → model → JSON must give back the same JSON.
+6. **Check it against the SDK**: add its settings and sample values to the
+   value table in `core/model/sdk-conformance.test.js`. The random editing and
+   Change element tests there pick up new elements on their own.
 
 Check the [SC schema spec](https://github.com/adobe/da-sc-sdk/blob/main/docs/schema-spec.md)
 first: the editor must not write anything the SDK rejects.
@@ -53,7 +56,8 @@ first: the editor must not write anything the SDK rejects.
   - `error`: the SDK would reject it, or content would break. Blocks saving.
   - `warning`: it saves, but probably isn't what the author wants.
   - `info`: a style hint.
-- **Test it** in `core/model/lint.test.js`.
+- **Test it** in `core/model/lint.test.js`. If it mirrors an SDK check, add a
+  case to `core/model/sdk-conformance.test.js` too, so the two can't drift.
 
 ## Add an edit (command)
 

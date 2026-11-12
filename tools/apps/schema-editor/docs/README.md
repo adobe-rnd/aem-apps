@@ -84,6 +84,10 @@ npx stylelint "tools/apps/schema-editor/**/*.css"
 - **Tests** mirror the source tree in
   `test/tools/apps/schema-editor/{core,adapters,ui}`. New logic goes in `core/`
   with a test next to its peers.
+- **SDK conformance**: `core/model/sdk-conformance.test.js` checks the editor
+  against the real SC SDK (the pinned `@adobe/da-sc-sdk` devDependency) and the
+  schema spec: exact output, value checks, imports, and seeded random editing.
+  To move to a new SDK, bump the pin and run it.
 - **To run the app**, start `aem up` and open it with `?ref=local&nxver=2`. See
   [Development](../README.md#development).
 - **The diagrams** in `diagrams/` are SVGs drawn with
