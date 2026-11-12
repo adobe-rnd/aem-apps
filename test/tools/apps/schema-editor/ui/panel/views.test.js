@@ -20,9 +20,9 @@ import { viewsFor, shownView } from '../../../../../../tools/apps/schema-editor/
 const ids = (mode) => viewsFor(mode).map((view) => view.id);
 
 describe('tool panel views', () => {
-  it('leaves Components out of Build, which has its own Components page', () => {
+  it('leads the Components page with Components, which Build leaves out for its own page', () => {
     expect(ids('build')).to.deep.equal(['elements', 'properties', 'issues']);
-    expect(ids('components')).to.deep.equal(['elements', 'properties', 'components', 'issues']);
+    expect(ids('components')).to.deep.equal(['components', 'elements', 'properties', 'issues']);
   });
 
   it('shows the picked view, else the default where the mode leaves it out', () => {

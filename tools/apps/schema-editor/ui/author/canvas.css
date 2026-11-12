@@ -452,7 +452,7 @@
 
 /* Components page ------------------------------------------------------- */
 
-/* Its head row is <se-component-head> (component-head.css). */
+/* The Components panel picks the component shown and adds new ones. */
 
 .no-components {
   padding-block: 64px;

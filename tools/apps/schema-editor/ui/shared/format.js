@@ -43,12 +43,13 @@ export function usesPhrase(count) {
   return count > 2 ? `all ${count} uses` : 'every use';
 }
 
-export function usedTimes(count) {
-  return count === 1 ? 'once' : `${count} times`;
+/** How often a component is used: "in 1 case", "in 3 cases". */
+export function usedIn(count) {
+  return `in ${plural(count, 'case')}`;
 }
 
 export function usageLabel(count) {
-  return count ? `Used ${usedTimes(count)}` : 'Not used';
+  return count ? `Used ${usedIn(count)}` : 'Not used';
 }
 
 const isApple = () => /mac|iphone|ipad/i.test(navigator.userAgentData?.platform ?? navigator.userAgent);

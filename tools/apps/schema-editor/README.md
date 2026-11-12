@@ -26,7 +26,7 @@ Search, sort, and use a row's menu to open, duplicate, copy the JSON or delete.
   item tells what the drop does (Insert here, Move here, Replace). Select a
   card to edit it. A component used as a field
   wears the component colour, indigo, on its icon and the line along its
-  fields; its type reads `Component: Address · used 2 times` (a narrow canvas
+  fields; its type reads `Component: Address · used in 2 cases` (a narrow canvas
   drops the part after the dot). Its own settings (label, key, required…)
   are edited here, but its fields are only a preview: folded at first,
   greyed out and locked (with a lock icon), without menus or dragging.
@@ -41,12 +41,11 @@ Search, sort, and use a row's menu to open, duplicate, copy the JSON or delete.
   only its Required and Read-only flags and counts the rest ("+2"); hover the
   count for the full list.
 - **Components**: one component (`$defs`) at a time, as an editable tree in
-  the same cards, so a component can use other components. The picker above
-  the tree switches component (da.live's field picker, the shown one
-  checked); **New
-  component**, the page's primary action alone at the far right of the tools
-  (just **+** on a narrow canvas), starts a new one. With none yet, the page explains what a component is and
-  offers the same **New component**, as does the Components panel. Opening a component from anywhere (the panel, an issue in an unused
+  the same cards, so a component can use other components. The Components
+  panel, the first tab on this page and brought forward on arriving here,
+  switches component and starts a new one with **New component**. With none
+  yet, the page explains what a component is and offers the same **New
+  component**. Opening a component from anywhere (the panel, an issue in an unused
   component) shows it here; switching here with a use selected in Build
   shows its component, otherwise the last one shown.
 - **Tool panel** (right): 320–400px wide, following the window; below 720px it
@@ -62,10 +61,10 @@ Search, sort, and use a row's menu to open, duplicate, copy the JSON or delete.
     saved as a reference (`$ref`), so it shows the reference and then the
     component's JSON.
     Clicking or editing an element on the canvas brings Properties forward.
-  - **Components**: reusable definitions (`$defs`) with how often each is
-    used; opening one shows it on the Components page, where the one shown
-    is highlighted. Use one as a field from Elements. Not offered in Build,
-    which has the Components page.
+  - **Components**: reusable definitions (`$defs`) and in how many cases each
+    is used; opening one shows it on the Components page, where the one shown
+    is highlighted. Use one as a field from Elements. The first tab on the
+    Components page; not offered in Build, which has the Components page.
   - **Issues**: everything the editor or the SC SDK flags, with quick fixes.
 - **Build / Components**: the header's pages. The whole file's JSON is the
   schema's own Properties › JSON (click the title to select it).

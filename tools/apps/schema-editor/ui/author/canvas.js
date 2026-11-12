@@ -23,7 +23,7 @@ import {
 import {
   moveBy, duplicate, remove, makeReusable, deleteComponent, newComponent, editComponent,
 } from '../shared/actions.js';
-import { usageLabel, usedTimes } from '../shared/format.js';
+import { usageLabel, usedIn } from '../shared/format.js';
 import { paletteMenuItems, parseMenuId, insertPaletteItem } from '../shared/palette.js';
 import { buttons, shared, loadStyle } from '../shared/styles.js';
 import {
@@ -35,7 +35,6 @@ import {
 } from './navigation.js';
 import { CanvasDropController } from './canvas-drop.js';
 import { BusController } from '../shared/bus-controller.js';
-import './component-head.js';
 
 await Promise.all([
   import('https://da.live/nx2/blocks/shared/menu/menu.js'),
@@ -394,7 +393,7 @@ class SeCanvas extends LitElement {
   /** A narrow canvas hides the usage count (`.card-kind-more`). */
   _renderUseKind(def) {
     const used = refUsages(this.model, def.id).length;
-    return html`<span class="card-kind is-use-kind muted">Component: ${def.name}<span class="card-kind-more"> · used ${usedTimes(used)}</span></span>`;
+    return html`<span class="card-kind is-use-kind muted">Component: ${def.name}<span class="card-kind-more"> · used ${usedIn(used)}</span></span>`;
   }
 
   _renderGroupBody(node, level, ctx) {
@@ -589,10 +588,6 @@ class SeCanvas extends LitElement {
     const shown = this._def();
     return html`
       <div class="canvas">
-        ${components ? html`
-          <se-component-head .store=${this.store} .model=${this.model}
-            .componentId=${shown?.id ?? null}></se-component-head>
-        ` : nothing}
         ${this._renderFoldSwitch()}
         <div role="tree" class="tree ${this._dnd.dragging ? 'is-dragging' : ''}"
           aria-label=${components ? `Component ${shown?.name ?? ''}`.trim() : 'Schema structure'}

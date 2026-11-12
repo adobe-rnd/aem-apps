@@ -66,6 +66,12 @@ class SeHeader extends LitElement {
     this.store.select(model.root.id, { reveal: true });
   }
 
+  /** The Components panel picks the component, so arriving on that page brings it forward. */
+  _setMode(mode) {
+    this.store.setMode(mode);
+    if (mode === 'components') this.store.bus.panelRequest.emit({ view: 'components' });
+  }
+
   _renderIssues(counts) {
     const total = counts.error + counts.warning;
     if (!total) return nothing;
@@ -130,7 +136,7 @@ class SeHeader extends LitElement {
         </div>
         <div class="group group-center">
           <nx-segmented-btn label="View" .items=${MODE_ITEMS} .value=${this.mode}
-            @change=${(e) => store.setMode(e.detail.value)}></nx-segmented-btn>
+            @change=${(e) => this._setMode(e.detail.value)}></nx-segmented-btn>
         </div>
         <div class="group group-end">
           <button type="button" class="nx-action-btn-icon"

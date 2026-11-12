@@ -22,12 +22,13 @@ const view = (id, label, tag, load, { hiddenIn = [] } = {}) => Object.freeze({
 });
 
 const VIEWS = Object.freeze([
-  view('elements', 'Elements', 'se-elements', () => import('./elements.js')),
-  view('properties', 'Properties', 'se-properties', () => import('./properties.js')),
-  // Build has the Components page for that, one header tab away.
+  // First on the Components page, where it picks the component shown. Build has that page
+  // one header tab away instead.
   view('components', 'Components', 'se-components', () => import('./components.js'), {
     hiddenIn: ['build'],
   }),
+  view('elements', 'Elements', 'se-elements', () => import('./elements.js')),
+  view('properties', 'Properties', 'se-properties', () => import('./properties.js')),
   view('issues', 'Issues', 'se-issues', () => import('./issues.js')),
 ]);
 

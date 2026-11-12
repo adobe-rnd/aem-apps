@@ -26,7 +26,7 @@ import {
 import { topNode } from '../../core/session/modes.js';
 import { insertionPoint, replacedItem } from '../../core/dnd/targets.js';
 import { confirmDialog } from './confirm.js';
-import { modKey, usedTimes } from './format.js';
+import { modKey, usedIn } from './format.js';
 
 function clickTarget(store) {
   const top = topNode(store.model, store.editingDefId, store.page);
@@ -144,7 +144,7 @@ export async function deleteComponent(store, defId) {
   if (used) {
     const confirmed = await confirmDialog({
       title: `Delete ${def.name}?`,
-      message: `"${def.name}" is used ${usedTimes(used)}. `
+      message: `"${def.name}" is used ${usedIn(used)}. `
         + 'Each usage gets its own copy of the fields, then the component is deleted.',
       confirmLabel: 'Detach and delete',
       destructive: true,

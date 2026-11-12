@@ -22,7 +22,7 @@ import {
 } from '../../../core/model/query.js';
 import { validateDefName } from '../../../core/model/keys.js';
 import { icon } from '../../shared/icons.js';
-import { usedTimes } from '../../shared/format.js';
+import { usageLabel } from '../../shared/format.js';
 import { copyText, deleteComponent, editComponent } from '../../shared/actions.js';
 import { section, picker } from './controls.js';
 
@@ -48,7 +48,7 @@ export function reference(ctx) {
     label: 'Uses component',
     value: def ? def.id : '',
     options: componentChoices(model, entry),
-    description: def ? `Used ${usedTimes(used)} in this schema.` : undefined,
+    description: def ? `${usageLabel(used)}.` : undefined,
     onChange: (refDefId) => ctx.update({ refDefId }),
   })}
     <p class="hint">Its fields show here read-only. Edit the component to change them everywhere it is used.</p>
@@ -81,7 +81,7 @@ function usages(ctx, uses) {
   };
   return html`
     <div class="usages">
-      <p class="eyebrow">Used in ${uses.length} ${uses.length > 1 ? 'places' : 'place'}</p>
+      <p class="eyebrow">${usageLabel(uses.length)}</p>
       <ul class="list">${uses.map(link)}</ul>
     </div>
   `;

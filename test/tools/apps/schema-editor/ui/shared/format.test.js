@@ -17,7 +17,7 @@
 import { afterEach, describe, it } from 'node:test';
 import { expect } from '../../expect.js';
 import {
-  plural, usesPhrase, usedTimes, usageLabel, modKey,
+  plural, usesPhrase, usedIn, usageLabel, modKey,
 } from '../../../../../../tools/apps/schema-editor/ui/shared/format.js';
 
 describe('format', () => {
@@ -34,12 +34,12 @@ describe('format', () => {
     expect(usesPhrase(5)).to.equal('all 5 uses');
   });
 
-  it('says how often a component is used', () => {
-    expect(usedTimes(1)).to.equal('once');
-    expect(usedTimes(3)).to.equal('3 times');
+  it('says in how many cases a component is used', () => {
+    expect(usedIn(1)).to.equal('in 1 case');
+    expect(usedIn(3)).to.equal('in 3 cases');
     expect(usageLabel(0)).to.equal('Not used');
-    expect(usageLabel(1)).to.equal('Used once');
-    expect(usageLabel(2)).to.equal('Used 2 times');
+    expect(usageLabel(1)).to.equal('Used in 1 case');
+    expect(usageLabel(2)).to.equal('Used in 2 cases');
   });
 
   describe('shortcut modifier', () => {
