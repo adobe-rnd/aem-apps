@@ -13,8 +13,9 @@ organization and site you want to work with.
 ### 1. Configure
 1. Enter **Organization/Site** in `/org/site` format.
 2. Optionally add **Search Paths** to limit the search to specific folders.
-3. Use **Include Subfolders** to control recursive JSON discovery; HTML discovery
-   uses the DA tree crawler.
+3. Check **Include Subfolders** to search nested folders. When unchecked (the
+   default), only files directly inside each search path (or the site root) are
+   scanned.
 4. Expand **Advanced Filters** to configure search options. Path exclusions and
    modification-date filtering currently apply to JSON discovery.
 
@@ -39,8 +40,8 @@ organization and site you want to work with.
 
 **For publishing:**
 1. Select files to publish
-2. Choose operation: **Preview/Publish/Unpublish**
-3. Click operation button (shows count: "Publish Selected (3)")
+2. Choose operation: **Preview / Preview & Publish / Unpublish**
+3. Click operation button (shows count: "Preview & Publish (3)")
 4. Monitor progress and results
 
 **For reverting changes:**
@@ -109,7 +110,7 @@ and dynamically generated icons resolve relative to the JavaScript module.
 | **Execute Replace** | Replace content in selected files, with individual match selection and regex replacement groups. |
 | **Replace with empty** | Insert `&nbsp;` in text mode; remove matched HTML in HTML Mode. |
 | **Revert Selected** | Restore selected files to their most recent saved versions. |
-| **Preview / Publish / Unpublish** | Run the selected publishing operation with progress tracking. |
+| **Preview / Preview & Publish / Unpublish** | Run the selected publishing operation with progress tracking. |
 | **Export Files** | Download selected files with match results. |
 
 Replacement requires a backup version via the DA Version Source API
@@ -123,6 +124,10 @@ and failed writes. Review the operational limits below before making bulk change
 
 Publishing uses the AEM Admin API (`admin.hlx.page`), with `main` for
 publish/unpublish and the current branch for preview.
+**Preview & Publish** previews the selected files on `main` before publishing,
+because publishing copies the current preview to live. For multiple files it
+waits for the bulk preview job to finish, and publishes nothing if the preview
+does not complete for every file.
 All three operations target the organization and site entered in the app.
 DA source paths are converted to site-relative paths before sending requests;
 for example, `/org/site/drafts/page.html` becomes `/drafts/page`.
@@ -173,7 +178,7 @@ of each resource.
 ### Filter and bulk publish
 1. Search for content
 2. Filter results: type `/blog` to show only blog pages
-3. Select All → Publish Selected (15)
+3. Select All → Preview & Publish (15)
 
 ## Files
 

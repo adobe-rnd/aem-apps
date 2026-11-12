@@ -20,11 +20,11 @@ import vm from 'node:vm';
 
 const source = readFileSync(new URL('../../../../tools/apps/findreplace-pro/findreplace-pro.js', import.meta.url), 'utf8');
 const operationsSource = source.slice(
-  source.indexOf('async function handleSingleFileOperation('),
+  source.indexOf('async function previewAndPublish('),
   source.indexOf('async function copySelectedUrlsFromBulk('),
 );
 
-async function runOperation(operation, paths, ref = 'feature') {
+async function runOperation(operation, paths, ref = 'feature', respond = () => ({})) {
   const calls = [];
   const messages = [];
   const run = vm.runInNewContext(`${operationsSource}\nbulkOperation`, {
@@ -43,13 +43,14 @@ async function runOperation(operation, paths, ref = 'feature') {
     confirm: () => true,
     updateProgress: () => {},
     showMessage: (text, type) => messages.push({ text, type }),
-    setTimeout: () => {},
-    fetch: async (url, options) => {
+    setTimeout: (callback) => callback(),
+    fetch: async (url, options = {}) => {
       calls.push({ url, options });
-      return { ok: true, status: 200, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => respond(url) };
     },
   });
   await run();
+  if (operation === 'publish') return { calls, messages };
   assert.ok(!messages.some(({ type }) => type === 'error'), JSON.stringify(messages));
   assert.equal(calls.length, operation === 'unpublish' ? paths.length : 1);
   calls.forEach(({ options }) => {
@@ -74,17 +75,51 @@ it('sends site-relative paths in bulk preview and defaults a missing ref to main
   assert.deepEqual(JSON.parse(call.options.body).paths, ['/drafts/first', '/drafts/second']);
 });
 
-it('publishes multiple files on main with normalized payload paths', async () => {
-  const [call] = await runOperation('publish', [
-    '/example/website/drafts/first.html',
-    '/example/website/drafts/second.html',
+it('previews then publishes a single file on main', async () => {
+  const { calls, messages } = await runOperation('publish', ['/example/website/drafts/test.html']);
+  assert.deepEqual(calls.map(({ url }) => url), [
+    'https://admin.hlx.page/preview/example/website/main/drafts/test',
+    'https://admin.hlx.page/live/example/website/main/drafts/test',
   ]);
-  assert.equal(call.url, 'https://admin.hlx.page/live/example/website/main/*');
-  assert.equal(call.options.method, 'POST');
-  assert.deepEqual(JSON.parse(call.options.body), {
+  assert.equal(messages.at(-1).type, 'success');
+});
+
+const jobUrl = 'https://admin.hlx.page/job/example/website/main/preview/job-1';
+const bulkPaths = ['/example/website/drafts/first.html', '/example/website/drafts/second.html'];
+
+it('waits for the bulk preview job before starting the bulk publish job', async () => {
+  let checks = 0;
+  const { calls, messages } = await runOperation('publish', bulkPaths, 'feature', (url) => {
+    if (url === jobUrl) {
+      checks += 1;
+      return { state: checks < 2 ? 'running' : 'stopped', progress: { processed: checks, failed: 0 } };
+    }
+    return url.includes('/preview/') ? { job: { name: 'job-1' }, links: { self: jobUrl } } : {};
+  });
+  assert.deepEqual(calls.map(({ url }) => url), [
+    'https://admin.hlx.page/preview/example/website/main/*',
+    jobUrl,
+    jobUrl,
+    'https://admin.hlx.page/live/example/website/main/*',
+  ]);
+  assert.deepEqual(JSON.parse(calls[3].options.body), {
     forceUpdate: true,
     paths: ['/drafts/first', '/drafts/second'],
     delete: false,
+  });
+  assert.equal(messages.at(-1).type, 'success');
+});
+
+it('does not bulk publish when any file fails to preview', async () => {
+  const { calls, messages } = await runOperation('publish', bulkPaths, 'feature', (url) => (
+    url === jobUrl
+      ? { state: 'stopped', progress: { processed: 2, failed: 1 } }
+      : { job: { name: 'job-1' }, links: { self: jobUrl } }
+  ));
+  assert.equal(calls.some(({ url }) => url.includes('/live/')), false);
+  assert.deepEqual(messages.at(-1), {
+    text: 'publish failed: Preview did not complete for all files, so nothing was published',
+    type: 'error',
   });
 });
 

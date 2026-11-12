@@ -235,7 +235,10 @@ it('keeps JSON scanning read-only and handles zero-width regex matches', async (
       parseOrgSite: () => ({ org: 'example', site: 'website' }),
       showMessage: (...args) => messages.push(args),
       updateProgress() {},
-      fetchFilesForJson: async () => [{ path: '/example/website/data.json', name: 'data.json' }],
+      listFolderFiles: async () => [
+        { path: '/example/website/data.json', name: 'data.json', ext: 'json' },
+        { path: '/example/website/page.html', name: 'page.html', ext: 'html' },
+      ],
       API: { SOURCE: 'https://admin.da.live/source' },
       fetch: async (url, options) => {
         assert.equal(url, 'https://admin.da.live/source/example/website/data.json');
@@ -259,4 +262,62 @@ it('keeps JSON scanning read-only and handles zero-width regex matches', async (
   assert.ok(app.results[0].matches.every((match) => match.selected));
   assert.equal(elements['execute-btn'].disabled, true);
   assert.equal(messages.at(-1)[1], 'success');
+});
+
+[false, true].forEach((includeSubfolders) => {
+  it(`HTML scans honor Include Subfolders: ${includeSubfolders ? 'checked' : 'unchecked'}`, async () => {
+    const app = {
+      searchPaths: ['/en'], results: [], selectedFiles: new Set(), token: 'test-token',
+    };
+    const elements = {
+      'search-term': { value: 'usta.com' },
+      'include-subfolders': { checked: includeSubfolders },
+    };
+    const listed = [];
+    const crawled = [];
+    const direct = { path: '/example/website/en/index.html', name: 'index.html', ext: 'html' };
+    const nested = { path: '/example/website/en/news/a.html', name: 'a.html', ext: 'html' };
+    const { scanFiles } = loadFunctions(
+      'async function scanFiles(',
+      'function escapeHtml(',
+      ['scanFiles'],
+      {
+        app,
+        document: {
+          getElementById: (id) => {
+            if (!elements[id]) elements[id] = {};
+            return elements[id];
+          },
+          querySelector: (selector) => (
+            selector === '.results-container' ? { style: {} } : { textContent: 'All Content' }
+          ),
+        },
+        resetPagination() {},
+        validateOrgSite: () => true,
+        parseOrgSite: () => ({ org: 'example', site: 'website' }),
+        showMessage() {},
+        updateProgress() {},
+        listFolderFiles: async (path) => {
+          listed.push(path);
+          return [direct, { path: '/example/website/en/data.json', name: 'data.json', ext: 'json' }];
+        },
+        crawl: ({ path, callback }) => {
+          crawled.push(path);
+          return { results: Promise.all([direct, nested].map(callback)) };
+        },
+        fetchContent: async () => ({ success: true, content: '<p>usta.com</p>' }),
+        searchInContent: () => ({ matches: [{ match: 'usta.com' }], updatedContent: '' }),
+        displayResults() {},
+        setAccordionExpanded() {},
+      },
+    );
+    await scanFiles();
+    assert.deepEqual(listed, includeSubfolders ? [] : ['/example/website/en']);
+    assert.deepEqual(crawled, includeSubfolders ? ['/example/website/en'] : []);
+    assert.deepEqual(
+      Array.from(app.results, ({ file }) => file.path),
+      includeSubfolders ? [direct.path, nested.path] : [direct.path],
+    );
+    assert.equal(elements['files-scanned'].textContent, includeSubfolders ? 2 : 1);
+  });
 });
