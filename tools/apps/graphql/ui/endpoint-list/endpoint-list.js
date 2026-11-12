@@ -62,16 +62,6 @@ class EndpointList extends LitElement {
       </div>`;
   }
 
-  // The engine serves GraphiQL on a GET of the endpoint URL.
-  renderGraphiql({ name, href }) {
-    if (!this.endpointPattern) return nothing;
-    return html`
-      <td class="graphiql">
-        <a class="nx-action-btn-icon nx-btn-sm" href=${href} target="_blank" rel="noopener"
-          title="Open in GraphiQL" aria-label="Open ${name} in GraphiQL">${icon({ name: 'openIn' })}</a>
-      </td>`;
-  }
-
   emitDelete(endpoint) {
     this.dispatchEvent(new CustomEvent('endpoint-delete', { detail: { endpoint } }));
   }
@@ -98,7 +88,6 @@ class EndpointList extends LitElement {
           <div class="stacked-path">${this.renderEndpoint({ name, href })}</div>
         </td>
         <td class="endpoint">${this.renderEndpoint({ name, href })}</td>
-        ${this.renderGraphiql({ name, href })}
         <td class="row-actions">${this.renderRowActions(name)}</td>
       </tr>`;
   }
@@ -114,7 +103,6 @@ class EndpointList extends LitElement {
           <tr>
             <th class="name" scope="col">Name</th>
             <th class="endpoint" scope="col">Endpoint</th>
-            ${this.endpointPattern ? html`<th class="graphiql" scope="col">GraphiQL</th>` : nothing}
             <th class="row-actions" scope="col" aria-label="Actions"></th>
           </tr>
         </thead>

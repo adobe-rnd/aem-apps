@@ -28,9 +28,8 @@ per-site sections later.
   back/forward moves between endpoints.
 - An invalid endpoint name in the hash opens the list. An endpoint, or site
   schemas, that cannot be loaded shows an error toast and returns to the list.
-- The list shows each endpoint's path (`/graphql/{name}`), a copy button for its
-  full URL and a GraphiQL link, from the
-  [`graphql.endpoint` config](#configuration).
+- The list shows each endpoint's path (`/graphql/{name}`) and a copy button
+  for its full URL, from the [`graphql.endpoint` config](#configuration).
 - New endpoint (⊕) opens a dialog for the name, then an unsaved endpoint screen
   at `#/{org}/{site}/endpoints/{name}`. Cancel replaces the hash with
   `#/{org}/{site}/endpoints`, and so do saving and deleting an endpoint.
@@ -92,9 +91,7 @@ the URL pattern of the GraphQL engine's endpoints. The app replaces
 | --- | --- |
 | `graphql.endpoint` | `https://content-ai-graphql-demo.corp.ethos09-prod-va7.ethos.adobe.net/graphql/${endpoint}?org=${org}&site=${site}` |
 
-The engine serves GraphiQL on a GET of the endpoint URL, so the list's
-GraphiQL link opens that URL. Without the key, copying gives only the engine
-path `/graphql/{name}` and the list has no GraphiQL column.
+Without the key, copying gives only the engine path `/graphql/{name}`.
 
 ## Storage contract
 
@@ -232,7 +229,7 @@ ui/                         custom elements, UI helpers and icons
   endpoint-screen/          one endpoint: load, save, discard, leave confirmation
     helpers/draft.js        schema selection, dirty check, save state
   header/                   site context, GraphQL › endpoints › name trail, screen actions slot
-  endpoint-list/            table, endpoint URLs, GraphiQL links, row actions
+  endpoint-list/            table, endpoint URLs, row actions
   endpoint-editor/          alerts, Schemas and GraphQL SDL tabs
   schemas-panel/            Schemas tab: search and selection table
     helpers/options.js      schema rows: filter, sort, schema status
