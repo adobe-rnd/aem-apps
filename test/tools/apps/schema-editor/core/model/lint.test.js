@@ -21,6 +21,7 @@ import {
 } from '../../../../../../tools/apps/schema-editor/core/model/lint.js';
 import { createNode } from '../../../../../../tools/apps/schema-editor/core/model/elements.js';
 import { insertNode } from '../../../../../../tools/apps/schema-editor/core/model/commands.js';
+import { localToUtc } from '../../../../../../tools/apps/schema-editor/ui/fields/datetime-zone.js';
 import { COMPLETE_EXAMPLE } from './fixtures.js';
 
 const load = (json) => parseSchema(json, { name: 't' }).model;
@@ -82,6 +83,13 @@ describe('schema model lint', () => {
     ['choice-constraint', {
       type: 'string', title: 'T', enum: ['a'], maxLength: 3,
     }, 'info'],
+    ['choice-unusable', {
+      type: 'string', title: 'T', enum: ['a', 'long'], maxLength: 3,
+    }, 'warning'],
+    ['invalid-pattern', { type: 'string', title: 'T', pattern: '[\\u{1F600}-\\u{1F64F}]' }, 'error'],
+    ['default-invalid', {
+      type: 'string', title: 'T', format: 'date', default: '2026-02-30',
+    }, 'error'],
   ];
 
   CASES.forEach(([code, prop, severity]) => {
@@ -153,6 +161,26 @@ describe('schema model lint', () => {
     expect(checkValue({ kind: 'string', variant: 'text', pattern: '^a' }, 'ba')).to.be.a('string');
     expect(checkValue({ kind: 'number', minimum: 0 }, -1)).to.be.a('string');
     expect(checkValue({ kind: 'boolean' }, false)).to.equal(null);
+  });
+
+  it('checks values the way the SC SDK validates form data', () => {
+    const date = { kind: 'string', variant: 'date' };
+    expect(checkValue(date, '2026-02-30')).to.be.a('string');
+    expect(checkValue(date, '2023-02-29')).to.be.a('string');
+    expect(checkValue(date, '2000-02-29')).to.equal(null);
+    const dateTime = { kind: 'string', variant: 'date-time' };
+    expect(checkValue(dateTime, '2026-04-31T10:00:00Z')).to.be.a('string');
+    // The default picker stores `toISOString()`, i.e. with milliseconds.
+    expect(checkValue(dateTime, localToUtc('2026-03-01T09:00'))).to.equal(null);
+    expect(checkValue(dateTime, '2026-03-01T09:00:00.500Z')).to.be.a('string');
+    expect(checkValue({ kind: 'string', variant: 'text', maxLength: 1 }, '😀')).to.be.a('string');
+    const choice = {
+      kind: 'string', variant: 'choice', enum: ['a', 'abc'], maxLength: 2,
+    };
+    expect(checkValue(choice, 'a')).to.equal(null);
+    expect(checkValue(choice, 'abc')).to.be.a('string');
+    expect(checkValue({ kind: 'string', variant: 'text', pattern: '^\\p{L}+$' }, 'héllo')).to.be.a('string');
+    expect(checkValue({ kind: 'string', variant: 'text', pattern: '^\\d{3}\\-\\d{4}$' }, '555-1234')).to.equal(null);
   });
 
   it('returns errors first', () => {

@@ -53,9 +53,10 @@ const UNSUPPORTED_REASONS = {
 const isNonNegativeInt = (v) => Number.isInteger(v) && v >= 0;
 const isNumber = (v) => typeof v === 'number' && Number.isFinite(v);
 
+// No flags: the SDK compiles and tests patterns with a plain `new RegExp(pattern)`.
 function compilePattern(pattern) {
   try {
-    return new RegExp(pattern, 'u');
+    return new RegExp(pattern);
   } catch {
     return null;
   }
@@ -77,11 +78,30 @@ function humanize(key) {
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
 }
 
-const DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+const DATE = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
-const DATE_TIME = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d:00Z$/;
+const DATE_TIME = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d:00(\.0+)?Z$/;
 
-/** Checks a value against a primitive node's type and constraints; returns a message or null. */
+function isCalendarDay(match) {
+  if (!match) return false;
+  const [year, month, day] = match.slice(1, 4).map(Number);
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  return day <= [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+}
+
+function checkFormat(variant, value) {
+  if (variant === 'date' && !isCalendarDay(DATE.exec(value))) return 'Must be a date (YYYY-MM-DD).';
+  if (variant === 'time' && !TIME.test(value)) return 'Must be a time (HH:MM or HH:MM:SS).';
+  if (variant === 'date-time' && !isCalendarDay(DATE_TIME.exec(value))) {
+    return 'Must be a UTC date and time (YYYY-MM-DDTHH:MM:00Z).';
+  }
+  return null;
+}
+
+/**
+ * Checks a value against a primitive node's type and constraints, the way the SDK validates
+ * form data (lengths count UTF-16 units); returns a message or null.
+ */
 export function checkValue(node, value) {
   if (node.kind === 'boolean') return typeof value === 'boolean' ? null : 'Must be on or off.';
   if (node.kind === 'number' || node.kind === 'integer') {
@@ -93,15 +113,12 @@ export function checkValue(node, value) {
   }
   if (node.kind !== 'string') return null;
   if (typeof value !== 'string') return 'Must be text.';
-  if (node.variant === 'choice') {
-    return Array.isArray(node.enum) && node.enum.includes(value) ? null : 'Must be one of the choices.';
+  if (node.variant === 'choice' && !(Array.isArray(node.enum) && node.enum.includes(value))) {
+    return 'Must be one of the choices.';
   }
-  if (node.variant === 'date' && !DATE.test(value)) return 'Must be a date (YYYY-MM-DD).';
-  if (node.variant === 'time' && !TIME.test(value)) return 'Must be a time (HH:MM or HH:MM:SS).';
-  if (node.variant === 'date-time' && !DATE_TIME.test(value)) {
-    return 'Must be a UTC date and time (YYYY-MM-DDTHH:MM:00Z).';
-  }
-  const { length } = [...value];
+  const formatProblem = checkFormat(node.variant, value);
+  if (formatProblem) return formatProblem;
+  const { length } = value;
   if (isNonNegativeInt(node.minLength) && length < node.minLength) {
     return `Must be at least ${node.minLength} characters.`;
   }
@@ -198,7 +215,7 @@ function lintString(node, report) {
   if (node.variant !== 'choice') return;
   ['minLength', 'maxLength', 'pattern'].forEach((field) => {
     if (node[field] !== undefined) {
-      report('choice-constraint', 'info', `"${field}" has no effect on a Choice.`, { field: 'advanced', fix: removeFieldFix(node, field, `Remove "${field}"`) });
+      report('choice-constraint', 'info', `"${field}" also applies to a Choice but can't be edited here.`, { field: 'advanced', fix: removeFieldFix(node, field, `Remove "${field}"`) });
     }
   });
   if (!Array.isArray(node.enum) || !node.enum.length) {
@@ -213,6 +230,10 @@ function lintString(node, report) {
   }
   if (new Set(node.enum).size !== node.enum.length) {
     report('enum-duplicate', 'error', 'Choices must be unique.', { field: 'enum' });
+  }
+  const blocked = node.enum.find((v) => typeof v === 'string' && v.trim() && checkValue(node, v));
+  if (blocked !== undefined) {
+    report('choice-unusable', 'warning', `Choice "${blocked}" can never be picked: ${checkValue(node, blocked)}`, { field: 'enum' });
   }
 }
 
