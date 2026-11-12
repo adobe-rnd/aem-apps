@@ -26,7 +26,7 @@ The plugin is a **thin REST client of [`publish-requests-worker`](https://github
 
 ### Initialization & submission flow
 
-1. The plugin reads the user's email (IMS profile, for display) and the content path from the DA SDK context.
+1. The plugin reads the user's email (IMS profile, for display) and the content path from the DA SDK context. Both dialog and panel entry points normalize the context, accepting `site` or the legacy `repo` field and removing a trailing `.html` from the path. This makes Prepare-menu source paths and Panels paths equivalent for preview, diff, lookups, and requests.
 2. It calls `GET /api/config` (display settings) and `GET /api/approvers` (resolved approvers + CC). If the worker reports missing config or no matching rule, an error is shown and the form is hidden.
 3. It calls `GET /api/requests?role=requester` to detect an existing pending request by this user for this path; if found, a "Request Pending" state is shown instead of the form.
 4. The author optionally reviews the diff, adds a note, and clicks **Request Publish**.
