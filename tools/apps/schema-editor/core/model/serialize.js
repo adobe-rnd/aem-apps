@@ -76,11 +76,14 @@ export function serializeNode(node, defName) {
 
   if (node.kind === 'object') {
     const children = node.children ?? [];
-    const required = children.filter((child) => child.required).map((child) => child.key);
-    if (required.length) out.required = required;
-    out.properties = Object.fromEntries(
+    const properties = Object.fromEntries(
       children.map((child) => [child.key, serializeNode(child, defName)]),
     );
+    // In property order, once: siblings can share a key while a duplicate-key error is open.
+    const required = Object.keys(properties)
+      .filter((key) => children.some((child) => child.key === key && child.required));
+    if (required.length) out.required = required;
+    out.properties = properties;
   }
   if (node.kind === 'array' && node.item) out.items = serializeNode(node.item, defName);
 

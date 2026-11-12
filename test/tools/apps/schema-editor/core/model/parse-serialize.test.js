@@ -182,4 +182,20 @@ describe('schema model parse/serialize', () => {
     expect(normalize(reparsed)).to.deep.equal(normalize(model));
     expect(stringifySchema(reparsed)).to.equal(stringifySchema(model));
   });
+
+  it('lists required keys once, in property order, while keys are duplicated', () => {
+    const root = createNode('group', { title: 'Root' });
+    root.children = [
+      { ...createNode('text', { siblingKeys: [] }), key: 'name' },
+      { ...createNode('number', { siblingKeys: [] }), key: 'age', required: true },
+      { ...createNode('longText', { siblingKeys: [] }), key: 'name', required: true },
+      { ...createNode('date', { siblingKeys: [] }), key: 'name', required: true },
+    ];
+    const json = serializeSchema({
+      version: 1, name: 'x', root, defs: [], rootExtras: {},
+    });
+    expect(json.required).to.deep.equal(['name', 'age']);
+    expect(JSON.stringify(serializeSchema(parseSchema(json, { name: 'x' }).model)))
+      .to.equal(JSON.stringify(json));
+  });
 });
