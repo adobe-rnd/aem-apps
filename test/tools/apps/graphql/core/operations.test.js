@@ -192,7 +192,7 @@ describe('saveEndpoint', () => {
     const result = await core.saveEndpoint({ ...args, config });
     assert.deepEqual(result.config, { name: 'main', schemas: ['product'] });
     assert.deepEqual(result.warnings, []);
-    assert.ok(result.sdl.includes('type Product {'));
+    assert.ok(result.sdl.includes('type Product @contentType(id: "product") {'));
     assert.deepEqual(store.calls.filter(({ method }) => ['write', 'publish'].includes(method)), [
       { method: 'write', path: `${ENDPOINTS}/main/endpoint.html` },
       { method: 'publish', path: `${ENDPOINTS}/main/endpoint.html` },

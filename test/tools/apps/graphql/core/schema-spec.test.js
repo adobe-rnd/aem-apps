@@ -16,7 +16,7 @@
 // Every construct of https://github.com/adobe/da-sc-sdk/blob/main/docs/schema-spec.md
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { Kind, parse, buildASTSchema } from '../../../../../tools/deps/graphql/dist/index.js';
+import { parse, buildASTSchema } from '../../../../../tools/deps/graphql/dist/index.js';
 import { generateSdl } from '../../../../../tools/apps/graphql/core/sdl.js';
 
 const gen = (schema, id = 'doc') => {
@@ -31,16 +31,12 @@ const clean = (schema, id) => {
   return sdl;
 };
 
-const fields = (sdl, typeName) => Object.values(buildASTSchema(parse(sdl))
-  .getType(typeName).getFields());
+// Content AI provides @contentType and @source, so the SDL is built without SDL validation.
+const schemaOf = (sdl) => buildASTSchema(parse(sdl), { assumeValidSDL: true });
+const fields = (sdl, typeName) => Object.values(schemaOf(sdl).getType(typeName).getFields());
 const fieldsOf = (sdl, typeName) => Object.fromEntries(fields(sdl, typeName)
   .map(({ name, type }) => [name, String(type)]));
-const descriptionsOf = (sdl, typeName) => Object.fromEntries(fields(sdl, typeName)
-  .map(({ name, description }) => [name, description]));
-const typeNames = (sdl) => parse(sdl).definitions
-  .filter(({ kind }) => kind !== Kind.DIRECTIVE_DEFINITION)
-  .map(({ name }) => name.value)
-  .sort();
+const typeNames = (sdl) => parse(sdl).definitions.map(({ name }) => name.value).sort();
 const sources = (sdl) => [...sdl.matchAll(/(\w+): \S+ @source\(key: "([^"]+)"\)/g)]
   .map(([, field, key]) => [field, key]);
 const pointers = (warnings) => warnings.map(({ pointer }) => pointer);
@@ -49,7 +45,6 @@ const str = (title, extra = {}) => ({ type: 'string', title, ...extra });
 const doc = (properties, extra = {}) => ({
   type: 'object', title: 'Doc', properties, ...extra,
 });
-const ENVELOPE = ['PageInfo', 'Query'];
 
 describe('schema spec §2: types', () => {
   it('maps every primitive type', () => {
@@ -59,7 +54,7 @@ describe('schema spec §2: types', () => {
       age: { type: 'integer', title: 'Age' },
       subscribed: { type: 'boolean', title: 'Subscribed' },
     }));
-    assert.deepEqual(fieldsOf(sdl, 'Doc'), {
+    assert.deepEqual(fieldsOf(sdl, 'DocData'), {
       name: 'String', score: 'Float', age: 'Int', subscribed: 'Boolean',
     });
   });
@@ -73,9 +68,9 @@ describe('schema spec §2: types', () => {
         properties: { name: str('Name'), email: str('Email') },
       },
     }));
-    assert.deepEqual(fieldsOf(sdl, 'Doc'), { contact: 'DocContact' });
+    assert.deepEqual(fieldsOf(sdl, 'DocData'), { contact: 'DocContact' });
     assert.deepEqual(fieldsOf(sdl, 'DocContact'), { name: 'String', email: 'String' });
-    assert.deepEqual(typeNames(sdl), [...ENVELOPE, 'Doc', 'DocConnection', 'DocContact', 'DocItem'].sort());
+    assert.deepEqual(typeNames(sdl), ['Doc', 'DocContact', 'DocData']);
   });
 
   it('maps arrays of primitives, objects and arrays', () => {
@@ -104,7 +99,7 @@ describe('schema spec §2: types', () => {
         },
       },
     }));
-    assert.deepEqual(fieldsOf(sdl, 'Doc'), {
+    assert.deepEqual(fieldsOf(sdl, 'DocData'), {
       tags: '[String]',
       scores: '[Float]',
       ranks: '[Int]',
@@ -147,12 +142,13 @@ describe('schema spec §2: types', () => {
         },
       },
     }, 'order');
-    assert.deepEqual(fieldsOf(sdl, 'Order'), { customer: 'OrderCustomer', lineItems: '[OrderLineItem]' });
+    assert.deepEqual(fieldsOf(sdl, 'OrderData'), { customer: 'OrderCustomer', lineItems: '[OrderLineItem]' });
     assert.deepEqual(fieldsOf(sdl, 'OrderCustomer'), { address: 'OrderCustomerAddress' });
     assert.deepEqual(fieldsOf(sdl, 'OrderCustomerAddress'), { city: 'String', country: 'String' });
     assert.deepEqual(fieldsOf(sdl, 'OrderLineItem'), { sku: 'String', quantity: 'Int' });
-    assert.deepEqual(typeNames(sdl), [...ENVELOPE, 'Order', 'OrderConnection', 'OrderCustomer',
-      'OrderCustomerAddress', 'OrderItem', 'OrderLineItem'].sort());
+    assert.deepEqual(typeNames(sdl), [
+      'Order', 'OrderCustomer', 'OrderCustomerAddress', 'OrderData', 'OrderLineItem',
+    ]);
   });
 });
 
@@ -160,11 +156,11 @@ describe('schema spec R11: root', () => {
   const contact = { type: 'object', title: 'Contact', properties: { name: str('Name') } };
 
   it('maps an object root to the data type', () => {
-    assert.equal(fieldsOf(clean(doc({ name: str('Name') })), 'DocItem').data, 'Doc');
+    assert.equal(fieldsOf(clean(doc({ name: str('Name') })), 'Doc').data, 'DocData');
   });
 
   it('maps an array root of primitives, objects, arrays and $refs', () => {
-    const data = (schema) => fieldsOf(clean(schema, 'list'), 'ListItem').data;
+    const data = (schema) => fieldsOf(clean(schema, 'list'), 'List').data;
     assert.equal(data({ type: 'array', title: 'Tags', items: str('Tag') }), '[String]');
     assert.equal(data({ type: 'array', title: 'Contacts', items: contact }), '[ListEntry]');
     assert.equal(data({
@@ -187,7 +183,7 @@ describe('schema spec R9/R10: property keys', () => {
       field1: str('E'),
       h1: str('F'),
     }));
-    assert.deepEqual(fieldsOf(sdl, 'Doc'), {
+    assert.deepEqual(fieldsOf(sdl, 'DocData'), {
       name: 'String',
       firstName: 'String',
       first_name: 'String',
@@ -201,7 +197,7 @@ describe('schema spec R9/R10: property keys', () => {
   it('suffixes a type name produced by two different keys', () => {
     const nested = (title) => ({ type: 'object', title, properties: { value: str('Value') } });
     const { sdl, warnings } = gen(doc({ 'first-name': nested('A'), firstName: nested('B') }));
-    assert.deepEqual(fieldsOf(sdl, 'Doc'), { first_name: 'DocFirstName', firstName: 'DocFirstName2' });
+    assert.deepEqual(fieldsOf(sdl, 'DocData'), { first_name: 'DocFirstName', firstName: 'DocFirstName2' });
     assert.deepEqual(pointers(warnings), ['/properties/firstName']);
   });
 
@@ -216,7 +212,7 @@ describe('schema spec R9/R10: property keys', () => {
         properties: { metadata: str('Metadata'), heading: str('Heading') },
       },
     }));
-    assert.deepEqual(fieldsOf(sdl, 'Doc'), { title: 'String', hero: 'DocHero' });
+    assert.deepEqual(fieldsOf(sdl, 'DocData'), { title: 'String', hero: 'DocHero' });
     assert.deepEqual(fieldsOf(sdl, 'DocHero'), { heading: 'String' });
     assert.deepEqual(pointers(warnings), [
       '/properties/metadata',
@@ -227,25 +223,26 @@ describe('schema spec R9/R10: property keys', () => {
 });
 
 describe('schema spec §3: annotations', () => {
-  it('describes fields with title and description, and types with title', () => {
-    const sdl = clean(doc({
-      name: str('Name'),
+  it('adds nothing for title and description', () => {
+    const bare = {
+      type: 'object',
+      properties: {
+        summary: { type: 'string' },
+        contact: { type: 'object', properties: { email: { type: 'string' } } },
+      },
+    };
+    const annotated = doc({
       summary: str('Summary', { description: 'A short abstract.' }),
-      same: str('Same', { description: 'Same' }),
       contact: {
         type: 'object',
         title: 'Contact',
         description: 'Who to call.',
         properties: { email: str('Email') },
       },
-    }));
-    assert.deepEqual(descriptionsOf(sdl, 'Doc'), {
-      name: 'Name',
-      summary: 'Summary\n\nA short abstract.',
-      same: 'Same',
-      contact: 'Contact\n\nWho to call.',
-    });
-    assert.equal(buildASTSchema(parse(sdl)).getType('DocContact').description, 'Contact');
+    }, { description: 'A document.' });
+    const sdl = clean(annotated);
+    assert.equal(sdl, clean(bare));
+    assert.ok(!sdl.includes('"""'));
   });
 
   it('adds nothing for default, readOnly and required, and keeps required fields nullable', () => {
@@ -271,7 +268,7 @@ describe('schema spec §3: annotations', () => {
     }, { required: ['title', 'priority', 'archived', 'tags', 'owner'] });
     const sdl = clean(annotated);
     assert.equal(sdl, clean(bare));
-    assert.deepEqual(fieldsOf(sdl, 'Doc'), {
+    assert.deepEqual(fieldsOf(sdl, 'DocData'), {
       title: 'String', priority: 'Int', archived: 'Boolean', tags: '[String]', owner: 'DocOwner',
     });
   });
@@ -309,18 +306,15 @@ describe('schema spec §4: constraints', () => {
     assert.equal(clean(constrained), clean(bare));
   });
 
-  it('lists enum values in the description of a string field only', () => {
+  it('maps enum strings to String, without their values', () => {
     const sdl = clean(doc({
       status: str('Status', { enum: ['Planning', 'Active', 'On Hold'] }),
       level: {
         type: 'integer', title: 'Level', enum: [1, 2],
       },
     }));
-    assert.deepEqual(fieldsOf(sdl, 'Doc'), { status: 'String', level: 'Int' });
-    assert.deepEqual(descriptionsOf(sdl, 'Doc'), {
-      status: 'Status\n\nAllowed values: "Planning", "Active", "On Hold"',
-      level: 'Level',
-    });
+    assert.deepEqual(fieldsOf(sdl, 'DocData'), { status: 'String', level: 'Int' });
+    assert.ok(!sdl.includes('Planning'));
   });
 
   it('maps the date and time formats to scalars', () => {
@@ -329,7 +323,7 @@ describe('schema spec §4: constraints', () => {
       openingTime: str('Opening time', { format: 'time' }),
       eventStart: str('Event start', { format: 'date-time' }),
     }));
-    assert.deepEqual(fieldsOf(sdl, 'Doc'), { publishDate: 'Date', openingTime: 'Time', eventStart: 'DateTime' });
+    assert.deepEqual(fieldsOf(sdl, 'DocData'), { publishDate: 'Date', openingTime: 'Time', eventStart: 'DateTime' });
   });
 
   it('applies the precedence enum > format > x-semantic-type', () => {
@@ -340,7 +334,7 @@ describe('schema spec §4: constraints', () => {
       all: str('D', { enum: ['x'], format: 'time', 'x-semantic-type': 'long-text' }),
       emptyEnum: str('E', { enum: [], format: 'date-time' }),
     }));
-    assert.deepEqual(fieldsOf(sdl, 'Doc'), {
+    assert.deepEqual(fieldsOf(sdl, 'DocData'), {
       enumFormat: 'String', enumSemantic: 'String', formatSemantic: 'Date', all: 'String', emptyEnum: 'DateTime',
     });
   });
@@ -354,10 +348,10 @@ describe('schema spec §4: constraints', () => {
       ratio: { type: 'number', title: 'Ratio', format: 'date-time' },
       flag: { type: 'boolean', title: 'Flag', format: 'time' },
     }));
-    assert.deepEqual(fieldsOf(sdl, 'Doc'), {
+    assert.deepEqual(fieldsOf(sdl, 'DocData'), {
       email: 'String', uri: 'String', proto: 'String', count: 'Int', ratio: 'Float', flag: 'Boolean',
     });
-    assert.deepEqual(typeNames(sdl), [...ENVELOPE, 'Doc', 'DocConnection', 'DocItem'].sort());
+    assert.deepEqual(typeNames(sdl), ['Doc', 'DocData']);
   });
 });
 
@@ -379,10 +373,9 @@ describe('schema spec §5: $defs and $ref', () => {
         editor: { $ref: '#/$defs/Contact', title: 'Editor' },
       },
     }, 'project');
-    assert.deepEqual(fieldsOf(sdl, 'Project'), { owner: 'ProjectContact', editor: 'ProjectContact' });
-    assert.deepEqual(descriptionsOf(sdl, 'Project'), { owner: 'Contact', editor: 'Editor' });
+    assert.deepEqual(fieldsOf(sdl, 'ProjectData'), { owner: 'ProjectContact', editor: 'ProjectContact' });
     assert.deepEqual(fieldsOf(sdl, 'ProjectContact'), { name: 'String', email: 'String' });
-    assert.deepEqual(typeNames(sdl), [...ENVELOPE, 'Project', 'ProjectConnection', 'ProjectContact', 'ProjectItem'].sort());
+    assert.deepEqual(typeNames(sdl), ['Project', 'ProjectContact', 'ProjectData']);
   });
 
   it('inlines references to primitive and array definitions', () => {
@@ -401,10 +394,10 @@ describe('schema spec §5: $defs and $ref', () => {
         backup: { $ref: '#/$defs/Contacts' },
       }),
     });
-    assert.deepEqual(fieldsOf(sdl, 'Doc'), {
+    assert.deepEqual(fieldsOf(sdl, 'DocData'), {
       day: 'Date', alias: 'Date', tags: '[String]', contacts: '[DocContact]', backup: '[DocContact]',
     });
-    assert.deepEqual(typeNames(sdl), [...ENVELOPE, 'Date', 'Doc', 'DocConnection', 'DocContact', 'DocItem'].sort());
+    assert.deepEqual(typeNames(sdl), ['Date', 'Doc', 'DocContact', 'DocData']);
   });
 
   it('shares one type between an inline object and a $ref to it', () => {
@@ -414,7 +407,7 @@ describe('schema spec §5: $defs and $ref', () => {
       doc({ billing: { $ref: '#/properties/address' }, address }),
     ].forEach((schema) => {
       const sdl = clean(schema);
-      assert.deepEqual(fieldsOf(sdl, 'Doc'), { address: 'DocAddress', billing: 'DocAddress' });
+      assert.deepEqual(fieldsOf(sdl, 'DocData'), { address: 'DocAddress', billing: 'DocAddress' });
       assert.deepEqual(fieldsOf(sdl, 'DocAddress'), { city: 'String' });
     });
   });
@@ -439,7 +432,7 @@ describe('schema spec §5: $defs and $ref', () => {
       },
       ...doc({ owner: { $ref: '#/$defs/Contact' }, tree: { $ref: '#/$defs/Node' } }),
     });
-    assert.deepEqual(fieldsOf(sdl, 'Doc'), { owner: 'DocContact', tree: 'DocNode' });
+    assert.deepEqual(fieldsOf(sdl, 'DocData'), { owner: 'DocContact', tree: 'DocNode' });
     assert.deepEqual(fieldsOf(sdl, 'DocContact'), { name: 'String', address: 'DocAddress' });
     assert.deepEqual(fieldsOf(sdl, 'DocAddress'), { city: 'String' });
     assert.deepEqual(fieldsOf(sdl, 'DocNode'), { label: 'String', children: '[DocNode]' });
@@ -491,7 +484,7 @@ describe('non-conformant input', () => {
       external: { $ref: 'other.json#/$defs/X' },
       dangling: { $ref: '#/$defs/Missing' },
     }));
-    assert.deepEqual(fieldsOf(sdl, 'Doc'), {
+    assert.deepEqual(fieldsOf(sdl, 'DocData'), {
       invalid: 'JSON',
       untyped: 'JSON',
       nullType: 'JSON',
@@ -517,21 +510,21 @@ describe('non-conformant input', () => {
 
   it('suffixes a field name produced by an R9-invalid key', () => {
     const { sdl, warnings } = gen(doc({ 'a-b': str('A'), a_b: str('B') }));
-    assert.deepEqual(fieldsOf(sdl, 'Doc'), { a_b: 'String', a_b_2: 'String' });
+    assert.deepEqual(fieldsOf(sdl, 'DocData'), { a_b: 'String', a_b_2: 'String' });
     assert.deepEqual(sources(sdl), [['a_b', 'a-b'], ['a_b_2', 'a_b']]);
     assert.deepEqual(pointers(warnings), ['/properties/a_b']);
   });
 });
 
-describe('document envelope', () => {
-  it('shapes items as path, schemaName, title and data', () => {
+describe('document type', () => {
+  it('marks the document with its content type and holds path, title and data', () => {
     const sdl = clean(doc({ title: str('Title') }));
-    assert.deepEqual(fieldsOf(sdl, 'Query'), { docList: 'DocConnection!', docByPath: 'DocItem' });
-    assert.deepEqual(fieldsOf(sdl, 'DocConnection'), { items: '[DocItem!]!', pageInfo: 'PageInfo!' });
-    assert.deepEqual(fieldsOf(sdl, 'DocItem'), {
-      path: 'String!', schemaName: 'String!', title: 'String', data: 'Doc',
-    });
-    assert.deepEqual(fieldsOf(sdl, 'PageInfo'), { endCursor: 'String', hasNextPage: 'Boolean!', total: 'Int' });
-    assert.deepEqual(fieldsOf(sdl, 'Doc'), { title: 'String' });
+    const { directives } = parse(sdl).definitions.find(({ name }) => name.value === 'Doc');
+    const applied = directives
+      .map(({ name, arguments: [arg] }) => [name.value, arg.name.value, arg.value.value]);
+    assert.deepEqual(applied, [['contentType', 'id', 'doc']]);
+    assert.deepEqual(fieldsOf(sdl, 'Doc'), { path: 'String!', title: 'String', data: 'DocData' });
+    assert.deepEqual(fieldsOf(sdl, 'DocData'), { title: 'String' });
+    assert.deepEqual(typeNames(sdl), ['Doc', 'DocData']);
   });
 });

@@ -116,8 +116,7 @@ the generated SDL as is, so the SDL needs no JSON escaping:
   "schemas": ["article", "product"],
   "generatedAt": "2026-01-01T00:00:00.000Z"
 }</code></pre>
-<pre><code>"""Article."""
-type Article { … }
+<pre><code>type Article @contentType(id: "article") { … }
 …</code></pre>
 </div></main>
 ```
@@ -145,21 +144,55 @@ type Article { … }
 
 `core/sdl.js` converts the JSON Schema subset that Structured Content
 supports ([da-sc-sdk schema spec](https://github.com/adobe/da-sc-sdk/blob/main/docs/schema-spec.md))
-into GraphQL.
+into the SDL that Content AI registers, following "Step 2: writing the SDL"
+of the [Content AI GraphQL user guide](https://wiki.corp.adobe.com/spaces/ContentAI/pages/4116182384/Draft+Content+AI+GraphQL+%E2%80%94+User+Guide).
 
-- Each schema gets a type plus `{type}List` and `{type}ByPath` queries, tagged
-  with `@schema(id: …)`.
-- An item is `{ path, schemaName, title, data }`: the document's DA `path`,
-  its `schemaName` and `title` from the document metadata, and `data` typed
-  from the schema.
+```graphql
+type Project @contentType(id: "project") {
+  path: String!
+  title: String
+  data: ProjectData
+}
+
+type ProjectData { … }
+```
+
+- Each schema becomes one document type marked `@contentType(id: …)` with
+  the schema id, and a `{Type}Data` type for its content. A schema whose root
+  is an array gets `data: [{Type}Entry]` instead. Nested objects become
+  `{Type}{Property}` types.
+- The SDL declares only object types and scalars (`JSON`, `Date`, `Time`,
+  `DateTime`, only those used). Content AI generates the queries
+  (`{type}List` returning `{Type}Page`), `PageInfo`, filters and ordering,
+  and provides the `@contentType` and `@source` directives, so the SDL
+  declares none of them and has no field arguments. A key that isn't a valid
+  field name is renamed, with `@source(key: …)` naming the original.
+- The SDL has no descriptions: schema titles, descriptions and enum values
+  are left out, and enum strings become `String`.
+- Type names that GraphQL, the scalars or Content AI reserve (`Query`,
+  `PageInfo`, `SortDirection`, the `*Condition` inputs) get a `Type` suffix.
+  A nested type named like a generated type of another (`{Type}Page`,
+  `{Type}Filter…`, `{Type}OrderBy…`) gets an `_` after the owner, as in
+  `Product_Filter`, and other duplicates a number. Schemas whose type names
+  clash that way can't share an endpoint.
+- Content AI can't read schema ids or keys that are blank or contain a dot,
+  so those schemas and properties are skipped with a warning.
+- GraphQL `Int` is 32-bit, so an integer whose `minimum` or `maximum` lies
+  outside that range becomes `Float`, with a warning.
+- The generated SDL must fit Content AI's limits: 64 KiB, 1,000 indexed
+  fields, counting scalar fields down to 10 levels below the document, and
+  1,000 generated filter and sort types: a filter type for each object with
+  indexed fields, and a sort type for each object with sortable ones (not
+  Booleans, lists or keys with whitespace). Text sorts only if its index key
+  enables filtering, which the app can't see, so it reports an error when the
+  number and date fields alone exceed the limit, and a warning when text
+  fields could.
 - The SDL is built as a graphql-js syntax tree and printed with `print`, so
-  escaping and formatting come from graphql-js. The fixed definitions
-  (scalars, directives, `PageInfo`) are one parsed SDL string;
-  unused scalars are dropped after a `visit` of the generated types.
-  `printSchema` is not used because it drops applied directives (`@schema`,
-  `@source`).
-- The document is checked with `buildASTSchema` and `validateSchema`; any
-  failure becomes a generation error, which blocks saving.
+  escaping and formatting come from graphql-js. `printSchema` is not used
+  because it drops applied directives.
+- The document is checked with `buildASTSchema` and `validateSchema`, with
+  the directives and a placeholder `Query` that Content AI provides; any
+  failure or exceeded limit becomes a generation error, which blocks saving.
 - Problems are reported per schema and JSON pointer.
 
 ## Core

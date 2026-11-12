@@ -16,7 +16,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  camel, pascal, singular, toFieldName, toTypeName,
+  pascal, singular, toFieldName, toTypeName,
 } from '../../../../../tools/apps/graphql/core/sdl.js';
 
 describe('graphql naming', () => {
@@ -31,10 +31,6 @@ describe('graphql naming', () => {
     assert.equal(pascal(''), 'Type');
   });
 
-  it('camel-cases values', () => {
-    assert.equal(camel('blog-post'), 'blogPost');
-  });
-
   it('singularises common plurals', () => {
     assert.equal(singular('Tags'), 'Tag');
     assert.equal(singular('Categories'), 'Category');
@@ -46,6 +42,7 @@ describe('graphql naming', () => {
   it('suffixes reserved type names', () => {
     assert.equal(toTypeName('query'), 'QueryType');
     assert.equal(toTypeName('date'), 'DateType');
+    assert.equal(toTypeName('sort-direction'), 'SortDirectionType');
     assert.equal(toTypeName('article'), 'Article');
   });
 

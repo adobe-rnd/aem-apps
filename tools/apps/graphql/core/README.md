@@ -11,7 +11,7 @@ GraphQL engine or a script could do the same.
 | Module | Use it for | Needs |
 | --- | --- | --- |
 | `operations.js` | `createGraphqlCore`: list, load, save and delete endpoints | a store |
-| `sdl.js` | `buildSdl`, `generateSdl`: JSON Schemas → SDL | graphql-js |
+| `sdl.js` | `buildSdl`, `generateSdl`: JSON Schemas → Content AI SDL | graphql-js |
 | `endpoint.js` | endpoint names and URLs, the endpoint document format | nothing |
 | `schemas.js` | parsing schema documents, validity and readable issues | nothing |
 | `codeblock.js` | reading and writing the code blocks of DA documents | nothing |
