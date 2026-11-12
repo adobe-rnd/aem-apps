@@ -21,5 +21,27 @@ module.exports = {
       files: ['test/**/*.js'],
       env: { node: true },
     },
+    {
+      files: ['tools/apps/schema-editor/core/**/*.js'],
+      env: { browser: false, 'shared-node-browser': true },
+      rules: {
+        'no-restricted-imports': ['error', {
+          patterns: [{
+            group: ['../../**/*.js', '*:*'],
+            message: 'Schema editor core is pure: it only imports other core modules.',
+          }],
+        }],
+      },
+    },
+    {
+      // Lit elements: `_` marks private members and reactive state.
+      files: ['tools/apps/schema-editor/*.js', 'tools/apps/schema-editor/ui/**/*.js'],
+      rules: {
+        'no-underscore-dangle': 'off',
+        'import/no-unresolved': ['error', { ignore: ['^da-lit$', '^https://'] }],
+        'import/prefer-default-export': 'off',
+        'class-methods-use-this': 'off',
+      },
+    },
   ],
 };

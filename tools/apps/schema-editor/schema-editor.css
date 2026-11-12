@@ -1,0 +1,115 @@
+:host {
+  display: block;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.no-site {
+  box-sizing: border-box;
+  display: grid;
+  gap: 12px;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 64px 24px;
+
+  h1 {
+    margin: 0;
+    font-size: var(--s2-heading-l-size, 28px);
+    color: var(--s2-gray-900);
+  }
+
+  p {
+    margin: 0;
+  }
+
+  form {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+  }
+
+  se-input {
+    flex: 1;
+  }
+}
+
+.author-layout {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+
+  /* The panel gives up width before the canvas does, so the canvas keeps
+     its labels and actions beside the chat panel. The two are separate
+     surfaces, as da.live's frame separates its main area and panels: a 12px
+     gap of the frame's grey, a hairline edge and a 16px corner on each side.
+     The app sits in the frame's own rounded main area, which draws the
+     outer edges. */
+  &.panel-open {
+    grid-template-columns: minmax(0, 1fr) var(--se-panel-width, clamp(320px, 36vw, 400px));
+    column-gap: 12px;
+    background: var(--s2-gray-50);
+
+    > se-author {
+      border-inline-end: 1px solid var(--s2-gray-100);
+      border-start-end-radius: var(--s2-corner-radius-800, 16px);
+      background: var(--s2-gray-25, #fff);
+    }
+  }
+
+  > * {
+    min-height: 0;
+  }
+}
+
+se-tool-panel {
+  border-inline-start: 1px solid var(--s2-gray-100);
+  border-start-start-radius: var(--s2-corner-radius-800, 16px);
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+@media (width < 720px) {
+  .author-layout.panel-open {
+    grid-template-columns: minmax(0, 1fr);
+
+    > se-author {
+      border-inline-end: 0;
+      border-radius: 0;
+    }
+  }
+
+  /* Over the canvas but under the header, which keeps Save and Undo. */
+  se-tool-panel {
+    position: absolute;
+    inset: var(--se-bar-height, 48px) 0 0 auto;
+    z-index: 4;
+    width: min(400px, 100%);
+    box-shadow: var(--s2-drop-shadow-elevated, 0 4px 16px rgb(0 0 0 / 16%));
+  }
+}
+
+/* Where the shell drops its frame (SDK `setFrameless`), each surface draws
+   the edge the frame drew around the whole app: a hairline border and 16px
+   top corners on the frame's grey. The gap beside the tool panel then reads
+   as the frame's grey all the way up, with no shared line across its top. */
+:host([frameless]) {
+  background: var(--s2-gray-50);
+
+  :is(.no-site, se-browse, se-author, se-tool-panel) {
+    box-sizing: border-box;
+    border: 1px solid var(--s2-gray-100);
+    border-radius: var(--s2-corner-radius-800, 16px) var(--s2-corner-radius-800, 16px) 0 0;
+    background: var(--s2-gray-25, #fff);
+  }
+
+  .no-site {
+    max-width: none;
+    height: 100%;
+    margin: 0;
+    padding-inline: max(24px, calc((100% - 432px) / 2));
+    align-content: start;
+  }
+}

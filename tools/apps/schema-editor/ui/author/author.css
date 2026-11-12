@@ -1,0 +1,103 @@
+:host {
+  --schema-gutter: 32px;
+  --schema-content-max: 1200px;
+
+  /* The header stays put; only the body scrolls, under it. */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+@media (width < 900px) {
+  :host {
+    --schema-gutter: 16px;
+  }
+}
+
+se-header {
+  flex: none;
+}
+
+/* Holds the header's place while loading, so the body doesn't drop. */
+.bar-placeholder {
+  flex: none;
+  box-sizing: border-box;
+  height: var(--se-bar-height, 48px);
+  border-block-end: 1px solid var(--s2-gray-200);
+}
+
+.scroller {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scroll-padding-block: 16px;
+}
+
+.body {
+  box-sizing: border-box;
+  max-width: var(--schema-content-max);
+  margin-inline: auto;
+  padding: 20px var(--schema-gutter) 64px;
+}
+
+.skeleton {
+  box-sizing: border-box;
+  max-width: var(--schema-content-max);
+  margin-inline: auto;
+  padding-inline: var(--schema-gutter);
+  display: grid;
+  gap: 12px;
+  padding-block: 24px;
+}
+
+.skeleton .bar {
+  height: 44px;
+  border-radius: 10px;
+  background: var(--s2-gray-100);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton .bar.title {
+  width: 40%;
+  height: 28px;
+}
+
+.skeleton .bar.short {
+  width: 60%;
+}
+
+.error-state .actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+.error-state a {
+  text-decoration: none;
+}
+
+.raw {
+  overflow: auto;
+  max-height: 240px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--s2-gray-75);
+  font-family: var(--se-code-font-family);
+  font-size: var(--s2-body-xs-size, 12px);
+  text-align: start;
+  white-space: pre-wrap;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton .bar {
+    animation: none;
+  }
+}

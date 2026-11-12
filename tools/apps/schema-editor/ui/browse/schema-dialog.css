@@ -1,0 +1,14 @@
+form {
+  display: grid;
+  gap: 16px;
+}
+
+/* Room to read pasted JSON; one width, so an error message can't widen it. */
+nx-dialog.is-wide {
+  --nx-dialog-min-width: 600px;
+  --nx-dialog-max-width: 600px;
+}
+
+.json {
+  --form-textarea-min-height: 200px;
+}

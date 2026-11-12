@@ -1,0 +1,120 @@
+/* Shared primitives of the schema editor views (adopted in each shadow root). */
+
+:host {
+  /* The da.live form editor's preview font; nx2 has no code font. */
+  --se-code-font-family: consolas, monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+
+  font-family: var(--s2-font-family);
+  color: var(--s2-gray-800);
+}
+
+.icon {
+  display: block;
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--s2-gray-600);
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: var(--s2-body-xs-size, 12px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--s2-gray-600);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  height: 20px;
+  border-radius: 10px;
+  font-size: var(--s2-body-xs-size, 12px);
+  line-height: 20px;
+  white-space: nowrap;
+  color: var(--s2-gray-700);
+  background: var(--s2-gray-100);
+}
+
+.chip.is-error {
+  color: var(--s2-red-900);
+  background: var(--s2-red-100);
+}
+
+.chip.is-warning {
+  color: var(--s2-orange-900);
+  background: var(--s2-orange-100);
+}
+
+.chip.is-info {
+  color: var(--s2-blue-900);
+  background: var(--s2-blue-100);
+}
+
+.chip .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--s2-gray-700);
+}
+
+.empty :is(h2, h3) {
+  margin: 0;
+  font-size: var(--s2-heading-xs-size, 16px);
+  color: var(--s2-gray-900);
+}
+
+.empty p {
+  margin: 0;
+  max-width: 64ch;
+  text-wrap: balance;
+}
+
+.empty .empty-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--s2-gray-500);
+}
+
+.error-text {
+  margin: 0;
+  color: var(--s2-red-900);
+}
+
+.skeleton {
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--s2-gray-100), var(--s2-gray-75), var(--s2-gray-100));
+  background-size: 200% 100%;
+  animation: skeleton 1.2s ease-in-out infinite;
+}
+
+@keyframes skeleton {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}

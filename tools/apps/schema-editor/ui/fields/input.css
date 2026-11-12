@@ -1,0 +1,8 @@
+/* Reserve room for the alert icon (18px) at its 12px inline-end inset. */
+.form-field.has-error .form-control {
+  padding-right: 38px;
+}
+
+.form-field.has-error .form-field-icon {
+  inset-inline-end: 12px;
+}
