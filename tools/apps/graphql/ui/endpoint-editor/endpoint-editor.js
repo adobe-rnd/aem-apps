@@ -1,0 +1,144 @@
+/*
+ * Copyright 2026 Adobe Systems Incorporated
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/* eslint-disable no-underscore-dangle, import/no-unresolved */
+import { html, LitElement, nothing } from 'da-lit';
+import { loadStyle } from 'https://da.live/nx2/utils/utils.js';
+import { NO_SCHEMAS_MESSAGE } from '../../core/endpoint.js';
+import { describeProblem } from '../utils/messages.js';
+import { getSchemaOptions } from '../schemas-panel/helpers/options.js';
+import { inlineAlertStyle, renderInlineAlert } from '../shared/inline-alert/inline-alert.js';
+import '../schemas-panel/schemas-panel.js';
+
+const style = await loadStyle(import.meta.url);
+
+const EL_NAME = 'gql-endpoint-editor';
+
+const TABS = [
+  { id: 'schemas', label: 'Schemas' },
+  { id: 'graphql', label: 'GraphQL SDL' },
+];
+
+class EndpointEditor extends LitElement {
+  static properties = {
+    draft: { attribute: false },
+    schemas: { attribute: false },
+    savedSchemas: { attribute: false },
+    preview: { attribute: false },
+    schemaEditorHref: { type: String },
+    busy: { type: Boolean },
+    readOnly: { type: Boolean },
+    _tab: { state: true },
+  };
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.shadowRoot.adoptedStyleSheets = [inlineAlertStyle, style];
+  }
+
+  get tab() {
+    return this._tab ?? 'schemas';
+  }
+
+  willUpdate(props) {
+    if (!['draft', 'schemas', 'savedSchemas'].some((prop) => props.has(prop))) return;
+    this._options = getSchemaOptions({
+      draft: this.draft, schemas: this.schemas, saved: this.savedSchemas,
+    });
+  }
+
+  selectTab(id) {
+    if (id === 'graphql') import('../sdl-panel/sdl-panel.js');
+    this._tab = id;
+  }
+
+  renderTabs() {
+    return html`
+      <div class="tab-bar">
+        <div class="tabs" role="tablist">
+          ${TABS.map(({ id, label }) => html`
+            <button type="button" role="tab" id="tab-${id}" aria-controls="panel"
+              aria-selected=${this.tab === id ? 'true' : 'false'}
+              @click=${() => this.selectTab(id)}>
+              ${label}
+            </button>`)}
+        </div>
+      </div>`;
+  }
+
+  renderNoSchemas() {
+    if (this.readOnly || this.draft.schemas.length || !this._options.length) return nothing;
+    return renderInlineAlert({
+      variant: 'informative',
+      className: 'no-schemas',
+      heading: NO_SCHEMAS_MESSAGE,
+    });
+  }
+
+  renderSchemas() {
+    return html`
+      ${this.renderNoSchemas()}
+      <gql-schemas-panel .options=${this._options} ?busy=${this.busy || this.readOnly}
+        schemaEditorHref=${this.schemaEditorHref}></gql-schemas-panel>`;
+  }
+
+  renderProblems() {
+    const { errors } = this.preview;
+    if (!errors.length) return nothing;
+    return renderInlineAlert({
+      variant: 'negative',
+      role: 'alert',
+      heading: 'The GraphQL schema cannot be generated',
+      content: html`<ul>${errors.map((error) => html`<li>${describeProblem(error)}</li>`)}</ul>`,
+    });
+  }
+
+  renderGraphqlEmpty() {
+    return html`
+      <div class="graphql-empty">
+        <p class="graphql-empty-title">No schemas selected</p>
+        <p>Select at least one Structured Content schema to generate the GraphQL schema.</p>
+        <sl-button class="primary outline" @click=${() => { this._tab = 'schemas'; }}>
+          Select schemas</sl-button>
+      </div>`;
+  }
+
+  renderGraphql() {
+    if (!this.draft.schemas.length) return this.renderGraphqlEmpty();
+    return html`
+      <div class="panel-header">
+        <p class="panel-intro">A read-only preview of the GraphQL schema generated from the
+          Structured Content schemas selected for this endpoint. It reflects the current
+          selection, including unsaved changes.</p>
+      </div>
+      <gql-sdl-panel .sdl=${this.preview.sdl}>${this.renderProblems()}</gql-sdl-panel>`;
+  }
+
+  renderPanel() {
+    if (this.tab === 'graphql') return this.renderGraphql();
+    return this.renderSchemas();
+  }
+
+  render() {
+    return html`
+      ${this.renderTabs()}
+      <div class="panel ${this.tab}" id="panel" role="tabpanel" aria-labelledby="tab-${this.tab}">
+        ${this.renderPanel()}
+      </div>
+    `;
+  }
+}
+
+customElements.define(EL_NAME, EndpointEditor);
