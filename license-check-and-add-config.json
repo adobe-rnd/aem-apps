@@ -20,6 +20,8 @@
     "**/.gitignore",
     ".hlxignore",
     ".idea/**",
+    "**/.wrangler/**",
+    "tools/apps/workfront/assets/icons/COPYRIGHT",
     ".DS_Store",
     "**/.DS_Store",
     "**/*.yaml",
@@ -47,6 +49,11 @@
       "append": "-->",
       "eachLine": {
         "prepend": " "
+      }
+    },
+    "toml": {
+      "eachLine": {
+        "prepend": "# "
       }
     }
   },
