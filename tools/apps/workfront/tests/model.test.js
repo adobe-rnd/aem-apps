@@ -1,6 +1,23 @@
+/*
+ * Copyright 2026 Adobe Systems Incorporated
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { addPageLink, filterCatalog, formatBrief, isLinkedToPage, parsePageUrl, taskDraft } from '../model.js';
+import {
+  addPageLink, filterCatalog, formatBrief, isLinkedToPage, parsePageUrl, taskDraft,
+} from '../model.js';
 
 const page = {
   siteId: 'northstar/website',
@@ -11,13 +28,23 @@ const page = {
 
 const catalog = {
   projects: [
-    { id: 'launch', type: 'project', name: 'Trail launch', siteIds: ['northstar/website'], ownerId: 'sam', memberIds: ['sam', 'alex'] },
-    { id: 'other', type: 'project', name: 'Trail launch', siteIds: ['northstar/other'], ownerId: 'sam', memberIds: ['sam'] },
+    {
+      id: 'launch', type: 'project', name: 'Trail launch', siteIds: ['northstar/website'], ownerId: 'sam', memberIds: ['sam', 'alex'],
+    },
+    {
+      id: 'other', type: 'project', name: 'Trail launch', siteIds: ['northstar/other'], ownerId: 'sam', memberIds: ['sam'],
+    },
   ],
   tasks: [
-    { id: 'linked', type: 'task', name: 'Write product copy', projectId: 'launch', pageLinks: [page], assigneeIds: ['alex'] },
-    { id: 'title-only', type: 'task', name: 'Trail launch', projectId: 'other', pageLinks: [], assigneeIds: ['sam'] },
-    { id: 'site-only', type: 'task', name: 'Update navigation', projectId: 'launch', pageLinks: [], assigneeIds: ['sam'] },
+    {
+      id: 'linked', type: 'task', name: 'Write product copy', projectId: 'launch', pageLinks: [page], assigneeIds: ['alex'],
+    },
+    {
+      id: 'title-only', type: 'task', name: 'Trail launch', projectId: 'other', pageLinks: [], assigneeIds: ['sam'],
+    },
+    {
+      id: 'site-only', type: 'task', name: 'Update navigation', projectId: 'launch', pageLinks: [], assigneeIds: ['sam'],
+    },
   ],
   users: [{ id: 'alex', name: 'Alex Morgan' }, { id: 'sam', name: 'Sam Chen' }],
 };
@@ -59,7 +86,9 @@ test('Assigned to me and selected user use exact assignee IDs', () => {
 test('tasks assigned only to a job role match users who hold that role', () => {
   const withRoles = {
     ...catalog,
-    tasks: [...catalog.tasks, { id: 'role-only', type: 'task', name: 'Review copy', projectId: 'other', pageLinks: [], assigneeIds: [], roleIds: ['editor'] }],
+    tasks: [...catalog.tasks, {
+      id: 'role-only', type: 'task', name: 'Review copy', projectId: 'other', pageLinks: [], assigneeIds: [], roleIds: ['editor'],
+    }],
     users: [{ id: 'alex', name: 'Alex Morgan', roleIds: ['editor'] }, { id: 'sam', name: 'Sam Chen', roleIds: [] }],
   };
   const mine = filterCatalog(withRoles, page, 'me');
@@ -152,7 +181,9 @@ test('every supported link format matches the open document', () => {
   };
   ['https://da.live/canvas#/andreas-haller/eds-coworker/index', 'https://main--eds-coworker--andreas-haller.aem.page/', 'https://main--eds-coworker--andreas-haller.aem.live/']
     .forEach((url) => assert.equal(isLinkedToPage(item(url), context), true, url));
-  const siteOnly = { id: 's', type: 'task', name: 'Site task', ...item('https://da.live/#/andreas-haller/eds-coworker') };
+  const siteOnly = {
+    id: 's', type: 'task', name: 'Site task', ...item('https://da.live/#/andreas-haller/eds-coworker'),
+  };
   const scoped = { projects: [], tasks: [siteOnly], users: [] };
   assert.equal(filterCatalog(scoped, context, 'page').tasks.length, 0);
   assert.equal(filterCatalog(scoped, context, 'site').tasks[0].matchReason, 'Linked to this site');

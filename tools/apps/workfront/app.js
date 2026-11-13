@@ -1,17 +1,48 @@
-import config from './config.js';
+/*
+ * Copyright 2026 Adobe Systems Incorporated
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/* eslint no-use-before-define: ["error", { "functions": false }] */
+import loadConfig from './config.js';
 import { createWorkfrontClient } from './api.js';
 import { connectToHost, putBriefInChat } from './host.js';
-import { filterCatalog, formatBrief, isLinkedToPage, pageKey } from './model.js';
+import {
+  filterCatalog, formatBrief, isLinkedToPage, pageKey,
+} from './model.js';
+
 const find = (selector) => document.querySelector(selector);
 const findAll = (selector) => [...document.querySelectorAll(selector)];
 const state = {
-  client: null, host: null, context: {},
+  client: null,
+  host: null,
+  context: {},
   catalog: { projects: [], tasks: [], users: [] },
-  scope: 'page', userFilter: '', tab: 'all', search: '', selected: null,
-  loading: true, error: null, mobileDetail: false, linking: new Set(), 
-  creating: false, createUncertain: false,
+  scope: 'page',
+  userFilter: '',
+  tab: 'all',
+  search: '',
+  selected: null,
+  loading: true,
+  error: null,
+  mobileDetail: false,
+  linking: new Set(),
+  creating: false,
+  createUncertain: false,
 };
-const scopeNames = { all: 'All', site: 'This site', page: 'This page', me: 'Assigned to me', user: 'Selected user' };
+const scopeNames = {
+  all: 'All', site: 'This site', page: 'This page', me: 'Assigned to me', user: 'Selected user',
+};
 const avatarColors = ['teal', 'coral', 'blue', 'gold'];
 let toastTimer;
 let loadVersion = 0;
@@ -62,12 +93,16 @@ function externalLink(url, label, iconOnly = false) {
 }
 
 function initials(name) {
-  return (name || '?').trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+  return (name || '?').trim().split(/\s+/).slice(0, 2).map((part) => part[0])
+    .join('')
+    .toUpperCase();
 }
 
 function avatar(user, size = 'small') {
-  const index = state.catalog.users.findIndex((entry) => entry.id === user?.id || entry.name === user?.name);
-  const element = node('span', `avatar avatar-${avatarColors[Math.max(index, 0) % avatarColors.length]} avatar-${size}`, initials(user?.name));
+  const index = state.catalog.users
+    .findIndex((entry) => entry.id === user?.id || entry.name === user?.name);
+  const color = avatarColors[Math.max(index, 0) % avatarColors.length];
+  const element = node('span', `avatar avatar-${color} avatar-${size}`, initials(user?.name));
   element.title = user?.name || 'Unassigned';
   element.setAttribute('aria-label', user?.name || 'Unassigned');
   return element;
@@ -77,7 +112,9 @@ function dateLabel(value, year = false) {
   if (!value) return 'No due date';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'No due date';
-  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', ...(year ? { year: 'numeric' } : {}), timeZone: 'UTC' }).format(date);
+  return new Intl.DateTimeFormat('en', {
+    month: 'short', day: 'numeric', ...(year ? { year: 'numeric' } : {}), timeZone: 'UTC',
+  }).format(date);
 }
 
 function projectFor(task) {
@@ -112,7 +149,7 @@ function chooseItem(item) {
 }
 
 function renderContext() {
-  const context = state.context;
+  const { context } = state;
   const thumbnail = find('#page-thumbnail');
   if (!thumbnail.querySelector('.icon')) {
     thumbnail.replaceChildren(icon('file-text'));
@@ -126,9 +163,12 @@ function renderContext() {
   } else {
     pageTitle.removeAttribute('href');
   }
-  find('#page-path').textContent = context.siteId
-    ? `${context.siteId.replace('/', ' / ')}${context.path ? ` / ${context.path.replace(/^\//, '').replace(/\//g, ' / ')}` : ''}`
-    : state.loading ? 'Waiting for Experience Workspace' : 'Page context is unavailable';
+  let pagePath = state.loading ? 'Waiting for Experience Workspace' : 'Page context is unavailable';
+  if (context.siteId) {
+    const path = context.path ? ` / ${context.path.replace(/^\//, '').replace(/\//g, ' / ')}` : '';
+    pagePath = `${context.siteId.replace('/', ' / ')}${path}`;
+  }
+  find('#page-path').textContent = pagePath;
   const linked = state.catalog.tasks.filter((task) => isLinkedToPage(task, context)).length;
   find('#page-link-count').replaceChildren(icon('link'), node('span', '', `${linked} linked task${linked === 1 ? '' : 's'}`));
   find('#page-link-count').hidden = !pageKey(context);
@@ -155,11 +195,15 @@ function renderControls(filtered) {
   find('.user-filter-wrap').classList.toggle('is-active', state.scope === 'user');
   find('#new-task').disabled = state.loading || Boolean(state.error) || !pageKey(state.context) || !state.catalog.projects.length;
   find('#new-task').title = !pageKey(state.context) ? 'A current page is required' : 'Create a task for this page';
-  find('#refresh').disabled = state.loading || state.creating;
+  find('#refresh').disabled = state.loading || state.creating || state.linking.size > 0;
   find('#refresh').classList.toggle('spin', state.loading);
   find('#clear-search').hidden = !state.search;
   if (find('#search').value !== state.search) find('#search').value = state.search;
-  const counts = { all: filtered.projects.length + filtered.tasks.length, projects: filtered.projects.length, tasks: filtered.tasks.length };
+  const counts = {
+    all: filtered.projects.length + filtered.tasks.length,
+    projects: filtered.projects.length,
+    tasks: filtered.tasks.length,
+  };
   findAll('[data-tab]').forEach((tab) => {
     tab.setAttribute('aria-selected', String(state.tab === tab.dataset.tab));
     tab.tabIndex = state.tab === tab.dataset.tab ? 0 : -1;
@@ -206,9 +250,12 @@ function taskRow(task) {
   const summary = node('span', 'task-summary');
   summary.append(node('span', 'task-name', task.name), node('span', 'task-project', projectFor(task)?.name || 'Project unavailable'), reasonElement(task.matchReason));
   const owner = node('span', 'task-owner');
-  const users = (task.assigneeIds || []).map((id) => state.catalog.users.find((user) => user.id === id)).filter(Boolean);
+  const users = (task.assigneeIds || [])
+    .map((id) => state.catalog.users.find((user) => user.id === id)).filter(Boolean);
   if (users.length) {
-    owner.append(avatar(users[0]), node('span', 'task-owner-name', users.length > 1 ? `${users[0].name.split(' ')[0]} +${users.length - 1}` : users[0].name.split(' ')[0]));
+    const firstName = users[0].name.split(' ')[0];
+    const ownerName = users.length > 1 ? `${firstName} +${users.length - 1}` : firstName;
+    owner.append(avatar(users[0]), node('span', 'task-owner-name', ownerName));
     owner.title = users.map((user) => user.name).join(', ');
   } else {
     owner.append(node('span', 'task-owner-name', 'Unassigned'));
@@ -239,7 +286,14 @@ function renderResults(filtered) {
     loading.setAttribute('role', 'status');
     const cards = node('div', 'skeleton-projects');
     cards.append(node('div', 'skeleton skeleton-card'), node('div', 'skeleton skeleton-card'));
-    loading.append(node('span', 'sr-only', 'Loading Workfront projects and tasks'), node('div', 'skeleton skeleton-heading'), cards, node('div', 'skeleton skeleton-row'), node('div', 'skeleton skeleton-row'), node('div', 'skeleton skeleton-row'));
+    loading.append(
+      node('span', 'sr-only', 'Loading Workfront projects and tasks'),
+      node('div', 'skeleton skeleton-heading'),
+      cards,
+      node('div', 'skeleton skeleton-row'),
+      node('div', 'skeleton skeleton-row'),
+      node('div', 'skeleton skeleton-row'),
+    );
     results.append(loading);
     return;
   }
@@ -247,15 +301,19 @@ function renderResults(filtered) {
     const retry = button('Retry connection', 'refresh-cw');
     retry.addEventListener('click', reload);
     const actions = [retry];
-    results.append(stateMessage('error', 'Workfront could not be loaded', state.error.message, actions));
+    const message = stateMessage('error', 'Workfront could not be loaded', state.error.message, actions);
+    results.append(message);
     return;
   }
   const showProjects = state.tab !== 'tasks';
   const showTasks = state.tab !== 'projects';
-  const visible = [...(showProjects ? filtered.projects : []), ...(showTasks ? filtered.tasks : [])];
+  const visible = [
+    ...(showProjects ? filtered.projects : []), ...(showTasks ? filtered.tasks : []),
+  ];
   if (!visible.length) {
     let title = `No ${state.tab === 'all' ? 'items' : state.tab} in this context`;
-    let text = `No ${state.tab === 'all' ? 'projects or tasks' : state.tab} are associated with ${scopeNames[state.scope].toLowerCase()}.`;
+    const itemType = state.tab === 'all' ? 'projects or tasks' : state.tab;
+    let text = `No ${itemType} are associated with ${scopeNames[state.scope].toLowerCase()}.`;
     const actions = [];
     if (state.search) {
       title = 'No matching items';
@@ -268,7 +326,7 @@ function renderResults(filtered) {
       text = 'The current page is unavailable from Experience Workspace.';
     } else if (state.scope === 'page') {
       title = `No ${state.tab === 'all' ? 'items' : state.tab} linked to this page`;
-      text = `There are no ${state.tab === 'all' ? 'projects or tasks' : state.tab} associated with ${state.context.path}.`;
+      text = `There are no ${itemType} associated with ${state.context.path}.`;
     }
     if (!state.search && state.scope !== 'all') {
       const all = button('View all items', 'layers');
@@ -277,7 +335,9 @@ function renderResults(filtered) {
     }
     results.append(stateMessage('empty', title, text, actions));
   } else {
-    if (!visible.some((item) => item.id === state.selected?.id && item.type === state.selected.type)) {
+    if (!visible.some((item) => (
+      item.id === state.selected?.id && item.type === state.selected.type
+    ))) {
       const first = showTasks && filtered.tasks.length ? filtered.tasks[0] : visible[0];
       state.selected = { id: first.id, type: first.type };
     }
@@ -329,7 +389,11 @@ function renderDetail(filtered) {
   });
   const top = node('div', 'detail-topline');
   const type = node('div', 'detail-type');
-  type.append(icon(item.type === 'task' ? 'list-todo' : 'folder'), node('span', 'eyebrow', item.type.toUpperCase()), node('span', 'detail-reference', `/ ${item.reference || item.id}`));
+  type.append(
+    icon(item.type === 'task' ? 'list-todo' : 'folder'),
+    node('span', 'eyebrow', item.type.toUpperCase()),
+    node('span', 'detail-reference', `/ ${item.reference || item.id}`),
+  );
   top.append(type, externalLink(item.url, `Open ${item.name} in Workfront`, true));
   inner.append(back, top, node('h2', 'detail-title', item.name));
   if (item.type === 'task') {
@@ -348,7 +412,8 @@ function renderDetail(filtered) {
   }
   const info = node('div', 'detail-metadata');
   if (item.type === 'task') {
-    const owners = (item.assigneeIds || []).map((id) => state.catalog.users.find((user) => user.id === id)).filter(Boolean);
+    const owners = (item.assigneeIds || [])
+      .map((id) => state.catalog.users.find((user) => user.id === id)).filter(Boolean);
     const content = owners.flatMap((owner) => [avatar(owner), node('span', '', owner.name)]);
     info.append(metadata('Assigned to', content.length ? content : 'Unassigned'));
   } else {
@@ -364,9 +429,16 @@ function renderDetail(filtered) {
   if (item.type === 'task') {
     const linked = isLinkedToPage(item, state.context);
     const busy = state.linking.has(item.id);
-    const link = button(linked ? 'Linked to this page' : busy ? 'Linking task' : 'Link to this page', busy ? 'loader-circle' : linked ? 'check' : 'link', `button button-secondary${linked ? ' is-linked' : ''}`);
+    let linkLabel = 'Link to this page';
+    if (busy) linkLabel = 'Linking task';
+    if (linked) linkLabel = 'Linked to this page';
+    let linkIcon = linked ? 'check' : 'link';
+    if (busy) linkIcon = 'loader-circle';
+    const link = button(linkLabel, linkIcon, `button button-secondary${linked ? ' is-linked' : ''}`);
     link.disabled = linked || busy || !pageKey(state.context);
-    link.title = linked ? 'This page is already linked to this task' : !pageKey(state.context) ? 'A current page is required' : 'Link this task to the current page';
+    link.title = 'Link this task to the current page';
+    if (!pageKey(state.context)) link.title = 'A current page is required';
+    if (linked) link.title = 'This page is already linked to this task';
     if (busy) link.querySelector('.icon').classList.add('spin');
     link.addEventListener('click', () => linkTask(item));
     actions.append(link);
@@ -400,16 +472,24 @@ function renderDetail(filtered) {
     notes.append(note);
   });
   inner.append(notes);
-  const matched = [...filtered.tasks, ...filtered.projects].find((entry) => entry.id === item.id && entry.type === item.type);
+  const matched = [...filtered.tasks, ...filtered.projects].find(
+    (entry) => entry.id === item.id && entry.type === item.type,
+  );
   const links = node('div', 'detail-match');
   if (matched) links.append(reasonElement(matched.matchReason));
-  if (item.pageUrl) links.append(externalLink(item.pageUrl, item.pageLinks?.[0]?.path || item.siteIds?.[0] || item.pageUrl));
+  if (item.pageUrl) {
+    const label = item.pageLinks?.[0]?.path || item.siteIds?.[0] || item.pageUrl;
+    links.append(externalLink(item.pageUrl, label));
+  }
   inner.append(links);
   pane.append(inner);
 }
 
 function render() {
-  const filtered = filterCatalog(state.catalog, state.context, state.scope, state.userFilter, state.search);
+  const {
+    catalog, context, scope, userFilter, search,
+  } = state;
+  const filtered = filterCatalog(catalog, context, scope, userFilter, search);
   renderContext();
   renderControls(filtered);
   renderResults(filtered);
@@ -417,22 +497,27 @@ function render() {
 }
 
 async function reload() {
-  const version = ++loadVersion;
+  if (state.creating || state.linking.size > 0) return;
+  loadVersion += 1;
+  const version = loadVersion;
   state.loading = true;
   state.error = null;
   state.mobileDetail = false;
   render();
   try {
-    state.host = await connectToHost();
-    if (!state.host.embedded || !state.host.context) {
+    const host = await connectToHost();
+    if (version !== loadVersion) return;
+    state.host = host;
+    if (!host.embedded || !host.context) {
       throw new Error('Open Workfront from the Experience Workspace editor to load page context.');
     }
-    state.context = state.host.context;
-    if (!state.client) {
-      state.client = createWorkfrontClient({ ...config, getToken: () => state.host.getToken() });
-    }
-    const catalog = await state.client.load();
+    state.context = host.context;
+    const config = await loadConfig(host.context.siteId, host.actions?.daFetch);
     if (version !== loadVersion) return;
+    const client = createWorkfrontClient({ ...config, getToken: () => host.getToken() });
+    const catalog = await client.load();
+    if (version !== loadVersion) return;
+    state.client = client;
     state.catalog = catalog;
     state.context = { ...state.context, userId: catalog.userId };
     renderEnvironment();
@@ -552,7 +637,9 @@ find('.results-tabs').addEventListener('keydown', (event) => {
   event.preventDefault();
   const tabs = findAll('[data-tab]');
   const current = tabs.findIndex((tab) => tab.dataset.tab === state.tab);
-  const index = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+  let index = (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+  if (event.key === 'Home') index = 0;
+  if (event.key === 'End') index = tabs.length - 1;
   tabs[index].click();
   tabs[index].focus();
 });

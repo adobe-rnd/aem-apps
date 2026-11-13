@@ -1,5 +1,24 @@
-import { addPageLink, pageKey, parsePageUrl, taskDraft } from './model.js';
+/*
+ * Copyright 2026 Adobe Systems Incorporated
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/* global globalThis */
+import {
+  addPageLink, pageKey, parsePageUrl, taskDraft,
+} from './model.js';
 
+const API_VERSION = 'v21.0';
 const COMMON_FIELDS = 'ID,referenceNumber,name,description,status,plannedCompletionDate,URL,notes:noteText,notes:owner:name,notes:entryDate';
 const PROJECT_FIELDS = `${COMMON_FIELDS},ownerID,projectUsers:userID`;
 const TASK_FIELDS = `${COMMON_FIELDS},projectID,assignedToID,assignments:assignedToID,assignments:roleID`;
@@ -20,7 +39,9 @@ function normalize(raw, type, origin) {
     throw new WorkfrontError('Workfront returned an incomplete item.');
   }
   const link = parsePageUrl(raw.URL);
-  const statuses = { CUR: 'In progress', INP: 'In progress', NEW: 'Not started', PLN: 'Planning', CPL: 'Complete', ONH: 'On hold' };
+  const statuses = {
+    CUR: 'In progress', INP: 'In progress', NEW: 'Not started', PLN: 'Planning', CPL: 'Complete', ONH: 'On hold',
+  };
   return {
     id: raw.ID,
     type,
@@ -32,10 +53,15 @@ function normalize(raw, type, origin) {
     dueDate: raw.plannedCompletionDate || null,
     projectId: raw.projectID,
     ownerId: raw.ownerID,
-    memberIds: [...new Set([raw.ownerID, ...(raw.projectUsers || []).map((entry) => entry.userID)].filter(Boolean))],
-    assigneeIds: [...new Set([raw.assignedToID, ...(raw.assignments || []).map((entry) => entry.assignedToID)].filter(Boolean))],
+    memberIds: [...new Set([
+      raw.ownerID, ...(raw.projectUsers || []).map((entry) => entry.userID),
+    ].filter(Boolean))],
+    assigneeIds: [...new Set([
+      raw.assignedToID, ...(raw.assignments || []).map((entry) => entry.assignedToID),
+    ].filter(Boolean))],
     // Role-only assignments: a job role is assigned but no specific user has been picked yet.
-    roleIds: [...new Set((raw.assignments || []).filter((entry) => !entry.assignedToID).map((entry) => entry.roleID).filter(Boolean))],
+    roleIds: [...new Set((raw.assignments || [])
+      .filter((entry) => !entry.assignedToID).map((entry) => entry.roleID).filter(Boolean))],
     pageUrl: typeof raw.URL === 'string' ? raw.URL.trim() : '',
     siteIds: link ? [link.siteId] : [],
     pageLinks: link?.path ? [link] : [],
@@ -47,7 +73,9 @@ function normalize(raw, type, origin) {
   };
 }
 
-export function createWorkfrontClient({ workfrontOrigin, proxyOrigin, apiVersion = 'v21.0', getToken = () => '', fetchImpl = globalThis.fetch }) {
+export function createWorkfrontClient({
+  workfrontOrigin, proxyOrigin, getToken = () => '', fetchImpl = globalThis.fetch,
+}) {
   let origin;
   try {
     const url = new URL(workfrontOrigin);
@@ -57,9 +85,6 @@ export function createWorkfrontClient({ workfrontOrigin, proxyOrigin, apiVersion
     origin = url.origin;
   } catch {
     throw new WorkfrontError('Configure a valid HTTPS Workfront origin.');
-  }
-  if (!/^v\d+\.\d+$/.test(apiVersion)) {
-    throw new WorkfrontError('Configure a supported Workfront API version, such as v21.0.');
   }
   let apiOrigin = origin;
   if (proxyOrigin) {
@@ -72,7 +97,7 @@ export function createWorkfrontClient({ workfrontOrigin, proxyOrigin, apiVersion
       throw new WorkfrontError('Configure a valid HTTPS Workfront proxy origin.');
     }
   }
-  const base = `${apiOrigin}/attask/api/${apiVersion}`;
+  const base = `${apiOrigin}/attask/api/${API_VERSION}`;
   const pendingLinks = new Map();
 
   async function request(resource, parameters = {}, method = 'GET') {
@@ -116,7 +141,11 @@ export function createWorkfrontClient({ workfrontOrigin, proxyOrigin, apiVersion
     const records = [];
     const seen = new Set();
     for (let offset = 0; ; offset += PAGE_SIZE) {
-      const batch = await request(`${resource}/search`, { fields, '$$LIMIT': PAGE_SIZE, '$$FIRST': offset, ID_Sort: 'asc' });
+      // Pages must be processed sequentially to detect repeated results.
+      // eslint-disable-next-line no-await-in-loop
+      const batch = await request(`${resource}/search`, {
+        fields, $$LIMIT: PAGE_SIZE, $$FIRST: offset, ID_Sort: 'asc',
+      });
       if (!Array.isArray(batch)) throw new WorkfrontError('Workfront returned an invalid result list.');
       if (batch.length && batch.every((entry) => seen.has(entry.ID))) {
         throw new WorkfrontError('Workfront is not advancing through result pages.');
@@ -150,7 +179,9 @@ export function createWorkfrontClient({ workfrontOrigin, proxyOrigin, apiVersion
         users: [...people.values()].map((user) => ({
           id: user.ID,
           name: user.name,
-          roleIds: [...new Set([user.roleID, ...(user.userRoles || []).map((entry) => entry.roleID)].filter(Boolean))],
+          roleIds: [...new Set([
+            user.roleID, ...(user.userRoles || []).map((entry) => entry.roleID),
+          ].filter(Boolean))],
         })).sort((first, second) => first.name.localeCompare(second.name)),
       };
     },

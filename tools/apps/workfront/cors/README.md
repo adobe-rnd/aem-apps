@@ -1,6 +1,6 @@
 # Workfront CORS Proxy
 
-A Cloudflare Worker that lets the Workfront plugin call `https://cashubv2workfront.my.workfront.com` from the `da.live` domain.
+A Cloudflare Worker that lets the Workfront plugin call its configured Workfront tenant from the plugin's origin.
 
 - Only forwards `/attask/api/vX.Y/...` paths to the fixed `WORKFRONT_ORIGIN`; it is not an open proxy.
 - Only answers requests whose `Origin` is in `ALLOWED_ORIGINS` (exact match, or `*` for one hostname label).
@@ -12,7 +12,7 @@ A Cloudflare Worker that lets the Workfront plugin call `https://cashubv2workfro
 Edit [wrangler.toml](./wrangler.toml):
 
 - `WORKFRONT_ORIGIN`: the Workfront tenant.
-- `ALLOWED_ORIGINS`: the origins that host the plugin (`index.html`).
+- `ALLOWED_ORIGINS`: the origins that host the plugin (`workfront.html`).
 
 ## Run and Deploy
 
@@ -24,7 +24,7 @@ npx wrangler dev      # local at http://localhost:8787
 npx wrangler deploy   # https://workfront-cors-proxy.<your-subdomain>.workers.dev
 ```
 
-Then set `proxyOrigin` in [../config.js](../config.js) to the deployed Worker URL. Links to Workfront records still use `workfrontOrigin`.
+Then set `workfront.origin.proxy` in the DA Config default **data** sheet to the deployed Worker origin, alongside `workfront.origin`. The Worker's `WORKFRONT_ORIGIN` must match that tenant, and `ALLOWED_ORIGINS` must contain the deployed plugin origin. Links to Workfront records still use `workfront.origin`. Leave the proxy key blank or omit it to call Workfront directly; see the [configuration rules](../README.md#live-connection).
 
 ## Test
 
