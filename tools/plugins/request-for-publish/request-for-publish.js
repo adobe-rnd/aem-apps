@@ -67,6 +67,14 @@ function getContextOrgSite(context = {}) {
   };
 }
 
+function normalizeContext(context = {}) {
+  return {
+    ...context,
+    ...getContextOrgSite(context),
+    path: context.path.replace(/\.html$/, ''),
+  };
+}
+
 class RequestForPublishPlugin extends LitElement {
   static properties = {
     context: { attribute: false },
@@ -526,11 +534,11 @@ customElements.define('request-for-publish', RequestForPublishPlugin);
   try {
     // Wait for DA SDK
     console.log('[Request Publish Plugin] Waiting for DA SDK...');
-    const { context, token } = await DA_SDK;
+    const { context: sdkContext, token } = await DA_SDK;
+    const context = normalizeContext(sdkContext);
     console.log('[Request Publish Plugin] Got SDK context:', context);
 
-    const { org, site } = getContextOrgSite(context);
-    const { path } = context;
+    const { org, site, path } = context;
 
     // Create and append the component
     const cmp = document.createElement('request-for-publish');
@@ -550,14 +558,14 @@ customElements.define('request-for-publish', RequestForPublishPlugin);
  * @param {Object} sdk - The DA SDK with context, token, actions
  * @returns {Object} Plugin configuration
  */
-export default async function init({ context, token }) {
+export default async function init({ context: sdkContext, token }) {
+  const context = normalizeContext(sdkContext);
   return {
     title: 'Request Publish',
     searchEnabled: false,
     panel: {
       render: (container) => {
-        const { org, site } = getContextOrgSite(context);
-        const { path } = context;
+        const { org, site, path } = context;
         const cmp = document.createElement('request-for-publish');
         cmp.context = context;
         cmp.path = `/${org}/${site}${path}`;
