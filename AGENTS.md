@@ -63,6 +63,10 @@ The repository provides the basic structure, blocks, and configuration needed to
   - Good: `.{blockname} .item-list`   
 - Avoid classes `{blockname}-container` and `{blockname}-wrapper` as those are used on sections and could be confusing.
 
+### Document Authoring and Experience Workspace UI
+- When extending Document Authoring (DA) or Experience Workspace (EW), align UI changes with the [Experience Workspace style guide](https://main--da-nx--adobe.aem.live/docs/style-guide/style-guide.html).
+- Prefer its shared NX styles and documented components over duplicating patterns; scope custom selectors to the relevant app or block root and follow the mobile-first breakpoints above.
+
 ### HTML
 - Use semantic HTML5 elements
 - Ensure accessibility standards (ARIA labels, proper heading hierarchy)

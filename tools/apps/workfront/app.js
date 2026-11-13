@@ -55,13 +55,18 @@ function node(tag, className = '', text = '') {
 }
 
 function icon(name, className = '') {
+  if (name === 'loader-circle') {
+    const spinner = node('span', 'nx-loading-spinner');
+    spinner.setAttribute('aria-hidden', 'true');
+    return spinner;
+  }
   const element = node('span', `icon${className ? ` ${className}` : ''}`);
   element.dataset.icon = name;
   element.setAttribute('aria-hidden', 'true');
   return element;
 }
 
-function button(text, iconName, className = 'button button-secondary') {
+function button(text, iconName, className = 'button nx-action-btn') {
   const element = node('button', className);
   element.type = 'button';
   if (iconName) element.append(icon(iconName));
@@ -79,7 +84,7 @@ function safeUrl(value) {
 }
 
 function externalLink(url, label, iconOnly = false) {
-  const element = node('a', iconOnly ? 'icon-button small' : 'linked-page');
+  const element = node('a', iconOnly ? 'icon-button small nx-action-btn-icon nx-btn-sm' : 'linked-page');
   const href = safeUrl(url);
   if (href) element.href = href;
   else element.setAttribute('aria-disabled', 'true');
@@ -381,7 +386,7 @@ function renderDetail(filtered) {
     return;
   }
   const inner = node('div', 'detail-inner');
-  const back = button('Back to items', 'arrow-left', 'button button-quiet mobile-back');
+  const back = button('Back to items', 'arrow-left', 'button nx-action-btn-quiet mobile-back');
   back.addEventListener('click', () => {
     state.mobileDetail = false;
     render();
@@ -398,7 +403,7 @@ function renderDetail(filtered) {
   inner.append(back, top, node('h2', 'detail-title', item.name));
   if (item.type === 'task') {
     const project = projectFor(item);
-    const parent = button(project?.name || 'Project unavailable', 'folder', 'detail-project');
+    const parent = button(project?.name || 'Project unavailable', 'folder', 'detail-project nx-action-btn-quiet');
     parent.disabled = !project;
     parent.addEventListener('click', () => { state.tab = 'all'; chooseItem(project); });
     inner.append(parent);
@@ -423,7 +428,7 @@ function renderDetail(filtered) {
   info.append(metadata('Due date', [icon('calendar-days'), node('span', '', dateLabel(item.dueDate, true))]));
   inner.append(info);
   const actions = node('div', 'detail-actions');
-  const copy = button('Copy to chat', 'message-square', 'button button-dark');
+  const copy = button('Copy to chat', 'message-square', 'button nx-btn-primary');
   copy.addEventListener('click', () => copyBrief(item));
   actions.append(copy);
   if (item.type === 'task') {
@@ -434,12 +439,11 @@ function renderDetail(filtered) {
     if (linked) linkLabel = 'Linked to this page';
     let linkIcon = linked ? 'check' : 'link';
     if (busy) linkIcon = 'loader-circle';
-    const link = button(linkLabel, linkIcon, `button button-secondary${linked ? ' is-linked' : ''}`);
+    const link = button(linkLabel, linkIcon, `button nx-action-btn${linked ? ' is-linked' : ''}`);
     link.disabled = linked || busy || !pageKey(state.context);
     link.title = 'Link this task to the current page';
     if (!pageKey(state.context)) link.title = 'A current page is required';
     if (linked) link.title = 'This page is already linked to this task';
-    if (busy) link.querySelector('.icon').classList.add('spin');
     link.addEventListener('click', () => linkTask(item));
     actions.append(link);
   } else {
@@ -585,7 +589,7 @@ async function createTask(event) {
   state.creating = true;
   find('#create-error').hidden = true;
   findAll('#create-form input, #create-form select, #create-form textarea, #create-form button').forEach((element) => { element.disabled = true; });
-  find('#submit-task').replaceChildren(icon('loader-circle', 'spin'), document.createTextNode('Creating task'));
+  find('#submit-task').replaceChildren(icon('loader-circle'), document.createTextNode('Creating task'));
   try {
     const task = await state.client.createTask(values, state.context);
     state.catalog.tasks.push(task);
