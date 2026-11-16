@@ -10,7 +10,7 @@ There is no role selector. When the caller is both the requester and an approver
 
 ## Opting in
 
-V2 is opt-in: deploy a worker supporting the `/api/v2/` contract, register the
+V2 is opt-in. The [Publish Requests Setup](../../apps/publish-requests-setup/README.md) app does the setup below from one page, and this plugin links to it when the site isn't registered or has no workflow config. By hand: deploy a worker supporting the `/api/v2/` contract, register the
 site and its requests-sheet access, then point the inline library entry to
 `/tools/plugins/request-for-publish-v2/request-for-publish-v2.html`. Use
 `/tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2` for the inbox and

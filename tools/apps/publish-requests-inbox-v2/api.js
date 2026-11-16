@@ -119,6 +119,21 @@ export function getLiveHostFromConfig(org, site, config) {
   return `main--${site}--${org}.aem.live`;
 }
 
+// Why the site can't take requests yet, or '' when it can or the worker can't say.
+export async function getSetupGap(org, site, token) {
+  const query = `org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
+  try {
+    const regResp = await fetch(`${getWorkerUrl()}/api/site-config?${query}`, getOpts(token));
+    if (!regResp.ok) {
+      const { availableProviders } = await regResp.json().catch(() => ({}));
+      if (Array.isArray(availableProviders)) return "isn't registered for publish requests";
+    }
+    const configResp = await fetch(`${getWorkerUrl()}/api/v2/config?${query}`, getOpts(token));
+    if (configResp.ok && !(await configResp.json()).config) return 'has no approval rules';
+  } catch { /* fail open: the inbox reports its own errors */ }
+  return '';
+}
+
 /**
  * Fetch per-customer accent color overrides from the workflow config (display).
  * @param {string} org - Organization

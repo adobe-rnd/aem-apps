@@ -43,6 +43,8 @@ describe('content refs', () => {
     assert.equal(links.live, 'https://release-42--website--example.aem.live/drafts/page');
     assert.equal(new URL(links.inbox).searchParams.get('ref'), 'rpfix');
     assert.equal(new URL(links.myRequests).searchParams.get('ref'), 'rpfix');
+    assert.equal(new URL(links.setup).pathname, '/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup');
+    assert.equal(new URL(links.setup).searchParams.get('ref'), 'rpfix');
   });
 });
 
@@ -372,6 +374,22 @@ describe('uninvolved viewers', () => {
   it('blocks on duplicate page records', () => {
     const view = deriveView(context, data({ page: [pending, { ...pending, requester: 'other@example.com' }] }));
     assert.equal(view.view, 'blocked');
+  });
+  it('flags an unregistered site as needing setup', async () => {
+    const { client } = fixture({
+      fail: () => response({ error: 'example/website is not registered for publish workflow' }, 403),
+    });
+    await assert.rejects(client.load(context), (error) => error.setup === true && /isn't registered/.test(error.message));
+  });
+  it('flags a site without workflow config as needing setup', async () => {
+    const { client } = fixture({
+      fail: (url) => (url.pathname === '/api/v2/config' ? response({ config: null }) : null),
+    });
+    await assert.rejects(client.load(context), (error) => error.setup === true);
+  });
+  it('keeps other access denials as plain errors', async () => {
+    const { client } = fixture({ fail: () => response({ error: 'User does not have minimum permissions' }, 403) });
+    await assert.rejects(client.load(context), (error) => !error.setup && error.status === 403);
   });
   it('reads the explicit page queue', async () => {
     const { client, calls } = fixture({ page: [pending] });

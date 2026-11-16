@@ -403,7 +403,8 @@ class RequestForPublish extends LitElement {
     if (this._receipt && this.page) return this.renderReceipt();
     if (this._error) {
       return html`<section class="empty"><h2>Request status unavailable</h2>
-      <p>${this._error.status === 401 ? 'Your session has expired. Reopen the plugin after signing in.' : this._error.message}</p></section>`;
+      <p>${this._error.status === 401 ? 'Your session has expired. Reopen the plugin after signing in.' : this._error.message}</p>
+      ${this._error.setup && this.page ? html`<a href=${pageLinks(this.page, new URLSearchParams(window.location.search).get('env')).setup} target="_blank" rel="noopener noreferrer">Open publish requests setup <span aria-hidden="true">↗</span></a>` : nothing}</section>`;
     }
     const { state } = this;
     if (state.view === 'loading') return html`<p class="loading" role="status">Checking publish request…</p>`;

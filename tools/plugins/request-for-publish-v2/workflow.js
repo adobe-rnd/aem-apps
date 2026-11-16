@@ -19,6 +19,8 @@ const WORKERS = {
   local: 'http://localhost:8787',
 };
 const INBOX = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2';
+const SETUP = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup';
+const SETUP_HINT = 'A config admin for the site can finish setup.';
 // Multi-step approvals are served by the worker's v2 API only.
 const API = '/api/v2';
 
@@ -171,6 +173,7 @@ export function pageLinks(context, env, moduleUrl = import.meta.url) {
     live: `https://${contentRef}--${site}--${org}.aem.live${delivered}`,
     inbox: `${INBOX}?${query}`,
     myRequests: `${INBOX}?${query}&requester=true`,
+    setup: `${SETUP}?${query}`,
   };
 }
 
@@ -337,8 +340,13 @@ export function createClient({
         list(context, { role: 'requester', path: context.path }),
         list(context, { role: 'approver', path: context.path }),
         list(context, { role: 'page', path: context.path }),
-      ]);
-      if (!configResult.config) throw failure('The publish workflow is not configured for this site.');
+      ]).catch((error) => {
+        if (error.status !== 403 || !/not registered/i.test(error.message)) throw error;
+        throw failure(`This site isn't registered for publish requests yet. ${SETUP_HINT}`, { status: 403, setup: true });
+      });
+      if (!configResult.config) {
+        throw failure(`The publish workflow is not configured for this site. ${SETUP_HINT}`, { setup: true });
+      }
       if (!Array.isArray(people.approvers) || !Array.isArray(people.cc)) {
         throw failure('The workflow service returned invalid reviewers.');
       }

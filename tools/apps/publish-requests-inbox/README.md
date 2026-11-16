@@ -107,13 +107,9 @@ If a user is not an authorized approver for the given content path (after group 
 
 If the user has no pending requests to act on, the inbox displays an empty state message.
 
-### 11. Missing Configuration
+### 11. Site Not Set Up
 
-If the `publish-workflow-config` tab is not found in the DA config at either the site level (`/config/{org}/{site}/`) or the org level (`/config/{org}/`), the app displays an error message:
-
-> *"Publish workflow configuration not found. Please ensure the "publish-workflow-config" tab exists in the DA config for site "{org}/{site}" or org "{org}"."*
-
-This prevents the app from operating without proper approver rules.
+Before loading requests, the app checks that the site exists, is registered with the worker (`GET /api/site-config`), and has `publish-workflow-config` rules in the site or org config. If it isn't registered or has no rules, it shows **Not Set Up Yet** with a link to the [Publish Requests Setup](../publish-requests-setup/README.md) app and a **Check Again** button. If the config can't be read, or the worker has no `/api/site-config` route, the app carries on and lets the worker gate each call.
 
 ### 12. Session/Login Issues
 
@@ -161,4 +157,6 @@ The app renders one of these states at any time:
 | `rejected` | Request successfully rejected and notifications sent |
 | `no-request` | No pending request found for the given path |
 | `unauthorized` | Current user is not an authorized approver (after group resolution) |
-| `error` | Missing required URL parameters, auth failure, or missing workflow configuration |
+| `site-not-found` | The org exists but has no such site |
+| `not-set-up` | Unregistered or no approval rules; links to the setup app |
+| `error` | Missing required URL parameters or auth failure |
