@@ -94,7 +94,8 @@ export default async function inspectBlockLibrary({
       }
       let status = exists ? 'unregistered' : 'absent';
       if (matches.length) status = exists ? 'existing' : 'missing-page';
-      const environment = target.environment === 'prod' ? 'prod' : 'stage';
+      const environmentQuery = target.environment === 'prod'
+        ? '' : '?da-admin=stage&da-collab=stage';
       return [name, {
         status,
         registered: Boolean(matches.length),
@@ -103,7 +104,7 @@ export default async function inspectBlockLibrary({
         codeStatus,
         name,
         displayName: matches[0]?.row.name || name,
-        editorURL: `https://da.live/canvas?da-admin=${environment}&da-collab=${environment}#/${target.org}/${target.site}${path.slice(0, -5)}`,
+        editorURL: `https://da.live/canvas${environmentQuery}#/${target.org}/${target.site}${path.slice(0, -5)}`,
       }];
     } catch (error) {
       signal?.throwIfAborted();

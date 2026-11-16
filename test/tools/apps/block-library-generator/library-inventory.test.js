@@ -21,7 +21,10 @@ import inspectBlockLibrary from '../../../../tools/apps/block-library-generator/
 
 const target = getProbeTarget('prod');
 const multisheetIndex = JSON.parse(await readFile(new URL('./fixtures/multisheet-library.json', import.meta.url), 'utf8'));
-function fixture() {
+function fixture(environment = 'prod') {
+  const selected = getProbeTarget(environment);
+  const contentOrigin = environment === 'prod' ? 'https://content.da.live' : 'https://stage-content.da.live';
+  const contentRoot = `${contentOrigin}/${selected.org}/${selected.site}`;
   const calls = [];
   const index = {
     ':type': 'sheet',
@@ -29,13 +32,13 @@ function fixture() {
     limit: 2,
     offset: 0,
     data: [
-      { name: 'Cards', path: 'https://content.da.live/msagolj/ew/docs/library/blocks/cards' },
-      { name: 'Columns', path: 'https://content.da.live/msagolj/ew/docs/library/blocks/columns' },
+      { name: 'Cards', path: `${contentRoot}/docs/library/blocks/cards` },
+      { name: 'Columns', path: `${contentRoot}/docs/library/blocks/columns` },
     ],
   };
   const states = new Map([['cards', 200], ['columns', 200]]);
   const options = {
-    target,
+    target: selected,
     blockNames: ['cards', 'columns', 'hero'],
     daFetch: async (url, init) => {
       calls.push({ url, method: init.method });
@@ -44,7 +47,7 @@ function fixture() {
         return Response.json({
           library: {
             data: [{
-              title: 'Blocks', path: 'https://content.da.live/msagolj/ew/docs/library/blocks.json',
+              title: 'Blocks', path: `${contentRoot}/docs/library/blocks.json`,
             }],
           },
         });
@@ -98,10 +101,21 @@ describe('Read-only existing library inventory', () => {
     assert.equal(value.blocks.cards.status, 'existing');
     assert.equal(value.blocks.columns.status, 'existing');
     assert.equal(value.blocks.hero.status, 'absent');
-    assert.match(value.blocks.cards.editorURL, /da-admin=prod.*#\/msagolj\/ew\/docs\/library\/blocks\/cards$/);
+    assert.equal(value.blocks.cards.editorURL, 'https://da.live/canvas#/msagolj/ew/docs/library/blocks/cards');
+    assert.equal(value.blocks.columns.editorURL, 'https://da.live/canvas#/msagolj/ew/docs/library/blocks/columns');
+    assert.equal(value.blocks.hero.editorURL, 'https://da.live/canvas#/msagolj/ew/docs/library/blocks/hero');
     assert.equal(value.paths.indexPath, '/docs/library/blocks.json');
     assert.equal(calls.length, 5);
     assert.ok(calls.every((call) => call.method === 'GET'));
+  });
+
+  it('keeps explicit non-default environment parameters on Stage page links', async () => {
+    const { options, calls } = fixture('stage');
+    const value = await inspectBlockLibrary(options);
+    assert.equal(value.blocks.cards.status, 'existing');
+    assert.equal(value.blocks.cards.editorURL, 'https://da.live/canvas?da-admin=stage&da-collab=stage#/msagolj/ew/docs/library/blocks/cards');
+    assert.equal(value.blocks.hero.editorURL, 'https://da.live/canvas?da-admin=stage&da-collab=stage#/msagolj/ew/docs/library/blocks/hero');
+    assert.ok(calls.every(({ url, method }) => method === 'GET' && url.startsWith('https://stage-admin.da.live/')));
   });
 
   it('distinguishes missing registered pages and unregistered existing pages', async () => {

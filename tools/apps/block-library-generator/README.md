@@ -91,7 +91,8 @@ silently become default pages.
 
 ## Manage existing pages
 
-- **Open** opens the current page in DA for normal authoring.
+- **Open** opens the current page in DA for normal authoring. Production page
+  links use the default environment without query overrides.
 - **Recreate** asks you to confirm replacement of the **entire page, including
   any author edits**, up front. It then automatically analyses the block,
   submits the prompt, validates the result, replaces the page and previews it.
