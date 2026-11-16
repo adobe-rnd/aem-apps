@@ -18,15 +18,13 @@
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from 'da-lit';
 import {
-  readConfig, writeConfig, checkSiteExists, getRegistration, saveRegistration,
-  getWorkflowConfig, saveWorkflowConfig,
+  readConfig, getSetup, saveRegistration, getWorkflowConfig, saveWorkflowConfig,
 } from './api.js';
 import {
-  RULES, STEPS, SETTINGS, GROUPS, emptyConfig, rowsOf, toList,
-  detectVersion, installState, rowsToReplace, applyInstall, tabsToConfig,
-  readRules, rulesToRows, readWorkflows, workflowsToRows, readGroups, groupsToRows,
-  missingGroups, emailAddresses, suggestDomains, describeProblem,
-  readSettings, settingsValues, guidanceItems, settingsToRows,
+  SETTINGS, rowsOf, toList, detectVersion, installState, rowsToReplace, tabsToConfig,
+  suggestVersion, activeConfigOf, readRules, readWorkflows, readGroups,
+  missingGroups, emailAddresses, suggestDomains, describeProblem, tabLabel,
+  blankRule, draftFromConfig, draftToTabs, mergeTabs, readSetup, problemCode,
 } from './model.js';
 
 const NX = 'https://da.live/nx2';
@@ -56,20 +54,34 @@ try {
 const PROVIDER_LABELS = { default: 'Default (Adobe)', 'custom-api': 'Custom API', gmail: 'Gmail' };
 const CUSTOM_API_FIELDS = ['apiUrl', 'apiKey', 'fromAddress', 'fromName'];
 const UNAVAILABLE = "The publish requests service didn't answer.";
-const VERSION_LABELS = { v1: 'Request publish v1', v2: 'Request publish v2' };
+// Worker codes that mean the site itself isn't ready, rather than an outage.
+const SITE_PROBLEMS = {
+  'site-not-found': 'Edge Delivery Services site does not exist. Please create it first.',
+  'preview-write-required': 'You need at least the basic_author role on the Edge Delivery Services site.',
+};
+const ROLES_DOCS = 'https://www.aem.live/docs/authentication-setup-authoring#admin-roles';
+const DEFAULT_PROVIDER_WARNING = "Adobe's default email provider is for proof-of-concept, demos and non-production use only. Production sites must use their own email provider (custom-api).";
+const VERSION_LABELS = { v1: 'Request Publish - Single Step', v2: 'Request Publish - Multi Step' };
 const VERSION_DOCS = {
   v1: 'https://www.aem.live/docs/ew/administering/request-publish',
   v2: 'https://www.aem.live/docs/ew/administering/request-publish-v2',
 };
 const NO_ACCESS = 'You need config admin rights for this site to change its setup. Ask a config admin.';
+// Worker registration `field`s and the inputs that edit them.
+const FIELD_INPUTS = {
+  apiUrl: 'apiUrl',
+  apiKey: 'apiKey',
+  fromAddress: 'fromAddress',
+  fromName: 'fromName',
+  allowedEmailDomains: 'domains',
+  emailProvider: 'provider',
+};
+const CODE_INPUTS = { 'acknowledgement-required': 'acknowledge', 'default-provider-staff-only': 'provider' };
 
 const ok = (text) => ({ tone: 'positive', text });
 const todo = (text) => ({ tone: 'negative', text });
 const info = (text) => ({ tone: 'neutral', text });
 
-const blankRule = () => ({
-  pattern: '', workflow: '', approvers: '', cc: '',
-});
 const blankStep = () => ({
   title: '', description: '', approvers: '', cc: '', ccCanApprove: false,
 });
@@ -95,6 +107,8 @@ class PublishRequestsSetup extends LitElement {
     _draft: { state: true },
     _saving: { state: true },
     _message: { state: true },
+    _conflict: { state: true },
+    _fieldError: { state: true },
   };
 
   constructor() {
@@ -117,12 +131,21 @@ class PublishRequestsSetup extends LitElement {
     if (org && site) this.loadSite(org, site);
   }
 
+  // The worker's view wins: it is what the last save wrote, while a DA read can be a minute old.
   get version() {
+    const installed = this._workflow?.installed;
+    if (installed) return installed.version;
     return detectVersion(this._siteConfig) || detectVersion(this._orgConfig);
   }
 
+  // Nothing installed: Single Step, unless the rules use workflows.
+  get defaultVersion() {
+    return suggestVersion(this._workflow
+      ? this.activeConfig : activeConfigOf(this._siteConfig, this._orgConfig));
+  }
+
   get apiVersion() {
-    return this.version === 'v1' ? 'v1' : 'v2';
+    return ['v1', 'v2'].includes(this.version) ? this.version : this.defaultVersion;
   }
 
   get source() {
@@ -151,43 +174,53 @@ class PublishRequestsSetup extends LitElement {
     } catch { /* cross-origin iframe */ }
   }
 
+  // Reads the DA config (fast, in parallel) to pick the version, then makes one worker call.
   async loadSite(org, site) {
     this._org = org;
     this._site = site;
     this._orgSiteValue = `/${org}/${site}`;
     this._state = 'loading';
-    this._open = null;
+    this.closeSection();
     this._message = null;
     this._readOnly = false;
-    const [exists, registration, siteRead, orgRead] = await Promise.all([
-      checkSiteExists(org, site),
-      getRegistration(org, site, this.token),
-      readConfig(org, site),
-      readConfig(org),
-    ]);
-    if (!exists) {
+    this._workflow = null;
+    const [siteRead, orgRead] = await Promise.all([readConfig(org, site), readConfig(org)]);
+    this._siteConfig = siteRead.config;
+    this._orgConfig = orgRead.config;
+    let route = this.apiVersion;
+    let setup = readSetup(await getSetup(route, org, site, this.token));
+    // A DA read up to a minute old can pick the wrong route; the worker's `installed` is current.
+    const installed = setup.workflow?.installed?.version;
+    if (['v1', 'v2'].includes(installed) && installed !== route) {
+      route = installed;
+      setup = readSetup(await getSetup(route, org, site, this.token));
+    }
+    if (setup.problem === 'site-not-found') {
       this._state = 'site-not-found';
       return;
     }
-    this._registration = registration;
-    this._siteConfig = siteRead.config;
-    this._orgConfig = orgRead.config;
-    await this.loadWorkflow();
-    this._readOnly = [401, 403].includes(siteRead.status)
-      || registration.config?.canEdit === false
-      || this._workflow?.canEdit === false;
+    this._registration = setup.registration;
+    this._workflow = setup.workflow;
+    this._workflowError = setup.workflow ? '' : this.problemText(setup.problem, setup.registration.error);
+    this._readOnly = [401, 403].includes(siteRead.status) || setup.canEdit === false;
     this._state = 'ready';
   }
 
-  async loadWorkflow() {
-    const { ok: loaded, data } = await getWorkflowConfig(
-      this.apiVersion,
-      this._org,
-      this._site,
-      this.token,
-    );
-    this._workflow = loaded ? data : null;
-    this._workflowError = loaded ? '' : (data.error || UNAVAILABLE);
+  // Refreshes the workflow view (e.g. recipient-domain warnings after a registration save).
+  async refreshWorkflow() {
+    const { _org: org, _site: site } = this;
+    const { ok: loaded, data } = await getWorkflowConfig(this.apiVersion, org, site, this.token);
+    if (loaded) this._workflow = data;
+    return loaded;
+  }
+
+  problemText(code, error) {
+    if (code === 'preview-write-required') {
+      return html`${SITE_PROBLEMS[code]} <a href=${ROLES_DOCS} target="_blank" rel="noopener">Admin roles</a>`;
+    }
+    if (SITE_PROBLEMS[code]) return SITE_PROBLEMS[code];
+    if (code === 'unavailable' || !error) return UNAVAILABLE;
+    return error;
   }
 
   handleSiteSubmit(e) {
@@ -204,26 +237,35 @@ class PublishRequestsSetup extends LitElement {
 
   openSection(key) {
     this._message = null;
+    this._conflict = null;
+    this._fieldError = null;
     this._open = key;
     this._draft = this.buildDraft(key);
+    // What the draft started from, to re-apply only the user's changes after a 409.
+    this._draftBase = ['rules', 'settings'].includes(key) ? this.draftTabs(key, this._draft) : null;
   }
 
   closeSection() {
     this._open = null;
     this._draft = null;
+    this._draftBase = null;
+    this._conflict = null;
+    this._fieldError = null;
+  }
+
+  draftTabs(key, draft) {
+    return draftToTabs(key, draft, { v2: this.apiVersion === 'v2' });
   }
 
   buildDraft(key) {
     const config = this.activeConfig;
-    const rules = readRules(config);
-    const workflows = readWorkflows(config);
-    const groups = readGroups(config);
     if (key === 'registration') {
       const current = this._registration.config;
       const providers = current.availableProviders || [];
+      const used = [readRules(config), readWorkflows(config), readGroups(config)];
       const domains = current.allowedEmailDomains?.length
         ? current.allowedEmailDomains
-        : suggestDomains(emailAddresses(rules, workflows, groups));
+        : suggestDomains(emailAddresses(...used));
       return {
         provider: providers.includes(current.emailProvider) ? current.emailProvider : providers[0],
         domains: domains.join(', '),
@@ -231,20 +273,9 @@ class PublishRequestsSetup extends LitElement {
       };
     }
     if (key === 'install') {
-      return { version: ['v1', 'v2'].includes(this.version) ? this.version : 'v2' };
+      return { version: ['v1', 'v2'].includes(this.version) ? this.version : this.defaultVersion };
     }
-    if (key === 'rules') {
-      const missing = missingGroups(rules, workflows, groups).map((group) => ({ group, email: '' }));
-      return {
-        rules: rules.length ? rules : [{ ...blankRule(), pattern: '/*' }],
-        workflows,
-        groups: [...groups, ...missing],
-      };
-    }
-    const settings = readSettings(config);
-    return {
-      settings, values: settingsValues(settings), items: guidanceItems(settings).join('\n'),
-    };
+    return draftFromConfig(key, config);
   }
 
   rerender() {
@@ -268,35 +299,20 @@ class PublishRequestsSetup extends LitElement {
     this.rerender();
   }
 
-  showResult(section, type, text) {
+  // Shows the result next to the section's Save button (or its header once closed), in view.
+  async showResult(section, type, text) {
     this._message = { section, type, text };
+    await this.updateComplete;
+    const fieldId = this._fieldError?.field;
+    const target = (fieldId && this.shadowRoot.querySelector(`#${fieldId}`))
+      || this.shadowRoot.querySelector(`#message-${section || 'site'}`);
+    target?.scrollIntoView?.({ block: 'nearest' });
+    target?.focus?.({ preventScroll: true });
   }
 
-  async saveConfig(section, change, successText) {
+  async saveWorkflowTabs(section, body, successText, api = this.apiVersion) {
     this._saving = true;
-    const { config, status } = await readConfig(this._org, this._site);
-    if (!config && status !== 404) {
-      this._saving = false;
-      if ([401, 403].includes(status)) this._readOnly = true;
-      this.showResult(section, 'error', this._readOnly ? NO_ACCESS : `Couldn't read the site config (${status}).`);
-      return;
-    }
-    const next = change(config || emptyConfig());
-    const result = await writeConfig(this._org, this._site, next);
-    this._saving = false;
-    if (!result.ok) {
-      if ([401, 403].includes(result.status)) this._readOnly = true;
-      this.showResult(section, 'error', this._readOnly ? NO_ACCESS : `Couldn't save the site config (${result.status}).`);
-      return;
-    }
-    this._siteConfig = next;
-    this.closeSection();
-    this.showResult(section, 'success', successText);
-  }
-
-  async saveWorkflowTabs(section, body, successText) {
-    this._saving = true;
-    const result = await saveWorkflowConfig(this.apiVersion, this._org, this._site, {
+    const result = await saveWorkflowConfig(api, this._org, this._site, {
       version: this._workflow.version, ...body,
     }, this.token);
     this._saving = false;
@@ -307,44 +323,98 @@ class PublishRequestsSetup extends LitElement {
       return;
     }
     if (result.status === 409) {
-      await this.loadWorkflow();
-      this.showResult(section, 'error', 'Someone changed these settings since you opened them. Your edits are still here: save again to replace their changes, or cancel to see them.');
+      await this.handleConflict(section, body.tabs);
       return;
     }
-    if (result.data.code === 'config-write-required') this._readOnly = true;
-    const { errors, error } = result.data;
-    this.showResult(section, 'error', errors?.length ? errors.map(describeProblem) : error || `Couldn't save (${result.status}).`);
+    const { errors, error, code } = result.data;
+    if (code === 'config-write-required') this._readOnly = true;
+    const problems = errors?.length ? errors.map(describeProblem) : null;
+    if (section === 'install' && errors?.some((e) => e.code === 'requires-v2')) {
+      problems.unshift(`${VERSION_LABELS.v1} can't use this site's ${VERSION_LABELS.v2} rules. Nothing was saved. Remove the workflows from the approval rules first, or keep ${VERSION_LABELS.v2}:`);
+    }
+    const definite = SITE_PROBLEMS[problemCode(result)];
+    this.showResult(section, 'error', problems || definite || error || `Couldn't save (${result.status}).`);
+  }
+
+  // A 409 means the tabs changed since they loaded. Rebuild the draft from the fresh tabs and
+  // re-apply only the user's changes; ask before replacing anything both sides changed.
+  async handleConflict(section, mine) {
+    const reloaded = await this.refreshWorkflow();
+    if (!reloaded) {
+      this.showResult(section, 'error', `Someone changed these settings since you opened them, and they couldn't be reloaded. ${UNAVAILABLE}`);
+      return;
+    }
+    if (!this._draftBase || !mine) {
+      this.showResult(section, 'error', 'The config changed since it loaded. It is reloaded now: save again.');
+      return;
+    }
+    const theirs = this.draftTabs(section, draftFromConfig(section, this.activeConfig));
+    const merged = mergeTabs(this._draftBase, mine, theirs);
+    this._draftBase = theirs;
+    if (!merged.ok) {
+      this._conflict = { section, incoming: merged.incoming };
+      this.showResult(section, 'error', [
+        "Someone saved other changes to these settings while you were editing, and they can't be combined with yours automatically. Your edits are still here.",
+        ...this.describeIncoming(merged.incoming),
+        'Save again to replace their version with yours, or cancel to keep theirs.',
+      ]);
+      return;
+    }
+    const dropSteps = this._draft?.dropSteps;
+    this._draft = {
+      ...draftFromConfig(section, { ...this.activeConfig, ...tabsToConfig(merged.tabs) }),
+      ...(dropSteps ? { dropSteps } : {}),
+    };
+    if (merged.conflicts.length) {
+      this._conflict = { section, conflicts: merged.conflicts };
+      this.showResult(section, 'error', [
+        'Someone saved changes while you were editing. Theirs are now included, except where you both changed the same thing; there your version is kept:',
+        ...merged.conflicts.map(({ tab, key, theirs: rows }) => `${tabLabel(tab)}: ${key}. Theirs: ${rows ? this.describeRows(rows) : 'removed'}`),
+        'Save again to keep your version of these, or cancel to keep theirs.',
+      ]);
+      return;
+    }
+    this.showResult(section, 'info', 'Someone saved changes while you were editing. Theirs are now included with yours: check them and save again.');
+  }
+
+  describeRows(rows) {
+    return rows.map((row) => Object.entries(row).filter(([, v]) => v !== '')
+      .map(([k, v]) => `${k}: ${v}`).join(', ')).join('; ');
+  }
+
+  describeIncoming(incoming) {
+    return Object.entries(incoming).map(([tab, rows]) => `Their ${tabLabel(tab)}: ${rows?.length ? this.describeRows(rows) : 'none'}`);
   }
 
   async saveInstall() {
     const { version } = this._draft;
-    await this.saveConfig('install', (c) => applyInstall(c, version), `${VERSION_LABELS[version]} is installed.`);
-    await this.loadWorkflow();
+    // One worker write: the response is the view for the installed version, `installed` included.
+    await this.saveWorkflowTabs('install', { install: true }, `${VERSION_LABELS[version]} is installed.`, version);
   }
 
   saveRules() {
-    const { rules, workflows, groups } = this._draft;
-    const tabs = {
-      [RULES]: rulesToRows(rules),
-      [GROUPS]: groups.length ? groupsToRows(groups) : null,
-    };
-    if (this.version === 'v2') tabs[STEPS] = workflows.length ? workflowsToRows(workflows) : null;
-    this.saveWorkflowTabs('rules', { tabs }, 'Approval rules saved.');
+    this._conflict = null;
+    this.saveWorkflowTabs('rules', { tabs: this.draftTabs('rules', this._draft) }, 'Approval rules saved.');
   }
 
   saveSettings() {
-    const { settings, values, items } = this._draft;
-    const rows = settingsToRows(settings, values, items.split('\n'));
-    this.saveWorkflowTabs('settings', { tabs: { [SETTINGS]: rows.length ? rows : null } }, 'Settings saved.');
+    this._conflict = null;
+    this.saveWorkflowTabs('settings', { tabs: this.draftTabs('settings', this._draft) }, 'Settings saved.');
   }
 
   useSiteRules() {
     this.saveWorkflowTabs('rules', { tabs: {}, copyFromOrg: true }, 'The org rules were copied to this site. Edit them here from now on.');
   }
 
+  registrationError(field, text) {
+    this._fieldError = field ? { field, text } : null;
+    this.showResult('registration', 'error', text);
+  }
+
   async saveRegistrationForm(e) {
     e.preventDefault();
     if (!this.canEdit) return;
+    this._fieldError = null;
     const { provider, acknowledged } = this._draft;
     const form = new FormData(e.target);
     const fields = provider === 'custom-api'
@@ -353,11 +423,11 @@ class PublishRequestsSetup extends LitElement {
       : {};
     const domains = toList(this._draft.domains);
     if (provider === 'custom-api' && !domains.length) {
-      this.showResult('registration', 'error', 'Add at least one allowed email domain, or emails to your approvers will be blocked.');
+      this.registrationError('domains', 'Add at least one allowed email domain, or emails to your approvers will be blocked.');
       return;
     }
     if (provider === 'default' && !acknowledged) {
-      this.showResult('registration', 'error', "Confirm you understand the default provider isn't for production.");
+      this.registrationError('acknowledge', "Confirm you understand the default provider isn't for production.");
       return;
     }
     this._saving = true;
@@ -369,14 +439,18 @@ class PublishRequestsSetup extends LitElement {
     }, this.token);
     this._saving = false;
     if (!result.ok) {
-      if (result.data.code === 'config-write-required') this._readOnly = true;
-      this.showResult('registration', 'error', result.data.error || `Registration failed (${result.status}).`);
+      const { code, error, field } = result.data;
+      if (code === 'config-write-required') this._readOnly = true;
+      const input = FIELD_INPUTS[/^[A-Za-z]+/.exec(field || '')?.[0]] || CODE_INPUTS[code];
+      this.registrationError(input, SITE_PROBLEMS[problemCode(result)] || error || `Registration failed (${result.status}).`);
       return;
     }
-    this._registration = await getRegistration(this._org, this._site, this.token);
-    await this.loadWorkflow();
+    // The POST returns the saved registration; providers and their warnings don't change on a save.
+    this._registration = { status: 'registered', config: { ...this._registration.config, ...result.data } };
     this.closeSection();
     this.showResult('registration', 'success', `${this._org}/${this._site} is registered.`);
+    // Recipient-domain warnings depend on the registration: refresh them without waiting.
+    this.refreshWorkflow().then(() => this.requestUpdate());
   }
 
   // ======== Status ========
@@ -387,17 +461,21 @@ class PublishRequestsSetup extends LitElement {
       return ok(`Registered · ${PROVIDER_LABELS[config.emailProvider] || config.emailProvider}`);
     }
     if (status === 'unregistered') return todo('Not registered');
+    if (this._registration.code === 'preview-write-required') return todo('No access to the site');
     return info("Can't check right now");
   }
 
   installStatus() {
     const { version } = this;
     if (!version) return todo('Not installed');
-    if (version === 'mixed') return todo('v1 and v2 are both installed');
-    const site = installState(this._siteConfig, version);
-    const org = installState(this._orgConfig, version);
-    if (!(site.library || org.library)) return todo(`${version}: plugin missing`);
-    if (!(site.apps || org.apps)) return todo(`${version}: inbox missing`);
+    if (version === 'mixed') return todo('Single Step and Multi Step are both installed');
+    const installed = this._workflow?.installed;
+    const has = installed
+      ? (tab) => [installed.site?.[tab], installed.org?.[tab]].some((v) => v === version || v === 'mixed')
+      : (tab) => [this._siteConfig, this._orgConfig]
+        .some((config) => installState(config, version)[tab]);
+    if (!has('library')) return todo(`${VERSION_LABELS[version]}: plugin missing`);
+    if (!has('apps')) return todo(`${VERSION_LABELS[version]}: inbox missing`);
     return ok(VERSION_LABELS[version]);
   }
 
@@ -429,7 +507,8 @@ class PublishRequestsSetup extends LitElement {
   renderMessage(section) {
     if (!this._message || this._message.section !== section) return nothing;
     const { type, text } = this._message;
-    return html`<div class="message ${type}" role="status">${Array.isArray(text)
+    return html`<div class="message ${type}" id="message-${section || 'site'}" tabindex="-1"
+      role=${type === 'error' ? 'alert' : 'status'}>${Array.isArray(text)
       ? html`<ul class="notes">${text.map((t) => html`<li>${t}</li>`)}</ul>` : text}</div>`;
   }
 
@@ -448,11 +527,14 @@ class PublishRequestsSetup extends LitElement {
     `;
   }
 
-  renderEditorActions(onSave) {
+  // The section's result shows here, next to Save, while the editor is open.
+  renderEditorActions(section, onSave) {
+    const saveLabel = this._conflict?.section === section ? 'Save and replace theirs' : 'Save';
     return html`
+      ${this.renderMessage(section)}
       <div class="form-actions">
         <sl-button class="pw-fill-accent" ?disabled=${!this.canEdit} @click=${onSave}>
-          ${this._saving ? 'Saving…' : 'Save'}
+          ${this._saving ? 'Saving…' : saveLabel}
         </sl-button>
         <sl-button class="pw-quiet-secondary" ?disabled=${this._saving} @click=${() => this.closeSection()}>Cancel</sl-button>
       </div>
@@ -463,8 +545,17 @@ class PublishRequestsSetup extends LitElement {
     return html`
       <sl-input id=${id} name=${id} label=${label} placeholder=${extra.placeholder || nothing}
         type=${extra.type || 'text'} autocomplete="off" .value=${value}
-        @input=${(e) => onInput(e.target.value)}></sl-input>
+        .error=${this.fieldError(id)}
+        @input=${(e) => { this.clearFieldError(id); onInput(e.target.value); }}></sl-input>
     `;
+  }
+
+  fieldError(id) {
+    return this._fieldError?.field === id ? this._fieldError.text : '';
+  }
+
+  clearFieldError(id) {
+    if (this._fieldError?.field === id) this._fieldError = null;
   }
 
   renderSection({
@@ -484,8 +575,7 @@ class PublishRequestsSetup extends LitElement {
           ` : nothing}
         </header>
         ${this.renderNotes(notes)}
-        ${this.renderMessage(key)}
-        ${open ? html`<div class="section-body">${body()}</div>` : nothing}
+        ${open ? html`<div class="section-body">${body()}</div>` : this.renderMessage(key)}
       </section>
     `;
   }
@@ -506,27 +596,36 @@ class PublishRequestsSetup extends LitElement {
         ${providers.length > 1 ? html`
           <div class="select-field">
             <label for="provider">Email provider</label>
-            <select id="provider" class="field-select" @change=${(e) => { this._draft.provider = e.target.value; this.rerender(); }}>
+            <select id="provider" class="field-select ${this.fieldError('provider') ? 'has-error' : ''}"
+              aria-invalid=${this.fieldError('provider') ? 'true' : 'false'}
+              @change=${(e) => { this._draft.provider = e.target.value; this._fieldError = null; this._message = null; this.rerender(); }}>
               ${providers.map((p) => html`<option value=${p} ?selected=${p === provider}>${PROVIDER_LABELS[p] || p}</option>`)}
             </select>
+            ${this.fieldError('provider') ? html`<p class="field-error">${this.fieldError('provider')}</p>` : nothing}
           </div>
         ` : nothing}
         ${provider === 'default' ? html`
-          <div class="message info">${current.providerWarnings?.default || "Adobe's default email provider is for proof-of-concept and non-production use only."}</div>
-          <sl-checkbox name="acknowledge" ?checked=${this._draft.acknowledged}
-            @change=${(e) => { this._draft.acknowledged = e.target.checked; }}>I understand this site's emails aren't for production use</sl-checkbox>
+          <div class="message info">${current.providerWarnings?.default || DEFAULT_PROVIDER_WARNING}</div>
+          <sl-checkbox name="acknowledge" id="acknowledge" ?checked=${this._draft.acknowledged}
+            .error=${this.fieldError('acknowledge')}
+            @change=${(e) => { this._draft.acknowledged = e.target.checked; this.clearFieldError('acknowledge'); }}><span class="checkbox-label">I understand this site's emails aren't for production use</span></sl-checkbox>
         ` : nothing}
         ${provider === 'custom-api' ? html`
-          <sl-input name="apiUrl" id="apiUrl" label="API URL" placeholder="https://example.com/api/send-email" autocomplete="off" .value=${current.apiUrl || ''}></sl-input>
+          <sl-input name="apiUrl" id="apiUrl" label="API URL" placeholder="https://example.com/api/send-email" autocomplete="off" .value=${current.apiUrl || ''}
+            .error=${this.fieldError('apiUrl')} @input=${() => this.clearFieldError('apiUrl')}></sl-input>
           <sl-input name="apiKey" id="apiKey" label="API key" type="password" autocomplete="off"
-            placeholder=${current.apiKeyPresent ? 'Leave empty to keep the current key' : ''}></sl-input>
-          <sl-input name="fromAddress" id="fromAddress" label="From address" placeholder="noreply@example.com" autocomplete="off" .value=${current.fromAddress || ''}></sl-input>
-          <sl-input name="fromName" id="fromName" label="From name" placeholder="Example Web Team" autocomplete="off" .value=${current.fromName || ''}></sl-input>
+            placeholder=${current.apiKeyPresent ? 'Leave empty to keep the current key' : ''}
+            .error=${this.fieldError('apiKey')} @input=${() => this.clearFieldError('apiKey')}></sl-input>
+          <sl-input name="fromAddress" id="fromAddress" label="From address" placeholder="noreply@example.com" autocomplete="off" .value=${current.fromAddress || ''}
+            .error=${this.fieldError('fromAddress')} @input=${() => this.clearFieldError('fromAddress')}></sl-input>
+          <sl-input name="fromName" id="fromName" label="From name" placeholder="Example Web Team" autocomplete="off" .value=${current.fromName || ''}
+            .error=${this.fieldError('fromName')} @input=${() => this.clearFieldError('fromName')}></sl-input>
         ` : nothing}
         <div>
           ${this.field('domains', 'Allowed email domains', this._draft.domains, (v) => { this._draft.domains = v; }, { placeholder: 'example.com, example.org' })}
           <p class="form-hint">Comma-separated. Emails only go to addresses in these domains.${provider === 'custom-api' ? '' : ' Leave empty for adobe.com only.'}</p>
         </div>
+        ${this.renderMessage('registration')}
         <div class="form-actions">
           <sl-button type="submit" class="pw-fill-accent" ?disabled=${!this.canEdit}>
             ${this._saving ? 'Saving…' : submitLabel}
@@ -542,7 +641,7 @@ class PublishRequestsSetup extends LitElement {
     const description = {
       registered: 'Lets the publish requests service send approval emails for this site.',
       unregistered: 'Register the site so the publish requests service can send approval emails.',
-      unknown: `${UNAVAILABLE} The other sections still work.`,
+      unknown: SITE_PROBLEMS[reg.code] ? this.problemText(reg.code) : `${UNAVAILABLE} The other sections still work.`,
     }[reg.status];
     return this.renderSection({
       key: 'registration',
@@ -556,7 +655,12 @@ class PublishRequestsSetup extends LitElement {
 
   renderInstallBody() {
     const { version } = this._draft;
-    const replacing = rowsToReplace(this._siteConfig, version);
+    const other = version === 'v1' ? 'v2' : 'v1';
+    // The worker's `installed` is current; the DA read only names the rows and can be stale.
+    const installed = this._workflow?.installed?.site;
+    const otherOnSite = !installed
+      || ['library', 'apps'].some((tab) => [other, 'mixed'].includes(installed[tab]));
+    const replacing = otherOnSite ? rowsToReplace(this._siteConfig, version) : [];
     return html`
       <fieldset class="choice-group">
         <legend>Version</legend>
@@ -576,16 +680,19 @@ class PublishRequestsSetup extends LitElement {
       </fieldset>
       ${replacing.length ? html`
         <div class="message info">
-          Saving replaces these ${VERSION_LABELS[version === 'v1' ? 'v2' : 'v1']} rows:
+          Saving replaces these ${VERSION_LABELS[other]} rows:
           <ul class="notes">${replacing.map((path) => html`<li><code>${path}</code></li>`)}</ul>
         </div>
+      ` : nothing}
+      ${otherOnSite && installed && !replacing.length ? html`
+        <div class="message info">Saving replaces the ${VERSION_LABELS[other]} plugin and inbox rows.</div>
       ` : nothing}
       <p class="form-hint">
         Adds the Request for Publish plugin to the library and the inbox to apps in the site config.
         Authors and approvers also need write access to <code>/.da/publish-workflow-requests.json</code>,
         set in the org's Experience Workspace permissions.
       </p>
-      ${this.renderEditorActions(() => this.saveInstall())}
+      ${this.renderEditorActions('install', () => this.saveInstall())}
     `;
   }
 
@@ -596,6 +703,7 @@ class PublishRequestsSetup extends LitElement {
         (<a href="https://da.live/config#/${this._org}/" target="_blank" rel="noopener">open it</a>).
         To give this site its own rules, copy them here. The site then stops following org changes.
       </div>
+      ${this.renderMessage('rules')}
       <div class="form-actions">
         <sl-button class="pw-fill-accent" ?disabled=${!this.canEdit} @click=${() => this.useSiteRules()}>
           ${this._saving ? 'Copying…' : 'Use site-specific rules'}
@@ -608,14 +716,14 @@ class PublishRequestsSetup extends LitElement {
   renderRulesBody() {
     if (this.source === 'org') return this.renderOrgRules();
     const { rules, workflows, groups } = this._draft;
-    const v2 = this.version === 'v2';
+    const v2 = this.apiVersion === 'v2';
     const names = [...new Set(workflows.map((w) => w.name.trim()).filter(Boolean))];
     return html`
       <h3 class="subsection-title">Rules</h3>
       <p class="form-hint">
         Patterns: an exact path (<code>/about</code>), a folder and everything below it (<code>/products/*</code>),
         or every page (<code>/*</code>). The most specific match wins. Separate addresses with commas;
-        a name without @ is a distribution list.
+        a list name from below, or a name without @, is a distribution list.
       </p>
       <ol class="row-list">
         ${rules.map((rule, i) => {
@@ -632,7 +740,9 @@ class PublishRequestsSetup extends LitElement {
                   </select>
                 </div>
               ` : nothing}
-              ${v2 && rule.workflow ? html`<p class="row-note">Approvers come from the workflow's steps.</p>` : html`
+              ${rule.workflow && !v2 ? this.renderMultiStepRule(rule) : nothing}
+              ${rule.workflow && v2 ? html`<p class="row-note">Approvers come from the workflow's steps.</p>` : nothing}
+              ${rule.workflow ? nothing : html`
                 ${this.field(`approvers-${i}`, 'Approvers', rule.approvers, (v) => { rule.approvers = v; }, { placeholder: 'web-team@example.com' })}
                 ${this.field(`cc-${i}`, 'CC', rule.cc, (v) => { rule.cc = v; })}
               `}
@@ -642,9 +752,35 @@ class PublishRequestsSetup extends LitElement {
         })}
       </ol>
       <sl-button class="pw-quiet-secondary" @click=${() => this.addRow(rules, blankRule())}>Add rule</sl-button>
-      ${v2 ? this.renderWorkflowsEditor(workflows) : nothing}
+      ${v2 ? this.renderWorkflowsEditor(workflows) : this.renderMultiStepWorkflows()}
       ${this.renderGroupsEditor(groups)}
-      ${this.renderEditorActions(() => this.saveRules())}
+      ${this.renderEditorActions('rules', () => this.saveRules())}
+    `;
+  }
+
+  // Single Step can't use a Multi Step rule: show it as an error with a way to convert it.
+  renderMultiStepRule(rule) {
+    return html`
+      <div class="message error row-problem">
+        This rule uses the ${VERSION_LABELS.v2} workflow <strong>${rule.workflow}</strong>, which ${VERSION_LABELS.v1} can't use.
+        <sl-button class="pw-quiet-secondary pw-action-sm" @click=${() => { rule.workflow = ''; this.rerender(); }}>Use approvers instead</sl-button>
+      </div>
+    `;
+  }
+
+  renderMultiStepWorkflows() {
+    const { workflows, dropSteps } = this._draft;
+    if (!workflows.length) return nothing;
+    const names = workflows.map((w) => w.name).join(', ');
+    if (dropSteps) {
+      return html`<div class="message info">Saving removes the ${VERSION_LABELS.v2} workflows: ${names}.
+        <sl-button class="pw-quiet-secondary pw-action-sm" @click=${() => { this._draft.dropSteps = false; this.rerender(); }}>Keep them</sl-button></div>`;
+    }
+    return html`
+      <div class="message error">
+        This site defines ${VERSION_LABELS.v2} workflows (${names}), which ${VERSION_LABELS.v1} can't use. Remove them to save these rules.
+        <sl-button class="pw-quiet-secondary pw-action-sm" @click=${() => { this._draft.dropSteps = true; this.rerender(); }}>Remove workflows</sl-button>
+      </div>
     `;
   }
 
@@ -672,7 +808,7 @@ class PublishRequestsSetup extends LitElement {
                   ${this.field(`step-approvers-${id}`, 'Approvers', step.approvers, (v) => { step.approvers = v; })}
                   ${this.field(`step-cc-${id}`, 'CC', step.cc, (v) => { step.cc = v; })}
                   <sl-checkbox name="cc-approve-${id}" ?checked=${step.ccCanApprove}
-                    @change=${(e) => { step.ccCanApprove = e.target.checked; }}>CC can approve</sl-checkbox>
+                    @change=${(e) => { step.ccCanApprove = e.target.checked; }}><span class="checkbox-label">CC can approve</span></sl-checkbox>
                   ${this.renderRowActions(workflow.steps, s, `step ${s + 1}`)}
                 </li>
               `;
@@ -707,16 +843,16 @@ class PublishRequestsSetup extends LitElement {
   renderSettingsBody() {
     const { values } = this._draft;
     const set = (key) => (v) => { values[key] = v; };
-    const v2 = this.version === 'v2';
+    const v2 = this.apiVersion === 'v2';
     return html`
       <div class="setup-form">
         <sl-checkbox name="comments-required" ?checked=${values.commentsRequired === 'true'}
-          @change=${(e) => { values.commentsRequired = e.target.checked ? 'true' : ''; }}>Require a comment on every request</sl-checkbox>
+          @change=${(e) => { values.commentsRequired = e.target.checked ? 'true' : ''; }}><span class="checkbox-label">Require a comment on every request</span></sl-checkbox>
         ${this.field('comments-length', 'Minimum comment length', values.commentsLength, set('commentsLength'), { type: 'number', placeholder: '10' })}
         ${this.field('support-contact', 'Support contact', values.supportContact, set('supportContact'), { placeholder: 'web-help@example.com' })}
         <sl-checkbox name="cc-can-approve" ?checked=${values.ccCanApprove === 'true'}
           @change=${(e) => { values.ccCanApprove = e.target.checked ? 'true' : ''; }}>
-          CC recipients can approve${v2 ? ' (rules without a workflow)' : ''}
+          <span class="checkbox-label">CC recipients can approve${v2 ? ' (rules without a workflow)' : ''}</span>
         </sl-checkbox>
         ${v2 ? html`
           ${this.field('guidance-title', 'Guidance title', values.guidanceTitle, set('guidanceTitle'), { placeholder: 'Before you submit' })}
@@ -731,7 +867,7 @@ class PublishRequestsSetup extends LitElement {
         ${this.field('accent-color', 'Accent color', values.accentColor, set('accentColor'), { placeholder: '#3b63fb' })}
         ${this.field('accent-color-hover', 'Accent hover color', values.accentColorHover, set('accentColorHover'), { placeholder: '#274dea' })}
       </div>
-      ${this.renderEditorActions(() => this.saveSettings())}
+      ${this.renderEditorActions('settings', () => this.saveSettings())}
     `;
   }
 
@@ -739,20 +875,22 @@ class PublishRequestsSetup extends LitElement {
     const hasVersion = ['v1', 'v2'].includes(this.version);
     const needsVersion = hasVersion ? '' : ' Choose a version under Plugin and inbox first.';
     const workflowReady = hasVersion && !!this._workflow;
-    const unavailable = this._workflow ? '' : ` ${this._workflowError}`;
+    const unavailable = this._workflow ? '' : html` ${this._workflowError}`;
     const validation = this._workflow?.validation || {};
     const sections = [
       {
         key: 'install',
         title: 'Plugin and inbox',
-        description: 'Which version this site uses. Adds the author plugin and the approver inbox.',
+        description: html`Which version this site uses. Adds the author plugin and the approver inbox.${unavailable}`,
         status: this.installStatus(),
         body: () => this.renderInstallBody(),
+        // The install goes through the worker, so it needs the workflow view (and its `version`).
+        editable: !!this._workflow,
       },
       {
         key: 'rules',
         title: 'Approval rules',
-        description: `Who approves which pages${this.version === 'v2' ? ', in which steps' : ''}, and the distribution lists they use.${needsVersion}${unavailable}`,
+        description: html`Who approves which pages${this.version === 'v2' ? ', in which steps' : ''}, and the distribution lists they use.${needsVersion}${unavailable}`,
         status: this.rulesStatus(),
         body: () => this.renderRulesBody(),
         editable: workflowReady,
@@ -761,7 +899,7 @@ class PublishRequestsSetup extends LitElement {
       {
         key: 'settings',
         title: 'Settings',
-        description: `Comment rules, support contact, guidance and colors.${needsVersion}${unavailable}`,
+        description: html`Comment rules, support contact, guidance and colors.${needsVersion}${unavailable}`,
         status: this.settingsStatus(),
         body: () => this.renderSettingsBody(),
         editable: workflowReady && this.source !== 'org',
@@ -784,7 +922,8 @@ class PublishRequestsSetup extends LitElement {
       `;
     }
     if (this._state === 'site-not-found') {
-      return html`<div class="message error">${this._org}/${this._site} doesn't exist. Check the organization and site names.</div>`;
+      // Every Request Publish call needs the EDS site, so nothing is offered here.
+      return html`<div class="message error" role="alert"><strong>${this._org}/${this._site}</strong>: ${SITE_PROBLEMS['site-not-found']}</div>`;
     }
     if (this._state === 'ready') return this.renderSections();
     return html`<p class="section-description">Enter a site to set up publish requests for it.</p>`;

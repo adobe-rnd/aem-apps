@@ -396,3 +396,34 @@ code {
 .choice-hint a {
   color: var(--pw-accent);
 }
+
+/* sl-checkbox gives its label a fixed light-mode grey; this text follows the theme instead. */
+sl-checkbox .checkbox-label {
+  color: var(--s2-gray-800);
+}
+
+.field-select.has-error {
+  border-color: var(--s2-red-900);
+}
+
+.field-error {
+  margin: 4px 0 0;
+  font-size: var(--s2-body-size-xs);
+  color: var(--s2-red-900);
+}
+
+.message:focus-visible {
+  outline: 2px solid var(--s2-blue-900);
+  outline-offset: 2px;
+}
+
+.edit-row > .row-problem {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.message sl-button {
+  display: inline-block;
+  margin-left: var(--s2-spacing-100);
+  vertical-align: middle;
+}

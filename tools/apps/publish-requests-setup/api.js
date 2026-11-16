@@ -23,10 +23,11 @@ const DA_ADMIN = 'https://admin.da.live';
 
 const { daFetch } = await import('https://da.live/nx/utils/daFetch.js');
 
+// An explicit `?env=ci` wins, so local code (`?ref=local`) can be tested against the CI worker.
 function getWorkerUrl() {
+  if (new URLSearchParams(window.location.search).get('env') === 'ci') return CI_WORKER_URL;
   const { hostname } = window.location;
   if (hostname === 'localhost' || hostname === '127.0.0.1') return LOCAL_WORKER_URL;
-  if (new URLSearchParams(window.location.search).get('env') === 'ci') return CI_WORKER_URL;
   return WORKER_URL;
 }
 
@@ -38,7 +39,10 @@ const workerOpts = (token, method = 'GET', body = null) => ({
 
 const configUrl = (org, site) => `${DA_ADMIN}/config/${org}/${site ? `${site}/` : ''}`;
 
-/** `{ config, status }`; config is null when missing (404) or unreadable. */
+/**
+ * `{ config, status }`; config is null when missing (404) or unreadable. Read only: every config
+ * write goes through the worker, which keeps one writer on the eventually consistent DA config.
+ */
 export async function readConfig(org, site) {
   try {
     const resp = await daFetch(configUrl(org, site), { cache: 'no-store' });
@@ -47,45 +51,6 @@ export async function readConfig(org, site) {
   } catch {
     return { config: null, status: 0 };
   }
-}
-
-/** Writes the whole site config; callers pass a fresh read with only their tabs changed. */
-export async function writeConfig(org, site, config) {
-  const body = new FormData();
-  body.append('config', JSON.stringify(config));
-  try {
-    const resp = await daFetch(configUrl(org, site), { method: 'PUT', body });
-    return { ok: resp.ok, status: resp.status };
-  } catch {
-    return { ok: false, status: 0 };
-  }
-}
-
-// False only when the org listing loads without the site; an unreadable listing doesn't block.
-export async function checkSiteExists(org, site) {
-  try {
-    const resp = await daFetch(`${DA_ADMIN}/list/${org}`);
-    const items = resp.ok ? await resp.json() : null;
-    return !Array.isArray(items) || items.some((item) => item.name === site);
-  } catch {
-    return true;
-  }
-}
-
-/**
- * `{ status: 'registered' | 'unregistered', config }` where config is the worker's setup view
- * (`availableProviders`, `providerWarnings`, `canEdit`, public registration fields),
- * or `{ status: 'unknown' }` when the worker can't say (no access, or no route yet).
- */
-export async function getRegistration(org, site, token) {
-  try {
-    const url = `${getWorkerUrl()}/api/site-config?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
-    const resp = await fetch(url, workerOpts(token));
-    const body = await resp.json().catch(() => ({}));
-    if (resp.ok) return { status: 'registered', config: body };
-    if (Array.isArray(body.availableProviders)) return { status: 'unregistered', config: body };
-  } catch { /* unknown */ }
-  return { status: 'unknown' };
 }
 
 async function callWorker(path, token, body) {
@@ -101,13 +66,18 @@ async function callWorker(path, token, body) {
 export const saveRegistration = (org, site, settings, token) => callWorker('/api/site-config', token, { org, site, ...settings });
 
 const workflowPath = (version) => (version === 'v1' ? '/api/workflow-config' : '/api/v2/workflow-config');
+const setupPath = (version) => (version === 'v1' ? '/api/setup' : '/api/v2/setup');
+const siteQuery = (org, site) => `org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
 
-export const getWorkflowConfig = (version, org, site, token) => callWorker(
-  `${workflowPath(version)}?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`,
-  token,
-);
+/** Registration, provider options, `canEdit`, `installed` and the workflow view, in one call. */
+export const getSetup = (version, org, site, token) => callWorker(`${setupPath(version)}?${siteQuery(org, site)}`, token);
 
-/** body: `{ version, tabs, copyFromOrg? }` from the worker's workflow-config contract. */
+export const getWorkflowConfig = (version, org, site, token) => callWorker(`${workflowPath(version)}?${siteQuery(org, site)}`, token);
+
+/**
+ * body: `{ version, tabs?, copyFromOrg?, install? }` from the worker's workflow-config contract.
+ * `install: true` installs this route's version (plugin and inbox rows) in the same write.
+ */
 export const saveWorkflowConfig = (version, org, site, body, token) => callWorker(
   workflowPath(version),
   token,
