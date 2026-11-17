@@ -96,6 +96,11 @@ export function validateSchemaName(name, existingNames = []) {
   return null;
 }
 
+/** A Group's fields need distinct keys: why `key` can't be used next to `siblingKeys`, or null. */
+export function keyClash(key, siblingKeys = []) {
+  return siblingKeys.includes(key) ? `Another field already uses "${key}".` : null;
+}
+
 export function validateDefName(name, existingNames = []) {
   if (!name) return 'Enter a name.';
   if (!DEF_NAME_PATTERN.test(name)) {

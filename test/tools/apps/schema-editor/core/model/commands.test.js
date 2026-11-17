@@ -157,6 +157,14 @@ describe('schema model commands', () => {
     expect(child(model, 'a').title).to.equal('Alpha');
   });
 
+  it('refuses a key a sibling already uses', () => {
+    const model = load(BASE);
+    const b = child(model, 'b');
+    expect(() => updateNode(model, { nodeId: b.id, patch: { key: 'a' } }))
+      .to.throw(CommandError, 'Another field already uses "a".');
+    expect(updateNode(model, { nodeId: b.id, patch: { key: 'b' } }).model.root.children[1].key).to.equal('b');
+  });
+
   it('clears a default that is no longer a choice', () => {
     let model = load({
       type: 'object',

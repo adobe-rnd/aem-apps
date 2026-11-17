@@ -19,7 +19,9 @@
 
 import { createId } from './ids.js';
 import { ELEMENTS, createNode } from './elements.js';
-import { deriveKey, deriveDefName, validateDefName } from './keys.js';
+import {
+  deriveKey, deriveDefName, keyClash, validateDefName,
+} from './keys.js';
 import {
   findNode, getDef, isDescendant, refUsages, siblingKeys, wouldCreateCycle,
 } from './query.js';
@@ -164,17 +166,20 @@ export function duplicateNode(model, { nodeId }) {
 
 /**
  * Patches node fields (`undefined` removes one). A title change re-derives the key until
- * the key was edited manually or saved once.
+ * the key was edited manually or saved once. A key a sibling already uses is refused.
  */
 export function updateNode(model, { nodeId, patch }) {
   const entry = requireEntry(model, nodeId);
+  const parentIsGroup = entry.parent?.kind === 'object';
+  const clash = 'key' in patch && parentIsGroup
+    && keyClash(patch.key, siblingKeys(entry.parent, nodeId));
+  if (clash) throw new CommandError(clash);
   let next = { ...entry.node };
   Object.entries(patch).forEach(([field, value]) => {
     if (value === undefined) delete next[field];
     else next[field] = value;
   });
   if ('key' in patch) next.keyManual = true;
-  const parentIsGroup = entry.parent?.kind === 'object';
   if ('title' in patch && parentIsGroup && !next.keyManual && !next.keyLocked) {
     next.key = deriveKey(next.title, siblingKeys(entry.parent, nodeId));
   }

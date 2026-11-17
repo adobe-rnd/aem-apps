@@ -74,7 +74,8 @@ Name or Modified heading also sorts by it, newest/Z-A first, and again reverses 
   - **Properties**: the selected element, as settings or as JSON (the view
     switch in the header's corner). **Settings**: label, key, description,
     required, and its options (length, pattern, range, choices, list
-    limits…); a field of a component says which component it belongs to,
+    limits…). A key another field in the same group uses isn't applied: the
+    field says so until you pick another (Escape reverts); a field of a component says which component it belongs to,
     and a component lists where it is used, each a link back to that use.
     **JSON**: its JSON as saved, with a copy button. A component use is
     saved as a reference (`$ref`), so it shows the reference and then the

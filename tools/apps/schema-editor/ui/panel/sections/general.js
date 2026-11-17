@@ -18,7 +18,8 @@
 import { html, nothing } from 'da-lit';
 import { ELEMENTS, elementOf } from '../../../core/model/elements.js';
 import { changeElement } from '../../../core/model/commands.js';
-import { labelOf } from '../../../core/model/query.js';
+import { keyClash } from '../../../core/model/keys.js';
+import { labelOf, siblingKeys } from '../../../core/model/query.js';
 import { icon } from '../../shared/icons.js';
 import { confirmDialog } from '../../shared/confirm.js';
 import { isGroupField } from '../inspector.js';
@@ -72,17 +73,39 @@ function keyHint(node) {
   return 'Set manually.';
 }
 
+/**
+ * A key another field uses stays a draft with an error, like a taken component name, so
+ * siblings never share a key; Escape drops the draft.
+ */
 function keyField(ctx) {
-  const { node } = ctx;
+  const { node, entry } = ctx;
+  const clashOf = (key) => keyClash(key, siblingKeys(entry.parent, node.id));
+  const draft = ctx.view.get('keyDraft');
+  const clash = draft === undefined ? null : clashOf(draft);
   const locked = node.keyLocked && !ctx.view.get('keyUnlocked');
-  const followLabel = () => ctx.update({ keyManual: undefined, title: node.title });
+  const setKey = (key) => {
+    if (clashOf(key)) {
+      ctx.view.set('keyDraft', key);
+      return;
+    }
+    ctx.view.set('keyDraft', undefined, { silent: true });
+    ctx.update({ key });
+  };
+  const onKeydown = (e) => {
+    if (e.key === 'Escape' && clash) ctx.view.set('keyDraft', undefined);
+  };
+  const followLabel = () => {
+    ctx.view.set('keyDraft', undefined, { silent: true });
+    ctx.update({ keyManual: undefined, title: node.title });
+  };
   return html`
     <div class="key-field">
-      <se-input label="Key" .value=${node.key ?? ''} required
+      <se-input label="Key" .value=${clash ? draft : node.key ?? ''} required
         ?disabled=${locked}
         description=${keyHint(node)}
-        .error=${ctx.error('key')}
-        @input=${(e) => ctx.update({ key: e.target.value })}></se-input>
+        .error=${clash ?? ctx.error('key')}
+        @input=${(e) => setKey(e.target.value)}
+        @keydown=${onKeydown}></se-input>
       ${locked ? html`
         <button type="button" class="nx-action-btn-quiet nx-action-btn-icon key-btn"
           title="Edit key" aria-label="Edit key"
