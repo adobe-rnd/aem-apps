@@ -62,7 +62,7 @@ Name or Modified heading also sorts by it, newest/Z-A first, and again reverses 
   waits for you if you switch pages without changing anything else. Here
   Issues names each element by its place in the JSON
   (`/$defs/Card/properties/title`) and gives every issue's line and column
-  in the text; clicking either scrolls to that line, flashes it and puts the caret there.
+  in the text; clicking either jumps to that line, flashes it and puts the caret there.
   Enter keeps the indent; **Format** reindents
   it and the copy button copies it. The panel shows only Issues, and clicking
   one opens its page.

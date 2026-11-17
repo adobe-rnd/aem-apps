@@ -168,9 +168,10 @@ textarea::selection {
   margin-inline-start: calc(var(--code-pad) + (var(--column) - 1) * 1ch);
 }
 
-/* The place revealed glows briefly (a colour fade, no movement), behind the error band. */
+/* The place revealed glows briefly (a colour fade, no movement), behind the error band.
+   `forwards` keeps the finished animation listed, so revealing the line again replays it. */
 .reveal-line {
-  animation: reveal-glow 1.6s ease-out;
+  animation: reveal-glow 1.6s ease-out forwards;
 }
 
 @keyframes reveal-glow {

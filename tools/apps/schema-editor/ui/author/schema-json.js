@@ -111,30 +111,25 @@ class SeSchemaJson extends LitElement {
     if (this._pendingReveal) this._reveal(area);
   }
 
-  /** Puts the caret at `{ line?, column? }` and scrolls it into view, once rendered. */
+  /** Puts the caret at `{ line?, column? }` and jumps to it, once rendered. */
   _revealAt(at, { focus }) {
     this._pendingReveal = { at, focus };
     this._mark = at?.line ? at : null;
     this.requestUpdate();
   }
 
-  async _reveal(area) {
+  _reveal(area) {
     const { at, focus } = this._pendingReveal;
     this._pendingReveal = null;
-    this._revealId = (this._revealId ?? 0) + 1;
-    const revealId = this._revealId;
     const caret = offsetAt(this._text, at);
     area.setSelectionRange(caret, caret);
     if (focus) area.focus({ preventScroll: true });
-    // The textarea is as tall as its text, so scroll to the marked place, not the textarea.
+    // The textarea is as tall as its text, so jump to the marked place, not the textarea.
     const line = this.shadowRoot.querySelector('.reveal-line');
     const marker = line?.querySelector('.reveal-at') ?? area;
-    await marker.scrollIntoView({
-      block: line ? 'center' : 'nearest', inline: 'nearest', behavior: 'smooth',
-    });
-    // A later reveal, or an edit, has moved on.
-    if (!line?.isConnected || revealId !== this._revealId) return;
-    line.getAnimations().forEach((animation) => {
+    marker.scrollIntoView({ block: line ? 'center' : 'nearest', inline: 'nearest' });
+    // Replays the highlight when the same line is revealed again.
+    line?.getAnimations().forEach((animation) => {
       animation.cancel();
       animation.play();
     });
