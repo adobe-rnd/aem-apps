@@ -16,7 +16,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeContext, deriveView, pageLinks, workerOrigin, createClient, buildStepModel,
+  normalizeContext, deriveView, pageLinks, workerOrigin, createClient, buildStepModel, setupUrl,
 } from '../../../../tools/plugins/request-for-publish-v2/workflow.js';
 
 const context = { org: 'example', site: 'website', path: '/drafts/page' };
@@ -43,8 +43,29 @@ describe('content refs', () => {
     assert.equal(links.live, 'https://release-42--website--example.aem.live/drafts/page');
     assert.equal(new URL(links.inbox).searchParams.get('ref'), 'rpfix');
     assert.equal(new URL(links.myRequests).searchParams.get('ref'), 'rpfix');
-    assert.equal(new URL(links.setup).pathname, '/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup');
-    assert.equal(new URL(links.setup).searchParams.get('ref'), 'rpfix');
+  });
+});
+
+describe('setup link', () => {
+  const SETUP = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup';
+
+  it('is the plain setup app URL with only org and site, even from a CI branch build', () => {
+    const links = pageLinks(
+      normalizeContext({ ...context, ref: 'release-42' }),
+      'ci',
+      'https://rpfix--aem-apps--adobe-rnd.aem.page/tools/plugins/request-for-publish-v2/workflow.js',
+    );
+    assert.equal(links.setup, `${SETUP}?org=example&site=website`);
+    assert.equal(setupUrl(context), `${SETUP}?org=example&site=website`);
+  });
+
+  it('encodes org and site and ignores the code host', () => {
+    assert.equal(
+      setupUrl({ org: 'my org', site: 'a&b=c' }),
+      `${SETUP}?org=my%20org&site=a%26b%3Dc`,
+    );
+    const links = pageLinks(context, 'ci', 'http://localhost:3000/tools/plugins/request-for-publish-v2/workflow.js');
+    assert.equal(links.setup, `${SETUP}?org=example&site=website`);
   });
 });
 
@@ -374,6 +395,43 @@ describe('uninvolved viewers', () => {
   it('blocks on duplicate page records', () => {
     const view = deriveView(context, data({ page: [pending, { ...pending, requester: 'other@example.com' }] }));
     assert.equal(view.view, 'blocked');
+  });
+  it('flags the worker\'s unregistered response on any v2 read as needing setup', async () => {
+    // Exactly what the CI worker returns for an unregistered site: a 403 without a code.
+    const unregistered = () => response({ error: 'sagarsane/devlive-da-lab is not registered for publish workflow' }, 403);
+    const routes = ['/api/v2/config', '/api/v2/approvers', '/api/v2/requests'];
+    await Promise.all(routes.map(async (route) => {
+      const fail = (url) => (url.pathname === route ? unregistered() : null);
+      const { client } = fixture({ fail });
+      await assert.rejects(client.load(context), (error) => error.setup && error.status === 403);
+    }));
+  });
+  it('flags a registered site without rules as needing setup', async () => {
+    // The CI worker's answers for a registered site with no publish-workflow-config.
+    const { client } = fixture({
+      fail: (url) => {
+        if (url.pathname === '/api/v2/config') return response({ config: null });
+        if (url.pathname === '/api/v2/approvers') {
+          return response({
+            approvers: [], cc: [], workflow: '', steps: [],
+          });
+        }
+        return url.pathname === '/api/v2/requests' ? response({ requests: [] }) : null;
+      },
+    });
+    await assert.rejects(client.load(context), (error) => error.setup === true && /not configured/.test(error.message));
+  });
+  it('does not flag setup when the worker cannot say', async () => {
+    const cases = [
+      () => response({ error: 'Admin status check failed' }, 403),
+      () => response({ error: 'Unable to read publish requests.' }, 502),
+      () => response({ error: 'Service unavailable' }, 503),
+      () => { throw new TypeError('Failed to fetch'); },
+    ];
+    await Promise.all(cases.map(async (fail) => {
+      const { client } = fixture({ fail });
+      await assert.rejects(client.load(context), (error) => !error.setup);
+    }));
   });
   it('flags an unregistered site as needing setup', async () => {
     const { client } = fixture({

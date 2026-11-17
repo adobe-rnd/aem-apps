@@ -181,10 +181,10 @@ class PublishRequestsApp extends LitElement {
     return `${this.appBaseUrl}?${params.toString()}`;
   }
 
+  // Always the production setup app with only org and site: never `ref` or `env`.
   get setupUrl() {
-    const { org, repo } = this.context || {};
-    const params = this.navigationParams({ org: this._org, site: this._site });
-    return `https://da.live/app/${org}/${repo}/tools/apps/publish-requests-setup/publish-requests-setup?${params}`;
+    const app = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup';
+    return `${app}?org=${encodeURIComponent(this._org)}&site=${encodeURIComponent(this._site)}`;
   }
 
   async isSetUp() {

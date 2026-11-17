@@ -145,19 +145,22 @@ export async function fetchAccentSettings(org, site, token) {
 // Site onboarding: DA existence + config (admin.da.live), worker registration
 // ===========================================================================
 
-async function getDaJson(url) {
+// The JSON, `missing` on a 404, or null when it can't be read.
+async function getDaJson(url, missing = null) {
   try {
     const resp = await daFetch(url);
+    if (resp.status === 404) return missing;
     return resp.ok ? await resp.json() : null;
   } catch {
     return null;
   }
 }
 
+// A config that doesn't exist is {} (no tabs); one that can't be read is null.
 export async function fetchDaConfigs(org, site) {
   const [siteConfig, orgConfig] = await Promise.all([
-    getDaJson(`${DA_ADMIN}/config/${org}/${site}/`),
-    getDaJson(`${DA_ADMIN}/config/${org}/`),
+    getDaJson(`${DA_ADMIN}/config/${org}/${site}/`, {}),
+    getDaJson(`${DA_ADMIN}/config/${org}/`, {}),
   ]);
   return { siteConfig, orgConfig };
 }

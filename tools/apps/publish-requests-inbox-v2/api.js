@@ -119,11 +119,16 @@ export function getLiveHostFromConfig(org, site, config) {
   return `main--${site}--${org}.aem.live`;
 }
 
-// Why the site can't take requests yet, or '' when it can or the worker can't say.
+/**
+ * Why the site can't take requests yet, or '' when it can or the worker can't say.
+ * Unregistered: `GET /api/v2/site-config` answers 404 with `availableProviders`.
+ * No rules: `GET /api/v2/config` answers `config: null` (no `publish-workflow-config`
+ * in the site or org config). Denials, outages and network failures report nothing.
+ */
 export async function getSetupGap(org, site, token) {
   const query = `org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
   try {
-    const regResp = await fetch(`${getWorkerUrl()}/api/site-config?${query}`, getOpts(token));
+    const regResp = await fetch(`${getWorkerUrl()}/api/v2/site-config?${query}`, getOpts(token));
     if (!regResp.ok) {
       const { availableProviders } = await regResp.json().catch(() => ({}));
       if (Array.isArray(availableProviders)) return "isn't registered for publish requests";

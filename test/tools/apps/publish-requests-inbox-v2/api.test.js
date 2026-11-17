@@ -456,3 +456,72 @@ describe('inbox v2 approval handlers', () => {
     assert.doesNotMatch(app.renderContent(), /Published!|View Published|aem.live/);
   });
 });
+
+describe('inbox v2 setup link and detection', () => {
+  const SETUP = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup';
+  const workerUrl = (href) => new URL(href).pathname;
+
+  it('links to the plain setup app with only org and site, whatever the page carries', () => {
+    const app = fixture({ window: { location: { search: '?org=x&site=y&env=ci&ref=local', pathname: '/inbox' } } });
+    app.context = { org: 'someone', repo: 'a-fork' };
+    app._org = 'my org';
+    app._site = 'a&b';
+    assert.equal(app.setupUrl, `${SETUP}?org=my%20org&site=a%26b`);
+    app._state = 'not-set-up';
+    app._setupReason = 'has no approval rules';
+    assert.ok(app.renderContent().includes(`href=${SETUP}?org=my%20org&site=a%26b target="_blank" rel="noopener"`));
+  });
+
+  const gap = async (test, responses) => {
+    global.window = { location: { hostname: 'da.live', search: '?env=ci' } };
+    test.after(() => { delete global.window; });
+    const calls = [];
+    test.mock.method(global, 'fetch', async (href) => {
+      calls.push(workerUrl(href));
+      const answer = responses[workerUrl(href)];
+      if (answer instanceof Error) throw answer;
+      const { body = {}, status = 500 } = answer || {};
+      return Response.json(body, { status });
+    });
+    return { reason: await api.getSetupGap('org', 'site', 'token'), calls };
+  };
+
+  it('reports an unregistered site from the worker\'s v2 site-config answer', async (test) => {
+    const { reason, calls } = await gap(test, {
+      '/api/v2/site-config': { status: 404, body: { error: 'Site is not registered', availableProviders: ['default'], canEdit: true } },
+    });
+    assert.equal(reason, "isn't registered for publish requests");
+    assert.deepEqual(calls, ['/api/v2/site-config']);
+  });
+
+  it('reports a registered site without rules', async (test) => {
+    const { reason } = await gap(test, {
+      '/api/v2/site-config': { status: 200, body: { org: 'org', site: 'site', availableProviders: ['default'] } },
+      '/api/v2/config': { status: 200, body: { config: null } },
+    });
+    assert.equal(reason, 'has no approval rules');
+  });
+
+  it('reports nothing for a set-up site', async (test) => {
+    const { reason } = await gap(test, {
+      '/api/v2/site-config': { status: 200, body: { org: 'org', site: 'site' } },
+      '/api/v2/config': { status: 200, body: { config: { 'publish-workflow-config': { data: [] } } } },
+    });
+    assert.equal(reason, '');
+  });
+
+  [
+    ['no preview write', { status: 403, body: { error: 'denied', code: 'preview-write-required' } }],
+    ['an unknown site', { status: 404, body: { error: 'missing', code: 'site-not-found' } }],
+    ['an outage', { status: 503, body: { error: 'later', code: 'permission-check-unavailable' } }],
+    ['a network failure', new TypeError('Failed to fetch')],
+  ].forEach(([label, siteConfig]) => {
+    it(`carries on when the worker can't say (${label})`, async (test) => {
+      const { reason } = await gap(test, {
+        '/api/v2/site-config': siteConfig,
+        '/api/v2/config': { status: 403, body: { error: 'Admin status check failed' } },
+      });
+      assert.equal(reason, '');
+    });
+  });
+});

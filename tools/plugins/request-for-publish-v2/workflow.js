@@ -158,6 +158,13 @@ export function deriveView(context, data) {
   };
 }
 
+/**
+ * The setup app link: always the production app with only `org` and `site`, never `ref` or `env`.
+ */
+export function setupUrl({ org, site }) {
+  return `${SETUP}?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
+}
+
 export function pageLinks(context, env, moduleUrl = import.meta.url) {
   const {
     org, site, path, ref: contentRef = 'main',
@@ -173,7 +180,7 @@ export function pageLinks(context, env, moduleUrl = import.meta.url) {
     live: `https://${contentRef}--${site}--${org}.aem.live${delivered}`,
     inbox: `${INBOX}?${query}`,
     myRequests: `${INBOX}?${query}&requester=true`,
-    setup: `${SETUP}?${query}`,
+    setup: setupUrl(context),
   };
 }
 
