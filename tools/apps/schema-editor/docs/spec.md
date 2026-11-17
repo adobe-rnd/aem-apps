@@ -153,7 +153,8 @@ The Author screen has three pages (`core/session/modes.js`):
   while the text is valid, Issues locates each issue in it (`store.textAt`
   with `issuePointer`, via `pointerLocator` in `core/json-text.js`): the
   keyword it is about, else its element's key. The line and column link
-  there, and so does the element. The tool panel offers only Issues.
+  there, and so does the element, which Issues names by its pointer here and
+  by its labels (`breadcrumb`) elsewhere. The tool panel offers only Issues.
 
 The page decides which nodes are shown and what can be selected. When a
 selection is not shown on the current page, it moves to the nearest node that

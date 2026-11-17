@@ -15,7 +15,7 @@
  */
 import { html, nothing } from 'da-lit';
 import { countIssues, issuePointer } from '../../core/model/lint.js';
-import { findNode, labelOf } from '../../core/model/query.js';
+import { findNode, breadcrumb } from '../../core/model/query.js';
 import { icon } from '../shared/icons.js';
 import { nodeIcon } from '../author/card-info.js';
 import { applyFix } from '../shared/actions.js';
@@ -44,19 +44,19 @@ function newGroup(model, issue) {
       key: null, nodeId: null, label: 'Schema', node: null,
     };
   }
-  const label = entry.def && !entry.parent ? entry.def.name : labelOf(model, entry.node);
   return {
     key: issue.nodeId,
     nodeId: issue.nodeId,
     pointer: entry.pointer,
-    label: label || 'Untitled',
+    trail: breadcrumb(model, issue.nodeId).map((label) => label || 'Untitled'),
     node: entry.node,
   };
 }
 
 /**
  * Groups issues by node, keeping the linter's order; unknown nodes form one "Schema" group, and
- * the Schema page's text (issues with `text`) one "Schema JSON" group.
+ * the Schema page's text (issues with `text`) one "Schema JSON" group. A node's group has its
+ * `pointer` in the schema and its `trail` of labels instead of a `label`.
  */
 export function groupIssues(model, issues) {
   const groups = new Map();
@@ -108,9 +108,26 @@ class SeIssues extends PanelView {
     else this.store.select(group.nodeId, { reveal: true });
   }
 
-  _renderLocation(issue) {
+  /** An element by its place in the JSON on the Schema page, elsewhere by its labels. */
+  _renderLabel(group) {
+    if (!group.trail) return html`<span class="group-label">${group.label}</span>`;
+    if (this._onSchemaPage) {
+      if (!group.pointer) return html`<span class="group-label">/</span>`;
+      // Long pointers wrap before a slash, between their tokens.
+      const tokens = group.pointer.split('/').slice(1).map((token) => html`<wbr>/${token}`);
+      return html`<span class="group-label">${tokens}</span>`;
+    }
+    const parents = group.trail.slice(0, -1).map((label) => `${label} › `).join('');
+    return html`<span class="group-label"><span class="trail">${parents}</span>${group.trail.at(-1)}</span>`;
+  }
+
+  _renderLocation(issue, group) {
     const at = this._textAt({ text: issue.text, pointer: issuePointer(issue) });
-    if (!at?.line) return issue.schemaPath ? html`<span class="path">${issue.schemaPath}</span>` : nothing;
+    if (!at?.line) {
+      // The group's label already locates its element; only a path past it adds anything.
+      const path = issue.schemaPath !== group.pointer ? issue.schemaPath : '';
+      return path ? html`<span class="path">${path}</span>` : nothing;
+    }
     const label = `Line ${at.line}, column ${at.column}`;
     if (!this._onSchemaPage) return html`<span class="path">${label}</span>`;
     return html`
@@ -119,14 +136,14 @@ class SeIssues extends PanelView {
     `;
   }
 
-  _renderIssue(issue) {
+  _renderIssue(issue, group) {
     return html`
       <li class="issue is-${issue.severity}">
         <span class="sev">${icon(SEVERITY_ICON[issue.severity] ?? 'info')}
           <span class="sr-only">${issue.severity}</span></span>
         <span class="issue-text">
           <span>${issue.message}</span>
-          ${this._renderLocation(issue)}
+          ${this._renderLocation(issue, group)}
         </span>
         ${issue.fix ? html`
           <button type="button" class="nx-action-btn"
@@ -168,9 +185,9 @@ class SeIssues extends PanelView {
               @click=${() => this._reveal(group)}>
               <span class="node-icon ${group.node?.kind === 'ref' ? 'is-ref' : ''}">
                 ${icon(group.icon ?? (group.node ? nodeIcon(group.node) : 'schema'))}</span>
-              <span class="group-label">${group.label}</span>
+              ${this._renderLabel(group)}
             </button>
-            <ul class="list">${group.issues.map((issue) => this._renderIssue(issue))}</ul>
+            <ul class="list">${group.issues.map((issue) => this._renderIssue(issue, group))}</ul>
           </section>
         `)}
       </div>

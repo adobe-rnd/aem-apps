@@ -60,8 +60,9 @@ Name or Modified heading also sorts by it, newest/Z-A first, and again reverses 
   **Schema JSON** error that blocks saving (clicking it returns to the line);
   the schema keeps its last valid version until it is fixed, and the text
   waits for you if you switch pages without changing anything else. Here
-  Issues gives every issue's line and column in the text; clicking it or
-  the element puts the caret there. Enter keeps the indent; **Format** reindents
+  Issues names each element by its place in the JSON
+  (`/$defs/Card/properties/title`) and gives every issue's line and column
+  in the text; clicking either puts the caret there. Enter keeps the indent; **Format** reindents
   it and the copy button copies it. The panel shows only Issues, and clicking
   one opens its page.
 - **Tool panel** (right): 320–400px wide, following the window; below 720px it
@@ -81,7 +82,8 @@ Name or Modified heading also sorts by it, newest/Z-A first, and again reverses 
     is used; opening one shows it on the Components page, where the one shown
     is highlighted. Use one as a field from Elements. The first tab on the
     Components page; not offered in Build, which has the Components page.
-  - **Issues**: everything the editor or the SC SDK flags, with quick fixes.
+  - **Issues**: everything the editor or the SC SDK flags, with quick fixes,
+    grouped by element and named by its labels (`Card › Title`).
 - **Build / Components / Schema**: the header's pages. The whole file's JSON is the
   schema's own Properties › JSON (click the title to select it), and editable on Schema.
 - Undo / redo (⌘Z / ⇧⌘Z) and Save (⌘S). Saving is blocked while there are errors.

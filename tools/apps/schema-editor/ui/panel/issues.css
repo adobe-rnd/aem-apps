@@ -15,9 +15,14 @@
   gap: 4px;
 }
 
+.group + .group {
+  padding-top: 16px;
+  border-top: 1px solid var(--s2-gray-200);
+}
+
 .group-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 4px 8px 4px 4px;
   border: none;
@@ -47,21 +52,33 @@
   background: var(--s2-gray-100);
 }
 
+/* Wraps rather than cut off the element itself, which comes last; lines match the icon. */
 .group-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.group-label .trail {
+  font-weight: 400;
+  color: var(--s2-gray-700);
 }
 
 .issue {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 6px 8px 6px 40px;
+
+  /* Not indented: the severity icon lines up with the element's icon (the head's padding). */
+  padding: 6px 8px 6px 4px;
 }
 
+/* As wide as the element's icon above, so the message starts where its label does. */
 .sev {
   display: flex;
+  flex: none;
+  justify-content: center;
+  width: 20px;
   margin-top: 1px;
 }
 
