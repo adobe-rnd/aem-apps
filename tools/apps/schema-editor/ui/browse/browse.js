@@ -275,10 +275,8 @@ class SeBrowse extends LitElement {
       <li class="row">
         <a class="row-link" href=${href}>
           <span class="row-icon">${icon('schema')}</span>
-          <span class="row-names">
-            <span class="row-title">${this._titleOf(item)}</span>
-            <span class="row-name muted">${item.name}</span>
-          </span>
+          <span class="row-title">${this._titleOf(item)}</span>
+          <span class="row-name muted">${item.name}</span>
           <span class="row-summary">${this._renderSummary(item)}</span>
           <span class="row-modified muted">${relativeTime(item.lastModified)}</span>
         </a>
@@ -291,14 +289,23 @@ class SeBrowse extends LitElement {
     `;
   }
 
+  /** The list's column headings are visual only: each row's link already reads out every cell. */
+  _renderTable(rows, busy = false) {
+    return html`
+      <div class="list">
+        <div class="list-head" aria-hidden="true">
+          <span></span><span>Title</span><span>Name</span><span>Contents</span><span>Modified</span>
+        </div>
+        <ul class="rows" aria-busy=${busy ? 'true' : nothing}
+          aria-label=${busy ? 'Loading schemas' : 'Schemas'}>${rows}</ul>
+      </div>
+    `;
+  }
+
   _renderList() {
     if (this._status === 'loading') {
-      return html`
-        <ul class="list" aria-busy="true" aria-label="Loading schemas">
-          ${[0, 1, 2, 3].map(() => html`
-            <li class="row"><span class="skeleton row-skeleton"></span></li>`)}
-        </ul>
-      `;
+      return this._renderTable([0, 1, 2, 3].map(() => html`
+        <li class="row"><span class="skeleton row-skeleton"></span></li>`), true);
     }
     if (this._status === 'error') return this._renderError();
     if (!this._items.length) return this._renderEmpty();
@@ -311,7 +318,7 @@ class SeBrowse extends LitElement {
     if (!visible.length) {
       return html`<div class="empty"><p>No schemas match "${this._query}".</p></div>`;
     }
-    return html`<ul class="list">${visible.map((item) => this._renderRow(item))}</ul>`;
+    return this._renderTable(visible.map((item) => this._renderRow(item)));
   }
 
   _renderEmpty() {

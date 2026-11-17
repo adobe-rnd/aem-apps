@@ -14,7 +14,8 @@ https://da.live/app/adobe-rnd/aem-apps/tools/apps/schema-editor/schema-editor#/{
 
 ### Browse (`#/{org}/{site}`)
 
-Lists the site's schemas with their field count, components and issues.
+Lists the site's schemas in columns: title, name, contents (field and component counts, plus
+issues) and last modified.
 Search, sort, and use a row's menu to open, duplicate, copy the JSON or delete.
 **New schema** starts from a blank schema or from pasted JSON.
 
