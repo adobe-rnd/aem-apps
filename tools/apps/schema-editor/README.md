@@ -16,8 +16,10 @@ https://da.live/app/adobe-rnd/aem-apps/tools/apps/schema-editor/schema-editor#/{
 
 Lists the site's schemas in columns: title, name, contents (field and component counts, plus
 issues) and last modified.
-Search, sort and **New** sit in the top bar (the same 48px bar as the editor, as on
+Search, **Sort** and **New** sit in the top bar (the same 48px bar as the editor, as on
 the da.live browse page); use a row's menu to open, duplicate, copy the JSON or delete.
+**Sort** lists every order (title, name or last modified, either way); clicking the Title,
+Name or Modified heading also sorts by it, newest/Z-A first, and again reverses it.
 **New** starts a schema from blank or from pasted JSON.
 
 ### Author (`#/{org}/{site}/{name}`)

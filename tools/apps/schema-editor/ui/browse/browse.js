@@ -17,7 +17,7 @@ import { LitElement, html, nothing } from 'da-lit';
 import { routeHash } from '../../core/routes.js';
 import { icon, iconFile } from '../shared/icons.js';
 import {
-  SchemaCatalog, SORTS, filterItems, sortItems,
+  SchemaCatalog, DEFAULT_SORT, filterItems, sortItems, toggleSort,
 } from '../../core/catalog.js';
 import { deriveSchemaName } from '../../core/model/keys.js';
 import {
@@ -31,6 +31,7 @@ import { schemaDialog } from './schema-dialog.js';
 
 await Promise.all([
   import('https://da.live/nx2/blocks/shared/menu/menu.js'),
+  import('https://da.live/nx2/blocks/shared/popover/popover.js'),
   import('https://da.live/nx2/blocks/shared/search/search.js'),
 ]);
 
@@ -64,7 +65,28 @@ const ROW_ITEMS = [
   { id: 'delete', label: 'Delete…', icon: iconFile('delete') },
 ];
 
-const SORT_ITEMS = Object.entries(SORTS).map(([id, label]) => ({ id, label }));
+// Sorting works as on da.live browse: a Sort popover in the bar and sortable column headings.
+const SORT_COLUMNS = {
+  title: { label: 'Title', ascending: 'A-Z', descending: 'Z-A' },
+  name: { label: 'Name', ascending: 'A-Z', descending: 'Z-A' },
+  modified: { label: 'Modified', ascending: 'oldest first', descending: 'newest first' },
+};
+
+const SORT_OPTIONS = [
+  ['title', 'ascending', 'Title (A-Z)'],
+  ['title', 'descending', 'Title (Z-A)'],
+  ['name', 'ascending', 'Name (A-Z)'],
+  ['name', 'descending', 'Name (Z-A)'],
+  ['modified', 'descending', 'Modified at (Newest)'],
+  ['modified', 'ascending', 'Modified at (Oldest)'],
+].map(([property, direction, label]) => ({ property, direction, label }));
+
+const sortedBy = ({ property, direction }) => {
+  const column = SORT_COLUMNS[property];
+  return `${column.label} (${column[direction]})`;
+};
+
+const sameSort = (a, b) => a?.property === b?.property && a?.direction === b?.direction;
 
 function toast(message, variant) {
   showToast({ message, variant });
@@ -87,6 +109,8 @@ class SeBrowse extends LitElement {
     _summaries: { state: true },
     _query: { state: true },
     _sort: { state: true },
+    _sortOpen: { state: true },
+    _sortStatus: { state: true },
     _chatOpen: { state: true },
   };
 
@@ -95,7 +119,8 @@ class SeBrowse extends LitElement {
     this._items = [];
     this._summaries = new Map();
     this._query = '';
-    this._sort = 'modified';
+    this._sort = DEFAULT_SORT;
+    this._sortStatus = '';
     this._loadId = 0;
   }
 
@@ -298,17 +323,44 @@ class SeBrowse extends LitElement {
     `;
   }
 
-  /** The list's column headings are visual only: each row's link already reads out every cell. */
+  /**
+   * Title, Name and Modified headings sort the list (as on da.live browse). The rest is visual
+   * only: each row's link already reads out every cell.
+   */
   _renderTable(rows, busy = false) {
     return html`
       <div class="list">
-        <div class="list-head" aria-hidden="true">
-          <span></span><span>Title</span><span>Name</span><span>Contents</span><span>Modified</span>
+        <div class="list-head" role="group" aria-label="Sort by">
+          <span aria-hidden="true"></span>
+          ${this._renderSortHeading('title', busy)}
+          ${this._renderSortHeading('name', busy)}
+          <span aria-hidden="true">Contents</span>
+          ${this._renderSortHeading('modified', busy)}
         </div>
         <ul class="rows" aria-busy=${busy ? 'true' : nothing}
           aria-label=${busy ? 'Loading schemas' : 'Schemas'}>${rows}</ul>
       </div>
     `;
+  }
+
+  /** The arrow shows on the sorted column only; the button names its order for screen readers. */
+  _renderSortHeading(property, disabled) {
+    const column = SORT_COLUMNS[property];
+    const direction = this._sort.property === property ? this._sort.direction : undefined;
+    return html`
+      <button type="button" class="sort-heading" ?disabled=${disabled}
+        @click=${() => this._setSort(toggleSort(this._sort, property))}>
+        <span>${column.label}${direction ? html`<span class="sr-only">, sorted ${column[direction]}</span>` : nothing}</span>
+        <span class="sort-icon">${direction ? icon(direction === 'ascending' ? 'sortUp' : 'sortDown') : nothing}</span>
+      </button>
+    `;
+  }
+
+  /** Announces the new order once, not each moved row. */
+  _setSort(sort) {
+    this._sort = sort;
+    const count = filterItems(this._items, this._query, this._summaries).length;
+    this._sortStatus = `Sorted by ${sortedBy(sort)}, ${plural(count, 'schema')}`;
   }
 
   _renderList() {
@@ -374,16 +426,66 @@ class SeBrowse extends LitElement {
     return html`
       <nx-search size="m" placeholder="Search schemas" label="Search schemas" .value=${this._query}
         @input=${(e) => { this._query = e.target.value ?? ''; }}></nx-search>
-      <nx-menu placement="below-end" .items=${SORT_ITEMS}
-        @select=${(e) => { this._sort = e.detail.id; }}>
-        <button slot="trigger" type="button" class="nx-action-btn-quiet"
-          aria-label="Sort by ${SORTS[this._sort]}">
-          <span><span class="wide">Sort: </span>${SORTS[this._sort]}</span> ${icon('chevronDown')}
-        </button>
-      </nx-menu>
+      ${this._renderSort()}
       <span class="divider" aria-hidden="true"></span>
     `;
   }
+
+  /** As on da.live browse: a Sort button opening every order, the current one checked. */
+  _renderSort() {
+    const current = sortedBy(this._sort);
+    return html`
+      <button type="button" class="nx-action-btn-quiet sort-btn" title="Sorted by ${current}"
+        aria-label="Sort: ${current}" aria-haspopup="dialog"
+        aria-expanded=${this._sortOpen ? 'true' : 'false'} @click=${this._toggleSortPopover}>
+        ${icon('sort')}<span class="wide">Sort</span>
+      </button>
+      <nx-popover class="sort-popover" role="dialog" aria-label="Sort"
+        @close=${() => { this._sortOpen = false; }} @keydown=${this._onSortKeydown}>
+        ${SORT_OPTIONS.map((option) => this._renderSortOption(option))}
+      </nx-popover>
+    `;
+  }
+
+  _renderSortOption(option) {
+    const selected = sameSort(option, this._sort);
+    return html`
+      <button type="button" class="nx-action-btn-quiet sort-option"
+        aria-pressed=${selected ? 'true' : 'false'} @click=${() => this._pickSort(option)}>
+        ${icon('checkmark', selected ? '' : 'unchecked')}<span>${option.label}</span>
+      </button>
+    `;
+  }
+
+  async _toggleSortPopover({ currentTarget }) {
+    const popover = this.shadowRoot.querySelector('.sort-popover');
+    if (this._sortOpen) {
+      popover.close();
+      return;
+    }
+    this._sortOpen = true;
+    popover.show({ anchor: currentTarget, placement: 'auto' });
+    // nx-popover stays `visibility: hidden` until its positioning frame; focus after it.
+    await popover.updateComplete;
+    await new Promise((resolve) => { requestAnimationFrame(resolve); });
+    popover.querySelector('[aria-pressed="true"]')?.focus();
+  }
+
+  _pickSort({ property, direction }) {
+    this._setSort({ property, direction });
+    this._closeSortPopover();
+  }
+
+  _closeSortPopover() {
+    this.shadowRoot.querySelector('.sort-popover')?.close();
+    this.shadowRoot.querySelector('.sort-btn')?.focus();
+  }
+
+  _onSortKeydown = (event) => {
+    if (event.key !== 'Escape') return;
+    event.stopPropagation();
+    this._closeSortPopover();
+  };
 
   /** Same toggle as the editor bar; hidden while the chat is open (on hosts that report it). */
   _renderChatToggle() {
@@ -418,6 +520,7 @@ class SeBrowse extends LitElement {
       <div class="content">
         <section class="browse">${this._renderList()}</section>
       </div>
+      <p class="sr-only" role="status">${this._sortStatus}</p>
     `;
   }
 }

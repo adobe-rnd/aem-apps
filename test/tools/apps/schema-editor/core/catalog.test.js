@@ -17,7 +17,7 @@ import { describe, it } from 'node:test';
 import { expect } from '../expect.js';
 import { memoryRepository } from '../fixtures.js';
 import {
-  SchemaCatalog, summarize, filterItems, sortItems, parseImport, checkNewName,
+  SchemaCatalog, summarize, filterItems, sortItems, toggleSort, parseImport, checkNewName,
 } from '../../../../../tools/apps/schema-editor/core/catalog.js';
 
 const PERSON = {
@@ -58,17 +58,39 @@ describe('schema catalog', () => {
     expect(filterItems(items, '  ', summaries)).to.have.length(2);
   });
 
-  it('sorts by last modified, title and name', () => {
+  it('sorts by last modified, title and name, either way', () => {
     const items = [
       { name: 'b', lastModified: 1 },
       { name: 'a', lastModified: 3 },
       { name: 'c', lastModified: 2 },
     ];
     const summaries = new Map([['a', { title: 'Zeta' }], ['b', { title: 'alpha' }]]);
-    expect(sortItems(items, 'modified').map((i) => i.name)).to.deep.equal(['a', 'c', 'b']);
-    expect(sortItems(items, 'name').map((i) => i.name)).to.deep.equal(['a', 'b', 'c']);
-    expect(sortItems(items, 'title', summaries).map((i) => i.name)).to.deep.equal(['b', 'c', 'a']);
+    const names = (property, direction) => sortItems(items, { property, direction }, summaries)
+      .map((i) => i.name);
+    expect(sortItems(items).map((i) => i.name)).to.deep.equal(['a', 'c', 'b']);
+    expect(names('modified', 'ascending')).to.deep.equal(['b', 'c', 'a']);
+    expect(names('name', 'ascending')).to.deep.equal(['a', 'b', 'c']);
+    expect(names('name', 'descending')).to.deep.equal(['c', 'b', 'a']);
+    expect(names('title', 'ascending')).to.deep.equal(['b', 'c', 'a']);
+    expect(names('title', 'descending')).to.deep.equal(['a', 'c', 'b']);
     expect(items[0].name).to.equal('b');
+  });
+
+  it('sorts names numerically and breaks ties by name', () => {
+    const items = [{ name: 'item10' }, { name: 'item9' }, { name: 'b', lastModified: 5 },
+      { name: 'a', lastModified: 5 }];
+    expect(sortItems(items, { property: 'name', direction: 'ascending' }).map((i) => i.name))
+      .to.deep.equal(['a', 'b', 'item9', 'item10']);
+    expect(sortItems(items, { property: 'modified', direction: 'descending' }).map((i) => i.name))
+      .to.deep.equal(['a', 'b', 'item9', 'item10']);
+  });
+
+  it('toggles a column sort descending first, then flips it', () => {
+    const sort = toggleSort({ property: 'modified', direction: 'descending' }, 'name');
+    expect(sort).to.deep.equal({ property: 'name', direction: 'descending' });
+    expect(toggleSort(sort, 'name')).to.deep.equal({ property: 'name', direction: 'ascending' });
+    expect(toggleSort({ property: 'name', direction: 'ascending' }, 'name').direction)
+      .to.equal('descending');
   });
 
   it('parses imported JSON', () => {

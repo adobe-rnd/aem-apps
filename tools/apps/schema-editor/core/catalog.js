@@ -27,11 +27,10 @@ import { walk } from './model/query.js';
 import { createModel } from './model/elements.js';
 import { validateSchemaName } from './model/keys.js';
 
-export const SORTS = Object.freeze({
-  modified: 'Last modified',
-  title: 'Title',
-  name: 'Name',
-});
+/** A sort is `{ property, direction }`: title, name or modified; ascending or descending. */
+export const DEFAULT_SORT = Object.freeze({ property: 'modified', direction: 'descending' });
+
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
 /** Summarises a schema for its browse row. */
 export function summarize(json, name) {
@@ -57,16 +56,23 @@ export function filterItems(items, query, summaries = new Map()) {
   });
 }
 
-/** `sort` is a key of `SORTS`; `summaries` as in `filterItems`. */
-export function sortItems(items, sort, summaries = new Map()) {
+/** `sort` as in `DEFAULT_SORT`; `summaries` as in `filterItems`. Ties fall back to name, A-Z. */
+export function sortItems(items, sort = DEFAULT_SORT, summaries = new Map()) {
   const titleOf = ({ name }) => summaries.get(name)?.title || name;
   const compare = {
-    modified: (a, b) => (b.lastModified ?? 0) - (a.lastModified ?? 0)
-      || a.name.localeCompare(b.name),
-    title: (a, b) => titleOf(a).localeCompare(titleOf(b), undefined, { sensitivity: 'base' }),
-    name: (a, b) => a.name.localeCompare(b.name),
-  }[sort] ?? (() => 0);
-  return [...items].sort(compare);
+    modified: (a, b) => (a.lastModified ?? 0) - (b.lastModified ?? 0),
+    title: (a, b) => collator.compare(titleOf(a), titleOf(b)),
+    name: (a, b) => collator.compare(a.name, b.name),
+  }[sort?.property];
+  if (!compare) return [...items];
+  const factor = sort.direction === 'descending' ? -1 : 1;
+  return [...items].sort((a, b) => factor * compare(a, b) || collator.compare(a.name, b.name));
+}
+
+/** The sort a column heading applies, as on da.live browse: descending first, then flipping. */
+export function toggleSort(sort, property) {
+  const descending = sort?.property === property && sort.direction === 'descending';
+  return { property, direction: descending ? 'ascending' : 'descending' };
 }
 
 const SCHEMA_TYPES = new Set(['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']);

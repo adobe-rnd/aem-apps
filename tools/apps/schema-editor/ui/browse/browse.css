@@ -77,6 +77,69 @@
   color: var(--s2-gray-600);
 }
 
+/* Sortable headings (as on da.live browse): the arrow's slot is kept so labels don't shift. */
+.sort-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: start;
+  min-width: 0;
+  min-height: 24px;
+  margin: 0 -4px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.sort-heading:hover {
+  color: var(--s2-gray-800);
+}
+
+.sort-heading:focus-visible {
+  outline: 2px solid var(--s2-blue-800);
+  outline-offset: 0;
+}
+
+.sort-heading:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.sort-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.sort-popover {
+  box-sizing: border-box;
+  width: 200px;
+  max-width: calc(100vw - 16px);
+  padding: 8px;
+  border-radius: 10px;
+  color: var(--s2-gray-800);
+  font-size: 14px;
+}
+
+.sort-option {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 7px 12px;
+}
+
+.sort-option .icon {
+  width: 16px;
+  height: 18px;
+}
+
+.sort-option .unchecked {
+  visibility: hidden;
+}
+
 .rows {
   margin: 0;
   padding: 0;
