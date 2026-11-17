@@ -17,7 +17,7 @@ import { describe, it } from 'node:test';
 import { expect } from '../../expect.js';
 import { parseSchema } from '../../../../../../tools/apps/schema-editor/core/model/parse.js';
 import {
-  lint, countIssues, checkValue, worstSeverity, testPattern,
+  lint, countIssues, checkValue, worstSeverity, testPattern, issuePointer,
 } from '../../../../../../tools/apps/schema-editor/core/model/lint.js';
 import { createNode } from '../../../../../../tools/apps/schema-editor/core/model/elements.js';
 import { insertNode } from '../../../../../../tools/apps/schema-editor/core/model/commands.js';
@@ -205,5 +205,11 @@ describe('issue helpers', () => {
     expect(testPattern('^a', '').state).to.equal('empty');
     expect(testPattern('^a', 'abc').state).to.equal('match');
     expect(testPattern('^a', 'b').state).to.equal('nomatch');
+  });
+
+  it('points at the keyword an issue is about, else at its element', () => {
+    expect(issuePointer({ schemaPath: '/properties/a', field: 'maxLength' })).to.equal('/properties/a/maxLength');
+    expect(issuePointer({ schemaPath: '/properties/a', field: 'key' })).to.equal('/properties/a');
+    expect(issuePointer({ schemaPath: '/properties/a/items' })).to.equal('/properties/a/items');
   });
 });

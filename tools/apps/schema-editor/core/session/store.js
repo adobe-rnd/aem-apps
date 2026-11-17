@@ -24,7 +24,7 @@ import { lint, countIssues } from '../model/lint.js';
 import { checkWithSdk } from '../model/sdk.js';
 import { createHistory } from '../model/history.js';
 import { CommandError, lockKeys } from '../model/commands.js';
-import { textIssue } from '../json-text.js';
+import { pointerLocator, textIssue } from '../json-text.js';
 import { findNode, getDef } from '../model/query.js';
 import {
   MODES, pageFor, componentFor, selectionAfter,
@@ -36,6 +36,9 @@ const sameProblem = (a, b) => (a && b
 
 // eslint-disable-next-line import/prefer-default-export
 export class SchemaStore {
+  /** `textAt`'s pointer locator, for the text it was made for. */
+  #located = null;
+
   constructor({
     org, site, name, repository, validateSchema, bus = createSchemaBus(), history,
   } = {}) {
@@ -192,11 +195,27 @@ export class SchemaStore {
   setJsonDraft({ text, problem = null }) {
     if (!this.model) return;
     const json = stringifySchema(this.model);
-    const before = this.jsonDraft?.problem;
+    const before = this.jsonDraft;
     this.jsonDraft = text === json && !problem ? null : { text, json, problem };
-    if (sameProblem(problem, before)) return;
-    this.#relint();
-    this.#emitModel();
+    const newProblem = !sameProblem(problem, before?.problem);
+    // Issues are located in valid text (`textAt`), so they follow its lines as well.
+    const moved = !problem && text !== (before?.text ?? json);
+    if (newProblem) this.#relint();
+    if (newProblem || moved) this.#emitModel();
+  }
+
+  /**
+   * Where the Schema page's text has `pointer` (or its nearest ancestor): `{ line, column }`, or
+   * null while the text is not a valid schema, as it may not hold the model's pointers.
+   */
+  textAt(pointer) {
+    if (!this.model || this.jsonDraft?.problem) return null;
+    const draft = this.jsonDraft?.text;
+    if (this.#located?.model !== this.model || this.#located.draft !== draft) {
+      const at = pointerLocator(draft ?? stringifySchema(this.model));
+      this.#located = { model: this.model, draft, at };
+    }
+    return this.#located.at(pointer);
   }
 
   #textIssues() {
@@ -326,6 +345,7 @@ export class SchemaStore {
       raw: this.raw,
       model: this.model,
       issues: this.issues,
+      jsonDraft: this.jsonDraft,
       counts: this.counts,
       dirty: this.dirty,
       canUndo: this.history.canUndo,

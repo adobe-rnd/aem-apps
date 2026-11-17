@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 import { html, nothing } from 'da-lit';
-import { countIssues } from '../../core/model/lint.js';
+import { countIssues, issuePointer } from '../../core/model/lint.js';
 import { findNode, labelOf } from '../../core/model/query.js';
 import { icon } from '../shared/icons.js';
 import { nodeIcon } from '../author/card-info.js';
@@ -22,6 +22,7 @@ import { applyFix } from '../shared/actions.js';
 import { plural } from '../shared/format.js';
 import { fixableIssues } from '../../core/prompts.js';
 import { loadStyle } from '../shared/styles.js';
+import { BusController } from '../shared/bus-controller.js';
 import { PanelView } from './panel-view.js';
 
 const style = await loadStyle(import.meta.url);
@@ -45,7 +46,11 @@ function newGroup(model, issue) {
   }
   const label = entry.def && !entry.parent ? entry.def.name : labelOf(model, entry.node);
   return {
-    key: issue.nodeId, nodeId: issue.nodeId, label: label || 'Untitled', node: entry.node,
+    key: issue.nodeId,
+    nodeId: issue.nodeId,
+    pointer: entry.pointer,
+    label: label || 'Untitled',
+    node: entry.node,
   };
 }
 
@@ -63,22 +68,55 @@ export function groupIssues(model, issues) {
   return [...groups.values()];
 }
 
-/** Problems found by the linter, the SDK and in the Schema page's text, grouped by element. */
+/**
+ * Problems found by the linter, the SDK and in the Schema page's text, grouped by element. On
+ * the Schema page they point to their line in the text, and clicking one goes there.
+ */
 class SeIssues extends PanelView {
   static sheets = [style];
 
-  _reveal({ nodeId, text }) {
-    if (!nodeId && !text) return;
-    // On the Schema page Issues is only the fallback view; pick it so the list stays in front.
-    this.store.bus.panelRequest.emit({ view: 'issues' });
-    // Revealing picks Build or Components, whichever shows the element.
-    if (nodeId) this.store.select(nodeId, { reveal: true });
-    else this.store.revealText(text);
+  static properties = {
+    /** The Schema page's text, when it differs from the schema's; its lines locate issues. */
+    jsonDraft: { state: true },
+  };
+
+  constructor() {
+    super();
+    this.jsonDraft = null;
+    this._draftSubscription = new BusController(this, (bus) => [
+      bus.modelState.subscribe((state) => { this.jsonDraft = state.jsonDraft ?? null; }),
+    ]);
   }
 
-  _location({ schemaPath, text }) {
-    if (text?.line) return `Line ${text.line}, column ${text.column}`;
-    return schemaPath;
+  get _onSchemaPage() {
+    return this.page.mode === 'schema';
+  }
+
+  /** Where `target` (an issue, or a group's `pointer`) is in the Schema page's text, or null. */
+  _textAt({ text, pointer }) {
+    if (text) return text;
+    return this._onSchemaPage ? this.store.textAt(pointer) : null;
+  }
+
+  _reveal(group) {
+    const at = this._textAt(group);
+    if (!group.nodeId && !at) return;
+    // On the Schema page Issues is only the fallback view; pick it so the list stays in front.
+    this.store.bus.panelRequest.emit({ view: 'issues' });
+    if (at) this.store.revealText(at);
+    // Revealing picks Build or Components, whichever shows the element.
+    else this.store.select(group.nodeId, { reveal: true });
+  }
+
+  _renderLocation(issue) {
+    const at = this._textAt({ text: issue.text, pointer: issuePointer(issue) });
+    if (!at?.line) return issue.schemaPath ? html`<span class="path">${issue.schemaPath}</span>` : nothing;
+    const label = `Line ${at.line}, column ${at.column}`;
+    if (!this._onSchemaPage) return html`<span class="path">${label}</span>`;
+    return html`
+      <button type="button" class="path is-link" title="Go to this place in the JSON"
+        @click=${() => this.store.revealText(at)}>${label}</button>
+    `;
   }
 
   _renderIssue(issue) {
@@ -88,7 +126,7 @@ class SeIssues extends PanelView {
           <span class="sr-only">${issue.severity}</span></span>
         <span class="issue-text">
           <span>${issue.message}</span>
-          ${this._location(issue) ? html`<span class="path">${this._location(issue)}</span>` : nothing}
+          ${this._renderLocation(issue)}
         </span>
         ${issue.fix ? html`
           <button type="button" class="nx-action-btn"

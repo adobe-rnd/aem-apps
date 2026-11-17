@@ -21,7 +21,10 @@ import { createChannel } from './channel.js';
 // eslint-disable-next-line import/prefer-default-export
 export function createSchemaBus() {
   return Object.freeze({
-    /** { status, error, model, issues, counts, dirty, canUndo, canRedo, … } (store `#emitModel`) */
+    /**
+     * { status, error, model, issues, jsonDraft, counts, dirty, canUndo, canRedo, … } (store
+     * `#emitModel`); `jsonDraft` is the Schema page's text when it differs (`setJsonDraft`).
+     */
     modelState: createChannel({ replay: true }),
     /** { nodeId, editingDefId } */
     selectionState: createChannel({ replay: true }),

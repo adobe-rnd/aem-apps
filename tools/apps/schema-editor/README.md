@@ -59,7 +59,9 @@ Name or Modified heading also sorts by it, newest/Z-A first, and again reverses 
   on leaving the editor, with the line marked, and listed in Issues as a
   **Schema JSON** error that blocks saving (clicking it returns to the line);
   the schema keeps its last valid version until it is fixed, and the text
-  waits for you if you switch pages without changing anything else. Enter keeps the indent; **Format** reindents
+  waits for you if you switch pages without changing anything else. Here
+  Issues gives every issue's line and column in the text; clicking it or
+  the element puts the caret there. Enter keeps the indent; **Format** reindents
   it and the copy button copies it. The panel shows only Issues, and clicking
   one opens its page.
 - **Tool panel** (right): 320–400px wide, following the window; below 720px it

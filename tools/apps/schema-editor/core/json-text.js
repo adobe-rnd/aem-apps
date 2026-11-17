@@ -13,7 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// JSON typed as text: where it breaks, and what Enter inserts. Pure, so it is unit-tested.
+// JSON typed as text: where it breaks, where its values are, and what Enter inserts. Pure, so
+// it is unit-tested.
+import { encodePointerToken } from './model/parse.js';
 
 const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -69,6 +71,86 @@ export function offsetAt(text, { line, column } = {}) {
   const index = Math.min(line, lines.length) - 1;
   const start = lines.slice(0, index).reduce((sum, { length }) => sum + length + 1, 0);
   return start + Math.min(Math.max((column ?? 1) - 1, 0), lines[index].length);
+}
+
+const SPACE = /[ \t\n\r]*/y;
+const STRING = /"(?:[^"\\]|\\.)*"/y;
+const SCALAR = /[^\s,\]}]+/y;
+const CLOSE = { '{': '}', '[': ']' };
+
+/** The offset of each value in valid JSON `text`, by JSON Pointer; a member's is its key's. */
+function valueOffsets(text) {
+  const offsets = new Map();
+  let at = 0;
+  const read = (pattern) => {
+    pattern.lastIndex = at;
+    const found = pattern.exec(text);
+    if (!found) throw new SyntaxError(`Unexpected text at ${at}`);
+    at = pattern.lastIndex;
+    return found[0];
+  };
+  const scan = (pointer) => {
+    read(SPACE);
+    if (!offsets.has(pointer)) offsets.set(pointer, at);
+    const open = text.charAt(at);
+    if (!CLOSE[open]) {
+      read(open === '"' ? STRING : SCALAR);
+      return;
+    }
+    at += 1;
+    for (let index = 0; ; index += 1) {
+      read(SPACE);
+      if (text.charAt(at) === CLOSE[open]) break;
+      let child = `${pointer}/${index}`;
+      if (open === '{') {
+        const keyAt = at;
+        child = `${pointer}/${encodePointerToken(JSON.parse(read(STRING)))}`;
+        // A repeated key is the last one, as JSON.parse reads it.
+        offsets.set(child, keyAt);
+        read(SPACE);
+        at += 1;
+      }
+      scan(child);
+      read(SPACE);
+      if (text.charAt(at) !== ',') break;
+      at += 1;
+    }
+    at += 1;
+  };
+  scan('');
+  return offsets;
+}
+
+/**
+ * Finds JSON Pointers in valid JSON `text`: the returned function gives the 1-based
+ * `{ line, column }` of a pointer (an object member at its key), or of its nearest ancestor in
+ * the text; null when `text` is not valid JSON.
+ */
+export function pointerLocator(text) {
+  let offsets;
+  try {
+    offsets = valueOffsets(text);
+  } catch {
+    return () => null;
+  }
+  const lineStarts = [0];
+  for (let i = text.indexOf('\n'); i !== -1; i = text.indexOf('\n', i + 1)) {
+    lineStarts.push(i + 1);
+  }
+  return (pointer = '') => {
+    let found = pointer;
+    while (found && !offsets.has(found)) found = found.slice(0, found.lastIndexOf('/'));
+    const offset = offsets.get(found);
+    if (offset === undefined) return null;
+    let low = 0;
+    let high = lineStarts.length - 1;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if (lineStarts[middle] <= offset) low = middle;
+      else high = middle - 1;
+    }
+    return { line: low + 1, column: offset - lineStarts[low] + 1 };
+  };
 }
 
 /**

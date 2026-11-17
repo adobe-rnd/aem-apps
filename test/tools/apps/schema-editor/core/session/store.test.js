@@ -357,4 +357,15 @@ describe('SchemaStore Schema page text', () => {
     expect(store.mode).to.equal('schema');
     expect(reveals).to.deep.equal([{ text: { line: 2, column: 5 } }]);
   });
+
+  it('locates pointers in the text while it is valid, broadcasting when its lines move', async () => {
+    const { store, seen } = await loaded();
+    expect(store.textAt('/properties/a')).to.deep.equal({ line: 5, column: 5 });
+    const emitted = seen.model.length;
+    store.setJsonDraft({ text: `\n\n${stringifySchema(store.model)}` });
+    expect(seen.model).to.have.length(emitted + 1);
+    expect(store.textAt('/properties/a')).to.deep.equal({ line: 7, column: 5 });
+    store.setJsonDraft({ text: '{', problem: PROBLEM });
+    expect(store.textAt('/properties/a')).to.equal(null);
+  });
 });

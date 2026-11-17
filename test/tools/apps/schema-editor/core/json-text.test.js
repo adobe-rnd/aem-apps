@@ -16,7 +16,7 @@
 import { describe, it } from 'node:test';
 import { expect } from '../expect.js';
 import {
-  jsonProblem, parseJsonText, parseSchemaText, lineBreakAt, offsetAt,
+  jsonProblem, parseJsonText, parseSchemaText, lineBreakAt, offsetAt, pointerLocator,
 } from '../../../../../tools/apps/schema-editor/core/json-text.js';
 
 describe('JSON text', () => {
@@ -66,6 +66,21 @@ describe('offsetAt', () => {
     expect(offsetAt(text, { line: 2, column: 99 })).to.equal(10);
     expect(offsetAt(text, { line: 9, column: 1 })).to.equal(11);
     expect(offsetAt(text, {})).to.equal(0);
+  });
+});
+
+describe('pointerLocator', () => {
+  it('finds a member at its key and an entry at its value, as 1-based line and column', () => {
+    const at = pointerLocator('{\n  "a/b": [1, { "c~d": true }],\n  "e": 1, "e": 2\n}');
+    expect(at('')).to.deep.equal({ line: 1, column: 1 });
+    expect(at('/a~1b')).to.deep.equal({ line: 2, column: 3 });
+    expect(at('/a~1b/1/c~0d')).to.deep.equal({ line: 2, column: 16 });
+    expect(at('/e')).to.deep.equal({ line: 3, column: 11 });
+  });
+
+  it('falls back to the nearest ancestor in the text, and finds nothing in text that is not valid', () => {
+    expect(pointerLocator('{\n  "a": {}\n}')('/a/maxLength')).to.deep.equal({ line: 2, column: 3 });
+    expect(pointerLocator('{ "a": ')('/a')).to.equal(null);
   });
 });
 

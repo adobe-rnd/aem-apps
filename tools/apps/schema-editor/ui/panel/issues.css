@@ -92,6 +92,30 @@
   color: var(--s2-gray-700);
 }
 
+/* A secondary link (S2): neutral and underlined, never a button. */
+.path.is-link {
+  justify-self: start;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  font-family: inherit;
+  text-align: start;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  background: none;
+  cursor: pointer;
+}
+
+.path.is-link:hover {
+  color: var(--s2-gray-900);
+}
+
+.path.is-link:focus-visible {
+  outline: 2px solid var(--s2-blue-800);
+  outline-offset: 1px;
+}
+
 .ok {
   color: var(--s2-green-900, #05834e);
 }

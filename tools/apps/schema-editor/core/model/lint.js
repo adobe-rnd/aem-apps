@@ -367,6 +367,17 @@ export function countIssues(issues) {
   }, { error: 0, warning: 0, info: 0 });
 }
 
+// Issue fields that are keywords of the saved schema.
+const KEYWORD_FIELDS = new Set([
+  'title', 'pattern', 'enum', 'default',
+  'minLength', 'maxLength', 'minItems', 'maxItems', 'minimum', 'maximum',
+]);
+
+/** Where an issue is in the saved schema: the keyword its field names, else its `schemaPath`. */
+export function issuePointer({ schemaPath = '', field }) {
+  return KEYWORD_FIELDS.has(field) ? `${schemaPath}/${field}` : schemaPath;
+}
+
 export function issuesByNode(issues) {
   const map = new Map();
   issues.forEach((issue) => {
