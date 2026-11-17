@@ -49,7 +49,7 @@ button.def-main:hover {
 }
 
 .def-meta {
-  font-size: var(--s2-body-xs-size, 12px);
+  font-size: var(--s2-component-s-regular-font-size);
   color: var(--s2-gray-700);
 }
 
@@ -60,17 +60,7 @@ button.def-main:hover {
   padding: 4px;
 }
 
-.rename {
-  height: 32px;
-  padding: 0 8px;
-  border: 2px solid var(--s2-blue-800);
-  border-radius: 8px;
-  font: inherit;
-  color: var(--s2-gray-900);
-  background: var(--s2-gray-25, #fff);
-  outline: none;
-}
-
+/* The box is the fields' `.form-control`, as in the form editor. */
 .rename[aria-invalid='true'] {
-  border-color: var(--s2-red-900, #d31510);
+  border-color: var(--s2-red-900);
 }

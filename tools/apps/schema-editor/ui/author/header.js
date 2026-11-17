@@ -130,7 +130,7 @@ class SeHeader extends LitElement {
             ${status.tone === 'dirty' ? html`<span class="dot" aria-hidden="true"></span>` : nothing}
             <span class="status-text">${status.text}</span>
             ${saveState.state === 'error' ? html`
-              <button type="button" class="nx-action-btn-quiet nx-btn-sm"
+              <button type="button" class="nx-action-btn-quiet"
                 @click=${() => store.save()}>Retry</button>` : nothing}
           </span>
         </div>

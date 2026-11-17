@@ -2,7 +2,6 @@
 
 :host {
   display: block;
-  font-size: var(--s2-body-s-size, 14px);
 }
 
 .panel {
@@ -24,7 +23,8 @@
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  font-size: var(--s2-heading-xs-size, 16px);
+  font-size: var(--s2-body-size-m);
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--s2-gray-900);
@@ -43,7 +43,7 @@
 
 .hint {
   margin: 0;
-  font-size: var(--s2-body-xs-size, 12px);
+  font-size: var(--s2-component-s-regular-font-size);
   color: var(--s2-gray-700);
 }
 
@@ -68,20 +68,23 @@
   list-style: none;
 }
 
+/* A bare icon at the S2 icons' native 20px, as on the canvas. */
 .node-icon {
   display: grid;
   place-items: center;
   flex: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  color: var(--s2-gray-800);
-  background: var(--s2-gray-100);
+  width: 20px;
+  height: 20px;
+  color: var(--s2-gray-700);
+}
+
+.node-icon .icon {
+  width: 20px;
+  height: 20px;
 }
 
 .node-icon.is-ref {
-  color: var(--s2-indigo-900, #4046ca);
-  background: var(--s2-indigo-100, #edeefd);
+  color: var(--s2-indigo-900);
 }
 
 .notice {
@@ -117,7 +120,7 @@ pre.json {
   overflow: auto;
   border-radius: 8px;
   font-family: var(--se-code-font-family);
-  font-size: var(--s2-body-xs-size, 12px);
+  font-size: var(--s2-body-size-xs);
   line-height: 1.5;
   white-space: pre;
   color: var(--s2-gray-900);

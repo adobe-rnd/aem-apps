@@ -5,6 +5,9 @@
   --se-code-font-family: consolas, monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
 
   font-family: var(--s2-font-family);
+
+  /* The form editor's control text size; labels and hints step down to 12px. */
+  font-size: var(--s2-body-size-s);
   color: var(--s2-gray-800);
 }
 
@@ -30,7 +33,7 @@
 
 .eyebrow {
   margin: 0;
-  font-size: var(--s2-body-xs-size, 12px);
+  font-size: var(--s2-component-s-regular-font-size);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -44,7 +47,7 @@
   padding: 0 8px;
   height: 20px;
   border-radius: 10px;
-  font-size: var(--s2-body-xs-size, 12px);
+  font-size: var(--s2-component-s-regular-font-size);
   line-height: 20px;
   white-space: nowrap;
   color: var(--s2-gray-700);
@@ -82,7 +85,8 @@
 
 .empty :is(h2, h3) {
   margin: 0;
-  font-size: var(--s2-heading-xs-size, 16px);
+  font-size: var(--s2-body-size-m);
+  font-weight: 600;
   color: var(--s2-gray-900);
 }
 

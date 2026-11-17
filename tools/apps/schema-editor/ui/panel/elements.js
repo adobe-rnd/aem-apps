@@ -94,7 +94,7 @@ class SeElements extends PanelView {
           @dragend=${() => endDrag(this.store?.bus)}>
           <span class="node-icon ${item.type === 'component' ? 'is-ref' : ''}">${icon(item.icon)}</span>
           <span class="element-label">${item.label}</span>
-          <span class="grip">${icon('drag')}</span>
+          <span class="grip">${icon('move')}</span>
         </button>
       </li>
     `;

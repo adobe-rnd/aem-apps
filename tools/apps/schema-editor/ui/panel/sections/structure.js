@@ -30,7 +30,7 @@ function addMenu(ctx, label, target) {
   return html`
     <nx-menu placement="below-start" .items=${paletteMenuItems(ctx.model, ctx.node.id)}
       @select=${(e) => insertPaletteItem(ctx.store, parseMenuId(e.detail.id), target)}>
-      <button slot="trigger" type="button" class="nx-action-btn nx-btn-sm">
+      <button slot="trigger" type="button" class="nx-action-btn">
         ${icon('add')} ${label}</button>
     </nx-menu>
   `;
@@ -59,14 +59,11 @@ function nodeRow(ctx, child, extra = nothing) {
 function requiredToggle(ctx, child) {
   const label = labelOf(ctx.model, child) || 'field';
   return html`
-    <label class="required-toggle" title="Required">
-      <input type="checkbox" .checked=${!!child.required} aria-label="${label} is required"
-        @change=${(e) => ctx.dispatch(updateNode, {
+    <se-checkbox class="required-toggle" title="Required" .checked=${!!child.required}
+      @change=${(e) => ctx.dispatch(updateNode, {
     nodeId: child.id,
     patch: { required: e.target.checked || undefined },
-  })}>
-      <span>Req.</span>
-    </label>
+  })}><span class="sr-only">${label} is required</span><span aria-hidden="true">Req.</span></se-checkbox>
   `;
 }
 
@@ -82,7 +79,7 @@ export function fields(ctx) {
     <div class="row-actions">
       ${addMenu(ctx, 'Add field', { parentId: node.id, index: children.length })}
       ${canReuse ? html`
-        <button type="button" class="nx-action-btn-quiet nx-btn-sm"
+        <button type="button" class="nx-action-btn-quiet"
           @click=${() => makeReusable(ctx.store, node.id)}>
           ${icon('component')} Make reusable</button>` : nothing}
     </div>
@@ -100,7 +97,7 @@ export function items(ctx) {
     <div class="row-actions">
       ${addMenu(ctx, node.item ? 'Change item' : 'Choose item', target)}
       ${entry.parent ? html`
-        <button type="button" class="nx-action-btn-quiet nx-btn-sm"
+        <button type="button" class="nx-action-btn-quiet"
           @click=${() => makeReusable(ctx.store, node.id)}>
           ${icon('component')} Make reusable</button>` : nothing}
     </div>

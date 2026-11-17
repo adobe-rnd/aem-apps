@@ -1,5 +1,17 @@
 .inspector-head {
+  --title-line: 24px;
+
   align-items: flex-start;
+}
+
+.inspector-head h2 {
+  line-height: var(--title-line);
+}
+
+/* As tall as the title's line, so the icon centres on it rather than on the
+   whole heading with its subtitle. */
+.inspector-head .node-icon {
+  height: var(--title-line);
 }
 
 .inspector-title {
@@ -72,7 +84,7 @@
 
 .tester {
   margin: 0;
-  font-size: var(--s2-body-xs-size, 12px);
+  font-size: var(--s2-component-s-regular-font-size);
   color: var(--s2-gray-700);
 }
 
@@ -142,25 +154,10 @@
   bottom: -3.5px;
 }
 
+/* The box is the fields' `.form-control`, as in the form editor. */
 .choice-input {
   flex: 1;
   min-width: 0;
-  height: 32px;
-  padding: 0 8px;
-  border: 2px solid var(--s2-gray-300);
-  border-radius: 8px;
-  font: inherit;
-  color: var(--s2-gray-900);
-  background: var(--s2-gray-25, #fff);
-}
-
-.choice-input:hover {
-  border-color: var(--s2-gray-400);
-}
-
-.choice-input:focus-visible {
-  border-color: var(--s2-blue-800);
-  outline: none;
 }
 
 .paste {
@@ -215,7 +212,7 @@
 }
 
 .node-row-meta {
-  font-size: var(--s2-body-xs-size, 12px);
+  font-size: var(--s2-component-s-regular-font-size);
   color: var(--s2-gray-700);
 }
 
@@ -224,12 +221,7 @@
 }
 
 .required-toggle {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--s2-body-xs-size, 12px);
-  color: var(--s2-gray-700);
-  cursor: pointer;
+  flex: none;
 }
 
 /* Component / root */

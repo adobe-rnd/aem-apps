@@ -23,6 +23,7 @@ import { usesPhrase } from '../shared/format.js';
 import { kindLabel, nodeIcon } from '../author/card-info.js';
 import { applyFix } from '../shared/actions.js';
 import { loadStyle } from '../shared/styles.js';
+import { fieldStyles } from '../fields/field.js';
 import { sectionsFor } from './inspector.js';
 import { SECTIONS } from './sections/index.js';
 import { PanelView } from './panel-view.js';
@@ -54,7 +55,7 @@ class SeProperties extends PanelView {
     _tab: { state: true },
   };
 
-  static sheets = [style];
+  static sheets = [fieldStyles, style];
 
   constructor() {
     super();
@@ -158,7 +159,7 @@ class SeProperties extends PanelView {
             ${icon(SEVERITY_ICON[issue.severity] ?? 'info')}
             <span class="notice-text">${issue.message}</span>
             ${issue.fix ? html`
-              <button type="button" class="nx-action-btn nx-btn-sm"
+              <button type="button" class="nx-action-btn"
                 @click=${() => applyFix(this.store, issue)}>${issue.fix.label}</button>` : nothing}
           </li>
         `)}

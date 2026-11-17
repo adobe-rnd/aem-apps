@@ -21,6 +21,7 @@ import { icon, iconFile } from '../shared/icons.js';
 import { usageLabel } from '../shared/format.js';
 import { newComponent, deleteComponent, editComponent } from '../shared/actions.js';
 import { loadStyle } from '../shared/styles.js';
+import { fieldStyles } from '../fields/field.js';
 import { PanelView } from './panel-view.js';
 
 await import('https://da.live/nx2/blocks/shared/menu/menu.js');
@@ -36,7 +37,7 @@ const MENU = [
 
 /** The schema's components (`$defs`). Shown on the Components page; uses come from Elements. */
 class SeComponents extends PanelView {
-  static sheets = [style];
+  static sheets = [fieldStyles, style];
 
   static properties = {
     ...PanelView.properties,
@@ -98,7 +99,7 @@ class SeComponents extends PanelView {
     const error = this._renameError(def);
     return html`
       <div class="def-rename">
-        <input class="rename" aria-label="Component name" .value=${this._draft}
+        <input class="form-control rename" aria-label="Component name" .value=${this._draft}
           aria-invalid=${error ? 'true' : 'false'}
           @input=${(e) => { this._draft = e.target.value; }}
           @keydown=${(e) => this._onRenameKey(e, def)}
@@ -139,7 +140,7 @@ class SeComponents extends PanelView {
       <div class="panel">
         <div class="panel-header">
           <h2>Components</h2>
-          <button type="button" class="nx-btn-accent nx-btn-sm"
+          <button type="button" class="nx-btn-accent"
             @click=${() => newComponent(this.store)}>${icon('add')} New component</button>
         </div>
         <p class="hint">Reusable groups of fields. Change one and every usage follows.</p>

@@ -27,19 +27,18 @@
 
 .card-head {
   box-sizing: border-box;
-  min-height: 56px;
-  padding: 6px 8px 6px 6px;
+  min-height: 40px;
+  padding: 4px 8px 4px 6px;
   border-radius: 8px;
   cursor: pointer;
 }
 
-/* The head's first row is 44px, so its centre stays at 28px even when a
-   component use's line sits below it. */
+/* As tall as the row's action button. */
 .card-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 44px;
+  min-height: 32px;
 }
 
 /* Nested rows move by dragging their head. Once a native drag starts the
@@ -66,8 +65,8 @@
 }
 
 /* Groups, lists and components open and close from a chevron in front of
-   their label. Its 28px box is centred at 58px, over the child icons (36px
-   indent + 22px), which leaves equal space around the 13px glyph. */
+   their label. Its 28px box is centred at 46px, over the child icons (30px
+   indent + 16px), which leaves equal space around the 13px glyph. */
 .tree-toggle {
   display: grid;
   place-items: center;
@@ -102,15 +101,23 @@
   color: var(--s2-blue-900);
 }
 
+/* A bare icon at the S2 icons' native 20px, as the form editor draws them. */
 .card-icon {
   display: grid;
   place-items: center;
   flex: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  color: var(--s2-gray-800);
-  background: var(--s2-gray-100);
+  width: 20px;
+  height: 20px;
+  color: var(--s2-gray-700);
+}
+
+.card-icon .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.card.is-selected > .card-head .card-icon {
+  color: var(--s2-blue-900);
 }
 
 .card-names {
@@ -123,7 +130,7 @@
 
 .card-title {
   overflow: hidden;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--s2-gray-900);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -133,13 +140,9 @@
   color: var(--s2-blue-800);
 }
 
-.card.is-top > .card-head .card-title {
-  font-size: var(--s2-heading-xs-size, 16px);
-}
-
 .card-key {
   overflow: hidden;
-  font-size: var(--s2-body-xs-size, 12px);
+  font-size: var(--s2-component-s-regular-font-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -147,7 +150,6 @@
 .card-kind {
   flex: none;
   margin-inline-start: auto;
-  font-size: var(--s2-body-s-size, 14px);
   white-space: nowrap;
 }
 
@@ -206,19 +208,19 @@
 /* Tree lines, like a file tree: an open group runs one 1px guide down the
    side of its rows, under its icon's centre, and the rows are listed along it
    without branches. --spine is the parent icon's centre (head padding 6px +
-   half the 32px icon), --indent the space from the guide to the child rows,
+   half the 20px icon), --indent the space from the guide to the child rows,
    --gap the space the .gap rows leave between children. The guides are
    light, as the indent already carries the nesting. */
 .children {
-  --spine: 22px;
+  --spine: 16px;
   --indent: 14px;
-  --gap: 8px;
+  --gap: 4px;
   --line: var(--s2-gray-300);
 
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  margin: 0 0 8px calc(var(--spine) + var(--indent));
+  margin: 0 0 var(--gap) calc(var(--spine) + var(--indent));
 }
 
 .children::before {
@@ -246,7 +248,7 @@
 
 .gap {
   position: relative;
-  height: 8px;
+  height: var(--gap);
 }
 
 .gap.is-target::after {
@@ -264,12 +266,11 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  min-height: 44px;
-  margin-block-start: 8px;
+  min-height: 40px;
+  margin-block-start: 4px;
   padding: 4px 12px;
   border: 1px dashed var(--s2-gray-300);
   border-radius: 10px;
-  font-size: var(--s2-body-s-size, 14px);
 }
 
 .tree.is-dragging .drop-zone {
@@ -320,7 +321,7 @@
   border-radius: 6px;
   color: var(--s2-gray-25, #fff);
   background: var(--s2-red-900, #d31510);
-  font-size: var(--s2-body-xs-size, 12px);
+  font-size: var(--s2-component-s-regular-font-size);
   white-space: nowrap;
   pointer-events: none;
 }
@@ -404,13 +405,11 @@
 
 .card.is-locked > .card-head .card-icon {
   color: var(--s2-gray-600);
-  background: var(--s2-gray-75);
 }
 
 /* Also inside a preview, a use's icon keeps the component colour. */
 .card.is-use > .card-head .card-icon {
   color: var(--s2-indigo-900);
-  background: var(--s2-indigo-200);
 }
 
 .spacer {
@@ -419,7 +418,7 @@
 
 .drop-zone.is-static {
   justify-content: flex-start;
-  min-height: 36px;
+  min-height: 32px;
   border-style: dotted;
 }
 
@@ -434,8 +433,7 @@
 }
 
 .unsupported-note {
-  margin: 0 12px 10px 48px;
-  font-size: var(--s2-body-s-size, 14px);
+  margin: 0 12px 8px 36px;
 }
 
 /* Tree tools ------------------------------------------------------------ */

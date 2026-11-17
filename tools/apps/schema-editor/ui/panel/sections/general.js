@@ -88,7 +88,7 @@ function keyField(ctx) {
           title="Edit key" aria-label="Edit key"
           @click=${() => unlockKey(ctx)}>${icon('lock')}</button>` : nothing}
       ${node.keyManual && !node.keyLocked ? html`
-        <button type="button" class="nx-action-btn-quiet nx-btn-sm key-btn"
+        <button type="button" class="nx-action-btn-quiet key-btn"
           @click=${followLabel}>Follow label</button>` : nothing}
     </div>
   `;

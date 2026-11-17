@@ -68,7 +68,7 @@ export function pattern(ctx) {
   })}
     <div class="row-actions">
       <nx-menu placement="below-start" .items=${presets} @select=${(e) => applyPreset(e.detail.id)}>
-        <button slot="trigger" type="button" class="nx-action-btn nx-btn-sm">
+        <button slot="trigger" type="button" class="nx-action-btn">
           Presets ${icon('chevronDown')}</button>
       </nx-menu>
     </div>

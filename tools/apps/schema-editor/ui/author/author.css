@@ -85,7 +85,7 @@ se-header {
   border-radius: 8px;
   background: var(--s2-gray-75);
   font-family: var(--se-code-font-family);
-  font-size: var(--s2-body-xs-size, 12px);
+  font-size: var(--s2-body-size-xs);
   text-align: start;
   white-space: pre-wrap;
 }

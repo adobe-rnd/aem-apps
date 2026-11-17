@@ -48,6 +48,7 @@ const FILES = {
   key: 'key',
   lock: 'lock',
   more: 'more',
+  move: 'move',
   chat: 'splitleft',
   panel: 'splitright',
   properties: 'properties',

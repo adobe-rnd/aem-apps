@@ -23,7 +23,7 @@
 
 .header h1 {
   margin: 4px 0 0;
-  font-size: var(--s2-heading-l-size, 28px);
+  font-size: var(--s2-heading-size-l);
   line-height: 1.2;
   color: var(--s2-gray-900);
   overflow-wrap: anywhere;
@@ -103,12 +103,12 @@
 }
 
 .row-title {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--s2-gray-900);
 }
 
 .row-name {
-  font-size: var(--s2-body-xs-size, 12px);
+  font-size: var(--s2-component-s-regular-font-size);
 }
 
 .row-title,
@@ -123,11 +123,9 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: var(--s2-body-s-size, 14px);
 }
 
 .row-modified {
-  font-size: var(--s2-body-s-size, 14px);
   text-align: end;
   white-space: nowrap;
 }

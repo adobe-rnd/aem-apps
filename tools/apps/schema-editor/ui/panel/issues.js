@@ -66,7 +66,7 @@ class SeIssues extends PanelView {
           ${issue.schemaPath ? html`<span class="path">${issue.schemaPath}</span>` : nothing}
         </span>
         ${issue.fix ? html`
-          <button type="button" class="nx-action-btn nx-btn-sm"
+          <button type="button" class="nx-action-btn"
             @click=${() => applyFix(this.store, issue)}>${issue.fix.label}</button>` : nothing}
       </li>
     `;
@@ -92,7 +92,7 @@ class SeIssues extends PanelView {
           ${counts.warning ? html`<span class="chip is-warning">${plural(counts.warning, 'warning')}</span>` : nothing}
           ${counts.info ? html`<span class="chip is-info">${plural(counts.info, 'note')}</span>` : nothing}
           ${this.chatAvailable && (counts.error || counts.warning) ? html`
-            <button type="button" class="nx-action-btn nx-btn-sm fix-ai"
+            <button type="button" class="nx-action-btn fix-ai"
               title="Hand the issues to the assistant and let it fix the schema"
               @click=${() => this.bus.chatRequest.emit({ intent: 'fix' })}>
               ${icon('ai')} Fix with AI

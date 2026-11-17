@@ -54,9 +54,9 @@ export function reference(ctx) {
     <p class="hint">Its fields show here read-only. Edit the component to change them everywhere it is used.</p>
     <div class="row-actions">
       ${def ? html`
-        <button type="button" class="nx-action-btn nx-btn-sm"
+        <button type="button" class="nx-action-btn"
           @click=${() => editComponent(ctx.store, { nodeId: node.id })}>${icon('edit')} Edit component</button>
-        <button type="button" class="nx-action-btn-quiet nx-btn-sm"
+        <button type="button" class="nx-action-btn-quiet"
           @click=${() => ctx.dispatch(detachRef, { nodeId: node.id })}>${icon('unlink')} Detach</button>
       ` : nothing}
     </div>
@@ -72,7 +72,7 @@ function usages(ctx, uses) {
     const where = trail.slice(0, -1).map((label) => label || 'Schema');
     if (def) where[0] = `${def.name} component`;
     return html`<li>
-      <button type="button" class="nx-action-btn-quiet nx-btn-sm usage"
+      <button type="button" class="nx-action-btn-quiet usage"
         title=${trail.join(' › ')} @click=${() => store.select(node.id, { reveal: true })}>
         <span class="usage-name">${trail.at(-1) || 'Untitled'}</span>
         <span class="usage-where">in ${where.join(' › ')}</span>
@@ -112,7 +112,7 @@ export function component(ctx) {
       @change=${() => !error && commitName(ctx, def, draft)}></se-input>
     ${usages(ctx, refUsages(model, def.id))}
     <div class="row-actions">
-      <button type="button" class="nx-action-btn-quiet nx-btn-sm"
+      <button type="button" class="nx-action-btn-quiet"
         @click=${() => deleteComponent(ctx.store, def.id)}>${icon('delete')} Delete component</button>
     </div>
   `);

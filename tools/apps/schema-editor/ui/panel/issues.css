@@ -86,7 +86,7 @@
 
 .path {
   overflow: hidden;
-  font-size: var(--s2-body-xs-size, 12px);
+  font-size: var(--s2-component-s-regular-font-size);
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--s2-gray-700);

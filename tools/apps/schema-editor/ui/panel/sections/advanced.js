@@ -42,7 +42,7 @@ export function advanced(ctx) {
           ${extras.map((keyword) => html`
             <li class="extra">
               <span>${keyword}</span>
-              <button type="button" class="nx-action-btn-quiet nx-btn-sm"
+              <button type="button" class="nx-action-btn-quiet"
                 @click=${() => removeExtra(ctx, keyword)}>Remove</button>
             </li>
           `)}
@@ -61,7 +61,7 @@ export function unsupported(ctx) {
     </p>
     ${entry.parent ? html`
       <div class="row-actions">
-        <button type="button" class="nx-action-btn nx-btn-sm"
+        <button type="button" class="nx-action-btn"
           @click=${() => remove(ctx.store, ctx.node.id)}>${icon('delete')} Delete</button>
       </div>` : nothing}
   `);

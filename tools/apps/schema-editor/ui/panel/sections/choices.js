@@ -118,13 +118,13 @@ function renderPaste(ctx) {
       <se-textarea label="Paste choices" description="One choice per line."
         .value=${draft} @input=${(e) => ctx.view.set('pasteDraft', e.target.value)}></se-textarea>
       <div class="row-actions">
-        <button type="button" class="nx-btn-primary nx-btn-sm"
+        <button type="button" class="nx-btn-primary"
           ?disabled=${!parseChoices(draft).length}
           @click=${() => applyPaste(ctx, draft, false)}>Add</button>
-        <button type="button" class="nx-action-btn nx-btn-sm"
+        <button type="button" class="nx-action-btn"
           ?disabled=${!parseChoices(draft).length}
           @click=${() => applyPaste(ctx, draft, true)}>Replace all</button>
-        <button type="button" class="nx-action-btn-quiet nx-btn-sm"
+        <button type="button" class="nx-action-btn-quiet"
           @click=${() => ctx.view.set('pasting', false)}>Cancel</button>
       </div>
     </div>
@@ -142,7 +142,7 @@ export function choices(ctx) {
           <span class="choice-grip" draggable="true" title="Drag to reorder" aria-hidden="true"
             @dragstart=${(e) => onDragStart(ctx, e, index)}
             @dragend=${() => onDragEnd(ctx)}>${icon('drag')}</span>
-          <input class="choice-input" aria-label="Choice ${index + 1}" .value=${choice}
+          <input class="form-control choice-input" aria-label="Choice ${index + 1}" .value=${choice}
             data-choice-index=${index}
             @input=${(e) => ctx.update(renameChoice(ctx.node, index, e.target.value))}>
           ${ctx.node.default === choice ? html`<span class="chip">Default</span>` : nothing}
@@ -156,10 +156,10 @@ export function choices(ctx) {
     <p class="hint" id="choices-hint">Drag or Alt+↑ / Alt+↓ reorders. ${modKey()}Z undoes.</p>
     ${ctx.view.get('pasting') ? renderPaste(ctx) : html`
       <div class="row-actions">
-        <button type="button" class="nx-action-btn nx-btn-sm"
+        <button type="button" class="nx-action-btn"
           @click=${() => ctx.update({ enum: [...list, nextChoice(list)] })}>
           ${icon('add')} Add choice</button>
-        <button type="button" class="nx-action-btn-quiet nx-btn-sm"
+        <button type="button" class="nx-action-btn-quiet"
           @click=${() => ctx.view.set('pasting', true)}>Paste list…</button>
       </div>
     `}
