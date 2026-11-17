@@ -213,6 +213,15 @@ function failure(message, details = {}) {
   return Object.assign(new Error(message), details);
 }
 
+// The worker's 403 for an unregistered site carries code 'site-not-registered'
+// (publish-requests-worker#41). Workers without it send no code, so a code-less
+// 403 still falls back to the message; any other code is a different denial.
+function isUnregistered(error) {
+  if (error.status !== 403) return false;
+  if (error.code) return error.code === 'site-not-registered';
+  return /not registered/i.test(error.message);
+}
+
 function settingsFrom(config) {
   const rows = config?.['publish-workflow-settings']?.data || [];
   const value = (key) => {
@@ -265,7 +274,12 @@ export function createClient({
     try { result = await resp.json(); } catch {
       throw failure(`The workflow service returned an unreadable response (${resp.status}).`, { status: resp.status });
     }
-    if (!resp.ok) throw failure(result.error || `The workflow service returned ${resp.status}.`, { status: resp.status });
+    if (!resp.ok) {
+      throw failure(result.error || `The workflow service returned ${resp.status}.`, {
+        status: resp.status,
+        ...(typeof result.code === 'string' && { code: result.code }),
+      });
+    }
     return result;
   }
 
@@ -348,8 +362,10 @@ export function createClient({
         list(context, { role: 'approver', path: context.path }),
         list(context, { role: 'page', path: context.path }),
       ]).catch((error) => {
-        if (error.status !== 403 || !/not registered/i.test(error.message)) throw error;
-        throw failure(`This site isn't registered for publish requests yet. ${SETUP_HINT}`, { status: 403, setup: true });
+        if (!isUnregistered(error)) throw error;
+        throw failure(`This site isn't registered for publish requests yet. ${SETUP_HINT}`, {
+          status: 403, code: 'site-not-registered', setup: true,
+        });
       });
       if (!configResult.config) {
         throw failure(`The publish workflow is not configured for this site. ${SETUP_HINT}`, { setup: true });

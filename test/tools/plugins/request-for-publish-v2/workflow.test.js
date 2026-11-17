@@ -406,6 +406,22 @@ describe('uninvolved viewers', () => {
       await assert.rejects(client.load(context), (error) => error.setup && error.status === 403);
     }));
   });
+  it('flags the worker\'s site-not-registered code as needing setup, whatever the message', async () => {
+    // Workers with publish-requests-worker#41 send code: 'site-not-registered' on the v2 403.
+    const { client } = fixture({
+      fail: () => response({ error: 'Registration missing', code: 'site-not-registered' }, 403),
+    });
+    await assert.rejects(
+      client.load(context),
+      (error) => error.setup === true && error.status === 403 && error.code === 'site-not-registered',
+    );
+  });
+  it('does not flag setup for a 403 with another code, even if the message says registered', async () => {
+    const { client } = fixture({
+      fail: () => response({ error: 'Site is not registered with this IdP', code: 'preview-write-required' }, 403),
+    });
+    await assert.rejects(client.load(context), (error) => !error.setup && error.code === 'preview-write-required');
+  });
   it('flags a registered site without rules as needing setup', async () => {
     // The CI worker's answers for a registered site with no publish-workflow-config.
     const { client } = fixture({
