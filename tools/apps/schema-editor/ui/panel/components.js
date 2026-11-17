@@ -140,8 +140,8 @@ class SeComponents extends PanelView {
       <div class="panel">
         <div class="panel-header">
           <h2>Components</h2>
-          <button type="button" class="nx-btn-accent"
-            @click=${() => newComponent(this.store)}>${icon('add')} New component</button>
+          <button type="button" class="nx-btn-accent new-btn" aria-label="New component"
+            @click=${() => newComponent(this.store)}>New</button>
         </div>
         <p class="hint">Reusable groups of fields. Change one and every usage follows.</p>
         ${defs.length ? html`

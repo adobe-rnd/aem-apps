@@ -16,9 +16,11 @@
 import { loadStyle } from 'https://da.live/nx2/utils/utils.js';
 
 // Sheets every view adopts: nx2 S2 buttons + the editor's shared primitives (chips, badges…).
-export const [buttons, shared] = await Promise.all([
+// `bar`: the top bar chrome the browse and author screens share.
+export const [buttons, shared, bar] = await Promise.all([
   loadStyle('https://da.live/nx2/styles/buttons.css'),
   loadStyle(import.meta.url),
+  loadStyle(new URL('./bar.css', import.meta.url).href),
 ]);
 
 export { loadStyle };

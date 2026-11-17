@@ -16,8 +16,9 @@ https://da.live/app/adobe-rnd/aem-apps/tools/apps/schema-editor/schema-editor#/{
 
 Lists the site's schemas in columns: title, name, contents (field and component counts, plus
 issues) and last modified.
-Search, sort, and use a row's menu to open, duplicate, copy the JSON or delete.
-**New schema** starts from a blank schema or from pasted JSON.
+Search, sort and **New** sit in the top bar (the same 48px bar as the editor, as on
+the da.live browse page); use a row's menu to open, duplicate, copy the JSON or delete.
+**New** starts a schema from blank or from pasted JSON.
 
 ### Author (`#/{org}/{site}/{name}`)
 
@@ -44,8 +45,8 @@ Search, sort, and use a row's menu to open, duplicate, copy the JSON or delete.
 - **Components**: one component (`$defs`) at a time, as an editable tree in
   the same cards, so a component can use other components. The Components
   panel, the first tab on this page and brought forward on arriving here,
-  switches component and starts a new one with **New component**. With none
-  yet, the page explains what a component is and offers the same **New
+  switches component and starts a new one with **New**. With none
+  yet, the page explains what a component is and offers **New
   component**. Opening a component from anywhere (the panel, an issue in an unused
   component) shows it here; switching here with a use selected in Build
   shows its component, otherwise the last one shown.
@@ -71,8 +72,9 @@ Search, sort, and use a row's menu to open, duplicate, copy the JSON or delete.
   schema's own Properties › JSON (click the title to select it).
 - Undo / redo (⌘Z / ⇧⌘Z) and Save (⌘S). Saving is blocked while there are errors.
 - The header and the tool panel use the da.live canvas chrome: a fixed 48px bar
-  that never wraps, the panel's close button and the header's reopen toggle in
-  the same spot, so opening or closing the chat or the panel moves nothing.
+  (`ui/shared/bar.css`, shared with browse) that never wraps, the panel's close
+  button and the header's reopen toggle in the same spot, so opening or closing
+  the chat or the panel moves nothing.
 
 ### AI assistant
 
@@ -80,11 +82,11 @@ When the shell offers the DA chat to the app, the editor adds:
 
 - **Chat toggle** (top-left of the header, as in the da.live canvas): opens the
   chat with the schema as context (and the unsaved draft, if any). Browse shows
-  the same toggle ahead of its title, with the site's schemas folder as context.
+  the same toggle at the start of its bar, with the site's schemas folder as context.
   Hidden while the chat is open on shells that report panel visibility
   (`capabilities.panelVisibility`), so only the chat's own close button shows.
 - **Fix with AI** (Issues): sends the issues and the draft to the assistant.
-- **New schema → With AI…** (browse): asks the assistant to create a schema.
+- **New → With AI…** (browse): asks the assistant to create a schema.
 
 After each completed assistant turn, the editor reloads the schema (the change
 can be undone) and browse reloads its list. The chat is only available when the

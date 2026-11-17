@@ -1,6 +1,38 @@
+/* The bar stays put (shared chrome in ui/shared/bar.css); only the list scrolls, under it. */
 :host {
-  display: block;
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
   height: 100%;
+  overflow: hidden;
+}
+
+.bar {
+  flex: none;
+}
+
+/* No center group: the controls take the room, and the search gives way before the title. */
+.group-start {
+  flex: 0 1 auto;
+}
+
+.group-end {
+  flex: 1 1000 auto;
+  min-width: auto;
+}
+
+.bar nx-search {
+  flex: 0 1 240px;
+  min-width: 96px;
+}
+
+.bar .nx-action-btn-quiet {
+  white-space: nowrap;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -12,67 +44,7 @@
   gap: 16px;
   max-width: 960px;
   margin: 0 auto;
-  padding: 32px 24px 48px;
-}
-
-.header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.header h1 {
-  margin: 4px 0 0;
-  font-size: var(--s2-heading-size-l);
-  line-height: 1.2;
-  color: var(--s2-gray-900);
-  overflow-wrap: anywhere;
-}
-
-/* Chat toggle and divider ahead of the title, as at the start of the editor bar,
- * on the title's line (the eyebrow sits above the title only). */
-.heading {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  min-width: 0;
-}
-
-.heading > div {
-  min-width: 0;
-}
-
-.heading .nx-action-btn-icon {
-  flex: none;
-  margin-inline-start: -8px;
-}
-
-.divider {
-  flex: none;
-  width: 1px;
-  height: 20px;
-  margin-block-end: 6px;
-  margin-inline-end: 4px;
-  background: var(--s2-gray-300);
-}
-
-.header .nx-btn-accent,
-.toolbar .nx-action-btn-quiet {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.toolbar nx-search {
-  flex: 0 1 360px;
+  padding: 24px 24px 48px;
 }
 
 /* One column template for the header and every row, so cells line up down the list. */
@@ -185,6 +157,13 @@
   display: flex;
   gap: 8px;
   margin-top: 8px;
+}
+
+/* Narrow canvas: shorter labels keep the bar on one line. */
+@container (width < 640px) {
+  .wide {
+    display: none;
+  }
 }
 
 /* Narrow: drop the headings and stack each row's cells beside its icon. */

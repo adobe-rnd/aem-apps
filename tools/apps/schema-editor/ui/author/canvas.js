@@ -576,7 +576,7 @@ class SeCanvas extends LitElement {
         <h2>No components yet</h2>
         <p>Define a set of fields once, like an address, and reuse it across the schema.</p>
         <button type="button" class="nx-btn-accent" @click=${() => newComponent(this.store)}>
-          ${icon('add')} New component</button>
+          New component</button>
       </div>
     `;
   }

@@ -20,7 +20,9 @@ import {
   SchemaCatalog, SORTS, filterItems, sortItems,
 } from '../../core/catalog.js';
 import { deriveSchemaName } from '../../core/model/keys.js';
-import { buttons, shared, loadStyle } from '../shared/styles.js';
+import {
+  buttons, shared, bar, loadStyle,
+} from '../shared/styles.js';
 import { relativeTime, plural } from '../shared/format.js';
 import { confirmDialog } from '../shared/confirm.js';
 import { toast as showToast } from '../shared/toast.js';
@@ -99,7 +101,7 @@ class SeBrowse extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.shadowRoot.adoptedStyleSheets = [buttons, shared, style];
+    this.shadowRoot.adoptedStyleSheets = [buttons, shared, bar, style];
   }
 
   disconnectedCallback() {
@@ -366,19 +368,20 @@ class SeBrowse extends LitElement {
     `;
   }
 
-  _renderToolbar() {
+  /** Search and sort once there is a list to filter, ahead of New (as in da.live browse). */
+  _renderControls() {
     if (this._status !== 'ready' || !this._items.length) return nothing;
     return html`
-      <div class="toolbar">
-        <nx-search placeholder="Search schemas" label="Search schemas" .value=${this._query}
-          @input=${(e) => { this._query = e.target.value ?? ''; }}></nx-search>
-        <nx-menu placement="below-end" .items=${SORT_ITEMS}
-          @select=${(e) => { this._sort = e.detail.id; }}>
-          <button slot="trigger" type="button" class="nx-action-btn-quiet">
-            Sort: ${SORTS[this._sort]} ${icon('chevronDown')}
-          </button>
-        </nx-menu>
-      </div>
+      <nx-search size="m" placeholder="Search schemas" label="Search schemas" .value=${this._query}
+        @input=${(e) => { this._query = e.target.value ?? ''; }}></nx-search>
+      <nx-menu placement="below-end" .items=${SORT_ITEMS}
+        @select=${(e) => { this._sort = e.detail.id; }}>
+        <button slot="trigger" type="button" class="nx-action-btn-quiet"
+          aria-label="Sort by ${SORTS[this._sort]}">
+          <span><span class="wide">Sort: </span>${SORTS[this._sort]}</span> ${icon('chevronDown')}
+        </button>
+      </nx-menu>
+      <span class="divider" aria-hidden="true"></span>
     `;
   }
 
@@ -394,26 +397,27 @@ class SeBrowse extends LitElement {
   }
 
   render() {
+    const key = `${this.org}/${this.site}`;
     return html`
-      <section class="browse">
-        <header class="header">
-          <div class="heading">
-            ${this._renderChatToggle()}
-            <div>
-              <p class="eyebrow">Schemas</p>
-              <h1>${this.org} / ${this.site}</h1>
-            </div>
-          </div>
+      <header class="bar">
+        <div class="group group-start">
+          ${this._renderChatToggle()}
+          <h1 class="title">Schemas</h1>
+          <span class="key" title=${key}>${key}</span>
+        </div>
+        <div class="group group-end">
+          ${this._renderControls()}
           <nx-menu placement="below-end" .items=${this._newItems}
             @select=${(e) => this._create(e.detail.id)}>
-            <button slot="trigger" type="button" class="nx-btn-accent">
-              ${icon('add')} New schema
+            <button slot="trigger" type="button" class="nx-btn-accent new-btn" aria-label="New schema">
+              New ${icon('chevronDown')}
             </button>
           </nx-menu>
-        </header>
-        ${this._renderToolbar()}
-        ${this._renderList()}
-      </section>
+        </div>
+      </header>
+      <div class="content">
+        <section class="browse">${this._renderList()}</section>
+      </div>
     `;
   }
 }

@@ -18,6 +18,11 @@
   height: 18px;
 }
 
+/* The da.live browse New button: an accent pill with no add icon (a chevron when it opens a menu). */
+.new-btn {
+  min-width: 88px;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

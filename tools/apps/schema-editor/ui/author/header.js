@@ -17,7 +17,9 @@ import { LitElement, html, nothing } from 'da-lit';
 import { icon } from '../shared/icons.js';
 import { routeHash } from '../../core/routes.js';
 import { labelOf } from '../../core/model/query.js';
-import { buttons, shared, loadStyle } from '../shared/styles.js';
+import {
+  buttons, shared, bar, loadStyle,
+} from '../shared/styles.js';
 import { modKey, plural } from '../shared/format.js';
 
 await import('https://da.live/nx2/blocks/shared/segmented-btn/segmented.js');
@@ -58,7 +60,7 @@ class SeHeader extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.shadowRoot.adoptedStyleSheets = [buttons, shared, style];
+    this.shadowRoot.adoptedStyleSheets = [buttons, shared, bar, style];
   }
 
   _selectRoot(model) {
