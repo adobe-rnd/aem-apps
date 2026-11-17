@@ -55,11 +55,12 @@ function setup() {
 }
 
 const BUILD = { mode: 'build', componentId: null };
+const SCHEMA = { mode: 'schema', componentId: null };
 const showing = (componentId) => ({ mode: 'components', componentId });
 
 describe('pages', () => {
-  it('lists Build and Components', () => {
-    expect(MODES).to.deep.equal(['build', 'components']);
+  it('lists Build, Components and Schema', () => {
+    expect(MODES).to.deep.equal(['build', 'components', 'schema']);
   });
 
   it('shows the schema in Build and one component on the Components page', () => {
@@ -69,6 +70,7 @@ describe('pages', () => {
     expect(pageTop(model, showing('missing'))).to.equal(null);
     expect(pageTop(model, showing(null))).to.equal(null);
     expect(pageTop(null, BUILD)).to.equal(null);
+    expect(pageTop(model, SCHEMA)).to.equal(null);
   });
 
   it('tops the selection with its component, else with the page tree', () => {
@@ -104,6 +106,13 @@ describe('pages', () => {
     expect(pageFor(model, ids.name, address)).to.deep.equal({ mode: 'build', componentId: defIds.address });
   });
 
+  it('reveals from Schema, which shows no elements, on Build or the component\'s page', () => {
+    const { model, ids, defIds } = setup();
+    expect(pageShows(model, ids.name, SCHEMA)).to.equal(false);
+    expect(pageFor(model, ids.name, SCHEMA)).to.deep.equal(BUILD);
+    expect(pageFor(model, ids.city, SCHEMA)).to.deep.equal(showing(defIds.address));
+  });
+
   it('opens Components on the component the user works in', () => {
     const { model, ids, defIds } = setup();
     expect(componentFor(model, ids.note, defIds.unused)).to.equal(defIds.unused);
@@ -125,6 +134,12 @@ describe('pages', () => {
     expect(selectionAfter(model, ids.name, showing(defIds.address))).to.equal(null);
     expect(selectionAfter(model, ids.address, BUILD)).to.equal(null);
     expect(selectionAfter(model, ids.lat, BUILD)).to.equal(null);
+  });
+
+  it('keeps the selection on Schema for the page the user returns to', () => {
+    const { model, ids } = setup();
+    expect(selectionAfter(model, ids.city, SCHEMA)).to.equal(ids.city);
+    expect(selectionAfter(model, null, SCHEMA)).to.equal(null);
   });
 
   it('selects the component of a selected use on its page', () => {

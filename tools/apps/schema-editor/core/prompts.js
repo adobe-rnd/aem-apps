@@ -36,6 +36,13 @@ export function askPrompt({
   return lines.join('\n');
 }
 
+/**
+ * The issues worth handing to the assistant: not notes, and not the Schema page's text (it gets
+ * the schema, which keeps its last valid version).
+ */
+export const fixableIssues = (issues) => issues
+  .filter((issue) => issue.severity !== 'info' && !issue.text);
+
 const issueLine = (issue) => `- ${issue.severity}: ${issue.message}${issue.schemaPath ? ` (at ${issue.schemaPath})` : ''}`;
 
 /** Asks the assistant to fix the schema's issues, starting from what the author sees. */

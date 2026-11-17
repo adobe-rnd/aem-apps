@@ -135,14 +135,26 @@ Every issue has the same shape:
 | `#/{org}/{site}` | Browse: list, search, sort, create, duplicate, delete |
 | `#/{org}/{site}/{name}` | Author |
 
-The Author screen has two pages (`core/session/modes.js`):
+The Author screen has three pages (`core/session/modes.js`):
 
 - **Build** shows the schema's tree. Component uses appear as locked previews.
 - **Components** shows one component at a time as an editable tree.
+- **Schema** shows the whole schema as JSON text (`ui/author/schema-json.js`).
+  Text that parses to a JSON object replaces the model through `replaceSchema`
+  (`core/model/commands.js`), coalesced into one undo step per burst of typing.
+  `reconcile` (`core/model/reconcile.js`) keeps the old node ids, matching
+  defs by name, fields by key and array items by position, so the selection
+  survives. Text that doesn't parse (`core/json-text.js`) changes nothing and
+  is reported, with its line, after a pause or on blur. The store keeps that
+  text (`jsonDraft`, dropped once the model changes) and its problem as an
+  `invalid-json` error issue with a `text` location, so it is listed in Issues,
+  blocks saving, and `revealText` brings the caret back to it. Fix with AI
+  leaves it out: the assistant only gets the last valid schema. The tool panel
+  offers only Issues.
 
 The page decides which nodes are shown and what can be selected. When a
 selection is not shown on the current page, it moves to the nearest node that
-is.
+is. The Schema page shows no nodes, so it keeps the selection for the other pages.
 
 ## Assistant
 

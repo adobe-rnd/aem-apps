@@ -20,6 +20,7 @@ import { buttons, shared, loadStyle } from '../shared/styles.js';
 import { BusController } from '../shared/bus-controller.js';
 import './header.js';
 import './canvas.js';
+import './schema-json.js';
 
 const style = await loadStyle(import.meta.url);
 
@@ -129,6 +130,9 @@ class SeAuthor extends LitElement {
   _renderMode() {
     const { model, issues } = this._state;
     // Separate templates, so a page switch starts a fresh canvas instead of reusing its state.
+    if (this._mode === 'schema') {
+      return html`<se-schema-json .store=${this.store} .model=${model}></se-schema-json>`;
+    }
     if (this._mode === 'components') {
       return html`
         <se-canvas view="components" .store=${this.store} .model=${model} .issues=${issues}

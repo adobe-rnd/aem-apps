@@ -32,6 +32,7 @@ import {
   detachRef,
   makeComponent,
   lockKeys,
+  replaceSchema,
 } from '../../../../../../tools/apps/schema-editor/core/model/commands.js';
 import {
   findNode, breadcrumb, cyclicDefs, wouldCreateCycle, refUsages, labelOf,
@@ -268,5 +269,76 @@ describe('lockKeys', () => {
     const locked = lockKeys(m1);
     expect(locked.root.children[0].keyLocked).to.equal(true);
     expect(lockKeys(locked).root).to.equal(locked.root);
+  });
+});
+
+describe('replaceSchema', () => {
+  const SOURCE = {
+    type: 'object',
+    title: 'Person',
+    properties: {
+      name: { type: 'string', title: 'Name' },
+      home: { $ref: '#/$defs/Address' },
+      tags: { type: 'array', title: 'Tags', items: { type: 'string', title: 'Tag' } },
+    },
+    $defs: {
+      Address: { type: 'object', title: 'Address', properties: { city: { type: 'string', title: 'City' } } },
+    },
+  };
+  const edited = (change) => {
+    const json = structuredClone(SOURCE);
+    change(json);
+    return json;
+  };
+  const open = () => {
+    const { model } = parseSchema(SOURCE);
+    const node = createNode('text', { title: 'Draft', siblingKeys: ['name', 'home', 'tags'] });
+    return insertNode(model, { parentId: model.root.id, node }).model;
+  };
+  const byKey = (model, key) => model.root.children.find((node) => node.key === key);
+
+  it('keeps the identity and key locks of what stays, so selections survive', () => {
+    const model = open();
+    const draftKey = model.root.children[3].key;
+    const { model: next, label, coalesceKey } = replaceSchema(model, {
+      json: edited((json) => {
+        json.properties.name.title = 'Full name';
+        json.properties[draftKey] = { type: 'string', title: 'Draft' };
+        json.properties.born = { type: 'string', format: 'date', title: 'Born' };
+        json.$defs.Address.properties.zip = { type: 'string', title: 'Zip' };
+      }),
+    });
+    expect([label, coalesceKey]).to.deep.equal(['Edit JSON', 'schema-json']);
+    expect(next.root.id).to.equal(model.root.id);
+    expect(byKey(next, 'name')).to.include({ id: byKey(model, 'name').id, title: 'Full name', keyLocked: true });
+    expect(byKey(next, 'tags').item.id).to.equal(byKey(model, 'tags').item.id);
+    expect(byKey(next, draftKey)).to.include({ id: byKey(model, draftKey).id, keyLocked: false });
+    expect(byKey(next, 'born')).to.include({ keyLocked: false, keyManual: true });
+    const [address] = next.defs;
+    expect(address.id).to.equal(model.defs[0].id);
+    expect(address.node.children[0].id).to.equal(model.defs[0].node.children[0].id);
+    expect(byKey(next, 'home').refDefId).to.equal(address.id);
+  });
+
+  it('gives a renamed field or component a new identity', () => {
+    const model = open();
+    const { model: next } = replaceSchema(model, {
+      json: edited((json) => {
+        json.properties.fullName = json.properties.name;
+        delete json.properties.name;
+        json.$defs.Place = json.$defs.Address;
+        delete json.$defs.Address;
+        json.properties.home.$ref = '#/$defs/Place';
+      }),
+    });
+    expect(byKey(next, 'fullName')).to.include({ keyLocked: false });
+    expect(byKey(next, 'fullName').id).to.not.equal(byKey(model, 'name').id);
+    expect(next.defs[0].id).to.not.equal(model.defs[0].id);
+    expect(byKey(next, 'home').refDefId).to.equal(next.defs[0].id);
+  });
+
+  it('is no edit when the JSON says the same', () => {
+    const { model } = parseSchema(SOURCE);
+    expect(replaceSchema(model, { json: structuredClone(SOURCE) }).model).to.equal(model);
   });
 });

@@ -29,6 +29,7 @@ const style = await loadStyle(import.meta.url);
 const MODE_ITEMS = [
   { value: 'build', label: 'Build' },
   { value: 'components', label: 'Components' },
+  { value: 'schema', label: 'Schema' },
 ];
 
 const timeFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });

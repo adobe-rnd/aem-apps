@@ -20,6 +20,7 @@ import { icon } from '../shared/icons.js';
 import { nodeIcon } from '../author/card-info.js';
 import { applyFix } from '../shared/actions.js';
 import { plural } from '../shared/format.js';
+import { fixableIssues } from '../../core/prompts.js';
 import { loadStyle } from '../shared/styles.js';
 import { PanelView } from './panel-view.js';
 
@@ -27,33 +28,57 @@ const style = await loadStyle(import.meta.url);
 
 const SEVERITY_ICON = { error: 'alert', warning: 'alert', info: 'info' };
 
-/** Groups issues by node, keeping the linter's order; unknown nodes form one "Schema" group. */
+// The key of the group of the Schema page's text; node ids are strings.
+const TEXT = Symbol('text');
+
+function newGroup(model, issue) {
+  if (issue.text) {
+    return {
+      key: TEXT, nodeId: null, text: issue.text, label: 'Schema JSON', icon: 'code', node: null,
+    };
+  }
+  const entry = issue.nodeId ? findNode(model, issue.nodeId) : null;
+  if (!entry) {
+    return {
+      key: null, nodeId: null, label: 'Schema', node: null,
+    };
+  }
+  const label = entry.def && !entry.parent ? entry.def.name : labelOf(model, entry.node);
+  return {
+    key: issue.nodeId, nodeId: issue.nodeId, label: label || 'Untitled', node: entry.node,
+  };
+}
+
+/**
+ * Groups issues by node, keeping the linter's order; unknown nodes form one "Schema" group, and
+ * the Schema page's text (issues with `text`) one "Schema JSON" group.
+ */
 export function groupIssues(model, issues) {
   const groups = new Map();
   issues.forEach((issue) => {
-    const entry = issue.nodeId ? findNode(model, issue.nodeId) : null;
-    const id = entry ? issue.nodeId : null;
-    if (!groups.has(id)) {
-      const label = entry
-        ? (entry.def && !entry.parent ? entry.def.name : labelOf(model, entry.node)) || 'Untitled'
-        : 'Schema';
-      groups.set(id, {
-        nodeId: id, label, node: entry?.node ?? null, issues: [],
-      });
-    }
-    groups.get(id).issues.push(issue);
+    const group = newGroup(model, issue);
+    if (!groups.has(group.key)) groups.set(group.key, { ...group, issues: [] });
+    groups.get(group.key).issues.push(issue);
   });
   return [...groups.values()];
 }
 
-/** Problems found by the linter and the SDK, grouped by element. */
+/** Problems found by the linter, the SDK and in the Schema page's text, grouped by element. */
 class SeIssues extends PanelView {
   static sheets = [style];
 
-  _reveal(nodeId) {
-    if (!nodeId) return;
+  _reveal({ nodeId, text }) {
+    if (!nodeId && !text) return;
+    // On the Schema page Issues is only the fallback view; pick it so the list stays in front.
+    this.store.bus.panelRequest.emit({ view: 'issues' });
     // Revealing picks Build or Components, whichever shows the element.
-    this.store.select(nodeId, { reveal: true });
+    if (nodeId) this.store.select(nodeId, { reveal: true });
+    else this.store.revealText(text);
+  }
+
+  _location({ schemaPath, text }) {
+    if (text?.line) return `Line ${text.line}, column ${text.column}`;
+    return schemaPath;
   }
 
   _renderIssue(issue) {
@@ -63,7 +88,7 @@ class SeIssues extends PanelView {
           <span class="sr-only">${issue.severity}</span></span>
         <span class="issue-text">
           <span>${issue.message}</span>
-          ${issue.schemaPath ? html`<span class="path">${issue.schemaPath}</span>` : nothing}
+          ${this._location(issue) ? html`<span class="path">${this._location(issue)}</span>` : nothing}
         </span>
         ${issue.fix ? html`
           <button type="button" class="nx-action-btn"
@@ -91,7 +116,7 @@ class SeIssues extends PanelView {
           ${counts.error ? html`<span class="chip is-error">${plural(counts.error, 'error')}</span>` : nothing}
           ${counts.warning ? html`<span class="chip is-warning">${plural(counts.warning, 'warning')}</span>` : nothing}
           ${counts.info ? html`<span class="chip is-info">${plural(counts.info, 'note')}</span>` : nothing}
-          ${this.chatAvailable && (counts.error || counts.warning) ? html`
+          ${this.chatAvailable && fixableIssues(this.issues).length ? html`
             <button type="button" class="nx-action-btn fix-ai"
               title="Hand the issues to the assistant and let it fix the schema"
               @click=${() => this.bus.chatRequest.emit({ intent: 'fix' })}>
@@ -100,11 +125,11 @@ class SeIssues extends PanelView {
         </p>
         ${groupIssues(this.model, this.issues).map((group) => html`
           <section class="group">
-            <button type="button" class="group-head" ?disabled=${!group.nodeId}
+            <button type="button" class="group-head" ?disabled=${!group.nodeId && !group.text}
               aria-current=${group.nodeId && group.nodeId === this.selection ? 'true' : nothing}
-              @click=${() => this._reveal(group.nodeId)}>
+              @click=${() => this._reveal(group)}>
               <span class="node-icon ${group.node?.kind === 'ref' ? 'is-ref' : ''}">
-                ${icon(group.node ? nodeIcon(group.node) : 'schema')}</span>
+                ${icon(group.icon ?? (group.node ? nodeIcon(group.node) : 'schema'))}</span>
               <span class="group-label">${group.label}</span>
             </button>
             <ul class="list">${group.issues.map((issue) => this._renderIssue(issue))}</ul>

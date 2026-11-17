@@ -17,7 +17,7 @@
 // after each completed turn, picks up what the assistant saved. `chat` is the injected
 // adapter (adapters/chat.js).
 
-import { askPrompt, fixPrompt } from '../prompts.js';
+import { askPrompt, fixPrompt, fixableIssues } from '../prompts.js';
 
 // eslint-disable-next-line import/prefer-default-export
 export function connectChat({ store, chat }) {
@@ -35,7 +35,7 @@ export function connectChat({ store, chat }) {
     } = store;
     if (status !== 'ready' || !model) return;
     if (intent === 'fix') {
-      const issues = store.issues.filter((issue) => issue.severity !== 'info');
+      const issues = fixableIssues(store.issues);
       if (!issues.length) return;
       handedDraft = true;
       chat.ask(fixPrompt({

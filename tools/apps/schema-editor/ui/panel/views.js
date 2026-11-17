@@ -15,7 +15,8 @@
  */
 // The tool panel views in tab order, each loaded when its tab first opens and given `.store`.
 // A view may implement `applyRequest(request)` for the rest of a `panelRequest` that shows it.
-// `hiddenIn` lists the modes whose panel leaves the view out.
+// `hiddenIn` lists the modes whose panel leaves the view out: the Schema page edits JSON text,
+// so it has no elements to add, pick or inspect, only Issues.
 
 const view = (id, label, tag, load, { hiddenIn = [] } = {}) => Object.freeze({
   id, label, tag, load, hiddenIn,
@@ -25,10 +26,14 @@ const VIEWS = Object.freeze([
   // First on the Components page, where it picks the component shown. Build has that page
   // one header tab away instead.
   view('components', 'Components', 'se-components', () => import('./components.js'), {
-    hiddenIn: ['build'],
+    hiddenIn: ['build', 'schema'],
   }),
-  view('elements', 'Elements', 'se-elements', () => import('./elements.js')),
-  view('properties', 'Properties', 'se-properties', () => import('./properties.js')),
+  view('elements', 'Elements', 'se-elements', () => import('./elements.js'), {
+    hiddenIn: ['schema'],
+  }),
+  view('properties', 'Properties', 'se-properties', () => import('./properties.js'), {
+    hiddenIn: ['schema'],
+  }),
   view('issues', 'Issues', 'se-issues', () => import('./issues.js')),
 ]);
 
@@ -38,7 +43,10 @@ export const viewById = (id) => VIEWS.find((candidate) => candidate.id === id);
 
 export const viewsFor = (mode) => VIEWS.filter((candidate) => !candidate.hiddenIn.includes(mode));
 
-/** The view shown in `mode` when `id` was picked: it, else the default. */
+/** The view shown in `mode` when `id` was picked: it, else the default, else the mode's first. */
 export function shownView(id, mode) {
-  return viewsFor(mode).some((candidate) => candidate.id === id) ? id : DEFAULT_VIEW;
+  const views = viewsFor(mode);
+  const offers = (viewId) => views.some((candidate) => candidate.id === viewId);
+  if (offers(id)) return id;
+  return offers(DEFAULT_VIEW) ? DEFAULT_VIEW : views[0].id;
 }

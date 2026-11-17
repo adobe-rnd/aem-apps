@@ -27,18 +27,22 @@ export function createSchemaBus() {
     selectionState: createChannel({ replay: true }),
     /** { state: 'idle'|'saving'|'saved'|'error', error?, savedAt? } */
     saveState: createChannel({ replay: true }),
-    /** { mode: 'build'|'components', componentId } — the page shown */
+    /** { mode: 'build'|'components'|'schema', componentId } — the page shown */
     pageState: createChannel({ replay: true }),
     /** { active, source: 'palette'|'card', payload } while dragging */
     dragState: createChannel(),
-    /** { nodeId, reveal? } — scroll a card into view and focus it */
+    /**
+     * { nodeId } — scroll a card into view and focus it; { text: { line?, column? } } — the same
+     * for a place in the Schema page's text
+     */
     revealRequest: createChannel(),
     /** { message, variant? } — user feedback, shown by the app */
     toastRequest: createChannel(),
     /**
      * { view?, open?, tab? } — bring a panel view (e.g. 'properties') to the front;
      * `open: true` reopens a closed panel; `tab` is 'settings' | 'json'. Sent on canvas
-     * clicks and edits, not on other selections (inserts, issues, arrow keys).
+     * clicks and edits, not on other selections (inserts, issues, arrow keys); an issue
+     * click only keeps Issues in front.
      */
     panelRequest: createChannel(),
     /** { available, open } — whether the DA chat assistant can be asked, and is open */

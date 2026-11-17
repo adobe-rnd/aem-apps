@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 // The authoring pages and which nodes each shows. A page is `{ mode, componentId }`: Build
-// shows the schema, Components one component (`$defs`). A page edits only its own tree; a
-// used component's fields only preview there and are revealed on that component's page.
+// shows the schema, Components one component (`$defs`), Schema the whole file as JSON text
+// (no element tree). A page edits only its own tree; a used component's fields only preview
+// there and are revealed on that component's page.
 
 import { findNode, getDef } from '../model/query.js';
 
-export const MODES = Object.freeze(['build', 'components']);
+export const MODES = Object.freeze(['build', 'components', 'schema']);
 
-/** The tree a page shows: the schema root, or the chosen component (null if none). */
+/** The tree a page shows: the schema root, or the chosen component (null if none or on Schema). */
 export function pageTop(model, { mode, componentId } = {}) {
-  if (!model) return null;
+  if (!model || mode === 'schema') return null;
   if (mode !== 'components') return { node: model.root, def: null };
   const def = componentId ? getDef(model, componentId) : null;
   return def ? { node: def.node, def } : null;
@@ -44,7 +45,7 @@ export function pageShows(model, nodeId, page) {
   return (entry.def?.id ?? null) === (top.def?.id ?? null);
 }
 
-/** Where to reveal `nodeId`: the current page, else its component's, else Build. */
+/** Where to reveal `nodeId`: this page, else its component's, else Build (from Schema too). */
 export function pageFor(model, nodeId, page) {
   if (pageShows(model, nodeId, page)) return page;
   const def = findNode(model, nodeId)?.def;
@@ -61,10 +62,13 @@ export function componentFor(model, nodeId, componentId) {
   return used?.id ?? entry?.def?.id ?? current ?? model.defs[0].id;
 }
 
-/** What stays selected on `page`; a use of the page's component selects its top. */
+/**
+ * What stays selected on `page`; a use of the page's component selects its top. Schema shows
+ * no elements, so it keeps the selection for the page the user returns to.
+ */
 export function selectionAfter(model, nodeId, page) {
   if (!nodeId) return null;
-  if (pageShows(model, nodeId, page)) return nodeId;
+  if (page?.mode === 'schema' || pageShows(model, nodeId, page)) return nodeId;
   const node = findNode(model, nodeId)?.node;
   const top = pageTop(model, page);
   if (node?.kind === 'ref' && top?.def && node.refDefId === top.def.id) return top.node.id;

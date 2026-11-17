@@ -24,10 +24,15 @@ import { lint, countIssues } from '../model/lint.js';
 import { checkWithSdk } from '../model/sdk.js';
 import { createHistory } from '../model/history.js';
 import { CommandError, lockKeys } from '../model/commands.js';
+import { textIssue } from '../json-text.js';
 import { findNode, getDef } from '../model/query.js';
 import {
   MODES, pageFor, componentFor, selectionAfter,
 } from './modes.js';
+
+const sameProblem = (a, b) => (a && b
+  ? a.error === b.error && a.line === b.line && a.column === b.column
+  : !a === !b);
 
 // eslint-disable-next-line import/prefer-default-export
 export class SchemaStore {
@@ -48,6 +53,8 @@ export class SchemaStore {
     this.model = null;
     this.issues = [];
     this.sdkIssues = [];
+    /** The Schema page's text (see `setJsonDraft`), or null. */
+    this.jsonDraft = null;
     this.lastSavedJson = null;
     this.selection = null;
     this.editingDefId = null;
@@ -99,6 +106,7 @@ export class SchemaStore {
     this.raw = undefined;
     this.history.clear();
     this.sdkIssues = [];
+    this.jsonDraft = null;
     this.#relint();
     this.editingDefId = null;
     this.componentId = null;
@@ -166,6 +174,7 @@ export class SchemaStore {
   #setModel(model) {
     this.model = model;
     this.sdkIssues = [];
+    if (this.jsonDraft && this.jsonDraft.json !== stringifySchema(model)) this.jsonDraft = null;
     this.#relint();
     if (this.selection && !findNode(model, this.selection)) this.selection = null;
     if (this.editingDefId && !getDef(model, this.editingDefId)) this.editingDefId = null;
@@ -175,8 +184,28 @@ export class SchemaStore {
     if (this.saveState.state === 'saved' && this.dirty) this.#setSaveState({ state: 'idle' });
   }
 
+  /**
+   * Keeps the Schema page's text while the schema is unchanged, so leaving the page loses
+   * nothing. `problem` (`{ error, line?, column? }`, see json-text.js) is why the text is not a
+   * valid schema, as the page reports it: an error issue until the text or the schema changes.
+   */
+  setJsonDraft({ text, problem = null }) {
+    if (!this.model) return;
+    const json = stringifySchema(this.model);
+    const before = this.jsonDraft?.problem;
+    this.jsonDraft = text === json && !problem ? null : { text, json, problem };
+    if (sameProblem(problem, before)) return;
+    this.#relint();
+    this.#emitModel();
+  }
+
+  #textIssues() {
+    const problem = this.jsonDraft?.problem;
+    return problem ? [textIssue(problem)] : [];
+  }
+
   #relint() {
-    this.issues = [...this.sdkIssues, ...lint(this.model)];
+    this.issues = [...this.#textIssues(), ...this.sdkIssues, ...lint(this.model)];
   }
 
   /** `reveal` also scrolls the canvas to the node, switching to a page that shows it. */
@@ -188,6 +217,12 @@ export class SchemaStore {
     if (!entry || !reveal) return;
     this.#setPage(pageFor(this.model, nodeId, this.page));
     this.bus.revealRequest.emit({ nodeId });
+  }
+
+  /** Shows the Schema page with `at` (`{ line?, column? }` in its text) in view. */
+  revealText(at) {
+    this.setMode('schema');
+    this.bus.revealRequest.emit({ text: at });
   }
 
   revealDef(defId) {
@@ -236,7 +271,7 @@ export class SchemaStore {
       return this.savePromise;
     }
     if (this.status !== 'ready') return { ok: false };
-    const errors = lint(this.model).filter((i) => i.severity === 'error').length;
+    const errors = countIssues([...this.#textIssues(), ...lint(this.model)]).error;
     if (errors) {
       const error = `Fix ${errors} ${errors === 1 ? 'error' : 'errors'} to save.`;
       this.#setSaveState({ state: 'error', error });

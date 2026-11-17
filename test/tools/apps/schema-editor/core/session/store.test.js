@@ -21,6 +21,7 @@ import { createNode } from '../../../../../../tools/apps/schema-editor/core/mode
 import {
   insertNode, updateNode, removeNode, addDef, deleteDef,
 } from '../../../../../../tools/apps/schema-editor/core/model/commands.js';
+import { stringifySchema } from '../../../../../../tools/apps/schema-editor/core/model/serialize.js';
 import { PERSON } from '../../fixtures.js';
 
 const SCHEMA = {
@@ -301,5 +302,59 @@ describe('SchemaStore.refresh', () => {
     await store.load();
     fail = true;
     expect(await store.refresh()).to.equal('error');
+  });
+});
+
+describe('SchemaStore Schema page text', () => {
+  const PROBLEM = { error: 'Not valid JSON: Expected \',\'', line: 2, column: 5 };
+
+  async function loaded() {
+    const context = setup();
+    await context.store.load();
+    return context;
+  }
+
+  it('reports text that is not valid as an error, and blocks saving', async () => {
+    const { store, saves, seen } = await loaded();
+    store.dispatch(updateNode, { nodeId: store.model.root.id, patch: { title: 'Edited' } });
+    store.setJsonDraft({ text: '{\n  "a" 1\n}', problem: PROBLEM });
+    expect(store.issues[0]).to.deep.include({
+      code: 'invalid-json', severity: 'error', text: { line: 2, column: 5 },
+    });
+    expect(seen.model.at(-1).counts.error).to.equal(1);
+    const result = await store.save();
+    expect(result).to.deep.equal({ ok: false, error: 'Fix 1 error to save.' });
+    expect(saves).to.have.length(0);
+  });
+
+  it('keeps the text while the schema is unchanged, and broadcasts only a new problem', async () => {
+    const { store, seen } = await loaded();
+    const emitted = seen.model.length;
+    store.setJsonDraft({ text: '{', problem: PROBLEM });
+    store.setJsonDraft({ text: '{ ', problem: { ...PROBLEM } });
+    expect(store.jsonDraft.text).to.equal('{ ');
+    expect(seen.model).to.have.length(emitted + 1);
+    store.setJsonDraft({ text: '{ ' });
+    expect(store.issues.some((i) => i.text)).to.equal(false);
+    store.setJsonDraft({ text: stringifySchema(store.model) });
+    expect(store.jsonDraft).to.equal(null);
+  });
+
+  it('drops the text once the schema changes, e.g. on undo', async () => {
+    const { store } = await loaded();
+    store.dispatch(updateNode, { nodeId: store.model.root.id, patch: { title: 'Edited' } });
+    store.setJsonDraft({ text: '{', problem: PROBLEM });
+    store.undo();
+    expect(store.jsonDraft).to.equal(null);
+    expect(store.issues.some((i) => i.text)).to.equal(false);
+  });
+
+  it('reveals a place in the text on the Schema page', async () => {
+    const { store, bus } = await loaded();
+    const reveals = [];
+    bus.revealRequest.subscribe((r) => reveals.push(r));
+    store.revealText({ line: 2, column: 5 });
+    expect(store.mode).to.equal('schema');
+    expect(reveals).to.deep.equal([{ text: { line: 2, column: 5 } }]);
   });
 });

@@ -25,6 +25,12 @@ describe('tool panel views', () => {
     expect(ids('components')).to.deep.equal(['components', 'elements', 'properties', 'issues']);
   });
 
+  it('offers only Issues on the Schema page, which edits JSON text', () => {
+    expect(ids('schema')).to.deep.equal(['issues']);
+    expect(shownView('elements', 'schema')).to.equal('issues');
+    expect(shownView('issues', 'schema')).to.equal('issues');
+  });
+
   it('shows the picked view, else the default where the mode leaves it out', () => {
     expect(shownView('components', 'components')).to.equal('components');
     expect(shownView('components', 'build')).to.equal('elements');

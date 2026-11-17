@@ -23,6 +23,9 @@ import { deriveKey, deriveDefName, validateDefName } from './keys.js';
 import {
   findNode, getDef, isDescendant, refUsages, siblingKeys, wouldCreateCycle,
 } from './query.js';
+import { parseSchema } from './parse.js';
+import { stringifySchema } from './serialize.js';
+import { reconcile } from './reconcile.js';
 
 export class CommandError extends Error {}
 
@@ -357,6 +360,16 @@ export function makeComponent(model, { nodeId, name }) {
     label: `Make ${defName} reusable`,
     defId: def.id,
   };
+}
+
+/**
+ * Replaces the whole schema with `json`, the file edited as text; what stays in place keeps its
+ * identity (see reconcile.js). Typing merges into one step; an edit that changes nothing is none.
+ */
+export function replaceSchema(model, { json }) {
+  const next = reconcile(model, parseSchema(json, { name: model.name }).model);
+  if (stringifySchema(next) === stringifySchema(model)) return { model, label: 'Edit JSON' };
+  return { model: next, label: 'Edit JSON', coalesceKey: 'schema-json' };
 }
 
 function lockNodeKeys(node) {

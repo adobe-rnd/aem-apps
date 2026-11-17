@@ -52,6 +52,16 @@ Name or Modified heading also sorts by it, newest/Z-A first, and again reverses 
   component**. Opening a component from anywhere (the panel, an issue in an unused
   component) shows it here; switching here with a use selected in Build
   shows its component, otherwise the last one shown.
+- **Schema**: the whole schema as JSON text, to edit by hand or paste into.
+  Valid text applies as you type (one undo step per burst, so the header's
+  Undo works here too); fields keep their identity by key, so the selection
+  and Build's state survive. Invalid text is reported after a short pause or
+  on leaving the editor, with the line marked, and listed in Issues as a
+  **Schema JSON** error that blocks saving (clicking it returns to the line);
+  the schema keeps its last valid version until it is fixed, and the text
+  waits for you if you switch pages without changing anything else. Enter keeps the indent; **Format** reindents
+  it and the copy button copies it. The panel shows only Issues, and clicking
+  one opens its page.
 - **Tool panel** (right): 320–400px wide, following the window; below 720px it
   overlays the canvas, under the header so Save and Undo stay in reach.
   - **Elements**: drag an element onto the schema to add it; clicking one
@@ -70,8 +80,8 @@ Name or Modified heading also sorts by it, newest/Z-A first, and again reverses 
     is highlighted. Use one as a field from Elements. The first tab on the
     Components page; not offered in Build, which has the Components page.
   - **Issues**: everything the editor or the SC SDK flags, with quick fixes.
-- **Build / Components**: the header's pages. The whole file's JSON is the
-  schema's own Properties › JSON (click the title to select it).
+- **Build / Components / Schema**: the header's pages. The whole file's JSON is the
+  schema's own Properties › JSON (click the title to select it), and editable on Schema.
 - Undo / redo (⌘Z / ⇧⌘Z) and Save (⌘S). Saving is blocked while there are errors.
 - The header and the tool panel use the da.live canvas chrome: a fixed 48px bar
   (`ui/shared/bar.css`, shared with browse) that never wraps, the panel's close
