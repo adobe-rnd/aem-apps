@@ -20,6 +20,7 @@ import { nothing } from 'da-lit';
 const FILES = {
   text: 'text',
   textArea: 'textparagraph',
+  richText: 'textsize',
   choice: 'radiobutton',
   number: 'ruler',
   integer: 'listnumbered',

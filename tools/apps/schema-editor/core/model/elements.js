@@ -19,6 +19,8 @@ import { createId } from './ids.js';
 import { deriveKey } from './keys.js';
 
 export const FORMAT_VARIANTS = Object.freeze(['date', 'time', 'date-time']);
+/** String variants stored as `x-semantic-type`; `enum` and `format` take precedence over them. */
+export const SEMANTIC_VARIANTS = Object.freeze(['long-text', 'rich-text']);
 export const PRIMITIVE_KINDS = Object.freeze(['string', 'number', 'integer', 'boolean']);
 
 const PALETTE_SECTIONS = Object.freeze([
@@ -51,6 +53,16 @@ export const ELEMENTS = freezeAll({
     class: 'string',
     palette: 'basic',
     description: 'Renders as a multi-line text area.',
+    sections: ['general', 'length', 'pattern', 'default'],
+  },
+  richText: {
+    label: 'Rich text',
+    icon: 'richText',
+    kind: 'string',
+    variant: 'rich-text',
+    class: 'string',
+    palette: 'basic',
+    description: 'Formatted text with headings, lists and links.',
     sections: ['general', 'length', 'pattern', 'default'],
   },
   choice: {

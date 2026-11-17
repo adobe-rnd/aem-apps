@@ -29,12 +29,15 @@ const PATTERN_PRESETS = Object.freeze([
   { id: 'digits', label: 'Digits only', pattern: '^[0-9]+$' },
 ]);
 
+const isRichText = (node) => node.variant === 'rich-text';
+
 export function length(ctx) {
   return section('length', 'Length', html`
     <div class="pair">
       ${numberField(ctx, 'minLength', 'Min characters', { min: 0, step: 1 })}
       ${numberField(ctx, 'maxLength', 'Max characters', { min: 0, step: 1 })}
     </div>
+    ${isRichText(ctx.node) ? html`<p class="hint">Counts the stored HTML, tags included.</p>` : nothing}
   `);
 }
 
@@ -59,7 +62,9 @@ export function pattern(ctx) {
   return section('pattern', 'Pattern', html`
     ${textField(ctx, 'pattern', 'Regular expression', {
     placeholder: 'e.g. ^[a-z0-9-]+$',
-    description: 'Values must match it. Leave empty to accept any text.',
+    description: isRichText(ctx.node)
+      ? 'The stored HTML must match it, tags included.'
+      : 'Values must match it. Leave empty to accept any text.',
   })}
     <div class="row-actions">
       <nx-menu placement="below-start" .items=${presets} @select=${(e) => applyPreset(e.detail.id)}>

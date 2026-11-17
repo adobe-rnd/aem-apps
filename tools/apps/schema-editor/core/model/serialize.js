@@ -15,7 +15,7 @@
  */
 // Authoring model → JSON Schema. Deterministic, so the string form doubles as the dirty check.
 
-import { FORMAT_VARIANTS } from './elements.js';
+import { FORMAT_VARIANTS, SEMANTIC_VARIANTS } from './elements.js';
 import { encodePointerToken } from './parse.js';
 
 function defRef(name) {
@@ -31,7 +31,7 @@ function put(out, key, value) {
 function serializeStringKeywords(out, node) {
   const { variant } = node;
   if (FORMAT_VARIANTS.includes(variant)) out.format = variant;
-  if (variant === 'long-text') out['x-semantic-type'] = 'long-text';
+  if (SEMANTIC_VARIANTS.includes(variant)) out['x-semantic-type'] = variant;
   if (variant === 'choice') put(out, 'enum', Array.isArray(node.enum) ? [...node.enum] : node.enum);
   put(out, 'minLength', node.minLength);
   put(out, 'maxLength', node.maxLength);

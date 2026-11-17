@@ -72,6 +72,7 @@ function buildEvent() {
   });
   e.add(root, 'text', { title: 'Slug', pattern: PATTERNS.slug, default: 'my-event' });
   e.add(root, 'longText', { title: 'Abstract', maxLength: 500 });
+  e.add(root, 'richText', { title: 'Body', maxLength: 2000, default: '<p>Welcome</p>' });
   e.add(root, 'choice', { title: 'Level', enum: ['Beginner', 'Expert'], default: 'Beginner' });
   e.add(root, 'integer', {
     title: 'Seats', minimum: 1, maximum: 500, default: 50,
@@ -111,6 +112,9 @@ const EVENT_SCHEMA = {
     },
     abstract: {
       type: 'string', title: 'Abstract', 'x-semantic-type': 'long-text', maxLength: 500,
+    },
+    body: {
+      type: 'string', title: 'Body', 'x-semantic-type': 'rich-text', maxLength: 2000, default: '<p>Welcome</p>',
     },
     level: {
       type: 'string', title: 'Level', enum: ['Beginner', 'Expert'], default: 'Beginner',
@@ -175,6 +179,7 @@ const EVENT_DATA = {
   fullName: 'Ada Lovelace',
   slug: 'analytical-engines',
   abstract: 'Notes on the engine.',
+  body: '<h2>Agenda</h2><ul><li><strong>Keynote</strong></li></ul><p>See <a href="https://example.com">details</a>.</p>',
   level: 'Expert',
   seats: 120,
   price: 9.5,
@@ -215,6 +220,7 @@ describe('SC SDK conformance', () => {
       expect(view['/data/slug']).to.include({ defaultValue: 'my-event' });
       expect(view['/data/slug'].validation).to.deep.equal({ pattern: PATTERNS.slug });
       expect(view['/data/abstract']).to.include({ semanticType: 'long-text' });
+      expect(view['/data/body']).to.include({ semanticType: 'rich-text', defaultValue: '<p>Welcome</p>' });
       expect(view['/data/level']).to.deep.include({ enumValues: ['Beginner', 'Expert'], defaultValue: 'Beginner' });
       expect(view['/data/seats']).to.deep.include({
         kind: 'integer', defaultValue: 50, validation: { minimum: 1, maximum: 500 },
@@ -246,7 +252,7 @@ describe('SC SDK conformance', () => {
       const { document } = createEngine({ schema, document: { metadata: { schemaName: 'event' }, data: {} } })
         .getState();
       expect(document.data).to.deep.include({
-        slug: 'my-event', level: 'Beginner', seats: 50, doorsOpen: '09:30', startsAt: '2026-03-01T09:00:00Z',
+        slug: 'my-event', body: '<p>Welcome</p>', level: 'Beginner', seats: 50, doorsOpen: '09:30', startsAt: '2026-03-01T09:00:00Z',
       });
     });
 
@@ -261,6 +267,7 @@ describe('SC SDK conformance', () => {
       ['fullName', undefined, '/data/fullName', 'required'],
       ['slug', 'My Event', '/data/slug', 'pattern'],
       ['abstract', 'x'.repeat(501), '/data/abstract', 'maxLength'],
+      ['body', `<p>${'x'.repeat(1994)}</p>`, '/data/body', 'maxLength'],
       ['level', 'expert', '/data/level', 'enum'],
       ['seats', 0, '/data/seats', 'minimum'],
       ['seats', 501, '/data/seats', 'maximum'],
@@ -297,7 +304,12 @@ describe('SC SDK conformance', () => {
     });
 
     it('keeps documents intact through DA storage (HTML) and the form engine', () => {
-      const { html } = convertJsonToHtml({ json: { metadata: { schemaName: 'event' }, data: EVENT_DATA } });
+      const stored = createEngine({ schema, document: { metadata: { schemaName: 'event' }, data: EVENT_DATA } })
+        .getState();
+      const { html } = convertJsonToHtml({ json: stored.document, model: stored.model });
+      // Rich text is stored as markup in a block of its own, not as escaped text.
+      expect(html).to.include('self://rich-text#body-1');
+      expect(html).to.include(EVENT_DATA.body);
       const { json } = convertHtmlToJson({ html });
       const { document, validation } = createEngine({ schema, document: json }).getState();
       expect(document.data).to.deep.equal(EVENT_DATA);
@@ -316,6 +328,8 @@ describe('SC SDK conformance', () => {
       // Without the `u` flag `\p{L}` is the literal text "p{L}", as in the SDK.
       ['text', { pattern: '^\\p{L}+$' }, { ok: ['p{L}', 'p{L}}'], bad: ['héllo'] }],
       ['longText', { maxLength: 5 }, { ok: ['hello', 'a\nb'], bad: ['hello!'] }],
+      // Length counts the stored markup, tags included.
+      ['richText', { maxLength: 12 }, { ok: ['<p>Hello</p>', 'plain'], bad: ['<p>Hello!</p>'] }],
       ['choice', { enum: ['Beginner', 'Expert'] }, { ok: ['Beginner', 'Expert'], bad: ['beginner', 'Other'] }],
       ['choice', { enum: ['a', 'abc'], maxLength: 2 }, { ok: ['a'], bad: ['abc', 'b'] }],
       ['integer', { minimum: 1, maximum: 10 }, { ok: [1, 10, 5], bad: [0, 11, 5.5, '5'] }],
@@ -431,6 +445,7 @@ describe('SC SDK conformance', () => {
     const SETTINGS = {
       text: { maxLength: 10, pattern: PATTERNS.slug, default: 'abc' },
       longText: { minLength: 1, default: 'Long' },
+      richText: { maxLength: 200, default: '<p>Rich</p>' },
       choice: { enum: ['Beginner', 'Expert'], default: 'Expert' },
       number: { minimum: 1.5, maximum: 9, default: 2.5 },
       integer: { minimum: 1, maximum: 9, default: 3 },
@@ -444,6 +459,7 @@ describe('SC SDK conformance', () => {
     const EXPECTED_VIEW = {
       text: { kind: 'string' },
       longText: { kind: 'string', semanticType: 'long-text' },
+      richText: { kind: 'string', semanticType: 'rich-text' },
       choice: { kind: 'string' },
       number: { kind: 'number' },
       integer: { kind: 'integer' },

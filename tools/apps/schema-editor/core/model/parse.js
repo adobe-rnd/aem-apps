@@ -18,7 +18,7 @@
 // linter's job, so issues have a single source.
 
 import { createId } from './ids.js';
-import { FORMAT_VARIANTS } from './elements.js';
+import { FORMAT_VARIANTS, SEMANTIC_VARIANTS } from './elements.js';
 
 const TYPES = ['string', 'number', 'integer', 'boolean', 'object', 'array'];
 const COMPOSITION = ['allOf', 'anyOf', 'oneOf', 'not', 'if', 'then', 'else'];
@@ -53,7 +53,7 @@ function inferType(json) {
 function stringVariant(json) {
   if ('enum' in json) return 'choice';
   if (FORMAT_VARIANTS.includes(json.format)) return json.format;
-  if (json['x-semantic-type'] === 'long-text') return 'long-text';
+  if (SEMANTIC_VARIANTS.includes(json['x-semantic-type'])) return json['x-semantic-type'];
   return 'text';
 }
 
@@ -63,7 +63,7 @@ function modelledKeywords(kind, variant) {
     keys.push('minLength', 'maxLength', 'pattern');
     if (variant === 'choice') keys.push('enum');
     if (FORMAT_VARIANTS.includes(variant)) keys.push('format');
-    if (variant === 'long-text') keys.push('x-semantic-type');
+    if (SEMANTIC_VARIANTS.includes(variant)) keys.push('x-semantic-type');
   }
   if (kind === 'number' || kind === 'integer') keys.push('minimum', 'maximum');
   if (kind === 'object') keys.push('properties', 'required');

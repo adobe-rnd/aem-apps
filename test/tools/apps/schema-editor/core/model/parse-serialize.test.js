@@ -87,6 +87,32 @@ describe('schema model parse/serialize', () => {
     expect(b.extras).to.deep.equal({ format: 'email' });
   });
 
+  it('maps x-semantic-type rich-text to Rich text, below enum and format', () => {
+    const body = {
+      type: 'string', title: 'Body', 'x-semantic-type': 'rich-text', maxLength: 2000,
+    };
+    const json = {
+      type: 'object',
+      title: 'R',
+      properties: {
+        body,
+        when: {
+          type: 'string', title: 'When', format: 'date', 'x-semantic-type': 'rich-text',
+        },
+        note: { type: 'string', title: 'Note', 'x-semantic-type': 'markdown' },
+      },
+    };
+    const { model } = parseSchema(structuredClone(json));
+    const [b, when, note] = model.root.children;
+    expect(b).to.include({ variant: 'rich-text', maxLength: 2000 });
+    expect(b.extras).to.equal(undefined);
+    expect(when.variant).to.equal('date');
+    expect(when.extras).to.deep.equal({ 'x-semantic-type': 'rich-text' });
+    expect(note.variant).to.equal('text');
+    expect(note.extras).to.deep.equal({ 'x-semantic-type': 'markdown' });
+    expect(serializeSchema(model).properties.body).to.deep.equal(body);
+  });
+
   it('R-3: preserves unsupported nodes and extras verbatim', () => {
     const input = {
       $schema: 'https://json-schema.org/draft/2020-12/schema',

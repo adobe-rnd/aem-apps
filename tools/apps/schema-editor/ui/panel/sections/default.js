@@ -75,6 +75,11 @@ function control(ctx) {
     });
   }
   const onInput = (e) => set(e.target.value === '' ? undefined : e.target.value);
+  if (node.variant === 'rich-text') {
+    return html`<se-textarea label="Default value" .value=${value ?? ''} .error=${error}
+      description="HTML or plain text. Plain text becomes paragraphs."
+      @input=${onInput}></se-textarea>`;
+  }
   return node.variant === 'long-text'
     ? html`<se-textarea label="Default value" .value=${value ?? ''} .error=${error}
         @input=${onInput}></se-textarea>`

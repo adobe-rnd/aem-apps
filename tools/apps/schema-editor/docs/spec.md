@@ -61,6 +61,7 @@ in one table, `ELEMENTS` in `core/model/elements.js`:
 |---|---|---|
 | Text | `string` | `type: string` |
 | Long text | `string`, `long-text` | `+ x-semantic-type: long-text` |
+| Rich text | `string`, `rich-text` | `+ x-semantic-type: rich-text` |
 | Choice | `string`, `choice` | `+ enum` |
 | Date, Time, Date & time | `string`, `date` / `time` / `date-time` | `+ format` |
 | Number, Whole number | `number`, `integer` | `type`, `minimum`, `maximum` |
@@ -69,7 +70,10 @@ in one table, `ELEMENTS` in `core/model/elements.js`:
 | List | `array` with `item` | `items`, `minItems`, `maxItems` |
 | Component use | `ref` with `refDefId` | `$ref: '#/$defs/<name>'`. Only `title` and `description` sit next to it. |
 
-Text and Long text also take `minLength`, `maxLength` and `pattern`.
+Text, Long text and Rich text also take `minLength`, `maxLength` and `pattern`.
+For Rich text they count the stored HTML, tags included, as the SDK does.
+`enum` and `format` win over `x-semantic-type`; an unknown semantic type is
+kept as an extra and the field stays Text.
 Changing an element keeps every setting that still applies. The store reports
 the dropped settings in a toast.
 

@@ -188,7 +188,7 @@ export function updateNode(model, { nodeId, patch }) {
   };
 }
 
-const STRING_TEXT = ['text', 'long-text'];
+const STRING_TEXT = ['text', 'long-text', 'rich-text'];
 
 function keepDefault(node, el) {
   if (node.default === undefined) return false;

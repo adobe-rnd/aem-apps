@@ -151,7 +151,7 @@ export function specProblems(schema) {
       if ('format' in node && !['date', 'time', 'date-time'].includes(node.format)) {
         problems.push(`${at}: format "${node.format}"`);
       }
-      if ('x-semantic-type' in node && node['x-semantic-type'] !== 'long-text') {
+      if ('x-semantic-type' in node && !['long-text', 'rich-text'].includes(node['x-semantic-type'])) {
         problems.push(`${at}: x-semantic-type "${node['x-semantic-type']}"`);
       }
       if ('enum' in node) {

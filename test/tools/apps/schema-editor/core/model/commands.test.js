@@ -176,6 +176,11 @@ describe('schema model commands', () => {
     expect(child(result.model, 'a')).to.include({
       variant: 'long-text', maxLength: 5, default: 'hi', required: true,
     });
+    result = changeElement(result.model, { nodeId: a.id, element: 'richText' });
+    expect(result.dropped).to.deep.equal([]);
+    expect(child(result.model, 'a')).to.include({
+      variant: 'rich-text', maxLength: 5, default: 'hi', required: true,
+    });
     result = changeElement(result.model, { nodeId: a.id, element: 'date' });
     expect(result.dropped).to.have.members(['maxLength', 'default']);
     model = changeElement(model, { nodeId: a.id, element: 'choice' }).model;
