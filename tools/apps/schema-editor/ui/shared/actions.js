@@ -56,7 +56,10 @@ async function place(store, target, make, label) {
   if (!ok) return { ok: false };
   const node = freshNode(store.model, target.parentId, make);
   const result = store.dispatch(insertNode, { ...target, node, replace });
-  if (result.ok) store.select(result.result.nodeId, { reveal: true });
+  if (!result.ok) return result;
+  // The new element is the one to set up next: select it and show its Properties.
+  store.select(result.result.nodeId, { reveal: true });
+  store.bus.panelRequest.emit({ view: 'properties' });
   return result;
 }
 

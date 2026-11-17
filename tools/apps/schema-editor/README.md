@@ -86,7 +86,8 @@ Name or Modified heading also sorts by it, newest/Z-A first, and again reverses 
     and named by its labels (`Card › Title`).
 - **Build / Components / Schema**: the header's pages. The whole file's JSON is the
   schema's own Properties › JSON (click the title to select it), and editable on Schema.
-- Undo / redo (⌘Z / ⇧⌘Z) and Save (⌘S). Saving is blocked while there are errors.
+- Undo / redo (⌘Z / ⇧⌘Z) and Save (⌘S). Saving is blocked while there are issues
+  (warnings and notes don't block it).
 - The header and the tool panel use the da.live canvas chrome: a fixed 48px bar
   (`ui/shared/bar.css`, shared with browse) that never wraps, the panel's close
   button and the header's reopen toggle in the same spot, so opening or closing

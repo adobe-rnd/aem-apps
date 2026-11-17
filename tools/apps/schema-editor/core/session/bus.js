@@ -44,7 +44,7 @@ export function createSchemaBus() {
     /**
      * { view?, open?, tab? } — bring a panel view (e.g. 'properties') to the front;
      * `open: true` reopens a closed panel; `tab` is 'settings' | 'json'. Sent on canvas
-     * clicks and edits, not on other selections (inserts, issues, arrow keys); an issue
+     * clicks, edits and inserts, not on other selections (issues, arrow keys); an issue
      * click only keeps Issues in front.
      */
     panelRequest: createChannel(),
