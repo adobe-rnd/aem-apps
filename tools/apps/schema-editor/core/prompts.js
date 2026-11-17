@@ -53,6 +53,15 @@ export function fixPrompt({
   ].join('\n');
 }
 
+/** Prefill for an open question about the site's schemas, asked from the schema list. */
+export function sitePrompt({ org, site }) {
+  return [
+    `I'm working on the Structured Content schemas of ${org}/${site}, saved in ${schemasFolder(org, site)} as <name>.html.`,
+    RULES,
+    '',
+  ].join('\n');
+}
+
 /** Prefill for creating a new schema; the author completes the description. */
 export function createPrompt({ org, site }) {
   return [

@@ -17,7 +17,9 @@ import { describe, it } from 'node:test';
 import { expect } from '../expect.js';
 import { ARTICLE } from '../fixtures.js';
 import { parseSchema } from '../../../../../tools/apps/schema-editor/core/model/parse.js';
-import { askPrompt, fixPrompt, createPrompt } from '../../../../../tools/apps/schema-editor/core/prompts.js';
+import {
+  askPrompt, fixPrompt, createPrompt, sitePrompt,
+} from '../../../../../tools/apps/schema-editor/core/prompts.js';
 
 const { model } = parseSchema(ARTICLE, { name: 'article' });
 const PATH = '/o/s/.da/forms/schemas/article.html';
@@ -48,6 +50,12 @@ describe('prompts', () => {
     expect(text).to.include('- error: Key is missing. (at /properties/x)');
     expect(text).to.include('"title": "Article"');
     expect(text).to.include(`Save the result back to ${PATH}.`);
+  });
+
+  it('points an open question from the list at the site schemas folder', () => {
+    const text = sitePrompt({ org: 'o', site: 's' });
+    expect(text).to.include('schemas of o/s, saved in /o/s/.da/forms/schemas');
+    expect(text.endsWith('\n')).to.equal(true);
   });
 
   it('asks for a new schema in the site schemas folder', () => {

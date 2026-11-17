@@ -24,7 +24,7 @@ import { buttons, shared, loadStyle } from '../shared/styles.js';
 import { relativeTime, plural } from '../shared/format.js';
 import { confirmDialog } from '../shared/confirm.js';
 import { toast as showToast } from '../shared/toast.js';
-import { createPrompt } from '../../core/prompts.js';
+import { createPrompt, sitePrompt } from '../../core/prompts.js';
 import { schemaDialog } from './schema-dialog.js';
 
 await Promise.all([
@@ -70,7 +70,8 @@ function toast(message, variant) {
 
 /**
  * `<se-browse>`: lists one site's schemas and creates, duplicates and deletes them through the
- * catalog. With chat available, the list reloads after each completed assistant turn.
+ * catalog. With chat available, it offers a chat toggle and reloads the list after each
+ * completed assistant turn.
  */
 class SeBrowse extends LitElement {
   static properties = {
@@ -84,6 +85,7 @@ class SeBrowse extends LitElement {
     _summaries: { state: true },
     _query: { state: true },
     _sort: { state: true },
+    _chatOpen: { state: true },
   };
 
   constructor() {
@@ -114,11 +116,16 @@ class SeBrowse extends LitElement {
 
   _subscribeChat() {
     this._unsubscribeChat?.();
-    this._unsubscribeChat = this.chat?.available
-      ? this.chat.onTurnCompleted(({ status } = {}) => {
+    this._unsubscribeChat = undefined;
+    this._chatOpen = false;
+    if (!this.chat?.available) return;
+    const unsubscribers = [
+      this.chat.onTurnCompleted(({ status } = {}) => {
         if (status === 'completed' && this._status !== 'loading') this._load({ quiet: true });
-      })
-      : undefined;
+      }),
+      this.chat.onVisibilityChange((open) => { this._chatOpen = open; }),
+    ];
+    this._unsubscribeChat = () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }
 
   get _newItems() {
@@ -375,13 +382,27 @@ class SeBrowse extends LitElement {
     `;
   }
 
+  /** Same toggle as the editor bar; hidden while the chat is open (on hosts that report it). */
+  _renderChatToggle() {
+    if (!this.chat?.available || this._chatOpen) return nothing;
+    return html`
+      <button type="button" class="nx-action-btn-icon" part="btn toggle-chat"
+        aria-label="Open chat" title="Ask the assistant about these schemas"
+        @click=${() => this.chat.ask(sitePrompt({ org: this.org, site: this.site }))}>${icon('chat')}</button>
+      <span class="divider" aria-hidden="true"></span>
+    `;
+  }
+
   render() {
     return html`
       <section class="browse">
         <header class="header">
-          <div>
-            <p class="eyebrow">Schemas</p>
-            <h1>${this.org} / ${this.site}</h1>
+          <div class="heading">
+            ${this._renderChatToggle()}
+            <div>
+              <p class="eyebrow">Schemas</p>
+              <h1>${this.org} / ${this.site}</h1>
+            </div>
           </div>
           <nx-menu placement="below-end" .items=${this._newItems}
             @select=${(e) => this._create(e.detail.id)}>

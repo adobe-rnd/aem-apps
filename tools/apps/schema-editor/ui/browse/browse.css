@@ -30,6 +30,33 @@
   overflow-wrap: anywhere;
 }
 
+/* Chat toggle and divider ahead of the title, as at the start of the editor bar,
+ * on the title's line (the eyebrow sits above the title only). */
+.heading {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.heading > div {
+  min-width: 0;
+}
+
+.heading .nx-action-btn-icon {
+  flex: none;
+  margin-inline-start: -8px;
+}
+
+.divider {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  margin-block-end: 6px;
+  margin-inline-end: 4px;
+  background: var(--s2-gray-300);
+}
+
 .header .nx-btn-accent,
 .toolbar .nx-action-btn-quiet {
   display: inline-flex;

@@ -79,7 +79,8 @@ Search, sort, and use a row's menu to open, duplicate, copy the JSON or delete.
 When the shell offers the DA chat to the app, the editor adds:
 
 - **Chat toggle** (top-left of the header, as in the da.live canvas): opens the
-  chat with the schema as context (and the unsaved draft, if any).
+  chat with the schema as context (and the unsaved draft, if any). Browse shows
+  the same toggle ahead of its title, with the site's schemas folder as context.
   Hidden while the chat is open on shells that report panel visibility
   (`capabilities.panelVisibility`), so only the chat's own close button shows.
 - **Fix with AI** (Issues): sends the issues and the draft to the assistant.
