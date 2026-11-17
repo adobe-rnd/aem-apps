@@ -48,9 +48,8 @@ first: the editor must not write anything the SDK rejects.
 ## Add a lint rule
 
 - **Add a check** in `lintNode` in `core/model/lint.js`: call
-  `report(code, severity, message, { field, fix })`.
+  `report(code, severity, message, { field })`.
   - `field` ties the issue to a control, so it shows inline.
-  - `fix` is `{ label, run: (model) => someCommand(model, args) }`.
   - Rules about components go in the `defs` loop of `lint`.
 - **Severity:**
   - `error`: the SDK would reject it, or content would break. Blocks saving.

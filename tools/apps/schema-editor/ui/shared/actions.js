@@ -156,12 +156,6 @@ export async function deleteComponent(store, defId) {
   return result;
 }
 
-/** Applies a linter quick fix as one undoable edit. */
-export function applyFix(store, issue) {
-  if (!issue?.fix) return { ok: false };
-  return store.dispatch((model) => issue.fix.run(model));
-}
-
 export async function copyText(store, text, what = 'Text') {
   try {
     await navigator.clipboard.writeText(text);

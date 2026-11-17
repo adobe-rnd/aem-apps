@@ -98,11 +98,6 @@ describe('schema model lint', () => {
       const issue = lint(model).find((i) => i.code === code && i.schemaPath === '/properties/p');
       expect(issue, code).to.not.equal(undefined);
       expect(issue.severity).to.equal(severity);
-      if (issue.fix) {
-        const fixed = issue.fix.run(model).model;
-        const again = lint(fixed).find((i) => i.code === code && i.nodeId === issue.nodeId);
-        expect(again, `${code} after fix`).to.equal(undefined);
-      }
     });
   });
 
@@ -117,13 +112,10 @@ describe('schema model lint', () => {
     ]);
   });
 
-  it('reports key problems with fixes', () => {
+  it('reports reserved and invalid keys on the key field', () => {
     const model = load(wrap({ metadata: { type: 'string', title: 'Meta' }, '1x': { type: 'string', title: 'One' } }));
-    const issues = lint(model);
-    expect(codes(issues)).to.include.members(['R10-reserved-key', 'R9-invalid-key']);
-    let fixed = model;
-    issues.filter((i) => i.field === 'key').forEach((i) => { fixed = i.fix.run(fixed).model; });
-    expect(fixed.root.children.map((c) => c.key)).to.deep.equal(['meta', 'one']);
+    const keyIssues = lint(model).filter((i) => i.field === 'key');
+    expect(codes(keyIssues)).to.deep.equal(['R10-reserved-key', 'R9-invalid-key']);
   });
 
   it('reports duplicate keys, required-unknown and readonly-required', () => {

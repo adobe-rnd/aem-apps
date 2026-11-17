@@ -40,7 +40,7 @@ function typeText(area, text) {
  * they are typed (one undo step per burst); while the text is not valid JSON the schema keeps
  * its last valid version, and the problem is reported to the store (an issue that blocks
  * saving). The store keeps the text, so leaving the page loses nothing; a change made elsewhere
- * (undo, a quick fix, the assistant) replaces it.
+ * (undo, the assistant) replaces it.
  */
 class SeSchemaJson extends LitElement {
   static properties = {

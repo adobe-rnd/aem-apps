@@ -696,15 +696,9 @@ describe('SC SDK conformance', () => {
           e.run(renameDef, { defId: def.id, name });
           return `rename ${def.name} to ${name}`;
         },
-        fix() {
-          const issue = pick(errorsOf(e.model).filter((i) => i.fix));
-          if (!issue) return 'fix: none';
-          e.run((model) => issue.fix.run(model));
-          return `fix ${issue.code}`;
-        },
       };
       const WEIGHTS = [
-        ['add', 6], ['edit', 6], ['fix', 4], ['move', 2], ['remove', 2], ['duplicate', 1],
+        ['add', 6], ['edit', 6], ['move', 2], ['remove', 2], ['duplicate', 1],
         ['change', 2], ['component', 2], ['use', 2], ['detach', 1], ['deleteDef', 1], ['renameDef', 1],
       ];
       const OP_NAMES = WEIGHTS.flatMap(([name, weight]) => Array(weight).fill(name));

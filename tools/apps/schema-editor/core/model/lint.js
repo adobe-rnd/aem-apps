@@ -15,17 +15,13 @@
  */
 // Authoring linter: the authoring rules and keyword applicability that the SDK's
 // `validateSchema` does not report.
-// Issue: { code, severity, message, nodeId, schemaPath, defId?, field?, fix? }
-// fix:   { label, run(model) → command result }, dispatched through the store (undoable).
+// Issue: { code, severity, message, nodeId, schemaPath, defId?, field? }
 
 import { ELEMENTS, PRIMITIVE_KINDS, elementOf } from './elements.js';
-import {
-  KEY_PATTERN, RESERVED_KEYS, DEF_NAME_PATTERN, deriveKey,
-} from './keys.js';
+import { KEY_PATTERN, RESERVED_KEYS, DEF_NAME_PATTERN } from './keys.js';
 import {
   walk, cyclicDefs, refUsages, siblingKeys,
 } from './query.js';
-import { updateNode, deleteDef } from './commands.js';
 
 const SEVERITY_ORDER = Object.freeze({ error: 0, warning: 1, info: 2 });
 
@@ -71,11 +67,6 @@ export function testPattern(source, sample) {
   return re.test(sample)
     ? { state: 'match', message: 'Matches.' }
     : { state: 'nomatch', message: 'Doesn\'t match.' };
-}
-
-function humanize(key) {
-  const text = String(key ?? '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ').trim();
-  return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
 }
 
 const DATE = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
@@ -132,29 +123,9 @@ export function checkValue(node, value) {
   return null;
 }
 
-function removeExtraFix(node, keyword) {
-  return {
-    label: `Remove "${keyword}"`,
-    run: (model) => {
-      const rest = { ...node.extras };
-      delete rest[keyword];
-      return updateNode(model, {
-        nodeId: node.id,
-        patch: { extras: Object.keys(rest).length ? rest : undefined },
-      });
-    },
-  };
-}
-
-const removeFieldFix = (node, field, label) => ({
-  label,
-  run: (model) => updateNode(model, { nodeId: node.id, patch: { [field]: undefined } }),
-});
-
 function lintExtras(node, report) {
   Object.keys(node.extras ?? {}).forEach((keyword) => {
-    const fix = removeExtraFix(node, keyword);
-    const at = { field: 'advanced', fix };
+    const at = { field: 'advanced' };
     if (node.kind === 'ref') {
       report('ref-sibling', 'warning', `"${keyword}" is ignored next to a component reference.`, at);
     } else if (node.kind === 'string' && STRING_EXCLUSIVE.includes(keyword)) {
@@ -215,7 +186,7 @@ function lintString(node, report) {
   if (node.variant !== 'choice') return;
   ['minLength', 'maxLength', 'pattern'].forEach((field) => {
     if (node[field] !== undefined) {
-      report('choice-constraint', 'info', `"${field}" also applies to a Choice but can't be edited here.`, { field: 'advanced', fix: removeFieldFix(node, field, `Remove "${field}"`) });
+      report('choice-constraint', 'info', `"${field}" also applies to a Choice but can't be edited here.`, { field: 'advanced' });
     }
   });
   if (!Array.isArray(node.enum) || !node.enum.length) {
@@ -247,19 +218,12 @@ function lintNode(entry, report) {
 
   if (parent?.kind === 'object') {
     const others = siblingKeys(parent, node.id);
-    const fix = {
-      label: 'Derive key from label',
-      run: (m) => updateNode(m, {
-        nodeId: node.id,
-        patch: { key: deriveKey(node.title || node.kind, others) },
-      }),
-    };
     if (RESERVED_KEYS.includes(node.key)) {
-      report('R10-reserved-key', 'error', `"${node.key}" is reserved.`, { field: 'key', fix });
+      report('R10-reserved-key', 'error', `"${node.key}" is reserved.`, { field: 'key' });
     } else if (!KEY_PATTERN.test(node.key ?? '')) {
-      report('R9-invalid-key', 'error', 'Keys start with a letter and use letters, digits or "-".', { field: 'key', fix });
+      report('R9-invalid-key', 'error', 'Keys start with a letter and use letters, digits or "-".', { field: 'key' });
     } else if (others.includes(node.key)) {
-      report('dup-key', 'error', `Duplicate key "${node.key}".`, { field: 'key', fix });
+      report('dup-key', 'error', `Duplicate key "${node.key}".`, { field: 'key' });
     }
   }
 
@@ -268,14 +232,10 @@ function lintNode(entry, report) {
   if (node.kind === 'ref') return;
 
   if (!String(node.title ?? '').trim()) {
-    const title = humanize(node.key) || ELEMENTS[elementOf(node)]?.label || 'Untitled';
-    report('R4-missing-title', 'error', 'Label is required.', {
-      field: 'title',
-      fix: { label: `Use "${title}"`, run: (m) => updateNode(m, { nodeId: node.id, patch: { title } }) },
-    });
+    report('R4-missing-title', 'error', 'Label is required.', { field: 'title' });
   }
   if (node.missingType) {
-    report('R1-missing-type', 'error', 'Type is missing.', { fix: { label: `Set type "${node.kind}"`, run: (m) => updateNode(m, { nodeId: node.id, patch: { missingType: undefined } }) } });
+    report('R1-missing-type', 'error', 'Type is missing.', {});
   }
 
   lintBounds(node, report);
@@ -294,7 +254,7 @@ function lintNode(entry, report) {
       report('empty-group', 'error', message, {});
     }
     if (node.requiredUnknown?.length) {
-      report('required-unknown', 'warning', `Required lists unknown fields: ${node.requiredUnknown.join(', ')}. They will be dropped on save.`, { fix: removeFieldFix(node, 'requiredUnknown', 'Drop unknown names') });
+      report('required-unknown', 'warning', `Required lists unknown fields: ${node.requiredUnknown.join(', ')}. They will be dropped on save.`, {});
     }
   }
   if (node.kind === 'array' && !node.item) {
@@ -316,9 +276,9 @@ function lintNode(entry, report) {
 export function lint(model) {
   const issues = [];
   [...walk(model)].forEach((entry) => {
-    const report = (code, severity, message, { field, fix } = {}) => {
+    const report = (code, severity, message, { field } = {}) => {
       issues.push({
-        code, severity, message, nodeId: entry.node.id, schemaPath: entry.pointer, field, fix,
+        code, severity, message, nodeId: entry.node.id, schemaPath: entry.pointer, field,
       });
     };
     lintNode(entry, report);
@@ -326,14 +286,14 @@ export function lint(model) {
 
   model.defs.forEach((def) => {
     const pointer = `/$defs/${def.name}`;
-    const report = (code, severity, message, fix) => issues.push({
-      code, severity, message, nodeId: def.node.id, defId: def.id, schemaPath: pointer, field: 'name', fix,
+    const report = (code, severity, message) => issues.push({
+      code, severity, message, nodeId: def.node.id, defId: def.id, schemaPath: pointer, field: 'name',
     });
     if (!DEF_NAME_PATTERN.test(def.name)) {
       report('invalid-def-name', 'error', 'Component names start with a letter and use letters, digits, "-" or "_".');
     }
     if (!refUsages(model, def.id).length) {
-      report('unused-component', 'info', `Component "${def.name}" is not used.`, { label: 'Delete component', run: (m) => deleteDef(m, { defId: def.id }) });
+      report('unused-component', 'info', `Component "${def.name}" is not used.`);
     }
   });
   cyclicDefs(model).forEach((def) => {

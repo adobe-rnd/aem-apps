@@ -107,13 +107,11 @@ the model and by name only in JSON, so renaming a component is a single edit.
 Every issue has the same shape:
 
 ```js
-{ code, severity, message, nodeId, schemaPath, defId?, field?, fix? }
+{ code, severity, message, nodeId, schemaPath, defId?, field? }
 ```
 
 - `severity` is `error`, `warning` or `info`. Errors block saving.
 - `field` points at the Properties control that shows the issue inline.
-- `fix` is `{ label, run(model) }`, and it runs through `store.dispatch`, so
-  a fix can be undone like any edit.
 - SDK issues are cleared on the next edit and come back on the next save.
 
 ## Storage

@@ -18,7 +18,6 @@ import { countIssues, issuePointer } from '../../core/model/lint.js';
 import { findNode, breadcrumb } from '../../core/model/query.js';
 import { icon } from '../shared/icons.js';
 import { nodeIcon } from '../author/card-info.js';
-import { applyFix } from '../shared/actions.js';
 import { plural } from '../shared/format.js';
 import { fixableIssues } from '../../core/prompts.js';
 import { loadStyle } from '../shared/styles.js';
@@ -145,9 +144,6 @@ class SeIssues extends PanelView {
           <span>${issue.message}</span>
           ${this._renderLocation(issue, group)}
         </span>
-        ${issue.fix ? html`
-          <button type="button" class="nx-action-btn"
-            @click=${() => applyFix(this.store, issue)}>${issue.fix.label}</button>` : nothing}
       </li>
     `;
   }

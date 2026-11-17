@@ -21,7 +21,6 @@ import {
 import { icon, iconHref } from '../shared/icons.js';
 import { usesPhrase } from '../shared/format.js';
 import { kindLabel, nodeIcon } from '../author/card-info.js';
-import { applyFix } from '../shared/actions.js';
 import { loadStyle } from '../shared/styles.js';
 import { fieldStyles } from '../fields/field.js';
 import { sectionsFor } from './inspector.js';
@@ -158,9 +157,6 @@ class SeProperties extends PanelView {
           <li class="notice is-${issue.severity}">
             ${icon(SEVERITY_ICON[issue.severity] ?? 'info')}
             <span class="notice-text">${issue.message}</span>
-            ${issue.fix ? html`
-              <button type="button" class="nx-action-btn"
-                @click=${() => applyFix(this.store, issue)}>${issue.fix.label}</button>` : nothing}
           </li>
         `)}
       </ul>
