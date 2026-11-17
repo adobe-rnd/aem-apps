@@ -77,7 +77,8 @@ Name or Modified heading also sorts by it, newest/Z-A first, and again reverses 
     **JSON**: its JSON as saved, with a copy button. A component use is
     saved as a reference (`$ref`), so it shows the reference and then the
     component's JSON.
-    Clicking or editing an element on the canvas brings Properties forward.
+    Clicking or editing an element on the canvas, or adding one, brings Properties
+    forward (a new element is also selected and scrolled into view).
   - **Components**: reusable definitions (`$defs`) and in how many cases each
     is used; opening one shows it on the Components page, where the one shown
     is highlighted. Use one as a field from Elements. The first tab on the

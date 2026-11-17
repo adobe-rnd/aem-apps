@@ -35,6 +35,15 @@ function typeText(area, text) {
   area.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+/** A band behind line `line` of the text, with a 1ch mark at `column` (`error` or `reveal`). */
+function lineMark(kind, { line, column = 1 }) {
+  return html`
+    <div class="line-mark ${kind}-line" style="--line: ${line}; --column: ${column}">
+      <span class="line-at ${kind}-at"></span>
+    </div>
+  `;
+}
+
 /**
  * `<se-schema-json>`: the Schema page, the whole schema file as JSON text. Valid edits apply as
  * they are typed (one undo step per burst); while the text is not valid JSON the schema keeps
@@ -49,6 +58,8 @@ class SeSchemaJson extends LitElement {
     _text: { state: true },
     /** The problem reported: `{ error, line?, column? }` (see json-text.js), or null. */
     _problem: { state: true },
+    /** The place last revealed (`{ line, column? }`), marked so it can be scrolled to. */
+    _mark: { state: true },
   };
 
   constructor() {
@@ -103,18 +114,29 @@ class SeSchemaJson extends LitElement {
   /** Puts the caret at `{ line?, column? }` and scrolls it into view, once rendered. */
   _revealAt(at, { focus }) {
     this._pendingReveal = { at, focus };
+    this._mark = at?.line ? at : null;
     this.requestUpdate();
   }
 
-  _reveal(area) {
+  async _reveal(area) {
     const { at, focus } = this._pendingReveal;
     this._pendingReveal = null;
+    this._revealId = (this._revealId ?? 0) + 1;
+    const revealId = this._revealId;
     const caret = offsetAt(this._text, at);
     area.setSelectionRange(caret, caret);
     if (focus) area.focus({ preventScroll: true });
-    const marker = this.shadowRoot.querySelector('.error-at');
-    (marker ?? area).scrollIntoView({
-      block: marker ? 'center' : 'nearest', inline: 'nearest', behavior: 'smooth',
+    // The textarea is as tall as its text, so scroll to the marked place, not the textarea.
+    const line = this.shadowRoot.querySelector('.reveal-line');
+    const marker = line?.querySelector('.reveal-at') ?? area;
+    await marker.scrollIntoView({
+      block: line ? 'center' : 'nearest', inline: 'nearest', behavior: 'smooth',
+    });
+    // A later reveal, or an edit, has moved on.
+    if (!line?.isConnected || revealId !== this._revealId) return;
+    line.getAnimations().forEach((animation) => {
+      animation.cancel();
+      animation.play();
     });
   }
 
@@ -123,6 +145,7 @@ class SeSchemaJson extends LitElement {
     clearTimeout(this._timer);
     const result = parseSchemaText(text);
     this._text = text;
+    this._mark = null;
     this._pending = result.error ? result : null;
     this._problem = this._pending;
     this.store.setJsonDraft({ text, problem: this._problem });
@@ -133,6 +156,7 @@ class SeSchemaJson extends LitElement {
     const result = parseSchemaText(text);
     clearTimeout(this._timer);
     this._text = text;
+    this._mark = null;
     if (result.error) {
       this._pending = result;
       this._timer = setTimeout(() => this._report(), REPORT_DELAY);
@@ -189,7 +213,7 @@ class SeSchemaJson extends LitElement {
   render() {
     if (this._text === undefined) return nothing;
     const lines = this._text.split('\n').length;
-    const { line: errorLine, column = 1 } = this._problem ?? {};
+    const { line: errorLine } = this._problem ?? {};
     const canFormat = !this._pending && this._text !== this._json;
     return html`
       <div class="json-tools">
@@ -207,10 +231,8 @@ class SeSchemaJson extends LitElement {
         </div>
         <div class="code">
           <div class="layers">
-            ${errorLine ? html`
-              <div class="error-line" style="--line: ${errorLine}; --column: ${column}">
-                <span class="error-at"></span>
-              </div>` : nothing}
+            ${this._mark ? lineMark('reveal', this._mark) : nothing}
+            ${errorLine ? lineMark('error', this._problem) : nothing}
             <pre class="mirror" aria-hidden="true">${highlightJson(this._text)} </pre>
             <textarea aria-label="Schema JSON" aria-describedby="json-status"
               aria-invalid=${this._problem ? 'true' : 'false'} wrap="off" spellcheck="false"
