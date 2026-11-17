@@ -127,3 +127,17 @@
 @media (prefers-reduced-motion: reduce) {
   .skeleton { animation: none; }
 }
+
+/* JSON token colours (see json-highlight.js). */
+.tok-key {
+  color: var(--s2-blue-1100);
+}
+
+.tok-string {
+  color: var(--s2-green-1100);
+}
+
+.tok-number,
+.tok-literal {
+  color: var(--s2-orange-1100);
+}

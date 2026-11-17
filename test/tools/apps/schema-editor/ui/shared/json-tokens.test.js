@@ -15,7 +15,7 @@
  */
 import { describe, it } from 'node:test';
 import { expect } from '../../expect.js';
-import { jsonTokens } from '../../../../../../tools/apps/schema-editor/ui/panel/json-tokens.js';
+import { jsonTokens } from '../../../../../../tools/apps/schema-editor/ui/shared/json-tokens.js';
 
 const typed = (json) => jsonTokens(json).filter((t) => t.type).map((t) => [t.type, t.text]);
 

@@ -126,16 +126,3 @@ pre.json {
   color: var(--s2-gray-900);
   background: var(--s2-gray-75);
 }
-
-pre.json .tok-key {
-  color: var(--s2-blue-1100);
-}
-
-pre.json .tok-string {
-  color: var(--s2-green-1100);
-}
-
-pre.json .tok-number,
-pre.json .tok-literal {
-  color: var(--s2-orange-1100);
-}

@@ -19,10 +19,7 @@ import { html } from 'da-lit';
 import { icon } from '../shared/icons.js';
 import { copyText } from '../shared/actions.js';
 import { jsonSections } from './json-sections.js';
-import { jsonTokens } from './json-tokens.js';
-
-const highlight = (json) => jsonTokens(json)
-  .map(({ text, type }) => (type ? html`<span class="tok-${type}">${text}</span>` : text));
+import { highlightJson } from '../shared/json-highlight.js';
 
 function renderSection(store, { title, what, json }) {
   return html`
@@ -32,7 +29,7 @@ function renderSection(store, { title, what, json }) {
         <button type="button" class="nx-action-btn-quiet nx-action-btn-icon" title="Copy ${what}"
           aria-label="Copy ${what}" @click=${() => copyText(store, json, what)}>${icon('copy')}</button>
       </div>
-      <pre class="json" tabindex="0" aria-label=${what}><code>${highlight(json)}</code></pre>
+      <pre class="json" tabindex="0" aria-label=${what}><code>${highlightJson(json)}</code></pre>
     </section>
   `;
 }
