@@ -67,7 +67,8 @@ Name or Modified heading also sorts by it, newest/Z-A first, and again reverses 
   it and the copy button copies it. The panel shows only Issues, and clicking
   one opens its page.
 - **Tool panel** (right): 320–400px wide, following the window; below 720px it
-  overlays the canvas, under the header so Save and Undo stay in reach.
+  overlays the canvas, under the header so Save and Undo stay in reach. A schema
+  opens on Elements.
   - **Elements**: drag an element onto the schema to add it; clicking one
     adds nothing (with the keyboard, Enter adds it at the selection).
   - **Properties**: the selected element, as settings or as JSON (the view

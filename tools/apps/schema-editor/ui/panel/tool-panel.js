@@ -24,27 +24,10 @@ import {
 
 const style = await loadStyle(import.meta.url);
 
-const STORAGE_KEY = 'se-tool-panel';
-
-function readView() {
-  try {
-    return localStorage.getItem(STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function writeView(id) {
-  try {
-    localStorage.setItem(STORAGE_KEY, id);
-  } catch {
-    // Storage blocked: the panel still works, it just won't remember.
-  }
-}
-
 /**
  * `<se-tool-panel>`: one view at a time behind tabs, each loaded on first use and kept (with its
- * scroll and state) across switches. Follows `panelRequest`s; offers only the mode's views.
+ * scroll and state) across switches. Opens every schema on Elements, then follows
+ * `panelRequest`s; offers only the mode's views.
  * Fires `panel-close`, not `close`, which its menus and popovers fire (composed) when they close.
  */
 class SeToolPanel extends LitElement {
@@ -61,7 +44,7 @@ class SeToolPanel extends LitElement {
 
   constructor() {
     super();
-    this._activeId = viewById(readView()) ? readView() : DEFAULT_VIEW;
+    this._activeId = DEFAULT_VIEW;
     this._mode = 'build';
     this._subscriptions = new BusController(this, (bus) => [
       bus.panelRequest.subscribe((req) => this._onRequest(req)),
@@ -81,6 +64,11 @@ class SeToolPanel extends LitElement {
   willUpdate(changed) {
     if (changed.has('store')) {
       this._elements.forEach((element) => { element.store = this.store; });
+      // Another schema opened in place: start it on Elements too.
+      if (changed.get('store')) {
+        this._activeId = DEFAULT_VIEW;
+        this._request = null;
+      }
     }
   }
 
@@ -91,7 +79,6 @@ class SeToolPanel extends LitElement {
   show(id) {
     if (shownView(id, this._mode) !== id || id === this._activeId) return;
     this._activeId = id;
-    writeView(id);
   }
 
   _onRequest(request) {
