@@ -57,12 +57,13 @@ Name or Modified heading also sorts by it, newest/Z-A first, and again reverses 
   Undo works here too); fields keep their identity by key, so the selection
   and Build's state survive. Invalid text is reported after a short pause or
   on leaving the editor, with the line marked, and listed in Issues as a
-  **Schema JSON** error that blocks saving (clicking it returns to the line);
+  **Schema JSON** issue that blocks saving (clicking it returns to the line);
   the schema keeps its last valid version until it is fixed, and the text
   waits for you if you switch pages without changing anything else. Here
   Issues names each element by its place in the JSON
   (`/$defs/Card/properties/title`) and gives every issue's line and column
-  in the text; clicking either puts the caret there. Enter keeps the indent; **Format** reindents
+  in the text; clicking either scrolls to that line, flashes it and puts the caret there.
+  Enter keeps the indent; **Format** reindents
   it and the copy button copies it. The panel shows only Issues, and clicking
   one opens its page.
 - **Tool panel** (right): 320–400px wide, following the window; below 720px it

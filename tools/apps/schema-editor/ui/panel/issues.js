@@ -18,7 +18,7 @@ import { countIssues, issuePointer } from '../../core/model/lint.js';
 import { findNode, breadcrumb } from '../../core/model/query.js';
 import { icon } from '../shared/icons.js';
 import { nodeIcon } from '../author/card-info.js';
-import { plural } from '../shared/format.js';
+import { SEVERITY_NAME, severityCount } from '../shared/format.js';
 import { fixableIssues } from '../../core/prompts.js';
 import { loadStyle } from '../shared/styles.js';
 import { BusController } from '../shared/bus-controller.js';
@@ -139,7 +139,7 @@ class SeIssues extends PanelView {
     return html`
       <li class="issue is-${issue.severity}">
         <span class="sev">${icon(SEVERITY_ICON[issue.severity] ?? 'info')}
-          <span class="sr-only">${issue.severity}</span></span>
+          <span class="sr-only">${SEVERITY_NAME[issue.severity] ?? issue.severity}</span></span>
         <span class="issue-text">
           <span>${issue.message}</span>
           ${this._renderLocation(issue, group)}
@@ -164,9 +164,8 @@ class SeIssues extends PanelView {
     return html`
       <div class="panel">
         <p class="summary" aria-live="polite">
-          ${counts.error ? html`<span class="chip is-error">${plural(counts.error, 'error')}</span>` : nothing}
-          ${counts.warning ? html`<span class="chip is-warning">${plural(counts.warning, 'warning')}</span>` : nothing}
-          ${counts.info ? html`<span class="chip is-info">${plural(counts.info, 'note')}</span>` : nothing}
+          ${['error', 'warning', 'info'].map((severity) => (counts[severity] ? html`
+            <span class="chip is-${severity}">${severityCount(severity, counts[severity])}</span>` : nothing))}
           ${this.chatAvailable && fixableIssues(this.issues).length ? html`
             <button type="button" class="nx-action-btn fix-ai"
               title="Hand the issues to the assistant and let it fix the schema"

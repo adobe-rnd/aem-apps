@@ -292,7 +292,7 @@ export class SchemaStore {
     if (this.status !== 'ready') return { ok: false };
     const errors = countIssues([...this.#textIssues(), ...lint(this.model)]).error;
     if (errors) {
-      const error = `Fix ${errors} ${errors === 1 ? 'error' : 'errors'} to save.`;
+      const error = `Fix ${errors} ${errors === 1 ? 'issue' : 'issues'} to save.`;
       this.#setSaveState({ state: 'error', error });
       return { ok: false, error };
     }

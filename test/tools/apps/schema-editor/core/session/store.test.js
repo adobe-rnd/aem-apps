@@ -106,7 +106,7 @@ describe('SchemaStore', () => {
     store.dispatch(updateNode, { nodeId: a.id, patch: { title: '' } });
     const result = await store.save();
     expect(result.ok).to.equal(false);
-    expect(result.error).to.contain('1 error');
+    expect(result.error).to.contain('1 issue');
     expect(saves).to.have.length(0);
   });
 
@@ -323,7 +323,7 @@ describe('SchemaStore Schema page text', () => {
     });
     expect(seen.model.at(-1).counts.error).to.equal(1);
     const result = await store.save();
-    expect(result).to.deep.equal({ ok: false, error: 'Fix 1 error to save.' });
+    expect(result).to.deep.equal({ ok: false, error: 'Fix 1 issue to save.' });
     expect(saves).to.have.length(0);
   });
 

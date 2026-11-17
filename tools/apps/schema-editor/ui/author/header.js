@@ -20,7 +20,7 @@ import { labelOf } from '../../core/model/query.js';
 import {
   buttons, shared, bar, loadStyle,
 } from '../shared/styles.js';
-import { modKey, plural } from '../shared/format.js';
+import { modKey, severityCount } from '../shared/format.js';
 
 await import('https://da.live/nx2/blocks/shared/segmented-btn/segmented.js');
 
@@ -81,7 +81,7 @@ class SeHeader extends LitElement {
     const tone = counts.error ? 'is-error' : 'is-warning';
     return html`
       <button type="button" class="nx-action-btn-quiet issues ${tone}"
-        title=${`${plural(counts.error, 'error')}, ${plural(counts.warning, 'warning')}`}
+        title=${`${severityCount('error', counts.error)}, ${severityCount('warning', counts.warning)}`}
         @click=${() => this.store.bus.panelRequest.emit({ view: 'issues', open: true })}>
         ${icon('alert')} ${total}<span class="sr-only">issues — show</span>
       </button>
@@ -114,7 +114,7 @@ class SeHeader extends LitElement {
     const saving = saveState.state === 'saving';
     const blocked = counts.error > 0;
     const saveTitle = blocked
-      ? `Fix ${plural(counts.error, 'error')} to save`
+      ? `Fix ${severityCount('error', counts.error)} to save`
       : `Save (${modKey()}S)`;
     const title = model ? labelOf(model, model.root) : '';
 

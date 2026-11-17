@@ -765,7 +765,7 @@ describe('SC SDK conformance', () => {
     const root = store.model.root.id;
     add(root, 'text', { title: 'Headline', required: true, maxLength: 120 });
     const code = add(root, 'text', { title: 'Code', pattern: '(' });
-    expect(await store.save()).to.deep.equal({ ok: false, error: 'Fix 1 error to save.' });
+    expect(await store.save()).to.deep.equal({ ok: false, error: 'Fix 1 issue to save.' });
     expect(saves.length).to.equal(0);
 
     store.dispatch(updateNode, { nodeId: code, patch: { pattern: '^[A-Z]{3}$' } });

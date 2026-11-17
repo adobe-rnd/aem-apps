@@ -23,7 +23,7 @@ import { deriveSchemaName } from '../../core/model/keys.js';
 import {
   buttons, shared, bar, loadStyle,
 } from '../shared/styles.js';
-import { relativeTime, plural } from '../shared/format.js';
+import { relativeTime, plural, severityCount } from '../shared/format.js';
 import { confirmDialog } from '../shared/confirm.js';
 import { toast as showToast } from '../shared/toast.js';
 import { createPrompt, sitePrompt } from '../../core/prompts.js';
@@ -294,10 +294,10 @@ class SeBrowse extends LitElement {
     if (summary.components) parts.push(plural(summary.components, 'component'));
     let badge = nothing;
     if (summary.errors) {
-      badge = html`<span class="chip is-error">${icon('alert')} ${plural(summary.errors, 'error')}</span>`;
+      badge = html`<span class="chip is-error">${icon('alert')} ${severityCount('error', summary.errors)}</span>`;
     } else if (summary.warnings) {
       badge = html`<span class="chip is-warning">${icon('alert')}
-        ${plural(summary.warnings, 'warning')}</span>`;
+        ${severityCount('warning', summary.warnings)}</span>`;
     }
     return html`<span class="muted">${parts.join(' · ')}</span>${badge}`;
   }

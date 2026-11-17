@@ -37,6 +37,14 @@ export function plural(count, singular, pluralForm = `${singular}s`) {
   return `${count} ${count === 1 ? singular : pluralForm}`;
 }
 
+/** What the UI calls each lint severity: blocking ones are just "issues". */
+export const SEVERITY_NAME = Object.freeze({ error: 'issue', warning: 'warning', info: 'note' });
+
+/** "2 issues", "1 warning", "3 notes". */
+export function severityCount(severity, count) {
+  return plural(count, SEVERITY_NAME[severity] ?? severity);
+}
+
 /** Where a change to a component used `count` times applies: "both uses", … */
 export function usesPhrase(count) {
   if (count === 2) return 'both uses';

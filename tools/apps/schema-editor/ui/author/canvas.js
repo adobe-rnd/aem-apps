@@ -23,7 +23,7 @@ import {
 import {
   moveBy, duplicate, remove, makeReusable, deleteComponent, newComponent, editComponent,
 } from '../shared/actions.js';
-import { usageLabel, usedIn } from '../shared/format.js';
+import { SEVERITY_NAME, usageLabel, usedIn } from '../shared/format.js';
 import { paletteMenuItems, parseMenuId, insertPaletteItem } from '../shared/palette.js';
 import { buttons, shared, loadStyle } from '../shared/styles.js';
 import {
@@ -331,7 +331,7 @@ class SeCanvas extends LitElement {
     if (!severity || severity === 'info') return nothing;
     const text = issues.filter((i) => i.severity === severity).map((i) => i.message).join('\n');
     return html`<span class="card-issue is-${severity}" title=${text}>
-      ${icon('alert')}<span class="sr-only">${severity}: ${text}</span></span>`;
+      ${icon('alert')}<span class="sr-only">${SEVERITY_NAME[severity]}: ${text}</span></span>`;
   }
 
   _renderActions(node, parent, row, def, partOf) {

@@ -17,7 +17,7 @@
 import { afterEach, describe, it } from 'node:test';
 import { expect } from '../../expect.js';
 import {
-  plural, usesPhrase, usedIn, usageLabel, modKey,
+  plural, severityCount, usesPhrase, usedIn, usageLabel, modKey,
 } from '../../../../../../tools/apps/schema-editor/ui/shared/format.js';
 
 describe('format', () => {
@@ -25,6 +25,13 @@ describe('format', () => {
     expect(plural(1, 'field')).to.equal('1 field');
     expect(plural(3, 'field')).to.equal('3 fields');
     expect(plural(2, 'entry', 'entries')).to.equal('2 entries');
+  });
+
+  it('calls blocking lint results issues, the rest warnings and notes', () => {
+    expect(severityCount('error', 1)).to.equal('1 issue');
+    expect(severityCount('error', 2)).to.equal('2 issues');
+    expect(severityCount('warning', 2)).to.equal('2 warnings');
+    expect(severityCount('info', 1)).to.equal('1 note');
   });
 
   it('describes where a component change applies', () => {
