@@ -215,9 +215,8 @@ class SeBrowse extends LitElement {
       confirmLabel: 'Create',
       existingNames: this._names,
       withJson: fromJson,
-      initialTitle: fromJson ? '' : 'Untitled',
       onSubmit: async ({ title, name, json }) => {
-        const result = await this._catalog.create({ name, title: title || 'Untitled', json });
+        const result = await this._catalog.create({ name, title, json });
         if (result.ok) this._open(name);
         return result;
       },

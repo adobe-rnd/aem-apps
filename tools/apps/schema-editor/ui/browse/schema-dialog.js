@@ -15,7 +15,7 @@
  */
 import { LitElement, html, nothing } from 'da-lit';
 import { buttons, shared, loadStyle } from '../shared/styles.js';
-import { deriveSchemaName } from '../../core/model/keys.js';
+import { deriveSchemaName, normalizeSchemaName } from '../../core/model/keys.js';
 import { checkNewName, parseImport } from '../../core/catalog.js';
 import '../fields/input.js';
 import '../fields/textarea.js';
@@ -45,6 +45,8 @@ class SeDialog extends LitElement {
     _name: { state: true },
     _json: { state: true },
     _nameEdited: { state: true },
+    _nameTouched: { state: true },
+    _jsonTouched: { state: true },
     _submitted: { state: true },
     _busy: { state: true },
     _error: { state: true },
@@ -54,8 +56,11 @@ class SeDialog extends LitElement {
     super.connectedCallback();
     this.shadowRoot.adoptedStyleSheets = [buttons, shared, style];
     this._title = this.initialTitle ?? '';
-    this._name = this.initialName
-      ?? deriveSchemaName(this._title || 'untitled', this.existingNames ?? []);
+    this._name = this.initialName ?? this._nameFor(this._title);
+  }
+
+  _nameFor(title) {
+    return title.trim() ? deriveSchemaName(title, this.existingNames ?? []) : '';
   }
 
   get _nameError() {
@@ -68,9 +73,13 @@ class SeDialog extends LitElement {
     return parseImport(this._json);
   }
 
+  get _valid() {
+    return !this._nameError && !this._jsonResult.error;
+  }
+
   _setTitle(title) {
     this._title = title;
-    if (!this._nameEdited) this._name = deriveSchemaName(title, this.existingNames ?? []);
+    if (!this._nameEdited) this._name = this._nameFor(title);
   }
 
   _onJson(text) {
@@ -91,8 +100,8 @@ class SeDialog extends LitElement {
     event.preventDefault();
     if (this._busy) return;
     this._submitted = true;
-    const { json, error: jsonError } = this._jsonResult;
-    if (this._nameError || jsonError) return;
+    const { json } = this._jsonResult;
+    if (!this._valid) return;
 
     this._busy = true;
     this._error = '';
@@ -102,19 +111,32 @@ class SeDialog extends LitElement {
     else this._error = result?.error ?? 'Something went wrong.';
   }
 
+  /**
+   * The inputs live in the fields' shadow roots, so they have no form owner and Enter doesn't
+   * submit implicitly: submit when valid, otherwise say what's missing (Create is disabled).
+   */
+  _onKeydown(event) {
+    if (event.key !== 'Enter' || event.isComposing || event.target.localName !== 'se-input') return;
+    event.preventDefault();
+    if (this._valid) event.currentTarget.requestSubmit();
+    else this._submitted = true;
+  }
+
   render() {
-    const showErrors = this._submitted || this._nameEdited;
-    const jsonError = this._submitted ? this._jsonResult.error : '';
+    const showNameError = this._submitted || this._nameTouched;
+    const jsonError = this._submitted || this._jsonTouched ? this._jsonResult.error : '';
     return html`
       <nx-dialog class=${this.withJson ? 'is-wide' : nothing} title=${this.heading}
         ?busy=${this._busy} @close=${() => this.resolve(false)}>
-        <form id="schema-form" @submit=${this._submit} novalidate>
+        <form id="schema-form" @submit=${this._submit} @keydown=${this._onKeydown} novalidate>
           ${this.withJson ? html`
             <se-textarea class="json" label="JSON Schema" required
               description="The schema definition (type, properties, …), not sample content."
               placeholder=${JSON_PLACEHOLDER}
               .value=${this._json ?? ''} .error=${jsonError || ''}
-              @input=${(e) => this._onJson(e.target.value)}></se-textarea>
+              @input=${(e) => this._onJson(e.target.value)}
+              @focusout=${() => { if (this._json !== undefined) this._jsonTouched = true; }}>
+            </se-textarea>
           ` : nothing}
           ${this.withTitle ? html`
             <se-input label="Title" ?autofocus=${!this.withJson}
@@ -124,14 +146,16 @@ class SeDialog extends LitElement {
           ` : nothing}
           <se-input label="Name" required ?autofocus=${!this.withTitle}
             description="The file name documents reference. Can't be changed later."
-            .value=${this._name ?? ''} .error=${showErrors ? this._nameError ?? '' : ''}
-            @input=${(e) => { this._name = e.target.value.trim(); this._nameEdited = true; }}></se-input>
+            .normalize=${normalizeSchemaName}
+            .value=${this._name ?? ''} .error=${showNameError ? this._nameError ?? '' : ''}
+            @input=${(e) => { this._name = e.target.value; this._nameEdited = true; }}
+            @focusout=${() => { if (this._nameEdited) this._nameTouched = true; }}></se-input>
           ${this._error ? html`<p class="error-text" role="alert">${this._error}</p>` : nothing}
         </form>
         <button type="button" slot="actions" class="nx-action-btn"
           ?disabled=${this._busy} @click=${() => this.resolve(false)}>Cancel</button>
         <button type="submit" slot="actions" form="schema-form" class="nx-btn-accent"
-          ?disabled=${this._busy} @click=${this._submit}>
+          ?disabled=${this._busy || !this._valid} @click=${this._submit}>
           ${this._busy ? 'Creating…' : this.confirmLabel}
         </button>
       </nx-dialog>

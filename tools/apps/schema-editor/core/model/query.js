@@ -131,7 +131,7 @@ export function componentCrossing(model, nodeId, parentId) {
   return { from, to };
 }
 
-/** Display label of a node (references fall back to the component title). */
+/** Display label of a node (references fall back to the component title, the root to the name). */
 export function labelOf(model, node) {
   if (!node) return '';
   if (node.title) return node.title;
@@ -139,6 +139,7 @@ export function labelOf(model, node) {
     const def = getDef(model, node.refDefId);
     return def?.node.title || def?.name || '';
   }
+  if (node === model?.root) return model.name ?? '';
   return node.key ?? '';
 }
 

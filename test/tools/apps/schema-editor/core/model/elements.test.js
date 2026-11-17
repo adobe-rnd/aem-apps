@@ -19,6 +19,7 @@ import {
   deriveKey,
   deriveSchemaName,
   deriveDefName,
+  normalizeSchemaName,
   validateSchemaName,
   validateDefName,
 } from '../../../../../../tools/apps/schema-editor/core/model/keys.js';
@@ -51,6 +52,14 @@ describe('schema model keys', () => {
     expect(deriveSchemaName('')).to.equal('schema');
     expect(deriveDefName('contact person')).to.equal('ContactPerson');
     expect(deriveDefName('Contact', ['Contact'])).to.equal('Contact2');
+  });
+
+  it('normalizes typed schema names into valid ones', () => {
+    expect(normalizeSchemaName('My Schema_v2')).to.equal('my-schema-v2');
+    expect(normalizeSchemaName('Été 2024!')).to.equal('ete-2024');
+    expect(normalizeSchemaName('2024 report')).to.equal('report');
+    expect(normalizeSchemaName('-draft-')).to.equal('draft-');
+    expect(normalizeSchemaName('!!')).to.equal('');
   });
 
   it('validates names', () => {

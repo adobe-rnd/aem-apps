@@ -69,6 +69,8 @@ describe('schema model query', () => {
     expect(findNode(model, street.id).pointer).to.equal('/$defs/Address/properties/street');
     expect(breadcrumb(model, street.id)).to.deep.equal(['Address', 'Street']);
     expect(labelOf(model, child(model, 'owner'))).to.equal('Contact');
+    const untitled = { name: 'article', root: { id: 'r', kind: 'object', title: '' } };
+    expect(labelOf(untitled, untitled.root)).to.equal('article');
   });
 
   it('detects component cycles', () => {

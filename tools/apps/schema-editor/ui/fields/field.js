@@ -37,6 +37,8 @@ export class SeField extends LitElement {
     error: { type: String },
     required: { type: Boolean },
     disabled: { type: Boolean, reflect: true },
+    /** Optional `(text) => text` applied as the user types, keeping the caret in place. */
+    normalize: { attribute: false },
   };
 
   connectedCallback() {
@@ -51,7 +53,17 @@ export class SeField extends LitElement {
 
   /** Copies the control's value and re-dispatches its event; `change` isn't composed. */
   relay(event) {
-    this.value = event.target.value;
+    const control = event.target;
+    if (this.normalize && !event.isComposing) {
+      const { value, selectionEnd } = control;
+      const next = this.normalize(value);
+      if (next !== value) {
+        const caret = this.normalize(value.slice(0, selectionEnd ?? value.length)).length;
+        control.value = next;
+        control.setSelectionRange(caret, caret);
+      }
+    }
+    this.value = control.value;
     this.dispatchEvent(new event.constructor(event.type, event));
   }
 

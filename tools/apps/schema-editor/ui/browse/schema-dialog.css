@@ -1,6 +1,8 @@
+/* nx-dialog's body scrolls, so it clips: leave room for the fields' focus ring (2px + 2px gap). */
 form {
   display: grid;
   gap: 16px;
+  padding-inline: 4px;
 }
 
 /* Room to read pasted JSON; one width, so an error message can't widen it. */

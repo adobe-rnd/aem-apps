@@ -64,6 +64,20 @@ export function deriveSchemaName(title, existingNames = []) {
   return uniquifyDashed(name, existingNames);
 }
 
+/**
+ * Coerces typed text towards a valid schema name: lowercase, spaces and underscores become
+ * hyphens, anything else invalid (including a leading digit or hyphen) is dropped.
+ */
+export function normalizeSchemaName(text) {
+  return String(text ?? '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/^[^a-z]+/, '');
+}
+
 export function deriveDefName(title, existingNames = []) {
   let name = words(title)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
