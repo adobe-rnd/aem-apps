@@ -228,14 +228,15 @@ export class SchemaStore {
   }
 
   /** `reveal` also scrolls the canvas to the node, switching to a page that shows it. */
-  select(nodeId, { reveal = false } = {}) {
+  /** Selects a node; `reveal` scrolls to its card, which takes focus unless `focus` is false. */
+  select(nodeId, { reveal = false, focus = true } = {}) {
     const entry = nodeId ? findNode(this.model, nodeId) : null;
     this.selection = entry ? nodeId : null;
     this.editingDefId = entry?.def?.id ?? null;
     this.#emitSelection();
     if (!entry || !reveal) return;
     this.#setPage(pageFor(this.model, nodeId, this.page));
-    this.bus.revealRequest.emit({ nodeId });
+    this.bus.revealRequest.emit({ nodeId, focus });
   }
 
   /** Shows the Schema page with `at` (`{ line?, column? }` in its text) in view. */

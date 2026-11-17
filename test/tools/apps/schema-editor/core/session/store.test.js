@@ -207,6 +207,15 @@ describe('SchemaStore pages', () => {
     expect(store.page).to.deep.equal({ mode: 'components', componentId: def.id });
   });
 
+  it('reveals without focusing the card when asked', async () => {
+    const { store, bus, model } = await opened();
+    const requests = [];
+    bus.revealRequest.subscribe((r) => requests.push(r));
+    store.select(model.root.id, { reveal: true });
+    store.select(model.root.id, { reveal: true, focus: false });
+    expect(requests.map((r) => r.focus)).to.deep.equal([true, false]);
+  });
+
   it('opens Components on the component of the selected use, else the first', async () => {
     const { store, model, def } = await opened();
     store.setMode('components');

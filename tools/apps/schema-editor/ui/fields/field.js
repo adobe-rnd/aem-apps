@@ -51,6 +51,13 @@ export class SeField extends LitElement {
     this.shadowRoot.querySelector('#control')?.focus();
   }
 
+  /** Focuses the control with its text selected, so typing replaces it. */
+  async focusAndSelect() {
+    await this.updateComplete;
+    this.focus();
+    this.shadowRoot.querySelector('#control')?.select?.();
+  }
+
   /** Copies the control's value and re-dispatches its event; `change` isn't composed. */
   relay(event) {
     const control = event.target;

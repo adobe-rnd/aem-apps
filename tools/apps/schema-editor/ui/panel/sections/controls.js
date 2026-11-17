@@ -37,7 +37,7 @@ export function toNumber(value) {
 export function textField(ctx, field, label, opts = {}) {
   const { node } = ctx;
   return html`
-    <se-input label=${label} .value=${node[field] ?? ''}
+    <se-input label=${label} .value=${node[field] ?? ''} data-field=${field}
       placeholder=${opts.placeholder ?? nothing}
       description=${opts.description ?? nothing}
       ?required=${!!opts.required}

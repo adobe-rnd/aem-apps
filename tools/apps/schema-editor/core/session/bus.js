@@ -35,15 +35,16 @@ export function createSchemaBus() {
     /** { active, source: 'palette'|'card', payload } while dragging */
     dragState: createChannel(),
     /**
-     * { nodeId } — scroll a card into view and focus it; { text: { line?, column? } } — the same
-     * for a place in the Schema page's text
+     * { nodeId, focus? } — scroll a card into view and focus it (unless `focus` is false);
+     * { text: { line?, column? } } — the same for a place in the Schema page's text
      */
     revealRequest: createChannel(),
     /** { message, variant? } — user feedback, shown by the app */
     toastRequest: createChannel(),
     /**
-     * { view?, open?, tab? } — bring a panel view (e.g. 'properties') to the front;
-     * `open: true` reopens a closed panel; `tab` is 'settings' | 'json'. Sent on canvas
+     * { view?, open?, tab?, focus? } — bring a panel view (e.g. 'properties') to the front;
+     * `open: true` reopens a closed panel; `tab` is 'settings' | 'json'; `focus` names the
+     * Properties setting to focus (e.g. 'title'). Sent on canvas
      * clicks, edits and inserts, not on other selections (issues, arrow keys); an issue
      * click only keeps Issues in front.
      */

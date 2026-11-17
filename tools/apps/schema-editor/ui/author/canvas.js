@@ -67,7 +67,7 @@ class SeCanvas extends LitElement {
     this._subscriptions = new BusController(this, (bus) => [
       // Before revealRequest: a reveal after a page change needs the new `_componentId`.
       bus.pageState.subscribe(({ componentId }) => { this._componentId = componentId; }),
-      bus.revealRequest.subscribe(({ nodeId }) => nodeId && this.reveal(nodeId)),
+      bus.revealRequest.subscribe(({ nodeId, focus }) => nodeId && this.reveal(nodeId, { focus })),
     ]);
   }
 

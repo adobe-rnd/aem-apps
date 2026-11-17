@@ -57,9 +57,10 @@ async function place(store, target, make, label) {
   const node = freshNode(store.model, target.parentId, make);
   const result = store.dispatch(insertNode, { ...target, node, replace });
   if (!result.ok) return result;
-  // The new element is the one to set up next: select it and show its Properties.
-  store.select(result.result.nodeId, { reveal: true });
-  store.bus.panelRequest.emit({ view: 'properties' });
+  // The new element is the one to set up next: select it, scroll to it and put its label in
+  // Properties in focus (not its card, which would take focus back from the panel).
+  store.select(result.result.nodeId, { reveal: true, focus: false });
+  store.bus.panelRequest.emit({ view: 'properties', open: true, focus: 'title' });
   return result;
 }
 

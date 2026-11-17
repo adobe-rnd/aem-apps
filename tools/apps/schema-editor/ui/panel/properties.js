@@ -63,8 +63,12 @@ class SeProperties extends PanelView {
     this._viewState = new Map();
   }
 
-  applyRequest({ tab }) {
+  applyRequest({ tab, focus }) {
     if (VIEWS.some((item) => item.value === tab)) this._tab = tab;
+    if (focus && this.selection) {
+      this._tab = 'settings';
+      this._viewFor(this.selection).set('focusField', focus);
+    }
   }
 
   _viewFor(nodeId) {
@@ -115,9 +119,15 @@ class SeProperties extends PanelView {
     if (!this.selection) return;
     const view = this._viewFor(this.selection);
     const index = view.get('focusChoice');
-    if (index === undefined) return;
-    view.set('focusChoice', undefined, { silent: true });
-    this.shadowRoot.querySelector(`[data-choice-index="${index}"]`)?.focus();
+    if (index !== undefined) {
+      view.set('focusChoice', undefined, { silent: true });
+      this.shadowRoot.querySelector(`[data-choice-index="${index}"]`)?.focus();
+    }
+    const field = view.get('focusField');
+    const control = field && this.shadowRoot.querySelector(`[data-field="${field}"]`);
+    if (!control) return;
+    view.set('focusField', undefined, { silent: true });
+    control.focusAndSelect();
   }
 
   _renderHeader(entry) {
