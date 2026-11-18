@@ -8,10 +8,8 @@
   --accent-soft: var(--s2-blue-100);
   --green: var(--s2-green-900);
 
-  position: fixed;
-  inset: 0;
-  overflow-y: auto;
   min-width: 320px;
+  min-height: 100vh;
   margin: 0;
   background: var(--s2-gray-25);
   color: var(--ink);

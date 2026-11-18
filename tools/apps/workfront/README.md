@@ -30,3 +30,11 @@ node --test tools/apps/workfront/tests/*.test.js
 ```
 
 Or run `npm test` inside this directory. No `npm install` is needed.
+
+### Scrolling regression check
+
+Open the plugin in an EW side panel and select **All** with enough items to
+extend below the viewport. Verify that mouse-wheel or trackpad scrolling over
+the list reaches the last item and results summary, then returns to the top.
+Repeat with item details open and at narrow and wide panel widths. The app body
+must remain in normal document flow so the iframe document can scroll.
