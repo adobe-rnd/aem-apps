@@ -405,7 +405,11 @@ function renderDetail(filtered) {
     const project = projectFor(item);
     const parent = button(project?.name || 'Project unavailable', 'folder', 'detail-project nx-action-btn-quiet');
     parent.disabled = !project;
-    parent.addEventListener('click', () => { state.tab = 'all'; chooseItem(project); });
+    parent.addEventListener('click', () => {
+      state.tab = 'all';
+      state.search = '';
+      chooseItem(project);
+    });
     inner.append(parent);
   }
   if (item.status) {
