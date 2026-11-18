@@ -305,12 +305,14 @@ class SeCanvas extends LitElement {
     return items;
   }
 
+  /** An empty zone's add menu, set off from its drop text by a divider. */
   _renderAdd(parentId, index, label) {
     return html`
+      <span class="zone-divider" aria-hidden="true"></span>
       <nx-menu placement="below-end" .items=${paletteMenuItems(this.model, parentId)}
         @select=${(e) => this._onAdd(parentId, index, e.detail.id)}>
-        <button slot="trigger" type="button" class="nx-btn-accent nx-btn-sm"
-          @click=${(e) => e.stopPropagation()}>${icon('add')} ${label}</button>
+        <button slot="trigger" type="button" class="nx-btn-accent nx-btn-sm zone-btn"
+          @click=${(e) => e.stopPropagation()}>${label}</button>
       </nx-menu>
     `;
   }

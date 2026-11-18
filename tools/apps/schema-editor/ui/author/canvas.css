@@ -370,6 +370,18 @@
   margin-block-start: 0;
 }
 
+.zone-divider {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  background: var(--s2-gray-300);
+}
+
+/* A text-only pill, as the da.live New button, wide enough for a short label. */
+.zone-btn {
+  min-width: 64px;
+}
+
 /* A component use wears the component colour (indigo, as in the panel) on
    its icon and the guide along its rows; its kind names the component and
    how often it is used (its menu opens it on the Components page). Its kind
