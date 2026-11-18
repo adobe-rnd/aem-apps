@@ -16,7 +16,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseConfig } from '../../../../tools/localization/core/domain/config.js';
-import { listLocationPages, isDotPath } from '../../../../tools/apps/msm-next/data/listing.js';
+import { listLocationPages, isDotPath, isDraftsPath } from '../../../../tools/apps/msm-next/data/listing.js';
 import createPool from '../../../../tools/apps/msm-next/data/pool.js';
 
 const model = parseConfig({
@@ -52,6 +52,30 @@ describe('listLocationPages', () => {
     const pages = await listLocationPages({ list, model, location: model.locations.get('brand:/en') });
     assert.deepEqual(pages, ['/en/data.json', '/en/games/a.html', '/en/index.html']);
     assert.deepEqual(calls.sort(), ['brand/en', 'brand/en/games']);
+  });
+
+  it('skips the root drafts folder and everything below it', async () => {
+    const root = parseConfig({ sites: { brand: [{ path: '/', language: 'en' }] } });
+    const tree = {
+      '/': [
+        { path: '/index.html', isFolder: false },
+        { path: '/drafts', isFolder: true },
+        { path: '/blog', isFolder: true },
+      ],
+      '/blog': [{ path: '/blog/drafts', isFolder: true }, { path: '/blog/a.html', isFolder: false }],
+      '/blog/drafts': [{ path: '/blog/drafts/b.html', isFolder: false }],
+      '/drafts': [{ path: '/drafts/x.html', isFolder: false }],
+    };
+    const list = async (site, folder) => tree[folder] ?? [];
+    const pages = await listLocationPages({ list, model: root, location: root.locations.get('brand:/') });
+    assert.deepEqual(pages, ['/blog/a.html', '/blog/drafts/b.html', '/index.html']);
+  });
+
+  it('detects drafts paths', () => {
+    assert.equal(isDraftsPath('/drafts'), true);
+    assert.equal(isDraftsPath('/drafts/a/b.html'), true);
+    assert.equal(isDraftsPath('/draftsy'), false);
+    assert.equal(isDraftsPath('/blog/drafts'), false);
   });
 
   it('detects dot paths', () => {

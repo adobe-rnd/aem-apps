@@ -25,6 +25,8 @@ const extOf = (path) => {
 
 export const isDotPath = (path) => path.split('/').some((segment) => segment.startsWith('.'));
 
+export const isDraftsPath = (path) => /^\/drafts(\/|$)/.test(path);
+
 export function nestedLocationPaths(model, location) {
   const paths = new Set();
   model.locations.forEach((other) => {
@@ -42,7 +44,7 @@ export async function listLocationPages({
     const items = await run(() => list(location.site, folder));
     const folders = [];
     items.forEach((item) => {
-      if (isDotPath(item.path)) return;
+      if (isDotPath(item.path) || isDraftsPath(item.path)) return;
       if (item.isFolder) {
         if (!nested.has(item.path)) folders.push(item.path);
         return;
