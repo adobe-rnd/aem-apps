@@ -1,0 +1,480 @@
+/*
+ * Copyright 2026 Adobe Systems Incorporated
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/* eslint-disable import/no-relative-packages -- Repository tests import the local app package. */
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { createWorkfrontClient } from '../../../../tools/apps/workfront/api.js';
+
+const page = { siteId: 'northstar/website', path: '/collections/fall.html', url: 'https://da.live/canvas#/northstar/website/collections/fall' };
+const link = { siteId: 'northstar/website', path: '/collections/fall', url: page.url };
+const task = { ID: 'task-1', name: 'Write copy', projectID: 'project-1' };
+const options = {
+  workfrontOrigin: 'https://northstar.my.workfront.com',
+  getToken: () => 'ims-access-token',
+};
+const response = (data, status = 200) => ({ ok: status < 400, status, json: async () => data });
+const isCurrentUser = (url) => url.includes('/user/search?ID=%24%24USER.ID&');
+
+test('direct mode requires a safe Workfront origin', () => {
+  assert.throws(() => createWorkfrontClient({ ...options, workfrontOrigin: 'https://attacker.example' }), /valid HTTPS/);
+  assert.throws(() => createWorkfrontClient({ ...options, workfrontOrigin: 'http://northstar.my.workfront.com' }), /valid HTTPS/);
+});
+
+test('proxy mode sends API calls to the proxy but keeps tenant links', async () => {
+  assert.throws(() => createWorkfrontClient({ ...options, proxyOrigin: 'http://proxy.example' }), /valid HTTPS Workfront proxy/);
+  const urls = [];
+  const client = createWorkfrontClient({
+    ...options,
+    proxyOrigin: 'https://wf-proxy.example.workers.dev/',
+    fetchImpl: async (url) => {
+      urls.push(url);
+      if (isCurrentUser(url)) return response([{ ID: 'alex', name: 'Alex' }]);
+      if (url.includes('/task/')) return response([task]);
+      return response([]);
+    },
+  });
+  const catalog = await client.load();
+  assert.equal(urls.every((url) => url.startsWith('https://wf-proxy.example.workers.dev/attask/api/v21.0/')), true);
+  assert.equal(catalog.tasks[0].url, 'https://northstar.my.workfront.com/task/task-1/overview');
+});
+
+test('proxy mode keeps the path of an Adobe I/O Runtime action URL', async () => {
+  const action = 'https://12345-wfproxy-stage.adobeioruntime.net/api/v1/web/workfront/proxy';
+  assert.throws(() => createWorkfrontClient({ ...options, proxyOrigin: `${action}?x=1` }), /valid HTTPS Workfront proxy/);
+  await Promise.all([action, `${action}/`].map(async (proxyOrigin) => {
+    const urls = [];
+    const client = createWorkfrontClient({
+      ...options,
+      proxyOrigin,
+      fetchImpl: async (url) => {
+        urls.push(url);
+        return response(isCurrentUser(url) ? [{ ID: 'alex', name: 'Alex' }] : []);
+      },
+    });
+    await client.load();
+    assert.equal(urls.length > 0, true);
+    assert.equal(urls.every((url) => url.startsWith(`${action}/attask/api/v21.0/`)), true);
+  }));
+});
+
+test('catalog calls the tenant API with the host bearer token and normalizes records', async () => {
+  const calls = [];
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      calls.push(url);
+      assert.equal(init.credentials, 'omit');
+      assert.equal(init.headers.Authorization, 'Bearer ims-access-token');
+      assert.equal(init.headers.SessionID, undefined);
+      assert.match(url, /^https:\/\/northstar\.my\.workfront\.com\/attask\/api\/v21\.0\//);
+      if (isCurrentUser(url)) {
+        return response([{
+          ID: 'alex', name: 'Alex Morgan', roleID: 'designer', userRoles: [{ roleID: 'editor' }],
+        }]);
+      }
+      if (url.includes('/user/search')) return response([{ ID: 'alex', name: 'Alex Morgan' }]);
+      if (url.includes('/project/')) {
+        return response([{
+          ID: 'project-1', name: 'Fall launch', ownerID: 'sam', projectUsers: [{ userID: 'alex' }], URL: 'https://da.live/#/northstar/website',
+        }]);
+      }
+      return response([{
+        ...task, assignedToID: 'alex', assignments: [{ assignedToID: 'alex', roleID: 'designer' }, { roleID: 'editor' }], URL: page.url, notes: [{ noteText: 'Approved messaging.', owner: { name: 'Sam' } }],
+      }]);
+    },
+  });
+  const catalog = await client.load();
+  assert.equal(catalog.userId, 'alex');
+  assert.equal(calls.some((url) => url.includes('/user/search?ID=%24%24USER.ID&fields=ID%2Cname')), true);
+  assert.equal(calls.some((url) => url.includes('/user/current')), false);
+  assert.equal(calls.some((url) => url.includes('/session')), false);
+  assert.deepEqual(catalog.tasks[0].pageLinks, [link]);
+  assert.deepEqual(catalog.projects[0].siteIds, [page.siteId]);
+  assert.deepEqual(catalog.projects[0].pageLinks, []);
+  assert.equal(calls.some((url) => url.includes('/task/search') && url.includes('%2CURL%2C')), true);
+  assert.equal(calls.some((url) => url.includes('parameterValues')), false);
+  assert.equal(catalog.projects[0].ownerId, 'sam');
+  assert.deepEqual(catalog.projects[0].memberIds, ['sam', 'alex']);
+  assert.equal(calls.some((url) => url.includes('/project/search') && url.includes('ownerID%2CprojectUsers%3AuserID')), true);
+  assert.deepEqual(catalog.tasks[0].assigneeIds, ['alex']);
+  assert.deepEqual(catalog.tasks[0].roleIds, ['editor']);
+  assert.deepEqual(catalog.users, [{ id: 'alex', name: 'Alex Morgan', roleIds: ['designer', 'editor'] }]);
+  assert.equal(catalog.tasks[0].notes[0].text, 'Approved messaging.');
+  assert.equal(catalog.tasks[0].url, 'https://northstar.my.workfront.com/task/task-1/overview');
+});
+
+test('a task is reread before linking and an existing association is never rewritten', async () => {
+  const calls = [];
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      calls.push(init.method);
+      return response({ ...task, URL: 'https://main--website--northstar.aem.live/collections/fall' });
+    },
+  });
+  assert.equal((await client.linkPage(task.ID, page)).added, false);
+  assert.deepEqual(calls, ['GET']);
+});
+
+test('concurrent clicks share one write to the URL field', async () => {
+  let writes = 0;
+  const record = { ...task, URL: '' };
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      if (init.method === 'PUT') {
+        writes += 1;
+        assert.deepEqual([...init.body.keys()], ['URL']);
+        assert.equal(init.body.get('URL'), page.url);
+        record.URL = init.body.get('URL');
+        return response({ ID: task.ID });
+      }
+      return response({ ...record });
+    },
+  });
+  await Promise.all([client.linkPage(task.ID, page), client.linkPage(task.ID, page)]);
+  assert.equal(writes, 1);
+});
+
+// Resolves for every caller once `count` callers have arrived.
+function barrier(count) {
+  let arrived = 0;
+  let release;
+  const done = new Promise((resolve) => { release = resolve; });
+  return () => {
+    arrived += 1;
+    if (arrived === count) release();
+    return done;
+  };
+}
+
+test('when two users link different pages after both read an empty URL, the overwritten user gets an error', async () => {
+  const otherPage = { siteId: 'northstar/website', path: '/about.html', url: 'https://da.live/canvas#/northstar/website/about' };
+  const record = { ...task, URL: '' };
+  const bothRead = barrier(2);
+  const bothWrote = barrier(2);
+  let reads = 0;
+  const fetchImpl = async (url, init) => {
+    if (init.method === 'PUT') {
+      record.URL = init.body.get('URL');
+      await bothWrote();
+      return response({ ID: task.ID });
+    }
+    reads += 1;
+    const snapshot = { ...record };
+    if (reads <= 2) await bothRead();
+    return response(snapshot);
+  };
+  const first = createWorkfrontClient({ ...options, fetchImpl });
+  const second = createWorkfrontClient({ ...options, fetchImpl });
+  const results = await Promise.allSettled([
+    first.linkPage(task.ID, page), second.linkPage(task.ID, otherPage),
+  ]);
+  const rejected = results.filter((result) => result.status === 'rejected');
+  const fulfilled = results.filter((result) => result.status === 'fulfilled');
+  assert.equal(rejected.length, 1);
+  assert.equal(fulfilled.length, 1);
+  assert.equal(fulfilled[0].value.item.pageUrl, record.URL);
+  assert.match(rejected[0].reason.message, /Someone else changed the link of "Write copy" at the same time to https:\/\/da\.live/);
+  assert.equal(rejected[0].reason.uncertain, true);
+});
+
+test('a link write that lands after the other user verified still wins (documented last-write-wins)', async () => {
+  const otherPage = { siteId: 'northstar/website', path: '/about.html', url: 'https://da.live/canvas#/northstar/website/about' };
+  const record = { ...task, URL: '' };
+  const fetchImpl = async (url, init) => {
+    if (init.method === 'PUT') record.URL = init.body.get('URL');
+    return response({ ...record });
+  };
+  let releaseLate;
+  const lateGate = new Promise((resolve) => { releaseLate = resolve; });
+  let lateReads = 0;
+  const late = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      if (init.method !== 'GET' || lateReads > 0) return fetchImpl(url, init);
+      lateReads += 1;
+      const snapshot = { ...record };
+      await lateGate;
+      return response(snapshot);
+    },
+  });
+  const lateLink = late.linkPage(task.ID, otherPage);
+  const early = createWorkfrontClient({ ...options, fetchImpl });
+  assert.equal((await early.linkPage(task.ID, page)).added, true);
+  releaseLate();
+  assert.equal((await lateLink).added, true);
+  assert.equal(record.URL, otherPage.url);
+});
+
+test('a saved link that cannot be verified is reported as uncertain', async () => {
+  let reads = 0;
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      if (init.method === 'PUT') return response({ ID: task.ID });
+      reads += 1;
+      if (reads > 1) throw new TypeError('Network failure');
+      return response({ ...task, URL: '' });
+    },
+  });
+  await assert.rejects(client.linkPage(task.ID, page), (error) => error.uncertain && /could not be verified/.test(error.message));
+});
+
+test('linking never overwrites a URL that points elsewhere', async () => {
+  const methods = [];
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      methods.push(init.method);
+      return response({ ...task, URL: 'https://da.live/canvas#/northstar/website/about' });
+    },
+  });
+  await assert.rejects(client.linkPage(task.ID, page), /already links to https:\/\/da.live\/canvas#\/northstar\/website\/about/);
+  assert.deepEqual(methods, ['GET']);
+});
+
+test('task creation submits the page URL in a single write', async () => {
+  let writes = 0;
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      writes += 1;
+      assert.equal(init.method, 'POST');
+      assert.equal(init.body.get('projectID'), 'project-1');
+      assert.equal(init.body.get('URL'), page.url);
+      assert.equal(init.body.has('DE:EW Page Links'), false);
+      return response({ ...task, URL: init.body.get('URL') });
+    },
+  });
+  const created = await client.createTask({ name: 'Write copy', projectId: 'project-1' }, page);
+  assert.equal(writes, 1);
+  assert.deepEqual(created.pageLinks, [link]);
+});
+
+test('creation submits optional due date, priority and self-assignment together with the page URL', async () => {
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      assert.equal(init.body.get('priority'), '4');
+      assert.equal(init.body.get('assignedToID'), 'alex');
+      assert.equal(init.body.get('plannedCompletionDate'), '2026-11-25');
+      assert.equal(init.body.get('URL'), page.url);
+      return response({ ...task, URL: page.url });
+    },
+  });
+  await client.createTask({
+    name: 'Review', projectId: 'project-1', dueDate: '2026-11-25', priority: 4, assignMe: true,
+  }, { ...page, userId: 'alex' });
+});
+
+test('task editing changes only edited fields and completion writes status and progress together', async () => {
+  const calls = [];
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      if (init.method === 'GET') return response({ ...task, description: 'Original', percentComplete: 25 });
+      calls.push({ url, init });
+      return response({
+        ...task, description: init.body.get('description') || '', status: init.body.get('status') || 'INP', percentComplete: Number(init.body.get('percentComplete') || 25),
+      });
+    },
+  });
+  const original = {
+    id: 'task/1', name: 'Write copy', description: 'Original', percentComplete: 25,
+  };
+  assert.equal(await client.updateTask(original, { description: 'Original' }), original);
+  assert.equal(calls.length, 0);
+  const edited = await client.updateTask(original, { description: 'Changed' });
+  assert.equal(edited.description, 'Changed');
+  assert.match(calls[0].url, /task\/task%2F1$/);
+  assert.equal(calls[0].init.method, 'PUT');
+  assert.deepEqual([...calls[0].init.body.keys()], ['description', 'fields']);
+  const completed = await client.completeTask(original.id);
+  assert.equal(completed.statusCode, 'CPL');
+  assert.equal(completed.percentComplete, 100);
+  assert.equal(calls[1].init.body.get('status'), 'CPL');
+  assert.equal(calls[1].init.body.get('percentComplete'), '100');
+});
+
+test('an edit is refused without writing when someone else changed the same field', async () => {
+  const methods = [];
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      methods.push(init.method);
+      return response({ ...task, description: 'Their brief' });
+    },
+  });
+  const loaded = { id: task.ID, name: 'Write copy', description: 'Original' };
+  await assert.rejects(
+    client.updateTask(loaded, { description: 'My brief' }),
+    /Someone else changed the brief of "Write copy" in Workfront. Your changes were not saved/,
+  );
+  assert.deepEqual(methods, ['GET']);
+});
+
+test('an edit still saves when someone else changed only other fields', async () => {
+  const writes = [];
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      if (init.method === 'PUT') writes.push([...init.body.keys()]);
+      return response({ ...task, name: 'Renamed by someone else', description: init.body?.get('description') || 'Original' });
+    },
+  });
+  const loaded = { id: task.ID, name: 'Write copy', description: 'Original' };
+  const saved = await client.updateTask(loaded, { description: 'My brief' });
+  assert.deepEqual(writes, [['description', 'fields']]);
+  assert.equal(saved.description, 'My brief');
+});
+
+test('posting an update targets the task and returns the attributed note', async () => {
+  let calls = 0;
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      calls += 1;
+      assert.match(url, /\/note$/);
+      assert.equal(init.method, 'POST');
+      assert.equal(init.body.get('noteObjCode'), 'TASK');
+      assert.equal(init.body.get('objID'), 'task-1');
+      assert.equal(init.body.get('noteText'), 'Looks good');
+      return response({
+        ID: 'note-1', noteText: 'Looks good', owner: { name: 'Alex' }, entryDate: '2026-11-18',
+      });
+    },
+  });
+  await assert.rejects(client.addNote('task-1', ' '), /Enter an update/);
+  assert.equal(calls, 0);
+  assert.deepEqual(await client.addNote('task-1', ' Looks good '), {
+    text: 'Looks good', author: 'Alex', date: '2026-11-18',
+  });
+});
+
+test('new write operations surface permission failures and flag unconfirmed responses without retrying', async () => {
+  const operations = [
+    (client) => client.updateTask({ id: 'task-1', name: 'Old' }, { name: 'New' }),
+    (client) => client.completeTask('task-1'),
+    (client) => client.addNote('task-1', 'Update'),
+  ];
+  /* eslint-disable no-restricted-syntax, no-await-in-loop */
+  for (const operation of operations) {
+    for (const failure of ['permission', 'network', 'incomplete']) {
+      let calls = 0;
+      const client = createWorkfrontClient({
+        ...options,
+        fetchImpl: async (url, init) => {
+          if (init.method === 'GET') return response({ ID: 'task-1', name: 'Old' });
+          calls += 1;
+          if (failure === 'network') throw new TypeError('Network failure');
+          return failure === 'permission' ? response(null, 403) : response({ ID: 'task-1' });
+        },
+      });
+      await assert.rejects(operation(client), (error) => (failure === 'permission'
+        ? error.status === 403 && !error.uncertain : error.uncertain));
+      assert.equal(calls, 1);
+    }
+  }
+  /* eslint-enable no-restricted-syntax, no-await-in-loop */
+});
+
+test('authentication and permission errors have actionable messages', async () => {
+  // Test each status sequentially.
+  /* eslint-disable no-restricted-syntax, no-await-in-loop */
+  for (const status of [401, 403]) {
+    const client = createWorkfrontClient({
+      ...options, fetchImpl: async () => response(null, status),
+    });
+    await assert.rejects(client.load(), (error) => error.status === status && /token|permission/.test(error.message));
+  }
+  /* eslint-enable no-restricted-syntax, no-await-in-loop */
+});
+
+test('other API errors include the Workfront error message', async () => {
+  const client = createWorkfrontClient({ ...options, fetchImpl: async () => response({ error: { message: 'Unsupported query' } }, 400) });
+  await assert.rejects(client.load(), (error) => error.status === 400 && /\(400\): Unsupported query/.test(error.message));
+});
+
+test('the latest host token is read for each direct API request', async () => {
+  let token = 'first-ims-token';
+  const headers = [];
+  const client = createWorkfrontClient({
+    ...options,
+    getToken: () => token,
+    fetchImpl: async (url, init) => {
+      headers.push(init.headers.Authorization);
+      if (isCurrentUser(url)) return response([{ ID: 'alex', name: 'Alex Morgan' }]);
+      if (url.includes('/user/search')) return response([]);
+      return response([]);
+    },
+  });
+  await client.load();
+  token = 'refreshed-ims-token';
+  await client.load();
+  assert.equal(headers.includes('Bearer first-ims-token'), true);
+  assert.equal(headers.includes('Bearer refreshed-ims-token'), true);
+});
+
+test('missing host token blocks the request without sending credentials', async () => {
+  let calls = 0;
+  const client = createWorkfrontClient({ ...options, getToken: () => '', fetchImpl: async () => { calls += 1; } });
+  await assert.rejects(client.load(), /Experience Workspace Workfront token is unavailable/);
+  assert.equal(calls, 0);
+});
+
+test('unrecognized URL values are ignored rather than inferring a match', async () => {
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url) => {
+      if (isCurrentUser(url)) return response([{ ID: 'alex', name: 'Alex' }]);
+      if (url.includes('/task/')) return response([{ ...task, URL: 'https://example.com/fall' }]);
+      return response([]);
+    },
+  });
+  const [loaded] = (await client.load()).tasks;
+  assert.deepEqual([loaded.pageLinks, loaded.siteIds, loaded.pageUrl], [[], [], 'https://example.com/fall']);
+});
+
+test('failed writes are marked uncertain and are not automatically retried', async () => {
+  let calls = 0;
+  const client = createWorkfrontClient({ ...options, fetchImpl: async () => { calls += 1; throw new TypeError('Network failure'); } });
+  await assert.rejects(client.createTask({ name: 'New copy', projectId: 'project-1' }, page), (error) => error.uncertain);
+  assert.equal(calls, 1);
+});
+
+test('an incomplete success response does not invite a duplicate task creation', async () => {
+  const client = createWorkfrontClient({ ...options, fetchImpl: async () => response({ ID: 'new-task' }) });
+  await assert.rejects(client.createTask({ name: 'New copy', projectId: 'project-1' }, page), (error) => error.uncertain && /may have been created/.test(error.message));
+});
+
+test('catalog paginates instead of silently truncating All', async () => {
+  let pages = 0;
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url) => {
+      if (isCurrentUser(url)) return response([{ ID: 'alex', name: 'Alex Morgan' }]);
+      if (url.includes('/user/search')) return response([{ ID: 'alex', name: 'Alex Morgan' }]);
+      if (url.includes('/task/')) return response([]);
+      if (url.includes('/user/')) return response([{ ID: 'alex', name: 'Alex' }]);
+      pages += 1;
+      const offset = Number(new URL(url, 'https://plugin.example').searchParams.get('$$FIRST'));
+      return response(offset === 0 ? Array.from({ length: 100 }, (_, index) => ({ ID: `project-${index}`, name: `Project ${index}` })) : [{ ID: 'project-last', name: 'Last project' }]);
+    },
+  });
+  assert.equal((await client.load()).projects.length, 101);
+  assert.equal(pages, 2);
+});

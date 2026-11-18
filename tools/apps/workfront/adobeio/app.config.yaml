@@ -1,0 +1,22 @@
+application:
+  runtimeManifest:
+    packages:
+      workfront:
+        license: Apache-2.0
+        actions:
+          proxy:
+            function: actions/proxy/index.js
+            runtime: nodejs:22
+            web: 'yes'
+            annotations:
+              # Receive the raw request (__ow_path, __ow_query, __ow_body) instead of parsed parameters.
+              raw-http: true
+              # Answer CORS preflights in the action so only ALLOWED_ORIGINS get CORS headers.
+              web-custom-options: true
+              # Request parameters cannot override the inputs below.
+              final: true
+              # The EW token is issued to another client ID; Workfront validates it instead.
+              require-adobe-auth: false
+            inputs:
+              WORKFRONT_ORIGIN: $WORKFRONT_ORIGIN
+              ALLOWED_ORIGINS: $ALLOWED_ORIGINS
