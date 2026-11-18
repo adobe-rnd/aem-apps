@@ -331,7 +331,8 @@
 }
 
 /* On a gap the note sits on the insertion line; on a List's item, on its
-   top edge: both clear of the rows' content. */
+   top edge; on an empty zone, on its bottom edge: all clear of the content,
+   which stays as it is. */
 .gap > :is(.drop-reason, .drop-hint) {
   inset-block-start: -7px;
 }
@@ -340,8 +341,8 @@
   inset-block-start: -10px;
 }
 
-.drop-zone :is(.drop-reason, .drop-hint) {
-  position: static;
+.drop-zone > :is(.drop-reason, .drop-hint) {
+  inset-block: auto -10px;
 }
 
 /* A component's fields, previewed under a use, take no drops (it is edited

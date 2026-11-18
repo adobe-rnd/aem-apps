@@ -26,8 +26,9 @@ Name or Modified heading also sorts by it, newest/Z-A first, and again reverses 
 
 - **Build**: the schema as nested cards, each led by its type icon, with
   its element and constraints at a glance. Drag cards to reorder or move
-  them between groups; a blue hint on the insertion line or the highlighted
-  item tells what the drop does (Insert here, Move here, Replace). Select a
+  them between groups; a blue hint on the insertion line, the highlighted
+  item or the edge of an empty area tells what the drop does (Insert here,
+  Move here, Replace). Select a
   card to edit it. A component used as a field
   wears the component colour, indigo, on its icon and the line along its
   fields; its type reads `Component: Address · used in 2 cases` (a narrow canvas

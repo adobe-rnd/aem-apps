@@ -367,10 +367,6 @@ class SeCanvas extends LitElement {
     return { className: [classes, mark?.className].filter(Boolean).join(' '), note };
   }
 
-  _zoneText(zone, text) {
-    return zone.note === nothing ? html`<span class="muted">${text}</span>` : zone.note;
-  }
-
   _renderGap(parentId, index, scope) {
     const zone = this._zone(`${parentId}:${index}`, scope, 'gap');
     return html`<div class=${zone.className} data-parent-id=${parentId} data-index=${index}
@@ -421,8 +417,9 @@ class SeCanvas extends LitElement {
     const zone = this._zone(`${node.id}:0`, scope, 'drop-zone');
     return html`
       <div class=${zone.className} data-parent-id=${node.id} data-index="0" data-scope=${scope}>
-        ${this._zoneText(zone, 'Drop elements here')}
+        <span class="muted">Drop elements here</span>
         ${this._renderAdd(node.id, 0, 'Add')}
+        ${zone.note}
       </div>
     `;
   }
@@ -447,8 +444,9 @@ class SeCanvas extends LitElement {
           </div>
         ` : html`
           <div class=${slot.className} data-parent-id=${node.id} data-slot data-scope=${ctx.scope}>
-            ${this._zoneText(slot, 'Drop the element each list entry should be')}
+            <span class="muted">Drop the element each list entry should be</span>
             ${this._renderAdd(node.id, undefined, 'Choose')}
+            ${slot.note}
           </div>
         `}
       </div>
