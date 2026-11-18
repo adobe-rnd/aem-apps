@@ -360,6 +360,11 @@ sl-textarea {
   align-self: stretch;
 }
 
+.workflow > .message {
+  align-self: stretch;
+  margin: 0;
+}
+
 .workflow-header {
   display: flex;
   align-items: flex-start;

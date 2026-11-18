@@ -27,7 +27,8 @@ import {
   blankRule, draftFromConfig, draftToTabs, mergeTabs, readSetup, problemCode,
   parseOrgSite, siteFromParams, registrationForm, registrationBody, saveErrorText,
   permissionsModeOf, permissionsNotice, PERMISSIONS_DOCS, rulesDraftErrors, settingsFields,
-  commentsLengthDefault,
+  commentsLengthDefault, rulesUsingWorkflow, workflowRemovalProblem, stepRemovalProblem,
+  renameWorkflow,
 } from './model.js';
 
 const NX = 'https://da.live/nx2';
@@ -116,6 +117,7 @@ class PublishRequestsSetup extends LitElement {
     _fieldError: { state: true },
     _draftErrors: { state: true },
     _permissionsMode: { state: true },
+    _blocked: { state: true },
   };
 
   constructor() {
@@ -266,6 +268,8 @@ class PublishRequestsSetup extends LitElement {
     this._conflict = null;
     this._fieldError = null;
     this._draftErrors = {};
+    this._blocked = null;
+    this._renaming = null;
     this._open = key;
     this._draft = this.buildDraft(key);
     // What the draft started from, to re-apply only the user's changes after a 409.
@@ -279,6 +283,8 @@ class PublishRequestsSetup extends LitElement {
     this._conflict = null;
     this._fieldError = null;
     this._draftErrors = {};
+    this._blocked = null;
+    this._renaming = null;
   }
 
   draftTabs(key, draft) {
@@ -332,6 +338,52 @@ class PublishRequestsSetup extends LitElement {
   removeRow(list, i) {
     list.splice(i, 1);
     this.rerender();
+  }
+
+  // Rules in the draft that use a workflow keep it: say why instead, next to the button, until
+  // those rules change. The button stays enabled so keyboard and screen reader users reach it.
+  async refuseRemoval(item) {
+    this._blocked = { item };
+    await this.updateComplete;
+    const message = this.shadowRoot.querySelector('#remove-blocked');
+    message?.scrollIntoView?.({ block: 'nearest' });
+    message?.focus?.({ preventScroll: true });
+  }
+
+  removeWorkflow(workflows, w) {
+    if (workflowRemovalProblem(this._draft.rules, workflows[w])) {
+      this.refuseRemoval(workflows[w]);
+      return;
+    }
+    this._blocked = null;
+    this.removeRow(workflows, w);
+  }
+
+  removeStep(workflow, s) {
+    if (stepRemovalProblem(this._draft.rules, workflow)) {
+      this.refuseRemoval(workflow.steps[s]);
+      return;
+    }
+    this._blocked = null;
+    this.removeRow(workflow.steps, s);
+  }
+
+  // The refusal for `item` while it still applies; it goes once no rule needs the item.
+  renderBlocked(item, problemOf) {
+    if (this._blocked?.item !== item) return nothing;
+    const problem = problemOf();
+    if (!problem) return nothing;
+    return html`<div class="message error row-problem" id="remove-blocked" tabindex="-1" role="alert">${problem}</div>`;
+  }
+
+  // The rules that used a workflow follow its new name. They are taken once, when the rename
+  // starts, so a name typed on the way (another workflow's, or blank) doesn't move other rules.
+  renameWorkflowTo(workflow, name) {
+    if (this._renaming?.workflow !== workflow) {
+      this._renaming = { workflow, rules: rulesUsingWorkflow(this._draft.rules, workflow.name) };
+    }
+    renameWorkflow(this._renaming.rules, workflow, name);
+    this.requestUpdate();
   }
 
   addRow(list, row) {
@@ -558,12 +610,12 @@ class PublishRequestsSetup extends LitElement {
     return html`<ul class="notes">${notes.map((note) => html`<li>${note}</li>`)}</ul>`;
   }
 
-  renderRowActions(list, i, label) {
+  renderRowActions(list, i, label, onRemove = () => this.removeRow(list, i)) {
     return html`
       <div class="row-actions">
         <sl-button class="pw-quiet-secondary pw-action-sm" aria-label="Move ${label} up" ?disabled=${i === 0} @click=${() => this.moveRow(list, i, -1)}>↑</sl-button>
         <sl-button class="pw-quiet-secondary pw-action-sm" aria-label="Move ${label} down" ?disabled=${i === list.length - 1} @click=${() => this.moveRow(list, i, 1)}>↓</sl-button>
-        <sl-button class="pw-quiet-secondary pw-action-sm" aria-label="Remove ${label}" @click=${() => this.removeRow(list, i)}>Remove</sl-button>
+        <sl-button class="pw-quiet-secondary pw-action-sm" aria-label="Remove ${label}" @click=${onRemove}>Remove</sl-button>
       </div>
     `;
   }
@@ -804,17 +856,22 @@ class PublishRequestsSetup extends LitElement {
     const options = [...new Set([...names, rule.workflow].filter(Boolean))];
     // No workflow to pick yet: offer to start one below.
     const offerAdd = !rule.workflow && !workflows.length;
+    const workflowError = this.fieldError(`workflow-${i}`);
     return html`
       <li class="edit-row">
         ${this.field(`pattern-${i}`, 'Pattern', rule.pattern, (v) => { rule.pattern = v; }, { placeholder: '/products/*' })}
         ${v2 ? html`
           <div class="select-field">
             <label for="workflow-${i}">Workflow</label>
-            <select id="workflow-${i}" class="field-select" @change=${(e) => this.chooseWorkflow(rule, e.target)}>
+            <select id="workflow-${i}" class="field-select ${workflowError ? 'has-error' : ''}"
+              aria-invalid=${workflowError ? 'true' : 'false'}
+              aria-describedby=${workflowError ? `workflow-error-${i}` : nothing}
+              @change=${(e) => this.chooseWorkflow(rule, e.target)}>
               <option value="" ?selected=${!rule.workflow}>None (single step)</option>
               ${options.map((n) => html`<option value=${n} ?selected=${rule.workflow === n}>${n}</option>`)}
               ${offerAdd ? html`<option value=${ADD_WORKFLOW}>Add a workflow…</option>` : nothing}
             </select>
+            ${workflowError ? html`<p class="field-error" id="workflow-error-${i}">${workflowError}</p>` : nothing}
           </div>
         ` : nothing}
         ${rule.workflow && !v2 ? this.renderMultiStepRule(rule) : nothing}
@@ -882,10 +939,12 @@ class PublishRequestsSetup extends LitElement {
       ${workflows.map((workflow, w) => html`
         <fieldset class="workflow">
           <legend class="sr-only">Workflow ${w + 1}</legend>
-          <div class="workflow-header">
-            ${this.field(`workflow-name-${w}`, 'Workflow name', workflow.name, (v) => { workflow.name = v; this.requestUpdate(); }, { placeholder: 'legal-then-brand' })}
-            <sl-button class="pw-quiet-secondary pw-action-sm" @click=${() => this.removeRow(workflows, w)}>Remove workflow</sl-button>
+          <div class="workflow-header" @focusout=${() => { this._renaming = null; }}>
+            ${this.field(`workflow-name-${w}`, 'Workflow name', workflow.name, (v) => this.renameWorkflowTo(workflow, v), { placeholder: 'legal-then-brand' })}
+            <sl-button class="pw-quiet-secondary pw-action-sm" aria-label="Remove workflow ${workflow.name.trim() || w + 1}"
+              @click=${() => this.removeWorkflow(workflows, w)}>Remove workflow</sl-button>
           </div>
+          ${this.renderBlocked(workflow, () => workflowRemovalProblem(this._draft.rules, workflow))}
           <ol class="row-list">
             ${workflow.steps.map((step, s) => {
               const id = `${w}-${s}`;
@@ -896,8 +955,9 @@ class PublishRequestsSetup extends LitElement {
                   ${this.field(`step-approvers-${id}`, 'Approvers', step.approvers, (v) => { step.approvers = v; })}
                   ${this.field(`step-cc-${id}`, 'CC', step.cc, (v) => { step.cc = v; })}
                   <sl-checkbox name="cc-approve-${id}" ?checked=${step.ccCanApprove}
-                    @change=${(e) => { step.ccCanApprove = e.target.checked; }}><span class="checkbox-label">CC can approve</span></sl-checkbox>
-                  ${this.renderRowActions(workflow.steps, s, `step ${s + 1}`)}
+                    @change=${(e) => { step.ccCanApprove = e.target.checked; this.rerender(); }}><span class="checkbox-label">CC can approve</span></sl-checkbox>
+                  ${this.renderRowActions(workflow.steps, s, `step ${s + 1}`, () => this.removeStep(workflow, s))}
+                  ${this.renderBlocked(step, () => stepRemovalProblem(this._draft.rules, workflow))}
                 </li>
               `;
             })}

@@ -197,6 +197,45 @@ export const isEmailAddress = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(Strin
 
 const isBlank = (value) => !String(value || '').trim();
 
+const sameName = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+
+/** The draft rules that use a workflow, matching its name in any case as the worker does. */
+export const rulesUsingWorkflow = (rules, name) => (isBlank(name) ? []
+  : rules.filter((rule) => sameName(rule.workflow, name)));
+
+// `Used by /a/*, rule 2.`: a rule without a pattern is named by its place.
+function usedBy(rules, workflow) {
+  const using = rulesUsingWorkflow(rules, workflow.name);
+  if (!using.length) return null;
+  const labels = using.map((rule) => rule.pattern.trim() || `rule ${rules.indexOf(rule) + 1}`);
+  return { text: `Used by ${labels.join(', ')}.`, whose: using.length === 1 ? "that rule's" : "those rules'" };
+}
+
+/** Why a workflow can't be removed (rules in the draft use it), else null. */
+export function workflowRemovalProblem(rules, workflow) {
+  const used = usedBy(rules, workflow);
+  return used ? `${used.text} Change ${used.whose} workflow first.` : null;
+}
+
+/** Why a step can't be removed (the last step of a workflow rules use), else null. */
+export function stepRemovalProblem(rules, workflow) {
+  const used = workflow.steps.length <= 1 && usedBy(rules, workflow);
+  return used ? `${used.text} A workflow needs at least one step: add another first, or change ${used.whose} workflow.` : null;
+}
+
+/**
+ * Renames a workflow and moves the rules that used it (`linked`, taken when the rename started)
+ * along. While the name is blank they keep the last one; the save checks flag it if left so.
+ */
+export function renameWorkflow(linked, workflow, name) {
+  workflow.name = name;
+  if (isBlank(name)) return;
+  linked.forEach((rule) => { rule.workflow = name.trim(); });
+}
+
+const isStaffed = (step) => toList(step.approvers).length > 0
+  || (step.ccCanApprove && toList(step.cc).length > 0);
+
 /**
  * Inline errors for the rules draft, by editor field id (`approvers-0`, `step-cc-1-0`,
  * `group-email-2`, …), checked as the worker would before a save. Approver and CC entries are
@@ -210,8 +249,14 @@ export function rulesDraftErrors({ rules = [], workflows = [], groups = [] }, { 
     const bad = toList(value).filter((e) => !defined.has(e.toLowerCase()) && !isEmailAddress(e));
     if (bad.length) errors[id] = `Not an email address or a defined list: ${bad.join(', ')}`;
   };
+  // A workflow without steps saves no rows, so the worker doesn't know it either.
+  const isWorkflow = (name) => workflows.some((w) => w.steps.length && sameName(w.name, name));
   rules.forEach((rule, i) => {
-    if (rule.workflow?.trim()) return;
+    const workflow = rule.workflow?.trim();
+    if (workflow) {
+      if (v2 && !isWorkflow(workflow)) errors[`workflow-${i}`] = `There's no workflow ${workflow}. Pick one, or None.`;
+      return;
+    }
     if (!toList(rule.approvers).length) errors[`approvers-${i}`] = 'Add at least one approver.';
     else checkRecipients(`approvers-${i}`, rule.approvers);
     checkRecipients(`cc-${i}`, rule.cc);
@@ -223,6 +268,12 @@ export function rulesDraftErrors({ rules = [], workflows = [], groups = [] }, { 
         checkRecipients(`step-approvers-${w}-${s}`, step.approvers);
         checkRecipients(`step-cc-${w}-${s}`, step.cc);
       });
+      // The worker refuses a used workflow none of whose steps can approve (`unstaffed-workflow`).
+      const id = `step-approvers-${w}-0`;
+      if (workflow.steps.length && !workflow.steps.some(isStaffed) && !errors[id]
+        && rulesUsingWorkflow(rules, workflow.name).length) {
+        errors[id] = 'Rules use this workflow: add approvers to at least one step.';
+      }
     });
   }
   const seen = new Set();

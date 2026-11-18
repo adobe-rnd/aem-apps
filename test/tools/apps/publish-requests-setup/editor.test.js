@@ -17,6 +17,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   isEmailAddress, rulesDraftErrors, settingsFields, commentsLengthDefault, tabsToConfig,
+  rulesUsingWorkflow, workflowRemovalProblem, stepRemovalProblem, renameWorkflow,
 } from '../../../../tools/apps/publish-requests-setup/model.js';
 
 const rule = (fields) => ({
@@ -118,4 +119,109 @@ test('settingsFields lists only the settings each version reads', () => {
 test('commentsLengthDefault follows each version\'s plugin', () => {
   assert.equal(commentsLengthDefault('v1'), 10);
   assert.equal(commentsLengthDefault('v2'), 1);
+});
+
+test('rulesUsingWorkflow finds the draft rules naming a workflow, in any case', () => {
+  const rules = [
+    rule({ pattern: '/a/*', workflow: 'Legal' }),
+    rule({ pattern: '/b/*', workflow: 'brand' }),
+    rule({ pattern: '/c/*', workflow: ' legal ' }),
+    rule({ pattern: '/d/*' }),
+  ];
+  assert.deepEqual(rulesUsingWorkflow(rules, 'legal').map((r) => r.pattern), ['/a/*', '/c/*']);
+  assert.deepEqual(rulesUsingWorkflow(rules, 'LEGAL ').map((r) => r.pattern), ['/a/*', '/c/*']);
+  assert.deepEqual(rulesUsingWorkflow(rules, 'other'), []);
+  // A blank name is no workflow: rules without one don't "use" it.
+  assert.deepEqual(rulesUsingWorkflow(rules, ' '), []);
+});
+
+test('workflowRemovalProblem refuses a workflow rules use, and allows it once none does', () => {
+  const legal = { name: 'multi-step-test-2', steps: [step({ approvers: 'a@x.com' })] };
+  const rules = [rule({ pattern: '/drafts/multi-step-test-2/*', workflow: 'Multi-Step-Test-2' })];
+  assert.equal(
+    workflowRemovalProblem(rules, legal),
+    "Used by /drafts/multi-step-test-2/*. Change that rule's workflow first.",
+  );
+  rules.push(rule({ pattern: '', workflow: 'multi-step-test-2' }));
+  assert.equal(
+    workflowRemovalProblem(rules, legal),
+    "Used by /drafts/multi-step-test-2/*, rule 2. Change those rules' workflow first.",
+  );
+  // The draft as edited counts: rules moved to None or another workflow, or removed, free it.
+  rules[0].workflow = '';
+  rules[1].workflow = 'brand';
+  assert.equal(workflowRemovalProblem(rules, legal), null);
+  assert.equal(workflowRemovalProblem([], legal), null);
+});
+
+test('stepRemovalProblem keeps the last step of a workflow rules use', () => {
+  const rules = [rule({ pattern: '/a/*', workflow: 'legal' })];
+  const one = { name: 'legal', steps: [step({ approvers: 'a@x.com' })] };
+  const two = { name: 'legal', steps: [step({ approvers: 'a@x.com' }), step()] };
+  assert.equal(
+    stepRemovalProblem(rules, one),
+    "Used by /a/*. A workflow needs at least one step: add another first, or change that rule's workflow.",
+  );
+  assert.equal(stepRemovalProblem(rules, two), null);
+  assert.equal(stepRemovalProblem([], one), null);
+});
+
+test('renameWorkflow moves the rules that used the old name, even past blanks and clashes', () => {
+  const rules = [
+    rule({ pattern: '/a/*', workflow: 'legal' }),
+    rule({ pattern: '/b/*', workflow: 'legal-x' }),
+    rule({ pattern: '/c/*' }),
+  ];
+  const legal = { name: 'legal', steps: [step()] };
+  // The rules to move are taken once, when the rename starts.
+  const linked = rulesUsingWorkflow(rules, legal.name);
+  renameWorkflow(linked, legal, '');
+  // While the name is blank, the rules keep the last name.
+  assert.equal(rules[0].workflow, 'legal');
+  assert.equal(legal.name, '');
+  renameWorkflow(linked, legal, 'legal-');
+  renameWorkflow(linked, legal, 'legal-x');
+  // Passing through another workflow's name doesn't take its rules along.
+  renameWorkflow(linked, legal, ' legal-xy ');
+  assert.deepEqual(rules.map((r) => r.workflow), ['legal-xy', 'legal-x', '']);
+  assert.equal(legal.name, ' legal-xy ');
+});
+
+test('rulesDraftErrors flags a rule whose workflow is missing or has no steps, in v2', () => {
+  const draft = {
+    rules: [
+      rule({ pattern: '/a/*', workflow: 'Legal' }),
+      rule({ pattern: '/b/*', workflow: 'gone' }),
+      rule({ pattern: '/c/*', workflow: 'empty' }),
+    ],
+    workflows: [
+      { name: 'legal', steps: [step({ approvers: 'a@x.com' })] },
+      { name: 'empty', steps: [] },
+    ],
+    groups: [],
+  };
+  assert.deepEqual(rulesDraftErrors(draft, { v2: true }), {
+    'workflow-1': "There's no workflow gone. Pick one, or None.",
+    'workflow-2': "There's no workflow empty. Pick one, or None.",
+  });
+});
+
+test('rulesDraftErrors flags a workflow rules use when none of its steps can approve', () => {
+  const draft = {
+    rules: [rule({ pattern: '/a/*', workflow: 'legal' })],
+    workflows: [
+      { name: 'legal', steps: [step(), step({ cc: 'c@x.com' })] },
+      // Unused: the worker only skips its steps, so no error here.
+      { name: 'draft', steps: [step()] },
+      { name: 'cc', steps: [step({ cc: 'c@x.com', ccCanApprove: true })] },
+    ],
+    groups: [],
+  };
+  assert.deepEqual(rulesDraftErrors(draft, { v2: true }), {
+    'step-approvers-0-0': 'Rules use this workflow: add approvers to at least one step.',
+  });
+  draft.rules.push(rule({ pattern: '/b/*', workflow: 'cc' }));
+  assert.equal(Object.keys(rulesDraftErrors(draft, { v2: true })).length, 1);
+  draft.workflows[0].steps[1].approvers = 'b@x.com';
+  assert.deepEqual(rulesDraftErrors(draft, { v2: true }), {});
 });
