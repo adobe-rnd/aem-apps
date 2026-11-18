@@ -30,9 +30,16 @@ The compact toolbar keeps **New task** beside search and **Refresh** beside the
 connection status. Refresh is hidden while connecting. Page context still comes
 from EW for filtering, linking, and creating tasks, without repeating it in a header.
 
-**Assigned to me** is the first context filter; **This page** remains the default
-context. **Tasks** is the default tab, with **Projects** beside it. Both use the
-same accordion layout and start with no item open. Click a row, or focus it and
+Visible filter pills are ordered **All**, **This site**, **This page**,
+**Assigned to me**, **Requested by me**, and **Completed (14 days)**.
+On initial load and every refresh, **This page** is selected if it contains
+tasks or projects; otherwise **This site** is selected if it contains tasks,
+falling back to **All**. Refresh clears search and user, title, and project
+filters before applying this default.
+**Projects** is the first tab, while **Tasks**
+is selected by default. Both use the same bordered accordion cards with a
+separate owner/date row and no linked/assigned summary line, and start with no
+item open. Click a card, or focus it and
 press Enter or Space, to open its details directly beneath it. Opening another
 row closes the previous one; clicking the open row closes it. Switching tabs,
 changing context, or refreshing collapses the rows. Creating a task opens its

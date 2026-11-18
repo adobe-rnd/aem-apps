@@ -182,6 +182,18 @@ test('static icons use mapped local Spectrum SVGs without an icon runtime', asyn
   }));
 });
 
+test('visible context choices start with All and Projects precedes the default Tasks tab', async () => {
+  const html = await readFile(new URL('../../../../tools/apps/workfront/workfront.html', import.meta.url), 'utf8');
+  assert.match(html, /<legend class="sr-only">Context filter<\/legend>/);
+  const options = [...html.matchAll(/<input type="radio" name="context" value="([^"]+)"[^>]*>/g)];
+  assert.deepEqual(options.map((match) => match[1]), ['all', 'site', 'page', 'me', 'requested', 'completed']);
+  const tabs = [...html.matchAll(/<button\b[^>]*role="tab"[^>]*>/g)].map((match) => match[0]);
+  assert.equal(tabs.length, 2);
+  assert.match(tabs[0], /data-tab="projects".*aria-selected="false".*tabindex="-1"/);
+  assert.match(tabs[1], /data-tab="tasks".*aria-selected="true"/);
+  assert.match(html, /id="results" role="tabpanel" aria-labelledby="tab-tasks"/);
+});
+
 test('EW context uses the exact organization, repository and document path', () => {
   const context = normalizeContext({ org: 'northstar', repo: 'website', path: '/collections/fall.html' });
   assert.equal(context.siteId, 'northstar/website');

@@ -22,6 +22,8 @@
     ".hlxignore",
     ".idea/**",
     "**/.wrangler/**",
+    "tools/apps/workfront/adobeio/.aio",
+    "tools/apps/workfront/adobeio/.env",
     "tools/apps/workfront/assets/icons/COPYRIGHT",
     ".DS_Store",
     "**/.DS_Store",

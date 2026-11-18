@@ -48,12 +48,12 @@
         <div class="context-controls">
           <fieldset class="context-filter">
             <legend class="sr-only">Context filter</legend>
-            <label><input type="radio" name="context" value="me"><span><span class="icon" data-icon="user-round" aria-hidden="true"></span>Assigned to me</span></label>
-            <label><input type="radio" name="context" value="requested"><span>Requested by me</span></label>
-            <label><input type="radio" name="context" value="completed"><span>Completed (14 days)</span></label>
-            <label><input type="radio" name="context" value="all"><span><span class="icon" data-icon="layers" aria-hidden="true"></span>All</span></label>
-            <label><input type="radio" name="context" value="site"><span><span class="icon" data-icon="globe-2" aria-hidden="true"></span>This site</span></label>
-            <label><input type="radio" name="context" value="page" checked><span><span class="icon" data-icon="file-text" aria-hidden="true"></span>This page</span></label>
+            <label><input type="radio" name="context" value="all" checked disabled><span>All</span></label>
+            <label><input type="radio" name="context" value="site" disabled><span>This site</span></label>
+            <label><input type="radio" name="context" value="page" disabled><span>This page</span></label>
+            <label><input type="radio" name="context" value="me" disabled><span>Assigned to me</span></label>
+            <label><input type="radio" name="context" value="requested" disabled><span>Requested by me</span></label>
+            <label><input type="radio" name="context" value="completed" disabled><span>Completed (14 days)</span></label>
           </fieldset>
         </div>
         <div class="search-controls">
@@ -74,8 +74,8 @@
 
       <section class="items-pane" aria-label="Workfront items">
         <div class="results-tabs" role="tablist" aria-label="Item type">
-          <button id="tab-tasks" role="tab" type="button" data-tab="tasks" aria-selected="true" aria-controls="results"><span class="icon" data-icon="list-todo" aria-hidden="true"></span>Tasks<span id="count-tasks" class="count-badge">0</span></button>
           <button id="tab-projects" role="tab" type="button" data-tab="projects" aria-selected="false" aria-controls="results" tabindex="-1"><span class="icon" data-icon="folder" aria-hidden="true"></span>Projects<span id="count-projects" class="count-badge">0</span></button>
+          <button id="tab-tasks" role="tab" type="button" data-tab="tasks" aria-selected="true" aria-controls="results"><span class="icon" data-icon="list-todo" aria-hidden="true"></span>Tasks<span id="count-tasks" class="count-badge">0</span></button>
         </div>
         <div id="results" role="tabpanel" aria-labelledby="tab-tasks" aria-busy="true">
           <div class="loading-state" role="status"><span class="sr-only">Loading Workfront tasks</span><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>

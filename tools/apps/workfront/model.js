@@ -276,6 +276,12 @@ export function filterCatalog(catalog, context, scope = 'page', selectedUserId =
   return { projects: filter(catalog.projects), tasks: filter(catalog.tasks) };
 }
 
+export function defaultScope(catalog, context) {
+  const pageItems = filterCatalog(catalog, context, 'page');
+  if (pageItems.tasks.length || pageItems.projects.length) return 'page';
+  return filterCatalog(catalog, context, 'site').tasks.length ? 'site' : 'all';
+}
+
 export function addPageLink(item, page) {
   if (!pageKey(page) || !page.url) throw new Error('A current page is required to link a task.');
   if (isLinkedToPage(item, page)) return { item, added: false };

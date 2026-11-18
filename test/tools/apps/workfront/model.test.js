@@ -17,7 +17,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  addPageLink, dateInputValue, filterCatalog, formatBrief, isLinkedToPage, isOverdue,
+  addPageLink, dateInputValue, defaultScope, filterCatalog, formatBrief, isLinkedToPage, isOverdue,
   parsePageUrl, parseWorkfrontDate, removeProjectFilter, searchTitles, searchUsers,
   taskCapabilities, taskDraft, taskUpdates,
 } from '../../../../tools/apps/workfront/model.js';
@@ -63,6 +63,20 @@ test('site filter uses explicit associations, including the parent project', () 
   const result = filterCatalog(catalog, page, 'site');
   assert.deepEqual(result.tasks.map((task) => task.id), ['linked', 'site-only']);
   assert.equal(result.tasks[1].matchReason, 'Project linked to this site');
+});
+
+test('default context prefers page tasks or projects, then site tasks, then All', () => {
+  assert.equal(defaultScope(catalog, page), 'page');
+  const projectOnly = {
+    ...catalog,
+    projects: [{ ...catalog.projects[0], pageLinks: [page] }],
+    tasks: [],
+  };
+  assert.equal(defaultScope(projectOnly, page), 'page');
+  assert.equal(defaultScope(catalog, { ...page, path: '/another-page', url: '' }), 'site');
+  assert.equal(defaultScope({ ...catalog, tasks: [] }, page), 'all');
+  assert.equal(defaultScope(catalog, { ...page, siteId: 'unrelated/site' }), 'all');
+  assert.equal(defaultScope(catalog, {}), 'all');
 });
 
 test('All includes only projects I own or am on, and their tasks', () => {

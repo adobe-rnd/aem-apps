@@ -18,7 +18,7 @@ import loadConfig from './config.js';
 import { createWorkfrontClient } from './api.js';
 import { connectToHost, putBriefInChat } from './host.js';
 import {
-  dateInputValue, filterCatalog, formatBrief, isLinkedToPage, isOverdue, pageKey,
+  dateInputValue, defaultScope, filterCatalog, formatBrief, isLinkedToPage, isOverdue, pageKey,
   parseWorkfrontDate, PRIORITIES, removeProjectFilter, searchTitles, searchUsers,
   TASK_STATUSES, taskUpdates,
 } from './model.js';
@@ -30,7 +30,7 @@ const state = {
   host: null,
   context: {},
   catalog: { projects: [], tasks: [], users: [] },
-  scope: 'page',
+  scope: 'all',
   userFilter: '',
   tab: 'tasks',
   search: '',
@@ -315,7 +315,7 @@ function itemAccordion(item) {
   const subtitle = item.type === 'task'
     ? projectFor(item)?.name || 'Project unavailable'
     : `${tasks.length} task${tasks.length === 1 ? '' : 's'}`;
-  summary.append(node('span', 'item-name', item.name), node('span', 'item-subtitle', subtitle), reasonElement(item.matchReason));
+  summary.append(node('span', 'item-name', item.name), node('span', 'item-subtitle', subtitle));
   if (item.type === 'task') {
     const health = node('span', 'task-health');
     health.append(node('span', '', item.status));
@@ -342,7 +342,9 @@ function itemAccordion(item) {
   }
   const due = node('span', 'item-due', `${item.type === 'task' && isOverdue(item) ? 'Overdue: ' : ''}${dateLabel(item.dueDate)}`);
   due.classList.toggle('is-overdue', item.type === 'task' && isOverdue(item));
-  row.append(summary, owner, due, icon('chevron-right', 'row-chevron'));
+  const meta = node('span', 'item-metadata');
+  meta.append(owner, due);
+  row.append(summary, meta, icon('chevron-right', 'row-chevron'));
   row.addEventListener('click', () => chooseItem(item));
   heading.append(row);
   const detail = node('div', 'item-detail');
@@ -702,6 +704,13 @@ async function reload() {
     state.uncertain.clear();
     state.createDeniedProjects.clear();
     state.context = { ...state.context, userId: catalog.userId };
+    state.scope = defaultScope(catalog, state.context);
+    state.userFilter = '';
+    state.titleTarget = null;
+    state.projectFilter = '';
+    state.search = '';
+    state.searchOpen = false;
+    state.searchIndex = -1;
   } catch (error) {
     console.error('Error while loading.', error);
     if (version !== loadVersion) return;

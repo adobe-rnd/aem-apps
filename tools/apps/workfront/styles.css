@@ -293,19 +293,15 @@
   .context-filter {
     display: flex;
     flex-wrap: wrap;
-    gap: 2px;
+    gap: 6px;
     min-width: 0;
-    width: 100%;
-    padding: 3px;
+    padding: 0;
     margin: 0;
     border: 0;
-    border-radius: var(--s2-corner-radius-400);
-    background: var(--s2-gray-75);
   }
 
   .context-filter label {
     position: relative;
-    flex: 1 0 auto;
     cursor: pointer;
   }
 
@@ -319,25 +315,26 @@
   :where(.context-filter label > span) {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 5px;
-    min-height: 32px;
-    padding: 8px 6px;
-    border-radius: var(--s2-corner-radius-300);
+    min-height: 30px;
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--s2-gray-25);
     color: var(--muted);
     font-size: var(--s2-component-xs-medium-font-size);
     font-weight: var(--s2-component-xs-medium-font-weight);
     white-space: nowrap;
   }
 
-  .context-filter .icon {
-    width: 12px;
-    height: 12px;
+  :where(.context-filter label:hover input:not(:checked, :disabled) + span) {
+    background: var(--soft);
+    color: var(--ink);
   }
 
   :where(.context-filter input:checked + span) {
-    background: var(--s2-gray-900);
-    color: var(--s2-gray-25);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent-dark);
   }
 
   :where(.context-filter input:focus-visible + span) {
@@ -348,15 +345,6 @@
   :where(.context-filter input:disabled + span) {
     opacity: 0.4;
     cursor: default;
-  }
-
-  :where(.context-filter label:hover input:not(:checked, :disabled) + span) {
-    background: var(--s2-gray-200);
-    color: var(--ink);
-  }
-
-  :where(.context-filter label:first-of-type .icon) {
-    display: none;
   }
 
   .search-controls {
@@ -539,7 +527,10 @@
   }
 
   .item-accordion {
-    border-bottom: 1px solid var(--line);
+    margin-bottom: 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--s2-corner-radius-300);
+    background: var(--s2-gray-25);
   }
 
   .item-accordion > h2 {
@@ -548,14 +539,13 @@
 
   .item-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 28px 48px 14px;
+    grid-template-columns: minmax(0, 1fr) 14px;
     align-items: center;
-    gap: 7px;
+    gap: 12px;
     width: 100%;
-    min-height: 88px;
-    padding: 12px 6px 12px 11px;
+    padding: 14px;
     border: 0;
-    border-left: 2px solid transparent;
+    border-radius: var(--s2-corner-radius-300);
     background: var(--s2-gray-25);
     text-align: left;
   }
@@ -565,8 +555,9 @@
   }
 
   .item-row[aria-expanded="true"] {
-    border-left-color: var(--accent);
     background: var(--accent-soft);
+    border-radius: var(--s2-corner-radius-300) var(--s2-corner-radius-300) 0 0;
+    box-shadow: inset 2px 0 var(--accent);
   }
 
   :where(.item-row[aria-expanded="true"]) .item-name {
@@ -574,6 +565,7 @@
   }
 
   .item-summary {
+    grid-column: 1;
     min-width: 0;
   }
 
@@ -587,16 +579,21 @@
 
   .item-subtitle {
     display: block;
-    margin-top: 1px;
+    margin-top: 4px;
     color: var(--muted);
     font-size: var(--s2-component-xs-regular-font-size);
     line-height: 1.5;
     overflow-wrap: anywhere;
   }
 
-  .item-summary .match-reason {
-    margin-top: 5px;
-    font-size: var(--s2-component-xs-regular-font-size);
+  .item-metadata {
+    display: flex;
+    flex-wrap: wrap;
+    grid-column: 1;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 12px;
+    min-width: 0;
   }
 
   .item-owner {
@@ -607,7 +604,7 @@
   }
 
   .item-owner-name {
-    display: none;
+    display: block;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -651,6 +648,8 @@
   }
 
   .row-chevron {
+    grid-column: 2;
+    grid-row: 1 / span 2;
     width: 14px;
     height: 14px;
     color: var(--s2-gray-500);
@@ -664,6 +663,7 @@
     min-width: 0;
     padding: 12px 14px 20px;
     border-left: 2px solid var(--accent);
+    border-radius: 0 0 var(--s2-corner-radius-300) var(--s2-corner-radius-300);
   }
 
   .detail-topline {
@@ -1137,36 +1137,8 @@
       margin-bottom: 16px;
     }
 
-    .context-controls {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-
-    .context-filter {
-      width: auto;
-    }
-
-    .context-filter label > span {
-      padding-right: 12px;
-      padding-left: 12px;
-    }
-
-    .context-filter label:first-of-type .icon {
-      display: inline-block;
-    }
-
     .item-row {
-      grid-template-columns: minmax(0, 1fr) 90px 62px 18px;
-      gap: 8px;
-      min-height: 85px;
-      padding-right: 13px;
-      padding-left: 16px;
-    }
-
-    .item-owner-name {
-      display: block;
+      padding: 16px;
     }
 
     .item-detail {
