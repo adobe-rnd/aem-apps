@@ -355,7 +355,9 @@ test('readSetup maps the worker setup view onto the registration and workflow st
       emailProvider: 'default', allowedEmailDomains: ['x.com'], availableProviders: ['default', 'custom-api'], providerWarnings: { default: 'w' }, canEdit: true,
     },
   });
-  assert.deepEqual(registered.workflow, { ...view, installed, canEdit: true });
+  assert.deepEqual(registered.workflow, {
+    ...view, installed, canEdit: true, permissionsMode: 'unknown',
+  });
   assert.equal(registered.canEdit, true);
   assert.equal(registered.problem, null);
 

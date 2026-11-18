@@ -25,6 +25,8 @@ import {
   suggestVersion, activeConfigOf, readRules, readWorkflows, readGroups,
   missingGroups, emailAddresses, suggestDomains, describeProblem, tabLabel,
   blankRule, draftFromConfig, draftToTabs, mergeTabs, readSetup, problemCode,
+  parseOrgSite, siteFromParams, registrationForm, registrationBody, saveErrorText,
+  permissionsModeOf, permissionsNotice, PERMISSIONS_DOCS,
 } from './model.js';
 
 const NX = 'https://da.live/nx2';
@@ -52,7 +54,6 @@ try {
 }
 
 const PROVIDER_LABELS = { default: 'Default (Adobe)', 'custom-api': 'Custom API', gmail: 'Gmail' };
-const CUSTOM_API_FIELDS = ['apiUrl', 'apiKey', 'fromAddress', 'fromName'];
 const UNAVAILABLE = "The publish requests service didn't answer.";
 // Worker codes that mean the site itself isn't ready, rather than an outage.
 const SITE_PROBLEMS = {
@@ -86,11 +87,6 @@ const blankStep = () => ({
   title: '', description: '', approvers: '', cc: '', ccCanApprove: false,
 });
 
-function parseOrgSite(raw) {
-  const parts = (raw || '').trim().split('/').filter(Boolean);
-  return parts.length === 2 ? { org: parts[0], site: parts[1] } : null;
-}
-
 class PublishRequestsSetup extends LitElement {
   static properties = {
     _org: { state: true },
@@ -109,6 +105,7 @@ class PublishRequestsSetup extends LitElement {
     _message: { state: true },
     _conflict: { state: true },
     _fieldError: { state: true },
+    _permissionsMode: { state: true },
   };
 
   constructor() {
@@ -120,15 +117,19 @@ class PublishRequestsSetup extends LitElement {
     this._saving = false;
     this._message = null;
     this._readOnly = false;
+    this._permissionsMode = 'unknown';
+    // Counts workflow views, so an older read never replaces a newer save's view (and `version`).
+    this._workflowSeq = 0;
   }
 
   connectedCallback() {
     super.connectedCallback();
     this.shadowRoot.adoptedStyleSheets = [nexter, sl, styles].filter(Boolean);
     const params = new URLSearchParams(window.location.search);
-    const org = params.get('org');
-    const site = params.get('site');
-    if (org && site) this.loadSite(org, site);
+    const target = siteFromParams(params);
+    if (!target) return;
+    const lowered = target.org !== params.get('org') || target.site !== params.get('site');
+    this.loadSite(target.org, target.site).then(() => { if (lowered) this.updateUrl(); });
   }
 
   // The worker's view wins: it is what the last save wrote, while a DA read can be a minute old.
@@ -174,8 +175,17 @@ class PublishRequestsSetup extends LitElement {
     } catch { /* cross-origin iframe */ }
   }
 
+  // Every worker response replaces the view whole: its `version` is the one the next save sends.
+  setWorkflow(view) {
+    this._workflowSeq += 1;
+    this._workflow = view;
+    this._permissionsMode = permissionsModeOf(view, this._permissionsMode);
+  }
+
   // Reads the DA config (fast, in parallel) to pick the version, then makes one worker call.
-  async loadSite(org, site) {
+  // The setup routes refuse uppercase org/site, so both are lowercased first.
+  async loadSite(rawOrg, rawSite) {
+    const { org, site } = parseOrgSite(`/${rawOrg}/${rawSite}`) || { org: rawOrg, site: rawSite };
     this._org = org;
     this._site = site;
     this._orgSiteValue = `/${org}/${site}`;
@@ -184,6 +194,8 @@ class PublishRequestsSetup extends LitElement {
     this._message = null;
     this._readOnly = false;
     this._workflow = null;
+    this._workflowSeq += 1;
+    this._permissionsMode = 'unknown';
     const [siteRead, orgRead] = await Promise.all([readConfig(org, site), readConfig(org)]);
     this._siteConfig = siteRead.config;
     this._orgConfig = orgRead.config;
@@ -200,17 +212,20 @@ class PublishRequestsSetup extends LitElement {
       return;
     }
     this._registration = setup.registration;
-    this._workflow = setup.workflow;
+    this.setWorkflow(setup.workflow);
+    this._permissionsMode = setup.permissionsMode;
     this._workflowError = setup.workflow ? '' : this.problemText(setup.problem, setup.registration.error);
     this._readOnly = [401, 403].includes(siteRead.status) || setup.canEdit === false;
     this._state = 'ready';
   }
 
   // Refreshes the workflow view (e.g. recipient-domain warnings after a registration save).
+  // A save that lands while this read is in flight wins: its view is newer.
   async refreshWorkflow() {
     const { _org: org, _site: site } = this;
+    const seq = this._workflowSeq;
     const { ok: loaded, data } = await getWorkflowConfig(this.apiVersion, org, site, this.token);
-    if (loaded) this._workflow = data;
+    if (loaded && seq === this._workflowSeq) this.setWorkflow(data);
     return loaded;
   }
 
@@ -317,7 +332,8 @@ class PublishRequestsSetup extends LitElement {
     }, this.token);
     this._saving = false;
     if (result.ok) {
-      this._workflow = result.data;
+      // The response is the new view: its `version` changes with every save, the install included.
+      this.setWorkflow(result.data);
       this.closeSection();
       this.showResult(section, 'success', successText);
       return;
@@ -326,12 +342,9 @@ class PublishRequestsSetup extends LitElement {
       await this.handleConflict(section, body.tabs);
       return;
     }
-    const { errors, error, code } = result.data;
+    const { error, code } = result.data;
     if (code === 'config-write-required') this._readOnly = true;
-    const problems = errors?.length ? errors.map(describeProblem) : null;
-    if (section === 'install' && errors?.some((e) => e.code === 'requires-v2')) {
-      problems.unshift(`${VERSION_LABELS.v1} can't use this site's ${VERSION_LABELS.v2} rules. Nothing was saved. Remove the workflows from the approval rules first, or keep ${VERSION_LABELS.v2}:`);
-    }
+    const problems = saveErrorText(result, section);
     const definite = SITE_PROBLEMS[problemCode(result)];
     this.showResult(section, 'error', problems || definite || error || `Couldn't save (${result.status}).`);
   }
@@ -416,11 +429,7 @@ class PublishRequestsSetup extends LitElement {
     if (!this.canEdit) return;
     this._fieldError = null;
     const { provider, acknowledged } = this._draft;
-    const form = new FormData(e.target);
-    const fields = provider === 'custom-api'
-      ? Object.fromEntries(CUSTOM_API_FIELDS.map((key) => [key, String(form.get(key) || '').trim()])
-        .filter(([, value]) => value))
-      : {};
+    const form = Object.fromEntries(new FormData(e.target));
     const domains = toList(this._draft.domains);
     if (provider === 'custom-api' && !domains.length) {
       this.registrationError('domains', 'Add at least one allowed email domain, or emails to your approvers will be blocked.');
@@ -431,22 +440,22 @@ class PublishRequestsSetup extends LitElement {
       return;
     }
     this._saving = true;
-    const result = await saveRegistration(this._org, this._site, {
-      ...fields,
-      emailProvider: provider,
-      allowedEmailDomains: domains,
-      ...(provider === 'default' ? { acknowledgeNonProduction: true } : {}),
-    }, this.token);
+    const body = registrationBody(provider, form, domains, this._registration.config);
+    const result = await saveRegistration(this._org, this._site, body, this.token);
     this._saving = false;
     if (!result.ok) {
       const { code, error, field } = result.data;
       if (code === 'config-write-required') this._readOnly = true;
       const input = FIELD_INPUTS[/^[A-Za-z]+/.exec(field || '')?.[0]] || CODE_INPUTS[code];
-      this.registrationError(input, SITE_PROBLEMS[problemCode(result)] || error || `Registration failed (${result.status}).`);
+      this.registrationError(input, saveErrorText(result, 'registration')
+        || SITE_PROBLEMS[problemCode(result)] || error || `Registration failed (${result.status}).`);
       return;
     }
+    this._permissionsMode = permissionsModeOf(result.data, this._permissionsMode);
     // The POST returns the saved registration; providers and their warnings don't change on a save.
-    this._registration = { status: 'registered', config: { ...this._registration.config, ...result.data } };
+    // apiUrl and apiUrlRedacted come from the response only, so a redaction never outlives it.
+    const { apiUrl: _url, apiUrlRedacted: _redacted, ...kept } = this._registration.config;
+    this._registration = { status: 'registered', config: { ...kept, ...result.data } };
     this.closeSection();
     this.showResult('registration', 'success', `${this._org}/${this._site} is registered.`);
     // Recipient-domain warnings depend on the registration: refresh them without waiting.
@@ -588,6 +597,8 @@ class PublishRequestsSetup extends LitElement {
     const registered = reg.status === 'registered';
     const submitLabel = registered ? 'Save' : 'Register site';
     const keepsUnavailable = registered && !providers.includes(current.emailProvider);
+    // Without config write the worker returns only the apiUrl origin: shown as set, not sent back.
+    const apiUrl = registrationForm(current);
     return html`
       <form class="setup-form" @submit=${(e) => this.saveRegistrationForm(e)}>
         ${keepsUnavailable ? html`
@@ -611,8 +622,12 @@ class PublishRequestsSetup extends LitElement {
             @change=${(e) => { this._draft.acknowledged = e.target.checked; this.clearFieldError('acknowledge'); }}><span class="checkbox-label">I understand this site's emails aren't for production use</span></sl-checkbox>
         ` : nothing}
         ${provider === 'custom-api' ? html`
-          <sl-input name="apiUrl" id="apiUrl" label="API URL" placeholder="https://example.com/api/send-email" autocomplete="off" .value=${current.apiUrl || ''}
-            .error=${this.fieldError('apiUrl')} @input=${() => this.clearFieldError('apiUrl')}></sl-input>
+          <div>
+            <sl-input name="apiUrl" id="apiUrl" label="API URL" autocomplete="off" .value=${apiUrl.apiUrl}
+              placeholder=${apiUrl.apiUrlSet ? 'Set. Leave empty to keep it' : 'https://example.com/api/send-email'}
+              .error=${this.fieldError('apiUrl')} @input=${() => this.clearFieldError('apiUrl')}></sl-input>
+            ${apiUrl.apiUrlHint ? html`<p class="form-hint">${apiUrl.apiUrlHint}</p>` : nothing}
+          </div>
           <sl-input name="apiKey" id="apiKey" label="API key" type="password" autocomplete="off"
             placeholder=${current.apiKeyPresent ? 'Leave empty to keep the current key' : ''}
             .error=${this.fieldError('apiKey')} @input=${() => this.clearFieldError('apiKey')}></sl-input>
@@ -905,7 +920,10 @@ class PublishRequestsSetup extends LitElement {
         editable: workflowReady && this.source !== 'org',
       },
     ];
+    const openPermissions = permissionsNotice(this._permissionsMode);
     return html`
+      ${openPermissions ? html`<div class="message warning" role="status">${openPermissions}
+        <a href=${PERMISSIONS_DOCS} target="_blank" rel="noopener">Set up DA permissions</a></div>` : nothing}
       ${this._readOnly ? html`<div class="message info" role="status">${NO_ACCESS}</div>` : nothing}
       ${this.renderRegistration()}
       ${sections.map((section) => this.renderSection(section))}

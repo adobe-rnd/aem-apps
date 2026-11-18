@@ -130,6 +130,11 @@ sl-textarea {
   color: var(--s2-gray-800);
 }
 
+.message.warning {
+  background: var(--s2-orange-100, var(--s2-gray-100));
+  color: var(--s2-orange-900, var(--s2-gray-800));
+}
+
 .message a {
   color: var(--pw-accent);
 }

@@ -252,11 +252,32 @@ const TAB_LABELS = {
 
 export const tabLabel = (tab) => TAB_LABELS[tab] || tab;
 
-// Worker validation errors carry a field like `tabs.publish-workflow-config[1].approvers`.
-export function describeProblem({ field, error, message }) {
-  const tab = /^tabs\.([a-z-]+)/.exec(field || '')?.[1];
-  const text = error || message;
-  return TAB_LABELS[tab] ? `${TAB_LABELS[tab]}: ${text}` : text;
+// Worker warnings whose own text talks about the worker: shown in the app's words instead.
+const PROBLEM_MESSAGES = {
+  'single-sheet-inactive': "This site's config is a single sheet, so its rules aren't used yet. The next save here rewrites it as named tabs, which makes them active.",
+  'org-config-unreadable': "The org config couldn't be read, so rules this site inherits from the org aren't shown.",
+};
+// Added after the worker's own text, which names the row and workflow.
+const PROBLEM_HINTS = {
+  'unstaffed-workflow': 'Add approvers to at least one of its steps, or a CC who can approve.',
+};
+
+const isOrgField = (field) => /^orgTabs\./.test(field || '');
+
+/**
+ * Worker validation errors carry a field like `tabs.publish-workflow-config[1].approvers`, or
+ * `orgTabs.…` for the org rules a site inherits (a save that would make the site use them).
+ */
+export function describeProblem({
+  field, error, message, code,
+}) {
+  const tab = /^(?:org)?[tT]abs\.([a-z-]+)/.exec(field || '')?.[1];
+  const base = PROBLEM_MESSAGES[code] || error || message || '';
+  const hint = PROBLEM_HINTS[code];
+  const text = hint ? `${base.replace(/\.?\s*$/, '.')} ${hint}` : base;
+  const label = TAB_LABELS[tab];
+  if (isOrgField(field)) return `Org rules this site inherits${label ? ` (${label})` : ''}: ${text}`;
+  return label ? `${label}: ${text}` : text;
 }
 
 // ======== Editor drafts ========
@@ -400,7 +421,17 @@ export function problemCode({ status, data }) {
   return data?.code || null;
 }
 
-/** Maps `GET /api[/v2]/setup` onto the app's registration and workflow state. */
+const PERMISSIONS_MODES = ['restricted', 'open', 'unknown'];
+
+/** A response's `permissionsMode` (`restricted`, `open` or `unknown`), else `fallback`. */
+export const permissionsModeOf = (data, fallback = 'unknown') => (
+  PERMISSIONS_MODES.includes(data?.permissionsMode) ? data.permissionsMode : fallback);
+
+/**
+ * Maps `GET /api[/v2]/setup` onto the app's registration and workflow state. An outage, including
+ * an unreadable registration (`503`, v2 code `registration-unavailable`), is `unknown`, never
+ * `unregistered`.
+ */
 export function readSetup({ ok, status, data }) {
   if (!ok) {
     const problem = problemCode({ status, data });
@@ -409,13 +440,20 @@ export function readSetup({ ok, status, data }) {
       workflow: null,
       canEdit: null,
       problem,
+      permissionsMode: 'unknown',
     };
   }
   const {
     registration, availableProviders, providerWarnings, canEdit, workflowConfig,
   } = data;
+  const permissionsMode = permissionsModeOf(data, permissionsModeOf(workflowConfig));
   const workflow = workflowConfig
-    ? { ...workflowConfig, installed: workflowConfig.installed ?? data.installed, canEdit }
+    ? {
+      ...workflowConfig,
+      installed: workflowConfig.installed ?? data.installed,
+      canEdit,
+      permissionsMode,
+    }
     : null;
   return {
     registration: {
@@ -427,5 +465,100 @@ export function readSetup({ ok, status, data }) {
     workflow,
     canEdit: canEdit !== false,
     problem: workflow ? null : 'unavailable',
+    permissionsMode,
   };
+}
+
+export const PERMISSIONS_DOCS = 'https://www.aem.live/docs/ew/administering/permissions';
+
+/** The warning for an org whose DA config write is open to everyone, else null. */
+export const permissionsNotice = (mode) => (mode === 'open'
+  ? "Anyone can change this site's config, including these settings: the DA org has no permissions sheet."
+  : null);
+
+// ======== Site input ========
+
+// The setup routes refuse uppercase org/site (400); DA and EDS names are lowercase anyway.
+const siteOf = (org, site) => (org && site
+  ? { org: org.trim().toLowerCase(), site: site.trim().toLowerCase() } : null);
+
+/** `/org/site` as typed, lowercased; null when it isn't two parts. */
+export function parseOrgSite(raw) {
+  const parts = String(raw || '').trim().split('/').filter(Boolean);
+  return parts.length === 2 ? siteOf(parts[0], parts[1]) : null;
+}
+
+/** `?org=&site=` deep-link values, lowercased; null unless both are set. */
+export const siteFromParams = (params) => siteOf(params.get('org'), params.get('site'));
+
+// ======== Registration form ========
+
+export const CUSTOM_API_FIELDS = ['apiUrl', 'apiKey', 'fromAddress', 'fromName'];
+
+/**
+ * Starting values of the registration form. A caller without config write gets only the
+ * apiUrl origin (`apiUrlRedacted: true`): it is shown as set, never prefilled as editable.
+ */
+export function registrationForm(config = {}) {
+  const redacted = config.apiUrlRedacted === true;
+  return {
+    apiUrl: redacted ? '' : config.apiUrl || '',
+    apiUrlSet: redacted,
+    apiUrlHint: redacted
+      ? `An API URL is set${config.apiUrl ? ` (${config.apiUrl}/…)` : ''}. Only config admins see it in full. Leave this empty to keep it.`
+      : '',
+  };
+}
+
+/** `POST /api/site-config` fields from the registration form; a redacted apiUrl is never sent. */
+export function registrationBody(provider, form, domains, current = {}) {
+  const fields = provider === 'custom-api'
+    ? Object.fromEntries(CUSTOM_API_FIELDS.map((key) => [key, String(form[key] ?? '').trim()])
+      .filter(([, value]) => value))
+    : {};
+  if (current.apiUrlRedacted && fields.apiUrl === current.apiUrl) delete fields.apiUrl;
+  return {
+    ...fields,
+    emailProvider: provider,
+    allowedEmailDomains: domains,
+    ...(provider === 'default' ? { acknowledgeNonProduction: true } : {}),
+  };
+}
+
+// ======== Save errors ========
+
+const V1_LABEL = 'Request Publish - Single Step';
+const V2_LABEL = 'Request Publish - Multi Step';
+
+const SAVE_MESSAGES = {
+  'payload-too-large': (section) => (section === 'registration'
+    ? 'The registration is too large to save. Shorten the values and try again.'
+    : 'These changes are too large to save at once. Remove some rows or shorten long values, then try again.'),
+  'config-too-large': () => "Saving this would make the site's config larger than DA allows (2 MiB). Nothing was saved. Remove unused rows or tabs from the site config, then try again.",
+  'install-sheet-incompatible': (section, error) => `Nothing was installed. ${error || 'The library or apps sheet has the same column twice, in different cases.'} Fix this in the site config, then install again.`,
+  'org-config-unreadable': (section, error, status) => (status >= 500 || !status
+    ? "This site uses, or would use, the org's rules, and the org's rules couldn't be read right now. Nothing was saved: try again in a moment."
+    : "This site uses, or would use, the org's rules, and you need read access to the org config for that. Nothing was saved. Ask an org config admin."),
+};
+
+/**
+ * What a refused `POST /api[/v2]/workflow-config` or `/api/site-config` means, in the app's words:
+ * the validation errors (with the inherited org rules called out), a message for a known code, or
+ * null to fall back to the worker's text.
+ */
+export function saveErrorText({ status, data }, section) {
+  const { errors, error, code } = data || {};
+  if (errors?.length) {
+    const problems = errors.map(describeProblem);
+    const fromOrg = errors.some((e) => isOrgField(e.field));
+    if (section === 'install' && errors.some((e) => e.code === 'requires-v2')) {
+      problems.unshift(fromOrg
+        ? `${V1_LABEL} can't use the org's ${V2_LABEL} rules this site inherits. Nothing was saved. Keep ${V2_LABEL}, or give this site its own rules first:`
+        : `${V1_LABEL} can't use this site's ${V2_LABEL} rules. Nothing was saved. Remove the workflows from the approval rules first, or keep ${V2_LABEL}:`);
+    } else if (fromOrg) {
+      problems.unshift("Without its own rules this site uses the org's rules, and they aren't valid for this version. Nothing was saved. Fix them in the org config, or keep the site's rules:");
+    }
+    return problems;
+  }
+  return SAVE_MESSAGES[code]?.(section, error, status) || null;
 }

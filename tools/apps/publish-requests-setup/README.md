@@ -10,7 +10,8 @@ https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish
 ```
 
 `?env=ci` targets the CI worker, also from local code (`?ref=local&env=ci`); otherwise localhost uses
-the local worker on port 8787. Both inboxes and both plugins link here when a site isn't registered or
+the local worker on port 8787. The worker's setup routes refuse uppercase org and site names (`400`),
+so the app lowercases what you type and the `?org=&site=` values before calling it. Both inboxes and both plugins link here when a site isn't registered or
 has no approval rules.
 
 | Version | Internal value | Worker routes |
@@ -22,7 +23,7 @@ has no approval rules.
 
 | Section | Writes |
 |---|---|
-| Registration | Worker `POST /api/site-config`: email provider, custom API settings, allowed email domains. Providers come from the worker; Adobe's default provider shows its non-production warning and needs an acknowledgement. Errors for one field are shown on that field. |
+| Registration | Worker `POST /api/site-config`: email provider, custom API settings, allowed email domains. Providers come from the worker; Adobe's default provider shows its non-production warning and needs an acknowledgement. Errors for one field are shown on that field. A caller without DA config write gets only the API URL's origin (`apiUrlRedacted: true`): the field shows it as set, isn't prefilled, and the redacted value is never sent back. |
 | Plugin and inbox | Worker `POST /api[/v2]/workflow-config` with `install: true`, on the route of the version being installed: the `library` and `apps` rows for that version. Switching version replaces the other version's rows, which are listed first. Existing rows for the chosen version (pinned refs, vendored copies) are kept. When nothing is installed, Single Step is preselected unless the rules use Multi Step workflows. |
 | Approval rules | Rules (`publish-workflow-config`), Multi Step workflows (`publish-workflow-steps`) and distribution lists (`publish-workflow-groups-to-email`), saved together. Lists used in rules but not defined are added for you to fill in. The Single Step editor shows a Multi Step rule as an error, with a way to convert it. |
 | Settings | Known `publish-workflow-settings` keys. Unknown keys are kept; guidance item keys such as `request.guidance.item.N.marker` move with their item. |
@@ -35,7 +36,9 @@ to detect the installed version, then makes one worker call: `GET /api/setup` (S
 and the workflow config view. The worker's `installed` wins over the app's own detection, since a DA
 read can be up to a minute old. A `site-not-found` answer means the Edge Delivery Services site
 doesn't exist yet, and nothing is offered; `preview-write-required` means the user needs at least the
-`basic_author` role. A `503` or a network failure is shown as the service not answering.
+`basic_author` role. A `503` (including a registration the worker can't read,
+`registration-unavailable`) or a network failure is shown as the service not answering, never as
+an unregistered site.
 
 Every config write goes through the worker. DA config is eventually consistent and has no conditional
 write, so a second writer could undo a recent save. Approval rules, settings and the plugin and inbox
@@ -47,8 +50,24 @@ theirs and asks before replacing them. Validation errors and warnings from the w
 section, and the save result shows next to the Save button. If the site follows the org's rules, the
 app shows that and offers **Use site-specific rules** (`copyFromOrg`).
 
+Every save sends the `version` of the most recent worker response, which changes with each save,
+the plugin and inbox install included. A workflow read that was started before a save never
+replaces the save's view.
+
+Refused saves are shown in plain words: a change too large to send (`413 payload-too-large`), a
+site config that would grow over 2 MiB (`413 config-too-large`), a workflow none of whose steps
+can be approved (`unstaffed-workflow`), a `library` or `apps` sheet with the same column twice
+(`install-sheet-incompatible`), and org rules that can't be read when the site uses or would use
+them (`org-config-unreadable`, on an install, a copy or when removing the site's rules). Errors
+in the org rules a site would inherit (`field` starting `orgTabs.`) are labelled as the org's
+rules. The `single-sheet-inactive` and `org-config-unreadable` warnings show under the rules.
+
 The worker's `canEdit` (config write on the site) decides whether the page is editable. Without it,
-the page is read-only with a note to ask a config admin.
+the page is read-only with a note to ask a config admin. When the worker reports
+`permissionsMode: "open"` (the DA org has no permissions sheet, so anyone can change the site's
+config), the app shows a short warning linking to
+[DA permissions](https://www.aem.live/docs/ew/administering/permissions); nothing is shown for
+`restricted` or `unknown`.
 
 Authors and approvers also need write access to `/.da/publish-workflow-requests.json`. That's set in
 the org's Experience Workspace permissions, which this app doesn't edit.
