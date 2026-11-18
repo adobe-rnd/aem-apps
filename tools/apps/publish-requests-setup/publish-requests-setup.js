@@ -26,7 +26,8 @@ import {
   missingGroups, emailAddresses, suggestDomains, describeProblem, tabLabel,
   blankRule, draftFromConfig, draftToTabs, mergeTabs, readSetup, problemCode,
   parseOrgSite, siteFromParams, registrationForm, registrationBody, saveErrorText,
-  permissionsModeOf, permissionsNotice, PERMISSIONS_DOCS,
+  permissionsModeOf, permissionsNotice, PERMISSIONS_DOCS, rulesDraftErrors, settingsFields,
+  commentsLengthDefault,
 } from './model.js';
 
 const NX = 'https://da.live/nx2';
@@ -67,6 +68,14 @@ const VERSION_DOCS = {
   v1: 'https://www.aem.live/docs/ew/administering/request-publish',
   v2: 'https://www.aem.live/docs/ew/administering/request-publish-v2',
 };
+// The Settings tab, documented per version.
+const SETTINGS_DOCS = {
+  v1: `${VERSION_DOCS.v1}#publish-workflow-settings-tab-optional`,
+  v2: `${VERSION_DOCS.v2}#publish-workflow-settings-tab-optional`,
+};
+const permissionsApp = (org, site) => `https://da.live/config/permissions#/${org}/${site}`;
+// The workflow picker's "Add a workflow" option: not a workflow name (names are trimmed).
+const ADD_WORKFLOW = ' add';
 const NO_ACCESS = 'You need config admin rights for this site to change its setup. Ask a config admin.';
 // Worker registration `field`s and the inputs that edit them.
 const FIELD_INPUTS = {
@@ -105,6 +114,7 @@ class PublishRequestsSetup extends LitElement {
     _message: { state: true },
     _conflict: { state: true },
     _fieldError: { state: true },
+    _draftErrors: { state: true },
     _permissionsMode: { state: true },
   };
 
@@ -117,6 +127,7 @@ class PublishRequestsSetup extends LitElement {
     this._saving = false;
     this._message = null;
     this._readOnly = false;
+    this._draftErrors = {};
     this._permissionsMode = 'unknown';
     // Counts workflow views, so an older read never replaces a newer save's view (and `version`).
     this._workflowSeq = 0;
@@ -254,6 +265,7 @@ class PublishRequestsSetup extends LitElement {
     this._message = null;
     this._conflict = null;
     this._fieldError = null;
+    this._draftErrors = {};
     this._open = key;
     this._draft = this.buildDraft(key);
     // What the draft started from, to re-apply only the user's changes after a 409.
@@ -266,6 +278,7 @@ class PublishRequestsSetup extends LitElement {
     this._draftBase = null;
     this._conflict = null;
     this._fieldError = null;
+    this._draftErrors = {};
   }
 
   draftTabs(key, draft) {
@@ -294,7 +307,19 @@ class PublishRequestsSetup extends LitElement {
   }
 
   rerender() {
+    this.revalidate();
     this.requestUpdate();
+  }
+
+  rulesErrors() {
+    return rulesDraftErrors(this._draft, { v2: this.apiVersion === 'v2' });
+  }
+
+  // Once a save found problems, they update as the user fixes them.
+  revalidate() {
+    if (this._open === 'rules' && Object.keys(this._draftErrors).length) {
+      this._draftErrors = this.rulesErrors();
+    }
   }
 
   moveRow(list, i, delta) {
@@ -315,10 +340,10 @@ class PublishRequestsSetup extends LitElement {
   }
 
   // Shows the result next to the section's Save button (or its header once closed), in view.
-  async showResult(section, type, text) {
+  async showResult(section, type, text, focusId = null) {
     this._message = { section, type, text };
     await this.updateComplete;
-    const fieldId = this._fieldError?.field;
+    const fieldId = focusId || this._fieldError?.field;
     const target = (fieldId && this.shadowRoot.querySelector(`#${fieldId}`))
       || this.shadowRoot.querySelector(`#message-${section || 'site'}`);
     target?.scrollIntoView?.({ block: 'nearest' });
@@ -407,6 +432,13 @@ class PublishRequestsSetup extends LitElement {
 
   saveRules() {
     this._conflict = null;
+    this._draftErrors = this.source === 'org' ? {} : this.rulesErrors();
+    const ids = Object.keys(this._draftErrors);
+    if (ids.length) {
+      const text = ids.length === 1 ? 'Fix the highlighted field, then save.' : `Fix the ${ids.length} highlighted fields, then save.`;
+      this.showResult('rules', 'error', text, ids[0]);
+      return;
+    }
     this.saveWorkflowTabs('rules', { tabs: this.draftTabs('rules', this._draft) }, 'Approval rules saved.');
   }
 
@@ -483,8 +515,8 @@ class PublishRequestsSetup extends LitElement {
       ? (tab) => [installed.site?.[tab], installed.org?.[tab]].some((v) => v === version || v === 'mixed')
       : (tab) => [this._siteConfig, this._orgConfig]
         .some((config) => installState(config, version)[tab]);
-    if (!has('library')) return todo(`${VERSION_LABELS[version]}: plugin missing`);
-    if (!has('apps')) return todo(`${VERSION_LABELS[version]}: inbox missing`);
+    if (!has('library')) return todo(`${VERSION_LABELS[version]}: extension missing`);
+    if (!has('apps')) return todo(`${VERSION_LABELS[version]}: app missing`);
     return ok(VERSION_LABELS[version]);
   }
 
@@ -555,12 +587,13 @@ class PublishRequestsSetup extends LitElement {
       <sl-input id=${id} name=${id} label=${label} placeholder=${extra.placeholder || nothing}
         type=${extra.type || 'text'} autocomplete="off" .value=${value}
         .error=${this.fieldError(id)}
-        @input=${(e) => { this.clearFieldError(id); onInput(e.target.value); }}></sl-input>
+        @input=${(e) => { this.clearFieldError(id); onInput(e.target.value); this.revalidate(); }}></sl-input>
     `;
   }
 
   fieldError(id) {
-    return this._fieldError?.field === id ? this._fieldError.text : '';
+    if (this._fieldError?.field === id) return this._fieldError.text;
+    return this._draftErrors?.[id] || '';
   }
 
   clearFieldError(id) {
@@ -700,12 +733,12 @@ class PublishRequestsSetup extends LitElement {
         </div>
       ` : nothing}
       ${otherOnSite && installed && !replacing.length ? html`
-        <div class="message info">Saving replaces the ${VERSION_LABELS[other]} plugin and inbox rows.</div>
+        <div class="message info">Saving replaces the ${VERSION_LABELS[other]} extension and app rows.</div>
       ` : nothing}
       <p class="form-hint">
-        Adds the Request for Publish plugin to the library and the inbox to apps in the site config.
-        Authors and approvers also need write access to <code>/.da/publish-workflow-requests.json</code>,
-        set in the org's Experience Workspace permissions.
+        Adds the Request Publish extension and app to this site's Experience Workspace config.
+        Authors and approvers also need write access to <code>/.da/publish-workflow-requests.json</code>
+        in the org's <a href=${permissionsApp(this._org, this._site)} target="_blank" rel="noopener">Experience Workspace permissions</a>.
       </p>
       ${this.renderEditorActions('install', () => this.saveInstall())}
     `;
@@ -728,49 +761,93 @@ class PublishRequestsSetup extends LitElement {
     `;
   }
 
+  // A bordered panel with a header bar, as the EW style guide frames its examples.
+  renderPanel(key, title, count, hint, content) {
+    return html`
+      <section class="subsection" aria-labelledby="subsection-${key}">
+        <header class="subsection-header">
+          <h3 class="subsection-title" id="subsection-${key}">${title}</h3>
+          <span class="subsection-count">${count}</span>
+        </header>
+        <div class="subsection-body">
+          <p class="form-hint">${hint}</p>
+          ${content}
+        </div>
+      </section>
+    `;
+  }
+
   renderRulesBody() {
     if (this.source === 'org') return this.renderOrgRules();
     const { rules, workflows, groups } = this._draft;
     const v2 = this.apiVersion === 'v2';
     const names = [...new Set(workflows.map((w) => w.name.trim()).filter(Boolean))];
+    const rulesHint = html`
+      Patterns: an exact path (<code>/about</code>), a folder and everything below it (<code>/products/*</code>),
+      or every page (<code>/*</code>). The most specific match wins. Separate addresses with commas;
+      a list name from Distribution lists stands for its addresses.
+      ${v2 ? 'A rule without a workflow has one approval step, as in Single Step.' : ''}`;
     return html`
-      <h3 class="subsection-title">Rules</h3>
-      <p class="form-hint">
-        Patterns: an exact path (<code>/about</code>), a folder and everything below it (<code>/products/*</code>),
-        or every page (<code>/*</code>). The most specific match wins. Separate addresses with commas;
-        a list name from below, or a name without @, is a distribution list.
-      </p>
-      <ol class="row-list">
-        ${rules.map((rule, i) => {
-          const options = [...new Set([...names, rule.workflow].filter(Boolean))];
-          return html`
-            <li class="edit-row">
-              ${this.field(`pattern-${i}`, 'Pattern', rule.pattern, (v) => { rule.pattern = v; }, { placeholder: '/products/*' })}
-              ${v2 ? html`
-                <div class="select-field">
-                  <label for="workflow-${i}">Workflow</label>
-                  <select id="workflow-${i}" class="field-select" @change=${(e) => { rule.workflow = e.target.value; this.rerender(); }}>
-                    <option value="" ?selected=${!rule.workflow}>None</option>
-                    ${options.map((n) => html`<option value=${n} ?selected=${rule.workflow === n}>${n}</option>`)}
-                  </select>
-                </div>
-              ` : nothing}
-              ${rule.workflow && !v2 ? this.renderMultiStepRule(rule) : nothing}
-              ${rule.workflow && v2 ? html`<p class="row-note">Approvers come from the workflow's steps.</p>` : nothing}
-              ${rule.workflow ? nothing : html`
-                ${this.field(`approvers-${i}`, 'Approvers', rule.approvers, (v) => { rule.approvers = v; }, { placeholder: 'web-team@example.com' })}
-                ${this.field(`cc-${i}`, 'CC', rule.cc, (v) => { rule.cc = v; })}
-              `}
-              ${this.renderRowActions(rules, i, `rule ${i + 1}`)}
-            </li>
-          `;
-        })}
-      </ol>
-      <sl-button class="pw-quiet-secondary" @click=${() => this.addRow(rules, blankRule())}>Add rule</sl-button>
+      ${this.renderPanel('rules', 'Rules', rules.length, rulesHint, html`
+        <ol class="row-list">
+          ${rules.map((rule, i) => this.renderRule(rule, i, { v2, names, workflows }))}
+        </ol>
+        <sl-button class="pw-quiet-secondary" @click=${() => this.addRow(rules, blankRule())}>Add rule</sl-button>
+      `)}
       ${v2 ? this.renderWorkflowsEditor(workflows) : this.renderMultiStepWorkflows()}
       ${this.renderGroupsEditor(groups)}
       ${this.renderEditorActions('rules', () => this.saveRules())}
     `;
+  }
+
+  renderRule(rule, i, { v2, names, workflows }) {
+    const options = [...new Set([...names, rule.workflow].filter(Boolean))];
+    // No workflow to pick yet: offer to start one below.
+    const offerAdd = !rule.workflow && !workflows.length;
+    return html`
+      <li class="edit-row">
+        ${this.field(`pattern-${i}`, 'Pattern', rule.pattern, (v) => { rule.pattern = v; }, { placeholder: '/products/*' })}
+        ${v2 ? html`
+          <div class="select-field">
+            <label for="workflow-${i}">Workflow</label>
+            <select id="workflow-${i}" class="field-select" @change=${(e) => this.chooseWorkflow(rule, e.target)}>
+              <option value="" ?selected=${!rule.workflow}>None (single step)</option>
+              ${options.map((n) => html`<option value=${n} ?selected=${rule.workflow === n}>${n}</option>`)}
+              ${offerAdd ? html`<option value=${ADD_WORKFLOW}>Add a workflow…</option>` : nothing}
+            </select>
+          </div>
+        ` : nothing}
+        ${rule.workflow && !v2 ? this.renderMultiStepRule(rule) : nothing}
+        ${rule.workflow && v2 ? html`<p class="row-note">Approvers come from the workflow's steps.</p>` : nothing}
+        ${rule.workflow ? nothing : html`
+          ${this.field(`approvers-${i}`, 'Approvers', rule.approvers, (v) => { rule.approvers = v; }, { placeholder: 'web-team@example.com' })}
+          ${this.field(`cc-${i}`, 'CC', rule.cc, (v) => { rule.cc = v; })}
+        `}
+        ${this.renderRowActions(this._draft.rules, i, `rule ${i + 1}`)}
+      </li>
+    `;
+  }
+
+  chooseWorkflow(rule, select) {
+    if (select.value === ADD_WORKFLOW) {
+      select.value = rule.workflow || '';
+      this.addWorkflow();
+      return;
+    }
+    rule.workflow = select.value;
+    this.rerender();
+  }
+
+  // Adds an empty workflow and puts the cursor in its name.
+  async addWorkflow() {
+    const { workflows } = this._draft;
+    workflows.push({ name: '', steps: [blankStep()] });
+    this.rerender();
+    await this.updateComplete;
+    const input = this.shadowRoot.querySelector(`#workflow-name-${workflows.length - 1}`);
+    await input?.updateComplete;
+    input?.scrollIntoView?.({ block: 'center' });
+    input?.focus?.();
   }
 
   // Single Step can't use a Multi Step rule: show it as an error with a way to convert it.
@@ -800,17 +877,13 @@ class PublishRequestsSetup extends LitElement {
   }
 
   renderWorkflowsEditor(workflows) {
-    return html`
-      <h3 class="subsection-title">Workflows</h3>
-      <p class="form-hint">
-        A workflow is an ordered list of approval steps. Each step completes when any one of its approvers approves.
-        Name a workflow, then pick it on a rule.
-      </p>
+    const hint = 'A workflow is an ordered list of approval steps. Each step completes when any one of its approvers approves. Name a workflow, then pick it on a rule.';
+    return this.renderPanel('workflows', 'Workflows', workflows.length, hint, html`
       ${workflows.map((workflow, w) => html`
         <fieldset class="workflow">
           <legend class="sr-only">Workflow ${w + 1}</legend>
           <div class="workflow-header">
-            ${this.field(`workflow-name-${w}`, 'Workflow name', workflow.name, (v) => { workflow.name = v; }, { placeholder: 'legal-then-brand' })}
+            ${this.field(`workflow-name-${w}`, 'Workflow name', workflow.name, (v) => { workflow.name = v; this.requestUpdate(); }, { placeholder: 'legal-then-brand' })}
             <sl-button class="pw-quiet-secondary pw-action-sm" @click=${() => this.removeRow(workflows, w)}>Remove workflow</sl-button>
           </div>
           <ol class="row-list">
@@ -832,14 +905,13 @@ class PublishRequestsSetup extends LitElement {
           <sl-button class="pw-quiet-secondary pw-action-sm" @click=${() => this.addRow(workflow.steps, blankStep())}>Add step</sl-button>
         </fieldset>
       `)}
-      <sl-button class="pw-quiet-secondary" @click=${() => this.addRow(workflows, { name: '', steps: [blankStep()] })}>Add workflow</sl-button>
-    `;
+      <sl-button class="pw-quiet-secondary" @click=${() => this.addWorkflow()}>Add workflow</sl-button>
+    `);
   }
 
   renderGroupsEditor(groups) {
-    return html`
-      <h3 class="subsection-title">Distribution lists</h3>
-      <p class="form-hint">Names used as approvers or CC that stand for several addresses. Lists your rules use but don't define are added here for you to fill in.</p>
+    const hint = "Names used as approvers or CC that stand for several addresses. Lists your rules use but don't define are added here for you to fill in.";
+    return this.renderPanel('lists', 'Distribution lists', groups.length, hint, html`
       <ol class="row-list">
         ${groups.map((group, i) => html`
           <li class="edit-row">
@@ -852,35 +924,62 @@ class PublishRequestsSetup extends LitElement {
         `)}
       </ol>
       <sl-button class="pw-quiet-secondary" @click=${() => this.addRow(groups, { group: '', email: '' })}>Add list</sl-button>
-    `;
+    `);
   }
 
+  // Only the settings this version reads; the others are kept as they are.
   renderSettingsBody() {
     const { values } = this._draft;
     const set = (key) => (v) => { values[key] = v; };
-    const v2 = this.apiVersion === 'v2';
+    const version = this.apiVersion;
+    const shown = new Set(settingsFields(version, this.activeConfig, values));
+    const toggle = (key) => (e) => { values[key] = e.target.checked ? 'true' : ''; this.rerender(); };
     return html`
       <div class="setup-form">
-        <sl-checkbox name="comments-required" ?checked=${values.commentsRequired === 'true'}
-          @change=${(e) => { values.commentsRequired = e.target.checked ? 'true' : ''; }}><span class="checkbox-label">Require a comment on every request</span></sl-checkbox>
-        ${this.field('comments-length', 'Minimum comment length', values.commentsLength, set('commentsLength'), { type: 'number', placeholder: '10' })}
-        ${this.field('support-contact', 'Support contact', values.supportContact, set('supportContact'), { placeholder: 'web-help@example.com' })}
-        <sl-checkbox name="cc-can-approve" ?checked=${values.ccCanApprove === 'true'}
-          @change=${(e) => { values.ccCanApprove = e.target.checked ? 'true' : ''; }}>
-          <span class="checkbox-label">CC recipients can approve${v2 ? ' (rules without a workflow)' : ''}</span>
-        </sl-checkbox>
-        ${v2 ? html`
-          ${this.field('guidance-title', 'Guidance title', values.guidanceTitle, set('guidanceTitle'), { placeholder: 'Before you submit' })}
-          <sl-textarea name="guidance-text" id="guidance-text" label="Guidance text" .value=${values.guidanceText}
-            @input=${(e) => { values.guidanceText = e.target.value; }}></sl-textarea>
-          <div>
-            <sl-textarea name="guidance-items" id="guidance-items" label="Guidance checklist" .value=${this._draft.items}
-              @input=${(e) => { this._draft.items = e.target.value; }}></sl-textarea>
-            <p class="form-hint">One item per line.</p>
-          </div>
+        <fieldset class="settings-group">
+          <legend>Request comments</legend>
+          <sl-checkbox name="comments-required" ?checked=${values.commentsRequired === 'true'}
+            @change=${toggle('commentsRequired')}><span class="checkbox-label">Require a comment on every request</span></sl-checkbox>
+          ${values.commentsRequired === 'true' ? this.field('comments-length', 'Minimum comment length', values.commentsLength, set('commentsLength'), {
+            type: 'number', placeholder: String(commentsLengthDefault(version)),
+          }) : nothing}
+        </fieldset>
+        ${shown.has('ccCanApprove') ? html`
+          <fieldset class="settings-group">
+            <legend>CC approvals</legend>
+            <sl-checkbox name="cc-can-approve" ?checked=${values.ccCanApprove === 'true'} @change=${toggle('ccCanApprove')}>
+              <span class="checkbox-label">Let CC recipients approve</span>
+            </sl-checkbox>
+            <p class="form-hint">CC recipients are only notified unless this is on.${version === 'v2'
+              ? " Applies to rules without a workflow; workflow steps have their own 'CC can approve'." : ''}</p>
+          </fieldset>
         ` : nothing}
-        ${this.field('accent-color', 'Accent color', values.accentColor, set('accentColor'), { placeholder: '#3b63fb' })}
-        ${this.field('accent-color-hover', 'Accent hover color', values.accentColorHover, set('accentColorHover'), { placeholder: '#274dea' })}
+        ${shown.has('guidance') ? html`
+          <fieldset class="settings-group">
+            <legend>Guidance for authors</legend>
+            <p class="form-hint">Shown in the request panel before an author submits.</p>
+            ${this.field('guidance-title', 'Guidance title', values.guidanceTitle, set('guidanceTitle'), { placeholder: 'Before you submit' })}
+            <sl-textarea name="guidance-text" id="guidance-text" label="Guidance text" .value=${values.guidanceText}
+              @input=${(e) => { values.guidanceText = e.target.value; }}></sl-textarea>
+            <div>
+              <sl-textarea name="guidance-items" id="guidance-items" label="Guidance checklist" .value=${this._draft.items}
+                @input=${(e) => { this._draft.items = e.target.value; }}></sl-textarea>
+              <p class="form-hint">One item per line.</p>
+            </div>
+          </fieldset>
+        ` : nothing}
+        <fieldset class="settings-group">
+          <legend>Support and colors</legend>
+          <div>
+            ${this.field('support-contact', 'Support contact', values.supportContact, set('supportContact'), { placeholder: 'web-help@example.com' })}
+            <p class="form-hint">Shown to authors who need help with an approval.</p>
+          </div>
+          <div class="field-pair">
+            ${this.field('accent-color', 'Accent color', values.accentColor, set('accentColor'), { placeholder: '#3b63fb' })}
+            ${this.field('accent-color-hover', 'Accent hover color', values.accentColorHover, set('accentColorHover'), { placeholder: '#274dea' })}
+          </div>
+          <p class="form-hint">CSS colors for the buttons in the extension and app.</p>
+        </fieldset>
       </div>
       ${this.renderEditorActions('settings', () => this.saveSettings())}
     `;
@@ -888,15 +987,15 @@ class PublishRequestsSetup extends LitElement {
 
   renderSections() {
     const hasVersion = ['v1', 'v2'].includes(this.version);
-    const needsVersion = hasVersion ? '' : ' Choose a version under Plugin and inbox first.';
+    const needsVersion = hasVersion ? '' : ' Choose a version under App Version first.';
     const workflowReady = hasVersion && !!this._workflow;
     const unavailable = this._workflow ? '' : html` ${this._workflowError}`;
     const validation = this._workflow?.validation || {};
     const sections = [
       {
         key: 'install',
-        title: 'Plugin and inbox',
-        description: html`Which version this site uses. Adds the author plugin and the approver inbox.${unavailable}`,
+        title: 'App Version',
+        description: html`Which version this site uses. Configures Experience Workspace extension and app.${unavailable}`,
         status: this.installStatus(),
         body: () => this.renderInstallBody(),
         // The install goes through the worker, so it needs the workflow view (and its `version`).
@@ -914,7 +1013,8 @@ class PublishRequestsSetup extends LitElement {
       {
         key: 'settings',
         title: 'Settings',
-        description: html`Comment rules, support contact, guidance and colors.${needsVersion}${unavailable}`,
+        description: html`${this.version === 'v2' ? 'Comment rules, author guidance, support contact and colors.' : 'Comment rules, CC approvals, support contact and colors.'}
+          ${hasVersion ? html`<a href=${SETTINGS_DOCS[this.version]} target="_blank" rel="noopener">What each setting does</a>` : nothing}${needsVersion}${unavailable}`,
         status: this.settingsStatus(),
         body: () => this.renderSettingsBody(),
         editable: workflowReady && this.source !== 'org',

@@ -24,9 +24,9 @@ has no approval rules.
 | Section | Writes |
 |---|---|
 | Registration | Worker `POST /api/site-config`: email provider, custom API settings, allowed email domains. Providers come from the worker; Adobe's default provider shows its non-production warning and needs an acknowledgement. Errors for one field are shown on that field. A caller without DA config write gets only the API URL's origin (`apiUrlRedacted: true`): the field shows it as set, isn't prefilled, and the redacted value is never sent back. |
-| Plugin and inbox | Worker `POST /api[/v2]/workflow-config` with `install: true`, on the route of the version being installed: the `library` and `apps` rows for that version. Switching version replaces the other version's rows, which are listed first. Existing rows for the chosen version (pinned refs, vendored copies) are kept. When nothing is installed, Single Step is preselected unless the rules use Multi Step workflows. |
-| Approval rules | Rules (`publish-workflow-config`), Multi Step workflows (`publish-workflow-steps`) and distribution lists (`publish-workflow-groups-to-email`), saved together. Lists used in rules but not defined are added for you to fill in. The Single Step editor shows a Multi Step rule as an error, with a way to convert it. |
-| Settings | Known `publish-workflow-settings` keys. Unknown keys are kept; guidance item keys such as `request.guidance.item.N.marker` move with their item. |
+| App Version | Worker `POST /api[/v2]/workflow-config` with `install: true`, on the route of the version being installed: the `library` (Experience Workspace extension) and `apps` (app) rows for that version. Switching version replaces the other version's rows, which are listed first. Existing rows for the chosen version (pinned refs, vendored copies) are kept. When nothing is installed, Single Step is preselected unless the rules use Multi Step workflows. |
+| Approval rules | Rules (`publish-workflow-config`), Multi Step workflows (`publish-workflow-steps`) and distribution lists (`publish-workflow-groups-to-email`), saved together, each in its own panel. Lists used in rules but not defined are added for you to fill in. Before saving, approver, CC and list entries are checked inline as the worker checks them: an email address or a defined list name (list names may contain `@`). A Multi Step rule without a workflow (**None (single step)**) has one approval step; when no workflow exists yet, the picker offers **Add a workflow**. The Single Step editor shows a Multi Step rule as an error, with a way to convert it. |
+| Settings | The `publish-workflow-settings` keys the version reads, linked to its docs. Both versions read `request.comments.required`, `request.comments.length`, `request.support.contact` and `theme.accent-color[-hover]`; Multi Step adds `request.guidance.*`. `approvals.cc.can-approve` shows for Single Step, and for Multi Step only when a rule has no workflow (or it is set). Unknown and hidden keys are kept; guidance item keys such as `request.guidance.item.N.marker` move with their item. |
 
 ## How loading and saving work
 
@@ -41,7 +41,7 @@ doesn't exist yet, and nothing is offered; `preview-write-required` means the us
 an unregistered site.
 
 Every config write goes through the worker. DA config is eventually consistent and has no conditional
-write, so a second writer could undo a recent save. Approval rules, settings and the plugin and inbox
+write, so a second writer could undo a recent save. Approval rules, settings and the App Version
 install all use `POST /api[/v2]/workflow-config`. The worker validates them, keeps every other tab, and
 refuses a save when the tabs changed since they were loaded (`409`). The app then reloads, rebuilds the
 editor from the new tabs and re-applies only your changes (by rule pattern, list name, workflow name
@@ -51,7 +51,7 @@ section, and the save result shows next to the Save button. If the site follows 
 app shows that and offers **Use site-specific rules** (`copyFromOrg`).
 
 Every save sends the `version` of the most recent worker response, which changes with each save,
-the plugin and inbox install included. A workflow read that was started before a save never
+the App Version install included. A workflow read that was started before a save never
 replaces the save's view.
 
 Refused saves are shown in plain words: a change too large to send (`413 payload-too-large`), a
@@ -70,7 +70,8 @@ config), the app shows a short warning linking to
 `restricted` or `unknown`.
 
 Authors and approvers also need write access to `/.da/publish-workflow-requests.json`. That's set in
-the org's Experience Workspace permissions, which this app doesn't edit.
+the org's Experience Workspace permissions (`https://da.live/config/permissions#/{org}/{site}`, linked
+from App Version), which this app doesn't edit.
 
 The app follows the color scheme stored for its own origin, else the OS setting: the da.live shell
 doesn't pass its theme to apps.

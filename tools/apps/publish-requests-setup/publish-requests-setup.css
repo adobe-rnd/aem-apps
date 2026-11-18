@@ -2,6 +2,9 @@
   --pw-accent: var(--s2-blue-900);
   --pw-accent-hover: var(--s2-blue-1000);
 
+  /* Height of a field label (body-xs text and its 4px gap), to line controls up with the inputs. */
+  --pw-label-offset: calc(var(--s2-body-size-xs) * 1.5 + 4px);
+
   display: block;
   max-width: var(--se-grid-container-width);
   margin: var(--s2-spacing-800) auto;
@@ -249,7 +252,7 @@ sl-textarea {
 .edit-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: var(--s2-spacing-200);
   padding: var(--s2-spacing-200);
   background: transparent;
@@ -262,21 +265,30 @@ sl-textarea {
   min-width: 0;
 }
 
+/* Inputs line up at the top, so an error under one doesn't shift the others. */
 .edit-row > sl-checkbox {
+  display: flex;
   flex: 0 0 auto;
+  margin-top: var(--pw-label-offset);
+  min-height: 32px;
+  align-items: center;
 }
 
 .row-actions {
   display: flex;
   flex: 0 0 auto;
+  align-items: center;
+  min-height: 32px;
+  margin-top: var(--pw-label-offset);
   margin-left: auto;
   gap: var(--s2-spacing-100);
   justify-content: flex-end;
 }
 
 .row-note {
-  margin: 0;
-  align-self: center;
+  margin: var(--pw-label-offset) 0 0;
+  align-self: flex-start;
+  line-height: 32px;
   flex-grow: 2;
   font-size: var(--s2-body-size-xs);
   color: var(--s2-gray-600);
@@ -335,7 +347,8 @@ sl-textarea {
 .workflow {
   margin: 0;
   padding: var(--s2-spacing-300);
-  border: 1px solid var(--s2-gray-200);
+  background: var(--s2-gray-50);
+  border: 1px solid var(--s2-gray-300);
   border-radius: var(--s2-corner-radius-500);
   display: flex;
   flex-direction: column;
@@ -349,7 +362,7 @@ sl-textarea {
 
 .workflow-header {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: var(--s2-spacing-200);
   align-self: stretch;
 }
@@ -358,11 +371,111 @@ sl-textarea {
   flex: 1;
 }
 
+.workflow-header sl-button {
+  margin-top: var(--pw-label-offset);
+}
+
+/* Rules, Workflows and Distribution lists: bordered panels with a header bar, as the EW style
+   guide frames its examples. Every color is an S2 light-dark() token. */
+.subsection {
+  border: 1px solid var(--s2-gray-300);
+  border-radius: var(--s2-corner-radius-500);
+  background: var(--s2-gray-25);
+  box-shadow: var(--s2-drop-shadow-emphasized);
+  overflow: hidden;
+}
+
+.subsection-header {
+  display: flex;
+  align-items: center;
+  gap: var(--s2-spacing-200);
+  padding: var(--s2-spacing-200) var(--s2-spacing-300);
+  background: var(--s2-gray-75);
+  border-bottom: 1px solid var(--s2-gray-300);
+  border-left: 4px solid var(--s2-blue-900);
+}
+
 .subsection-title {
-  margin: var(--s2-spacing-200) 0 0;
+  margin: 0;
   font-size: var(--s2-body-size-s);
   font-weight: 700;
   color: var(--s2-gray-900);
+}
+
+.subsection-count {
+  min-width: 1.5em;
+  padding: 0 var(--s2-spacing-100);
+  border-radius: var(--s2-corner-radius-800);
+  background: var(--s2-blue-200);
+  color: var(--s2-blue-1100);
+  font-size: var(--s2-body-size-xs);
+  font-weight: 700;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.subsection-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s2-spacing-200);
+  padding: var(--s2-spacing-300);
+}
+
+.subsection-body > .form-hint {
+  margin: 0;
+}
+
+.subsection-body > .row-list,
+.subsection-body > .workflow,
+.subsection-body > .form-hint,
+.subsection-body > .message {
+  align-self: stretch;
+}
+
+.subsection .edit-row {
+  background: var(--s2-gray-50);
+}
+
+.workflow .edit-row {
+  background: var(--s2-gray-25);
+}
+
+/* Settings: one titled group per topic. */
+.settings-group {
+  margin: 0;
+  padding: var(--s2-spacing-300);
+  border: 1px solid var(--s2-gray-300);
+  border-radius: var(--s2-corner-radius-500);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2-spacing-200);
+}
+
+.settings-group legend {
+  padding: 0 var(--s2-spacing-100);
+  font-size: var(--s2-body-size-s);
+  font-weight: 700;
+  color: var(--s2-gray-900);
+}
+
+.settings-group .form-hint {
+  margin: 0;
+}
+
+.field-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2-spacing-200);
+}
+
+.field-pair > * {
+  flex: 1 1 12rem;
+}
+
+.section-description a,
+.form-hint a {
+  color: var(--pw-accent);
 }
 
 .notes {
@@ -431,4 +544,10 @@ sl-checkbox .checkbox-label {
   display: inline-block;
   margin-left: var(--s2-spacing-100);
   vertical-align: middle;
+}
+
+/* A step has too many fields for one line: its actions always take their own line. */
+.workflow .row-actions {
+  flex-basis: 100%;
+  margin-top: 0;
 }

@@ -192,6 +192,54 @@ export function emailAddresses(rules, workflows, groups) {
   ].filter((entry) => entry.includes('@') && !isList(entry)));
 }
 
+// The worker's check: one address, no spaces, a dot in the domain.
+export const isEmailAddress = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ''));
+
+const isBlank = (value) => !String(value || '').trim();
+
+/**
+ * Inline errors for the rules draft, by editor field id (`approvers-0`, `step-cc-1-0`,
+ * `group-email-2`, …), checked as the worker would before a save. Approver and CC entries are
+ * email addresses or lists defined below (names may contain @). Single Step leaves workflow rules
+ * and workflows to their own errors.
+ */
+export function rulesDraftErrors({ rules = [], workflows = [], groups = [] }, { v2 = false } = {}) {
+  const errors = {};
+  const defined = new Set(groups.map((g) => g.group.trim().toLowerCase()).filter(Boolean));
+  const checkRecipients = (id, value) => {
+    const bad = toList(value).filter((e) => !defined.has(e.toLowerCase()) && !isEmailAddress(e));
+    if (bad.length) errors[id] = `Not an email address or a defined list: ${bad.join(', ')}`;
+  };
+  rules.forEach((rule, i) => {
+    if (rule.workflow?.trim()) return;
+    if (!toList(rule.approvers).length) errors[`approvers-${i}`] = 'Add at least one approver.';
+    else checkRecipients(`approvers-${i}`, rule.approvers);
+    checkRecipients(`cc-${i}`, rule.cc);
+  });
+  if (v2) {
+    workflows.forEach((workflow, w) => {
+      if (isBlank(workflow.name)) errors[`workflow-name-${w}`] = 'Name this workflow.';
+      workflow.steps.forEach((step, s) => {
+        checkRecipients(`step-approvers-${w}-${s}`, step.approvers);
+        checkRecipients(`step-cc-${w}-${s}`, step.cc);
+      });
+    });
+  }
+  const seen = new Set();
+  groups.forEach(({ group, email }, i) => {
+    if (isBlank(group) && isBlank(email)) return;
+    const name = group.trim().toLowerCase();
+    if (!name) errors[`group-${i}`] = 'Name this list.';
+    else if (name.includes(',')) errors[`group-${i}`] = "A list name can't contain a comma.";
+    else if (seen.has(name)) errors[`group-${i}`] = 'This list is already defined above.';
+    seen.add(name);
+    const bad = toList(email).filter((e) => !isEmailAddress(e));
+    if (!toList(email).length) errors[`group-email-${i}`] = 'Add at least one email address.';
+    else if (bad.length) errors[`group-email-${i}`] = `Not an email address: ${bad.join(', ')}`;
+  });
+  return errors;
+}
+
 export const suggestDomains = (addresses) => unique(addresses.map((email) => email.split('@').pop().toLowerCase()));
 
 export const readSettings = (config) => rowsOf(config, SETTINGS)
@@ -245,6 +293,25 @@ export function settingsToRows(settings, values, items) {
 
 export const settingsValues = (settings) => Object.fromEntries(Object.entries(SETTING_KEYS)
   .map(([field, key]) => [field, settings.find((s) => s.key === key)?.value || '']));
+
+const COMMON_SETTINGS = ['commentsRequired', 'commentsLength', 'supportContact', 'accentColor', 'accentColorHover'];
+
+/**
+ * The Settings fields a version reads (its plugin and inbox, and the worker). Both read the
+ * comment, support contact and color keys; only Multi Step shows guidance.
+ * `approvals.cc.can-approve` applies to every Single Step rule, but in Multi Step only to rules
+ * without a workflow, so there it shows when such a rule exists or the value is set (so it can be
+ * cleared).
+ */
+export function settingsFields(version, config, values = {}) {
+  if (version !== 'v2') return [...COMMON_SETTINGS, 'ccCanApprove'];
+  const inlineRules = readRules(config).some((rule) => !rule.workflow.trim());
+  const cc = inlineRules || values.ccCanApprove === 'true' ? ['ccCanApprove'] : [];
+  return [...COMMON_SETTINGS, ...cc, 'guidance'];
+}
+
+/** The minimum comment length each version's plugin uses when none is set. */
+export const commentsLengthDefault = (version) => (version === 'v2' ? 1 : 10);
 
 const TAB_LABELS = {
   [RULES]: 'Rules', [STEPS]: 'Workflows', [GROUPS]: 'Distribution lists', [SETTINGS]: 'Settings',
