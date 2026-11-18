@@ -77,11 +77,14 @@ test('rulesDraftErrors skips workflow rules and checks Multi Step steps only in 
     'step-approvers-0-1': 'Not an email address or a defined list: dl-x',
     'workflow-name-1': 'Name this workflow.',
   });
-  // Single Step shows workflow rules and workflows as their own errors, not field errors.
-  assert.deepEqual(rulesDraftErrors(draft, { v2: false }), {});
+  // Single Step refuses workflow rules and workflows (the worker's requires-v2).
+  assert.deepEqual(rulesDraftErrors(draft, { v2: false }), {
+    'workflow-0': "Single Step can't use workflows: use approvers instead.",
+    'workflows-v1': 'Remove the workflows to save in Single Step.',
+  });
 });
 
-test('rulesDraftErrors checks distribution lists, ignoring fully blank rows', () => {
+test('rulesDraftErrors checks distribution lists, including fully blank rows', () => {
   const draft = {
     rules: [rule({ approvers: 'dl-a, dl-b, dl-c' })],
     workflows: [],
@@ -99,6 +102,7 @@ test('rulesDraftErrors checks distribution lists, ignoring fully blank rows', ()
     'group-email-0': 'Add at least one email address.',
     'group-email-1': 'Not an email address: nope',
     'group-2': 'This list is already defined above.',
+    'group-4': 'Fill in this list, or remove it.',
     'group-5': 'Name this list.',
     'group-6': "A list name can't contain a comma.",
   });
@@ -203,6 +207,7 @@ test('rulesDraftErrors flags a rule whose workflow is missing or has no steps, i
   assert.deepEqual(rulesDraftErrors(draft, { v2: true }), {
     'workflow-1': "There's no workflow gone. Pick one, or None.",
     'workflow-2': "There's no workflow empty. Pick one, or None.",
+    'workflow-name-1': 'Add a step, or remove this workflow.',
   });
 });
 

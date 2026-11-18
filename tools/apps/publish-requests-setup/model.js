@@ -94,9 +94,10 @@ export const tabsToConfig = (tabs) => tabs && Object.fromEntries(Object.entries(
   .map(([tab, rows]) => [tab, { data: rows }]));
 
 // Each item keeps its source row so columns the editor doesn't show survive a save.
+// A workflow cell of only spaces is no workflow, as the worker trims cells.
 export const readRules = (config) => rowsOf(config, RULES).map((row) => ({
   pattern: cell(row, 'pattern'),
-  workflow: cell(row, 'workflow'),
+  workflow: cell(row, 'workflow').trim(),
   approvers: cell(row, 'approvers'),
   cc: cell(row, 'cc'),
   row,
@@ -114,13 +115,16 @@ const RULE_KEYS = ['pattern', 'workflow', 'approvers', 'cc'];
 
 export const rulesToRows = (rules) => rules.map(({
   pattern, workflow, approvers, cc, row,
-}) => withoutEmpty({
-  pattern: pattern.trim(),
-  workflow: (workflow || '').trim(),
-  approvers: workflow ? '' : toList(approvers).join(', '),
-  cc: workflow ? '' : toList(cc).join(', '),
-  ...withoutKeys(row, RULE_KEYS),
-}, ['workflow', 'approvers', 'cc']));
+}) => {
+  const name = (workflow || '').trim();
+  return withoutEmpty({
+    pattern: pattern.trim(),
+    workflow: name,
+    approvers: name ? '' : toList(approvers).join(', '),
+    cc: name ? '' : toList(cc).join(', '),
+    ...withoutKeys(row, RULE_KEYS),
+  }, ['workflow', 'approvers', 'cc']);
+});
 
 export function readWorkflows(config) {
   const byName = new Map();
@@ -160,7 +164,8 @@ export const groupsToRows = (groups) => groups.map(({ group, email, row }) => ({
 }));
 
 const ruleEntries = (rules) => rules
-  .flatMap((rule) => (rule.workflow ? [] : [...toList(rule.approvers), ...toList(rule.cc)]));
+  .flatMap((rule) => (rule.workflow?.trim() ? []
+    : [...toList(rule.approvers), ...toList(rule.cc)]));
 
 const stepEntries = (workflows) => workflows
   .flatMap((w) => w.steps.flatMap((s) => [...toList(s.approvers), ...toList(s.cc)]));
@@ -211,17 +216,33 @@ function usedBy(rules, workflow) {
   return { text: `Used by ${labels.join(', ')}.`, whose: using.length === 1 ? "that rule's" : "those rules'" };
 }
 
-/** Why a workflow can't be removed (rules in the draft use it), else null. */
-export function workflowRemovalProblem(rules, workflow) {
-  const used = usedBy(rules, workflow);
+// Another workflow with the same name in any case, and steps: the worker reads the two as one.
+const hasTwin = (workflows, workflow) => workflows.some((other) => other !== workflow
+  && other.steps.length && !isBlank(other.name) && sameName(other.name, workflow.name));
+
+/**
+ * Why a workflow can't be removed (rules in the draft use it), else null. A duplicate name
+ * (`workflows`, in any case) can go: its twin keeps the rules.
+ */
+export function workflowRemovalProblem(rules, workflow, workflows = []) {
+  const used = !hasTwin(workflows, workflow) && usedBy(rules, workflow);
   return used ? `${used.text} Change ${used.whose} workflow first.` : null;
 }
 
 /** Why a step can't be removed (the last step of a workflow rules use), else null. */
-export function stepRemovalProblem(rules, workflow) {
-  const used = workflow.steps.length <= 1 && usedBy(rules, workflow);
+export function stepRemovalProblem(rules, workflow, workflows = []) {
+  const used = workflow.steps.length <= 1 && !hasTwin(workflows, workflow)
+    && usedBy(rules, workflow);
   return used ? `${used.text} A workflow needs at least one step: add another first, or change ${used.whose} workflow.` : null;
 }
+
+/**
+ * The rules a rename of `workflow` moves along: those using its name, unless another workflow
+ * has the same name (in any case), as then they can't be told apart and stay where they are.
+ */
+export const rulesToRename = (rules, workflows, workflow) => (workflows.some((other) => (
+  other !== workflow && !isBlank(other.name) && sameName(other.name, workflow.name)))
+  ? [] : rulesUsingWorkflow(rules, workflow.name));
 
 /**
  * Renames a workflow and moves the rules that used it (`linked`, taken when the rename started)
@@ -236,58 +257,179 @@ export function renameWorkflow(linked, workflow, name) {
 const isStaffed = (step) => toList(step.approvers).length > 0
   || (step.ccCanApprove && toList(step.cc).length > 0);
 
+// The worker's limits (parseRows, validateWorkflowTabs).
+export const LIMITS = {
+  rows: 500, columns: 20, cell: 4000, recipients: 100,
+};
+
+/**
+ * Why a rule pattern is invalid, as the worker checks it (trimmed), else null: `/*`, `*`, an
+ * exact `/path` or `/path/*`; `*` only last; no spaces, `?`, `#` or `\`; no `.` or `..` folders.
+ */
+export function patternProblem(value) {
+  const pattern = String(value || '').trim();
+  if (!pattern) return 'Add a pattern, such as /products/*.';
+  if (pattern === '/*' || pattern === '*') return null;
+  if (!pattern.startsWith('/')) return 'Start the pattern with /, or use /* for every page.';
+  if (/[\s?#\\]/.test(pattern)) return "A pattern can't contain spaces, ?, # or \\.";
+  const body = pattern.endsWith('/*') ? pattern.slice(0, -2) : pattern;
+  if (body.includes('*')) return '* can only end a pattern, as in /products/*.';
+  if (body.split('/').slice(1).some((s) => s === '.' || s === '..')) return "A pattern can't contain . or .. folders.";
+  return null;
+}
+
+const isBlankStep = (step) => ['title', 'description', 'approvers', 'cc'].every((key) => isBlank(step[key]));
+const isBlankRule = (rule) => ['pattern', 'workflow', 'approvers', 'cc'].every((key) => isBlank(rule[key]));
+
+// An entry that is several addresses separated by something other than a comma.
+const looksLikeSeveral = (entry) => entry.includes(';')
+  || entry.split(/\s+/).filter((part) => part.includes('@')).length > 1;
+
+const TOO_LONG = `At most ${LIMITS.cell} characters.`;
+
+/**
+ * Checks the rows a tab would save against the worker's per-row limits (columns, cell length).
+ * `fieldOf(i, column)` is the editor field for a cell; columns the editor doesn't show map to the
+ * row's first field.
+ */
+function checkRows(rows, fieldOf, add) {
+  rows.forEach((row, i) => {
+    const entries = Object.entries(row);
+    if (entries.length > LIMITS.columns) {
+      add(fieldOf(i), `This row has more than ${LIMITS.columns} columns. Remove some in the site's config.`);
+    }
+    entries.filter(([, value]) => String(value ?? '').trim().length > LIMITS.cell).forEach(([column]) => {
+      const field = fieldOf(i, column);
+      add(field || fieldOf(i), field ? TOO_LONG
+        : `The ${column} column is longer than ${LIMITS.cell} characters. Shorten it in the site's config.`);
+    });
+  });
+}
+
 /**
  * Inline errors for the rules draft, by editor field id (`approvers-0`, `step-cc-1-0`,
- * `group-email-2`, …), checked as the worker would before a save. Approver and CC entries are
- * email addresses or lists defined below (names may contain @). Single Step leaves workflow rules
- * and workflows to their own errors.
+ * `group-email-2`, …), checked as the worker would before a save: patterns, approvers, recipients,
+ * workflows, lists and the row and cell limits. Besides the worker's checks, rows added but left
+ * empty and workflow names that only differ in case are refused (the worker drops the first and
+ * merges the second). Panel-wide problems use `rules-limit`, `workflows-limit`, `lists-limit` and
+ * `workflows-v1`. Single Step refuses workflow rules and workflows, unless they are dropped.
  */
-export function rulesDraftErrors({ rules = [], workflows = [], groups = [] }, { v2 = false } = {}) {
+export function rulesDraftErrors({
+  rules = [], workflows = [], groups = [], dropSteps = false,
+}, { v2 = false } = {}) {
   const errors = {};
+  const add = (id, text) => { if (!errors[id]) errors[id] = text; };
   const defined = new Set(groups.map((g) => g.group.trim().toLowerCase()).filter(Boolean));
   const checkRecipients = (id, value) => {
-    const bad = toList(value).filter((e) => !defined.has(e.toLowerCase()) && !isEmailAddress(e));
-    if (bad.length) errors[id] = `Not an email address or a defined list: ${bad.join(', ')}`;
+    const entries = toList(value);
+    if (entries.length > LIMITS.recipients) {
+      add(id, `At most ${LIMITS.recipients} entries.`);
+      return;
+    }
+    const bad = entries.filter((e) => !defined.has(e.toLowerCase()) && !isEmailAddress(e));
+    if (!bad.length) return;
+    const hint = bad.some(looksLikeSeveral) ? '. Separate entries with commas.' : '';
+    add(id, `Not an email address or a defined list: ${bad.join(', ')}${hint}`);
   };
   // A workflow without steps saves no rows, so the worker doesn't know it either.
   const isWorkflow = (name) => workflows.some((w) => w.steps.length && sameName(w.name, name));
+
+  if (rules.length > LIMITS.rows) add('rules-limit', `At most ${LIMITS.rows} rules. Remove some, or use broader patterns.`);
+  const patterns = new Set();
   rules.forEach((rule, i) => {
-    const workflow = rule.workflow?.trim();
-    if (workflow) {
-      if (v2 && !isWorkflow(workflow)) errors[`workflow-${i}`] = `There's no workflow ${workflow}. Pick one, or None.`;
+    if (isBlankRule(rule)) {
+      add(`pattern-${i}`, 'Fill in this rule, or remove it.');
       return;
     }
-    if (!toList(rule.approvers).length) errors[`approvers-${i}`] = 'Add at least one approver.';
+    const pattern = rule.pattern.trim();
+    const problem = patternProblem(pattern);
+    if (problem) add(`pattern-${i}`, problem);
+    // The worker compares patterns as written: an earlier rule with the same one always wins.
+    else if (patterns.has(pattern)) add(`pattern-${i}`, 'A rule above already uses this pattern.');
+    patterns.add(pattern);
+    const workflow = rule.workflow?.trim();
+    if (workflow) {
+      if (!v2) add(`workflow-${i}`, "Single Step can't use workflows: use approvers instead.");
+      else if (!isWorkflow(workflow)) add(`workflow-${i}`, `There's no workflow ${workflow}. Pick one, or None.`);
+      return;
+    }
+    if (!toList(rule.approvers).length) add(`approvers-${i}`, 'Add at least one approver.');
     else checkRecipients(`approvers-${i}`, rule.approvers);
     checkRecipients(`cc-${i}`, rule.cc);
   });
+  checkRows(rulesToRows(rules), (i, column) => ({
+    pattern: `pattern-${i}`, workflow: `workflow-${i}`, approvers: `approvers-${i}`, cc: `cc-${i}`,
+  }[column || 'pattern']), add);
+
+  if (!v2 && workflows.length && !dropSteps) add('workflows-v1', 'Remove the workflows to save in Single Step.');
   if (v2) {
+    const steps = workflows.reduce((n, w) => n + w.steps.length, 0);
+    if (steps > LIMITS.rows) add('workflows-limit', `At most ${LIMITS.rows} steps across all workflows.`);
+    const names = new Set();
     workflows.forEach((workflow, w) => {
-      if (isBlank(workflow.name)) errors[`workflow-name-${w}`] = 'Name this workflow.';
+      const nameId = `workflow-name-${w}`;
+      const name = workflow.name.trim().toLowerCase();
+      if (!name && workflow.steps.every(isBlankStep)) {
+        add(nameId, 'Fill in this workflow, or remove it.');
+        return;
+      }
+      if (!name) add(nameId, 'Name this workflow.');
+      // The worker matches names in any case: two such workflows would be one.
+      else if (names.has(name)) add(nameId, 'A workflow above has this name. Names ignore case.');
+      names.add(name);
+      if (!workflow.steps.length) add(nameId, 'Add a step, or remove this workflow.');
       workflow.steps.forEach((step, s) => {
+        if (isBlankStep(step)) {
+          add(`title-${w}-${s}`, 'Fill in this step, or remove it.');
+          return;
+        }
         checkRecipients(`step-approvers-${w}-${s}`, step.approvers);
         checkRecipients(`step-cc-${w}-${s}`, step.cc);
       });
       // The worker refuses a used workflow none of whose steps can approve (`unstaffed-workflow`).
       const id = `step-approvers-${w}-0`;
       if (workflow.steps.length && !workflow.steps.some(isStaffed) && !errors[id]
-        && rulesUsingWorkflow(rules, workflow.name).length) {
-        errors[id] = 'Rules use this workflow: add approvers to at least one step.';
+        && !errors[`title-${w}-0`] && rulesUsingWorkflow(rules, workflow.name).length) {
+        add(id, 'Rules use this workflow: add approvers to at least one step.');
       }
     });
+    const stepIds = workflows.flatMap((workflow, w) => workflow.steps.map((_, s) => [w, s]));
+    checkRows(workflowsToRows(workflows), (i, column) => {
+      const [w, s] = stepIds[i];
+      return {
+        workflow: `workflow-name-${w}`,
+        title: `title-${w}-${s}`,
+        description: `description-${w}-${s}`,
+        approvers: `step-approvers-${w}-${s}`,
+        cc: `step-cc-${w}-${s}`,
+      }[column || 'title'];
+    }, add);
   }
+
+  if (groups.length > LIMITS.rows) add('lists-limit', `At most ${LIMITS.rows} lists.`);
   const seen = new Set();
   groups.forEach(({ group, email }, i) => {
-    if (isBlank(group) && isBlank(email)) return;
+    if (isBlank(group) && isBlank(email)) {
+      add(`group-${i}`, 'Fill in this list, or remove it.');
+      return;
+    }
     const name = group.trim().toLowerCase();
-    if (!name) errors[`group-${i}`] = 'Name this list.';
-    else if (name.includes(',')) errors[`group-${i}`] = "A list name can't contain a comma.";
-    else if (seen.has(name)) errors[`group-${i}`] = 'This list is already defined above.';
+    if (!name) add(`group-${i}`, 'Name this list.');
+    else if (name.includes(',')) add(`group-${i}`, "A list name can't contain a comma.");
+    else if (seen.has(name)) add(`group-${i}`, 'This list is already defined above.');
     seen.add(name);
-    const bad = toList(email).filter((e) => !isEmailAddress(e));
-    if (!toList(email).length) errors[`group-email-${i}`] = 'Add at least one email address.';
-    else if (bad.length) errors[`group-email-${i}`] = `Not an email address: ${bad.join(', ')}`;
+    const emails = toList(email);
+    const bad = emails.filter((e) => !isEmailAddress(e));
+    if (!emails.length) add(`group-email-${i}`, 'Add at least one email address.');
+    else if (emails.length > LIMITS.recipients) add(`group-email-${i}`, `At most ${LIMITS.recipients} addresses.`);
+    else if (bad.length) {
+      const hint = bad.some(looksLikeSeveral) ? '. Separate addresses with commas.' : '';
+      add(`group-email-${i}`, `Not an email address: ${bad.join(', ')}${hint}`);
+    }
   });
+  checkRows(groupsToRows(groups), (i, column) => ({
+    group: `group-${i}`, email: `group-email-${i}`,
+  }[column || 'group']), add);
   return errors;
 }
 
@@ -345,19 +487,59 @@ export function settingsToRows(settings, values, items) {
 export const settingsValues = (settings) => Object.fromEntries(Object.entries(SETTING_KEYS)
   .map(([field, key]) => [field, settings.find((s) => s.key === key)?.value || '']));
 
+const isBooleanText = (value) => ['true', 'false'].includes(value.toLowerCase());
+const isColor = (value) => /^(?:#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})|[a-z]{3,20})$/i.test(value)
+  || /^(?:rgb|rgba|hsl|hsla)\([0-9.,%\s/]+\)$/i.test(value);
+const notBoolean = (value) => `Set to '${value}', not true or false: tick or untick it.`;
+const atMost = (n) => (value) => (value.length > n ? `At most ${n} characters.` : null);
+const notColor = (value) => (isColor(value) ? null : 'Not a CSS color. Use one like #3b63fb.');
+
+// The Settings fields, by editor field id, with the worker's check of a non-empty value.
+const SETTING_CHECKS = {
+  commentsRequired: ['comments-required', (v) => (isBooleanText(v) ? null : notBoolean(v))],
+  commentsLength: ['comments-length', (v) => (/^\d+$/.test(v) && Number(v) >= 1 && Number(v) <= 10000
+    ? null : 'Enter a whole number from 1 to 10000.')],
+  ccCanApprove: ['cc-can-approve', (v) => (isBooleanText(v) ? null : notBoolean(v))],
+  supportContact: ['support-contact', atMost(254)],
+  guidanceTitle: ['guidance-title', atMost(200)],
+  guidanceText: ['guidance-text', atMost(2000)],
+  accentColor: ['accent-color', notColor],
+  accentColorHover: ['accent-color-hover', notColor],
+};
+
+/**
+ * Inline errors for the Settings draft, by editor field id, as the worker checks the
+ * `publish-workflow-settings` values it knows. Kept keys the editor doesn't show aren't checked.
+ */
+export function settingsDraftErrors({ settings = [], values = {}, items = '' }) {
+  const errors = {};
+  Object.entries(SETTING_CHECKS).forEach(([field, [id, check]]) => {
+    const value = String(values[field] ?? '').trim();
+    const problem = value && check(value);
+    if (problem) errors[id] = problem;
+  });
+  const lines = items.split('\n').map((line) => line.trim());
+  const long = lines.findIndex((line) => line.length > 500);
+  if (long >= 0) errors['guidance-items'] = `Line ${long + 1} is longer than 500 characters.`;
+  else if (settingsToRows(settings, values, lines).length > LIMITS.rows) {
+    errors['guidance-items'] = `At most ${LIMITS.rows} settings in all: remove some items.`;
+  }
+  return errors;
+}
+
 const COMMON_SETTINGS = ['commentsRequired', 'commentsLength', 'supportContact', 'accentColor', 'accentColorHover'];
 
 /**
  * The Settings fields a version reads (its plugin and inbox, and the worker). Both read the
  * comment, support contact and color keys; only Multi Step shows guidance.
  * `approvals.cc.can-approve` applies to every Single Step rule, but in Multi Step only to rules
- * without a workflow, so there it shows when such a rule exists or the value is set (so it can be
- * cleared).
+ * without a workflow, so there it shows when such a rule exists or a value is set (so it can be
+ * cleared or fixed).
  */
 export function settingsFields(version, config, values = {}) {
   if (version !== 'v2') return [...COMMON_SETTINGS, 'ccCanApprove'];
   const inlineRules = readRules(config).some((rule) => !rule.workflow.trim());
-  const cc = inlineRules || values.ccCanApprove === 'true' ? ['ccCanApprove'] : [];
+  const cc = inlineRules || String(values.ccCanApprove || '').trim() ? ['ccCanApprove'] : [];
   return [...COMMON_SETTINGS, ...cc, 'guidance'];
 }
 

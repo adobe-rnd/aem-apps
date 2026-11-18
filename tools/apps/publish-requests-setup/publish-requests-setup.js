@@ -27,8 +27,8 @@ import {
   blankRule, draftFromConfig, draftToTabs, mergeTabs, readSetup, problemCode,
   parseOrgSite, siteFromParams, registrationForm, registrationBody, saveErrorText,
   permissionsModeOf, permissionsNotice, PERMISSIONS_DOCS, rulesDraftErrors, settingsFields,
-  commentsLengthDefault, rulesUsingWorkflow, workflowRemovalProblem, stepRemovalProblem,
-  renameWorkflow,
+  commentsLengthDefault, workflowRemovalProblem, stepRemovalProblem,
+  renameWorkflow, settingsDraftErrors, rulesToRename,
 } from './model.js';
 
 const NX = 'https://da.live/nx2';
@@ -88,6 +88,17 @@ const FIELD_INPUTS = {
   emailProvider: 'provider',
 };
 const CODE_INPUTS = { 'acknowledgement-required': 'acknowledge', 'default-provider-staff-only': 'provider' };
+
+// Settings the editor may not show for a version, named when their value would be refused.
+const HIDDEN_LABELS = {
+  'guidance-title': 'Guidance title',
+  'guidance-text': 'Guidance text',
+  'guidance-items': 'Guidance checklist',
+  'cc-can-approve': 'Let CC recipients approve',
+  'comments-length': 'Minimum comment length',
+};
+// Boolean settings, as the worker reads them: `true` in any case.
+const isOn = (value) => String(value || '').trim().toLowerCase() === 'true';
 
 const ok = (text) => ({ tone: 'positive', text });
 const todo = (text) => ({ tone: 'negative', text });
@@ -276,6 +287,12 @@ class PublishRequestsSetup extends LitElement {
     this._draftBase = ['rules', 'settings'].includes(key) ? this.draftTabs(key, this._draft) : null;
   }
 
+  // Cancel drops the draft and what its last save attempt said.
+  cancelSection() {
+    if (this._message?.section === this._open) this._message = null;
+    this.closeSection();
+  }
+
   closeSection() {
     this._open = null;
     this._draft = null;
@@ -317,15 +334,34 @@ class PublishRequestsSetup extends LitElement {
     this.requestUpdate();
   }
 
-  rulesErrors() {
+  // The worker's checks for the open editor, by field id.
+  draftErrors() {
+    if (this._open === 'settings') return settingsDraftErrors(this._draft);
+    if (this._open !== 'rules' || this.source === 'org') return {};
     return rulesDraftErrors(this._draft, { v2: this.apiVersion === 'v2' });
   }
 
   // Once a save found problems, they update as the user fixes them.
   revalidate() {
-    if (this._open === 'rules' && Object.keys(this._draftErrors).length) {
-      this._draftErrors = this.rulesErrors();
-    }
+    if (Object.keys(this._draftErrors).length) this._draftErrors = this.draftErrors();
+  }
+
+  // Shows the problems the worker would refuse on their fields, instead of saving: nothing is sent.
+  // A value this version's editor doesn't show (e.g. Multi Step guidance in Single Step) is named.
+  refuseInvalid(section) {
+    const errors = this.draftErrors();
+    this._draftErrors = errors;
+    const ids = Object.keys(errors);
+    if (!ids.length) return false;
+    this.updateComplete.then(() => {
+      const hidden = ids.filter((id) => !this.shadowRoot.querySelector(`#${id}`));
+      const shown = ids.length - hidden.length;
+      const summary = shown === 1 ? 'Fix the highlighted field, then save.' : `Fix the ${shown} highlighted fields, then save.`;
+      const notes = hidden.map((id) => `${HIDDEN_LABELS[id] || id}, not shown here: ${errors[id]} Fix it in the site's config.`);
+      const text = notes.length ? [...(shown ? [summary] : []), ...notes] : summary;
+      this.showResult(section, 'error', text, ids);
+    });
+    return true;
   }
 
   moveRow(list, i, delta) {
@@ -351,7 +387,7 @@ class PublishRequestsSetup extends LitElement {
   }
 
   removeWorkflow(workflows, w) {
-    if (workflowRemovalProblem(this._draft.rules, workflows[w])) {
+    if (workflowRemovalProblem(this._draft.rules, workflows[w], workflows)) {
       this.refuseRemoval(workflows[w]);
       return;
     }
@@ -360,7 +396,7 @@ class PublishRequestsSetup extends LitElement {
   }
 
   removeStep(workflow, s) {
-    if (stepRemovalProblem(this._draft.rules, workflow)) {
+    if (stepRemovalProblem(this._draft.rules, workflow, this._draft.workflows)) {
       this.refuseRemoval(workflow.steps[s]);
       return;
     }
@@ -380,7 +416,8 @@ class PublishRequestsSetup extends LitElement {
   // starts, so a name typed on the way (another workflow's, or blank) doesn't move other rules.
   renameWorkflowTo(workflow, name) {
     if (this._renaming?.workflow !== workflow) {
-      this._renaming = { workflow, rules: rulesUsingWorkflow(this._draft.rules, workflow.name) };
+      const { rules, workflows } = this._draft;
+      this._renaming = { workflow, rules: rulesToRename(rules, workflows, workflow) };
     }
     renameWorkflow(this._renaming.rules, workflow, name);
     this.requestUpdate();
@@ -392,14 +429,21 @@ class PublishRequestsSetup extends LitElement {
   }
 
   // Shows the result next to the section's Save button (or its header once closed), in view.
+  // With several fields to focus (`focusId` a list), the first one on the page gets focus.
   async showResult(section, type, text, focusId = null) {
     this._message = { section, type, text };
     await this.updateComplete;
-    const fieldId = focusId || this._fieldError?.field;
-    const target = (fieldId && this.shadowRoot.querySelector(`#${fieldId}`))
-      || this.shadowRoot.querySelector(`#message-${section || 'site'}`);
+    const ids = [focusId || this._fieldError?.field].flat().filter(Boolean);
+    const [field] = ids.map((id) => this.shadowRoot.querySelector(`#${id}`)).filter(Boolean)
+      // eslint-disable-next-line no-bitwise
+      .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+    const target = field || this.shadowRoot.querySelector(`#message-${section || 'site'}`);
     target?.scrollIntoView?.({ block: 'nearest' });
-    target?.focus?.({ preventScroll: true });
+    await target?.updateComplete;
+    // sl-textarea and sl-checkbox don't forward focus to their control.
+    const control = target?.localName?.startsWith('sl-') && target.localName !== 'sl-input'
+      ? target.shadowRoot?.querySelector('textarea, input') : null;
+    (control || target)?.focus?.({ preventScroll: true });
   }
 
   async saveWorkflowTabs(section, body, successText, api = this.apiVersion) {
@@ -484,18 +528,13 @@ class PublishRequestsSetup extends LitElement {
 
   saveRules() {
     this._conflict = null;
-    this._draftErrors = this.source === 'org' ? {} : this.rulesErrors();
-    const ids = Object.keys(this._draftErrors);
-    if (ids.length) {
-      const text = ids.length === 1 ? 'Fix the highlighted field, then save.' : `Fix the ${ids.length} highlighted fields, then save.`;
-      this.showResult('rules', 'error', text, ids[0]);
-      return;
-    }
+    if (this.refuseInvalid('rules')) return;
     this.saveWorkflowTabs('rules', { tabs: this.draftTabs('rules', this._draft) }, 'Approval rules saved.');
   }
 
   saveSettings() {
     this._conflict = null;
+    if (this.refuseInvalid('settings')) return;
     this.saveWorkflowTabs('settings', { tabs: this.draftTabs('settings', this._draft) }, 'Settings saved.');
   }
 
@@ -629,7 +668,7 @@ class PublishRequestsSetup extends LitElement {
         <sl-button class="pw-fill-accent" ?disabled=${!this.canEdit} @click=${onSave}>
           ${this._saving ? 'Saving…' : saveLabel}
         </sl-button>
-        <sl-button class="pw-quiet-secondary" ?disabled=${this._saving} @click=${() => this.closeSection()}>Cancel</sl-button>
+        <sl-button class="pw-quiet-secondary" ?disabled=${this._saving} @click=${() => this.cancelSection()}>Cancel</sl-button>
       </div>
     `;
   }
@@ -730,7 +769,7 @@ class PublishRequestsSetup extends LitElement {
           <sl-button type="submit" class="pw-fill-accent" ?disabled=${!this.canEdit}>
             ${this._saving ? 'Saving…' : submitLabel}
           </sl-button>
-          <sl-button class="pw-quiet-secondary" ?disabled=${this._saving} @click=${() => this.closeSection()}>Cancel</sl-button>
+          <sl-button class="pw-quiet-secondary" ?disabled=${this._saving} @click=${() => this.cancelSection()}>Cancel</sl-button>
         </div>
       </form>
     `;
@@ -808,7 +847,7 @@ class PublishRequestsSetup extends LitElement {
         <sl-button class="pw-fill-accent" ?disabled=${!this.canEdit} @click=${() => this.useSiteRules()}>
           ${this._saving ? 'Copying…' : 'Use site-specific rules'}
         </sl-button>
-        <sl-button class="pw-quiet-secondary" @click=${() => this.closeSection()}>Cancel</sl-button>
+        <sl-button class="pw-quiet-secondary" @click=${() => this.cancelSection()}>Cancel</sl-button>
       </div>
     `;
   }
@@ -823,10 +862,17 @@ class PublishRequestsSetup extends LitElement {
         </header>
         <div class="subsection-body">
           <p class="form-hint">${hint}</p>
+          ${this.renderPanelError(`${key}-limit`)}
           ${content}
         </div>
       </section>
     `;
+  }
+
+  // A problem with a whole panel (or the Single Step workflows), focusable like a field.
+  renderPanelError(id, text = this.fieldError(id)) {
+    if (!text) return nothing;
+    return html`<div class="message error" id=${id} tabindex="-1" role="alert">${text}</div>`;
   }
 
   renderRulesBody() {
@@ -874,7 +920,7 @@ class PublishRequestsSetup extends LitElement {
             ${workflowError ? html`<p class="field-error" id="workflow-error-${i}">${workflowError}</p>` : nothing}
           </div>
         ` : nothing}
-        ${rule.workflow && !v2 ? this.renderMultiStepRule(rule) : nothing}
+        ${rule.workflow && !v2 ? this.renderMultiStepRule(rule, i) : nothing}
         ${rule.workflow && v2 ? html`<p class="row-note">Approvers come from the workflow's steps.</p>` : nothing}
         ${rule.workflow ? nothing : html`
           ${this.field(`approvers-${i}`, 'Approvers', rule.approvers, (v) => { rule.approvers = v; }, { placeholder: 'web-team@example.com' })}
@@ -908,9 +954,9 @@ class PublishRequestsSetup extends LitElement {
   }
 
   // Single Step can't use a Multi Step rule: show it as an error with a way to convert it.
-  renderMultiStepRule(rule) {
+  renderMultiStepRule(rule, i) {
     return html`
-      <div class="message error row-problem">
+      <div class="message error row-problem" id="workflow-${i}" tabindex="-1">
         This rule uses the ${VERSION_LABELS.v2} workflow <strong>${rule.workflow}</strong>, which ${VERSION_LABELS.v1} can't use.
         <sl-button class="pw-quiet-secondary pw-action-sm" @click=${() => { rule.workflow = ''; this.rerender(); }}>Use approvers instead</sl-button>
       </div>
@@ -926,7 +972,7 @@ class PublishRequestsSetup extends LitElement {
         <sl-button class="pw-quiet-secondary pw-action-sm" @click=${() => { this._draft.dropSteps = false; this.rerender(); }}>Keep them</sl-button></div>`;
     }
     return html`
-      <div class="message error">
+      <div class="message error" id="workflows-v1" tabindex="-1">
         This site defines ${VERSION_LABELS.v2} workflows (${names}), which ${VERSION_LABELS.v1} can't use. Remove them to save these rules.
         <sl-button class="pw-quiet-secondary pw-action-sm" @click=${() => { this._draft.dropSteps = true; this.rerender(); }}>Remove workflows</sl-button>
       </div>
@@ -944,7 +990,7 @@ class PublishRequestsSetup extends LitElement {
             <sl-button class="pw-quiet-secondary pw-action-sm" aria-label="Remove workflow ${workflow.name.trim() || w + 1}"
               @click=${() => this.removeWorkflow(workflows, w)}>Remove workflow</sl-button>
           </div>
-          ${this.renderBlocked(workflow, () => workflowRemovalProblem(this._draft.rules, workflow))}
+          ${this.renderBlocked(workflow, () => workflowRemovalProblem(this._draft.rules, workflow, workflows))}
           <ol class="row-list">
             ${workflow.steps.map((step, s) => {
               const id = `${w}-${s}`;
@@ -957,7 +1003,7 @@ class PublishRequestsSetup extends LitElement {
                   <sl-checkbox name="cc-approve-${id}" ?checked=${step.ccCanApprove}
                     @change=${(e) => { step.ccCanApprove = e.target.checked; this.rerender(); }}><span class="checkbox-label">CC can approve</span></sl-checkbox>
                   ${this.renderRowActions(workflow.steps, s, `step ${s + 1}`, () => this.removeStep(workflow, s))}
-                  ${this.renderBlocked(step, () => stepRemovalProblem(this._draft.rules, workflow))}
+                  ${this.renderBlocked(step, () => stepRemovalProblem(this._draft.rules, workflow, workflows))}
                 </li>
               `;
             })}
@@ -998,20 +1044,21 @@ class PublishRequestsSetup extends LitElement {
       <div class="setup-form">
         <fieldset class="settings-group">
           <legend>Request comments</legend>
-          <sl-checkbox name="comments-required" ?checked=${values.commentsRequired === 'true'}
-            @change=${toggle('commentsRequired')}><span class="checkbox-label">Require a comment on every request</span></sl-checkbox>
-          ${values.commentsRequired === 'true' ? this.field('comments-length', 'Minimum comment length', values.commentsLength, set('commentsLength'), {
+          <sl-checkbox name="comments-required" id="comments-required" ?checked=${isOn(values.commentsRequired)}
+            .error=${this.fieldError('comments-required')} @change=${toggle('commentsRequired')}><span class="checkbox-label">Require a comment on every request</span></sl-checkbox>
+          ${isOn(values.commentsRequired) || this.fieldError('comments-length') ? this.field('comments-length', 'Minimum comment length', values.commentsLength, set('commentsLength'), {
             type: 'number', placeholder: String(commentsLengthDefault(version)),
           }) : nothing}
         </fieldset>
         ${shown.has('ccCanApprove') ? html`
           <fieldset class="settings-group">
             <legend>CC approvals</legend>
-            <sl-checkbox name="cc-can-approve" ?checked=${values.ccCanApprove === 'true'} @change=${toggle('ccCanApprove')}>
+            <sl-checkbox name="cc-can-approve" id="cc-can-approve" ?checked=${isOn(values.ccCanApprove)}
+              .error=${this.fieldError('cc-can-approve')} @change=${toggle('ccCanApprove')}>
               <span class="checkbox-label">Let CC recipients approve</span>
             </sl-checkbox>
             <p class="form-hint">CC recipients are only notified unless this is on.${version === 'v2'
-              ? " Applies to rules without a workflow; workflow steps have their own 'CC can approve'." : ''}</p>
+              ? " Applies to rules without a multi-step workflow; workflow steps have their own 'CC can approve'." : ''}</p>
           </fieldset>
         ` : nothing}
         ${shown.has('guidance') ? html`
@@ -1020,10 +1067,12 @@ class PublishRequestsSetup extends LitElement {
             <p class="form-hint">Shown in the request panel before an author submits.</p>
             ${this.field('guidance-title', 'Guidance title', values.guidanceTitle, set('guidanceTitle'), { placeholder: 'Before you submit' })}
             <sl-textarea name="guidance-text" id="guidance-text" label="Guidance text" .value=${values.guidanceText}
-              @input=${(e) => { values.guidanceText = e.target.value; }}></sl-textarea>
+              .error=${this.fieldError('guidance-text')}
+              @input=${(e) => { values.guidanceText = e.target.value; this.revalidate(); }}></sl-textarea>
             <div>
               <sl-textarea name="guidance-items" id="guidance-items" label="Guidance checklist" .value=${this._draft.items}
-                @input=${(e) => { this._draft.items = e.target.value; }}></sl-textarea>
+                .error=${this.fieldError('guidance-items')}
+                @input=${(e) => { this._draft.items = e.target.value; this.revalidate(); }}></sl-textarea>
               <p class="form-hint">One item per line.</p>
             </div>
           </fieldset>
