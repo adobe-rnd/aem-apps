@@ -562,6 +562,12 @@ const PROBLEM_HINTS = {
   'unstaffed-workflow': 'Add approvers to at least one of its steps, or a CC who can approve.',
 };
 
+// The worker lists the refused domains in `domains`; its own message talks about the API.
+export function blockedDomainsText(domains) {
+  const where = domains.length > 1 ? "those domains aren't" : "that domain isn't";
+  return `Emails to ${domains.join(', ')} are blocked: ${where} in Registration › Allowed email domains. The author's address is checked when sending.`;
+}
+
 const isOrgField = (field) => /^orgTabs\./.test(field || '');
 
 /**
@@ -569,8 +575,11 @@ const isOrgField = (field) => /^orgTabs\./.test(field || '');
  * `orgTabs.…` for the org rules a site inherits (a save that would make the site use them).
  */
 export function describeProblem({
-  field, error, message, code,
+  field, error, message, code, domains,
 }) {
+  if (code === 'recipient-domain-not-allowed' && Array.isArray(domains) && domains.length) {
+    return blockedDomainsText(domains);
+  }
   const tab = /^(?:org)?[tT]abs\.([a-z-]+)/.exec(field || '')?.[1];
   const base = PROBLEM_MESSAGES[code] || error || message || '';
   const hint = PROBLEM_HINTS[code];

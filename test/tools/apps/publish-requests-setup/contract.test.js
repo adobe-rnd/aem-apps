@@ -19,7 +19,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseOrgSite, siteFromParams, registrationForm, registrationBody, describeProblem,
-  saveErrorText, readSetup, permissionsNotice, PERMISSIONS_DOCS,
+  blockedDomainsText, saveErrorText, readSetup, permissionsNotice, PERMISSIONS_DOCS,
 } from '../../../../tools/apps/publish-requests-setup/model.js';
 
 test('parseOrgSite lowercases what the user types, as the setup routes require', () => {
@@ -175,4 +175,18 @@ test('permissionsNotice warns only for an open org', () => {
   assert.equal(permissionsNotice('unknown'), null);
   assert.equal(permissionsNotice(undefined), null);
   assert.equal(PERMISSIONS_DOCS, 'https://www.aem.live/docs/ew/administering/permissions');
+});
+
+test('the blocked-domains warning uses the worker\'s domains in plain words', () => {
+  const worker = { code: 'recipient-domain-not-allowed', message: 'Emails to westernsydney.edu.au are never sent: … allowedEmailDomains …' };
+  assert.equal(
+    describeProblem({ ...worker, domains: ['westernsydney.edu.au'] }),
+    "Emails to westernsydney.edu.au are blocked: that domain isn't in Registration › Allowed email domains. The author's address is checked when sending.",
+  );
+  assert.equal(
+    blockedDomainsText(['gmail.com', 'yahoo.com']),
+    "Emails to gmail.com, yahoo.com are blocked: those domains aren't in Registration › Allowed email domains. The author's address is checked when sending.",
+  );
+  // An older worker sends no `domains`: its own message is shown.
+  assert.equal(describeProblem(worker), worker.message);
 });
