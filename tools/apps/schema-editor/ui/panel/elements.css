@@ -1,0 +1,58 @@
+.palette-section {
+  display: grid;
+  gap: 4px;
+}
+
+.palette-section h3 {
+  margin: 0;
+}
+
+.element-rows {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.element-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 8px;
+  font: inherit;
+  text-align: start;
+  color: var(--s2-gray-900);
+  background: transparent;
+  cursor: grab;
+}
+
+.element-row:focus-visible {
+  outline: 2px solid var(--s2-blue-800);
+  outline-offset: -2px;
+}
+
+.element-row:hover {
+  background: var(--s2-gray-100);
+}
+
+.element-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Says the row can be dragged, where the pointer is. */
+.grip {
+  display: grid;
+  color: var(--s2-gray-600);
+  opacity: 0;
+}
+
+.element-row:is(:hover, :focus-visible) .grip {
+  opacity: 1;
+}

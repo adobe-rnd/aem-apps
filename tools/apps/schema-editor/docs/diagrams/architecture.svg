@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="architecture-title architecture-desc" id="architecture-root">
+        <title id="architecture-title">Schema editor architecture</title>
+        <desc id="architecture-desc">Architecture of the schema editor: Lit views dispatch intents to a single SchemaStore that runs pure model commands, broadcasts state over a bus, and reaches DA only through injected adapters.</desc>
+        <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #architecture-root { --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace; }
+      #architecture-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #architecture-root .diagram-container { width: 100%; overflow-x: auto; }
+      @media print {
+#architecture-root .diagram-container { overflow-x: visible; }
+}</style>
+          <marker id="architecture-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+          <marker id="architecture-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#bf4520"/></marker>
+          <marker id="architecture-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+          <marker id="architecture-arrow-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#4f5d75" stroke-width="1.2"/></marker>
+        </defs>
+        <rect width="100%" height="100%" fill="#f5f5f5"/>
+
+        <rect x="40" y="40" width="880" height="120" rx="8" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.02" stroke-opacity="0.10"/>
+        <rect x="56" y="44" width="84" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="98" y="53" fill="#5a6580" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">UI · LIT VIEWS</text>
+        <rect x="40" y="232" width="880" height="120" rx="8" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.02" stroke-opacity="0.10"/>
+        <rect x="56" y="236" width="112" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="112" y="245" fill="#5a6580" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">CORE · PURE, NO DOM</text>
+        <rect x="40" y="392" width="600" height="120" rx="8" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.02" stroke-opacity="0.10"/>
+        <rect x="56" y="396" width="84" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="98" y="405" fill="#5a6580" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">ADAPTERS · I/O</text>
+        <path d="M 592 100 H 328" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#architecture-arrow)"/>
+        <path d="M 184 128 V 264" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#architecture-arrow)"/>
+        <path d="M 232 128 V 200 A 8 8 0 0 0 240 208 H 424 A 8 8 0 0 1 432 216 V 264" fill="none" stroke="#bf4520" stroke-width="1.4" marker-end="url(#architecture-arrow-accent)"/>
+        <path d="M 480 264 V 184 A 8 8 0 0 0 472 176 H 288 A 8 8 0 0 1 280 168 V 128" fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#architecture-arrow-open)"/>
+        <path d="M 688 128 V 184 A 8 8 0 0 1 680 192 H 536 A 8 8 0 0 0 528 200 V 264" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#architecture-arrow)"/>
+        <path d="M 576 292 H 688" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#architecture-arrow)"/>
+        <path d="M 480 320 V 424" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#architecture-arrow)"/>
+        <path d="M 152 320 V 444 A 8 8 0 0 0 160 452 H 384" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#architecture-arrow)"/>
+        <path d="M 576 452 H 688" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#architecture-arrow-link)"/>
+        <rect x="436" y="80" width="48" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="460" y="89" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">MOUNTS</text>
+        <rect x="128" y="188" width="48" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="152" y="197" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">BROWSE</text>
+        <rect x="304" y="216" width="56" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="332" y="225" fill="#bf4520" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">DISPATCH</text>
+        <rect x="348" y="156" width="64" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="380" y="165" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">BUS EVENTS</text>
+        <rect x="584" y="172" width="48" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="608" y="181" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">CREATES</text>
+        <rect x="604" y="272" width="56" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="632" y="281" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">COMMANDS</text>
+        <rect x="488" y="364" width="64" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="520" y="373" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">SAVE · SDK</text>
+        <rect x="236" y="432" width="64" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="268" y="441" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">REPOSITORY</text>
+        <rect x="612" y="432" width="40" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="632" y="441" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">FETCH</text>
+        <rect x="136" y="72" width="192" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="136" y="72" width="192" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="144" y="80" width="28" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.40"/>
+        <text x="158" y="89" fill="#5a6580" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+        <text x="232" y="104" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Views</text>
+        <text x="232" y="119" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">ui/ · se-* elements</text>
+        <rect x="592" y="72" width="192" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="592" y="72" width="192" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="600" y="80" width="28" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.40"/>
+        <text x="614" y="89" fill="#5a6580" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">APP</text>
+        <text x="688" y="104" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">App shell</text>
+        <text x="688" y="119" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">schema-editor.js · routes</text>
+        <rect x="72" y="264" width="160" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="72" y="264" width="160" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="80" y="272" width="28" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.40"/>
+        <text x="94" y="281" fill="#5a6580" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CORE</text>
+        <text x="152" y="296" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Catalog</text>
+        <text x="152" y="311" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">core/catalog.js</text>
+        <rect x="384" y="264" width="192" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="384" y="264" width="192" height="56" rx="6" fill="#bf4520" stroke="#bf4520" stroke-width="1" fill-opacity="0.08"/>
+        <rect x="392" y="272" width="36" height="12" rx="2" fill="none" stroke="#bf4520" stroke-width="0.8" stroke-opacity="0.50"/>
+        <text x="410" y="281" fill="#bf4520" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">STATE</text>
+        <text x="480" y="296" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">SchemaStore</text>
+        <text x="480" y="311" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">core/session · bus · undo</text>
+        <rect x="688" y="264" width="176" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="688" y="264" width="176" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="696" y="272" width="28" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.40"/>
+        <text x="710" y="281" fill="#5a6580" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PURE</text>
+        <text x="776" y="296" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Model</text>
+        <text x="776" y="311" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">core/model · commands, lint</text>
+        <rect x="384" y="424" width="192" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="384" y="424" width="192" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="392" y="432" width="28" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.40"/>
+        <text x="406" y="441" fill="#5a6580" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">I/O</text>
+        <text x="480" y="456" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Adapters</text>
+        <text x="480" y="471" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">repository · SDK · chat</text>
+        <rect x="688" y="424" width="192" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="688" y="424" width="192" height="56" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <rect x="696" y="432" width="28" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.22"/>
+        <text x="710" y="441" fill="#5a6580" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXT</text>
+        <text x="784" y="456" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">da.live</text>
+        <text x="784" y="471" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">source API · SC SDK · chat</text>
+        <line x1="40" y1="532" x2="920" y2="532" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.10"/>
+        <text x="40" y="548" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+        <rect x="40" y="556" width="14" height="10" rx="2" fill="#bf4520" stroke="#bf4520" stroke-width="1" fill-opacity="0.08"/>
+        <text x="74" y="564" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Single source of truth</text>
+        <rect x="200" y="556" width="14" height="10" rx="2" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="234" y="564" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Module</text>
+        <rect x="292" y="556" width="14" height="10" rx="2" fill="#2d3142" stroke="#2d3142" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <text x="326" y="564" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">External</text>
+        <path d="M 392 561 H 418" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#architecture-arrow)"/>
+        <text x="426" y="564" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Calls</text>
+        <path d="M 480 561 H 506" fill="none" stroke="#bf4520" stroke-width="1.4" marker-end="url(#architecture-arrow-accent)"/>
+        <text x="514" y="564" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">User intent</text>
+        <path d="M 592 561 H 618" fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#architecture-arrow-open)"/>
+        <text x="626" y="564" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Broadcast</text>
+        <path d="M 696 561 H 722" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#architecture-arrow-link)"/>
+        <text x="730" y="564" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">HTTP</text>
+      </svg>

@@ -9,7 +9,6 @@ helix-importer-ui
 .idea
 .claude/
 .github/copilot/settings.local.json
-docs/
 
 # Ensure these files are tracked
 !CLAUDE.md

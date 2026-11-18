@@ -1,0 +1,188 @@
+/* The Schema page: a JSON text editor laid out like the form controls (2px border, 8px radius,
+   static focus ring) with the tool panel's JSON colours. */
+
+:host {
+  /* The textarea and its highlighted mirror must lay text out identically. */
+  --code-pad: 12px;
+  --code-line: 18px;
+
+  display: block;
+}
+
+.json-tools {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  /* Reaches over the page's top padding, and the editor's focus outline at the sides. */
+  margin: -20px -4px 8px;
+  padding: 20px 4px 8px;
+  background: var(--s2-gray-25, #fff);
+}
+
+.status {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--s2-body-size-xs);
+}
+
+.status.is-error {
+  color: var(--s2-red-900);
+}
+
+.status .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.editor {
+  display: flex;
+  overflow: hidden;
+  border: 2px solid var(--s2-gray-300);
+  border-radius: var(--s2-corner-radius-500, 8px);
+  background: var(--s2-gray-25);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: border-color 0.13s cubic-bezier(0.45, 0, 0.4, 1);
+}
+
+.editor:hover {
+  border-color: var(--s2-gray-400);
+}
+
+/* A textarea always shows its focus, so focus-within is focus-visible here. */
+.editor:focus-within {
+  border-color: var(--s2-gray-900);
+  outline-color: var(--s2-blue-800);
+}
+
+.editor.has-error,
+.editor.has-error:focus-within {
+  border-color: var(--s2-red-900);
+}
+
+.gutter,
+.mirror,
+textarea,
+.line-at {
+  font-family: var(--se-code-font-family);
+  font-size: var(--s2-body-size-xs);
+  line-height: var(--code-line);
+}
+
+.gutter {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-width: calc(3ch + 2 * 8px);
+  padding: var(--code-pad) 8px;
+  border-inline-end: 1px solid var(--s2-gray-200);
+  background: var(--s2-gray-75);
+  color: var(--s2-gray-600);
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.gutter .is-error {
+  color: var(--s2-red-900);
+  font-weight: 700;
+}
+
+.code {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+/* The textarea sits on its highlighted copy in one grid cell; the copy sizes both, so the
+   field grows with its text without `field-sizing` (not yet Baseline widely available). */
+.layers {
+  display: grid;
+  min-width: 100%;
+  width: max-content;
+  min-height: 240px;
+}
+
+.layers > * {
+  grid-area: 1 / 1;
+}
+
+.mirror,
+textarea {
+  box-sizing: border-box;
+  margin: 0;
+  padding: var(--code-pad);
+  border: 0;
+  white-space: pre;
+  overflow-wrap: normal;
+  tab-size: 2;
+  font-variant-ligatures: none;
+  font-kerning: none;
+  letter-spacing: normal;
+}
+
+/* Room past the last column and line, so the caret never scrolls the textarea itself
+   before the copy re-renders around new text. */
+.mirror {
+  padding-inline-end: calc(var(--code-pad) + 4ch);
+  padding-block-end: calc(var(--code-pad) + var(--code-line));
+  color: var(--s2-gray-900);
+}
+
+textarea {
+  place-self: stretch;
+  min-width: 0;
+  overflow: hidden;
+  resize: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--s2-gray-900);
+  outline: none;
+}
+
+textarea::selection {
+  background: color-mix(in srgb, var(--s2-blue-500) 45%, transparent);
+}
+
+/* A band behind one line of the text, with a 1ch mark at a column: revealing a place
+   (Issues' line links) scrolls its mark into view. */
+.line-mark {
+  align-self: start;
+  height: var(--code-line);
+  margin-block-start: calc(var(--code-pad) + (var(--line) - 1) * var(--code-line));
+}
+
+.line-at {
+  display: block;
+  width: 1ch;
+  height: 100%;
+  margin-inline-start: calc(var(--code-pad) + (var(--column) - 1) * 1ch);
+}
+
+/* The place revealed glows briefly (a colour fade, no movement), behind the error band.
+   `forwards` keeps the finished animation listed, so revealing the line again replays it. */
+.reveal-line {
+  animation: reveal-glow 1.6s ease-out forwards;
+}
+
+@keyframes reveal-glow {
+  from { background: var(--s2-blue-300); }
+}
+
+.error-line {
+  background: var(--s2-red-200);
+}
+
+/* Underlines the character where the text stops being valid. */
+.error-at {
+  box-shadow: inset 0 -2px var(--s2-red-900);
+}

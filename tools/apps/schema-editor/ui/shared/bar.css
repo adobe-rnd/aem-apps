@@ -1,0 +1,82 @@
+/* The screens' top bar, same chrome as the da.live canvas header (ew-canvas-header):
+ * a fixed 48px bar that never wraps. Start and end share the free space equally.
+ * The host must be an inline-size container (for the narrow rule below). */
+.bar {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: var(--se-bar-height, 48px);
+  padding: 0 12px;
+  border-block-end: 1px solid var(--s2-gray-200);
+  background: light-dark(#fff, var(--s2-gray-25));
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.group-start,
+.group-end {
+  flex: 1 1 0;
+}
+
+.group-center {
+  flex: none;
+}
+
+.group-end {
+  justify-content: flex-end;
+}
+
+/* Zero specificity: a screen's own rule lets a child shrink (the title, a status, a search). */
+:where(.group-start, .group-end) > * {
+  flex: none;
+}
+
+.divider {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--s2-gray-300);
+}
+
+.title {
+  flex: 0 1 auto;
+  overflow: hidden;
+  min-width: 48px;
+  max-width: 40ch;
+  margin: 0;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: var(--s2-component-l-bold-font-size, 16px);
+  font-weight: 700;
+  line-height: 20px;
+  color: var(--s2-gray-900);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.key {
+  overflow: hidden;
+  font-size: var(--s2-component-s-regular-font-size);
+  max-width: 24ch;
+  margin-inline-end: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--s2-gray-700);
+  background: var(--s2-gray-100);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Narrow canvas (chat and panel open): drop secondary text, never wrap. */
+@container (width < 900px) {
+  .key {
+    display: none;
+  }
+}

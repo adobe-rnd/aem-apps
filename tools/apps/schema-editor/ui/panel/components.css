@@ -1,0 +1,66 @@
+.def {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 8px;
+}
+
+.def.is-current {
+  background: var(--s2-blue-100);
+}
+
+.def-main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  font: inherit;
+  text-align: start;
+  color: var(--s2-gray-900);
+  background: transparent;
+}
+
+button.def-main {
+  cursor: pointer;
+}
+
+button.def-main:hover {
+  background: var(--s2-gray-100);
+}
+
+.def-main:focus-visible {
+  outline: 2px solid var(--s2-blue-800);
+  outline-offset: -2px;
+}
+
+.def-text {
+  display: grid;
+  min-width: 0;
+}
+
+.def-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.def-meta {
+  font-size: var(--s2-component-s-regular-font-size);
+  color: var(--s2-gray-700);
+}
+
+.def-rename {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  padding: 4px;
+}
+
+/* The box is the fields' `.form-control`, as in the form editor. */
+.rename[aria-invalid='true'] {
+  border-color: var(--s2-red-900);
+}
