@@ -16,7 +16,8 @@
 /* global globalThis */
 import loadConfig from './config.js';
 import {
-  addPageLink, pageKey, parsePageUrl, taskCapabilities, taskDraft, taskUpdates,
+  addPageLink, conflictingFields, isLinkedToPage, pageKey, parsePageUrl, taskCapabilities,
+  taskDraft, taskUpdates,
 } from './model.js';
 
 const API_VERSION = 'v21.0';
@@ -170,6 +171,24 @@ export function createWorkfrontClient({
     }
   }
 
+  async function readTask(taskId) {
+    const raw = await request(`task/${encodeURIComponent(taskId)}`, { fields: TASK_FIELDS });
+    return normalize(raw, 'task', origin);
+  }
+
+  // Workfront has no conditional writes, so these checks narrow, but cannot close, the race window.
+  async function verifyLink(taskId, page) {
+    let verified;
+    try {
+      verified = await readTask(taskId);
+    } catch {
+      throw new WorkfrontError('The page link was saved but could not be verified. Refresh and check Workfront before making further changes.', { uncertain: true });
+    }
+    if (!isLinkedToPage(verified, page)) {
+      throw new WorkfrontError(`Someone else changed the link of "${verified.name}" at the same time${verified.pageUrl ? ` to ${verified.pageUrl}` : ''}. Refresh and check Workfront.`, { uncertain: true });
+    }
+  }
+
   async function writeTask(taskId, updates) {
     const raw = await request(`task/${encodeURIComponent(taskId)}`, {
       ...updates, fields: TASK_FIELDS,
@@ -213,11 +232,11 @@ export function createWorkfrontClient({
       const key = `${taskId}:${pageKey(page)}`;
       if (pendingLinks.has(key)) return pendingLinks.get(key);
       const operation = (async () => {
-        const raw = await request(`task/${encodeURIComponent(taskId)}`, { fields: TASK_FIELDS });
-        const latest = normalize(raw, 'task', origin);
+        const latest = await readTask(taskId);
         const result = addPageLink(latest, page);
         if (!result.added) return result;
         await request(`task/${encodeURIComponent(taskId)}`, { URL: result.item.pageUrl }, 'PUT');
+        await verifyLink(taskId, page);
         return result;
       })().finally(() => pendingLinks.delete(key));
       pendingLinks.set(key, operation);
@@ -226,6 +245,10 @@ export function createWorkfrontClient({
     async updateTask(task, values) {
       const updates = taskUpdates(task, values);
       if (!Object.keys(updates).length) return task;
+      const conflicts = conflictingFields(task, await readTask(task.id), updates);
+      if (conflicts.length) {
+        throw new WorkfrontError(`Someone else changed the ${conflicts.join(', ')} of "${task.name}" in Workfront. Your changes were not saved. Refresh to load the latest values, then edit again.`);
+      }
       return writeTask(task.id, updates);
     },
     completeTask(taskId) {

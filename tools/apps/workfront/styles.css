@@ -1043,7 +1043,7 @@
     resize: vertical;
   }
 
-  .field-page > span {
+  .field-page > label {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1082,44 +1082,34 @@
     overflow-wrap: anywhere;
   }
 
-  .toast {
+  .noscript {
+    padding: 30px;
+    text-align: center;
+  }
+
+  .toast-fallback {
     position: fixed;
     z-index: 60;
     bottom: 16px;
     left: 50%;
     display: flex;
     align-items: center;
-    gap: 10px;
-    width: max-content;
+    gap: 8px;
     max-width: calc(100% - 32px);
-    padding: 11px 14px;
+    padding: 8px 8px 8px 14px;
     transform: translateX(-50%);
-    border-radius: var(--s2-corner-radius-400);
-    background: var(--s2-gray-800);
-    color: var(--s2-gray-25);
-    box-shadow: var(--s2-drop-shadow-emphasized);
-    font-size: var(--s2-component-s-regular-font-size);
-    line-height: 1.5;
+    border-radius: var(--s2-corner-radius-400, 8px);
+    background: var(--s2-gray-800, #292929);
+    color: var(--s2-gray-25, #fff);
+    font-size: var(--s2-component-s-regular-font-size, 14px);
   }
 
-  .toast > span:first-child {
-    display: flex;
-    align-items: center;
-    color: var(--s2-green-400);
+  .toast-fallback.is-error {
+    background: var(--s2-red-900, #b40000);
   }
 
-  .toast.is-error > span:first-child {
-    color: var(--s2-red-400);
-  }
-
-  .toast .icon-button {
-    margin-left: 3px;
-    color: var(--s2-gray-200);
-  }
-
-  .noscript {
-    padding: 30px;
-    text-align: center;
+  .toast-fallback .icon-button {
+    color: inherit;
   }
 
   @media (width >= 600px) {
@@ -1166,9 +1156,6 @@
       padding: 17px 26px;
     }
 
-    .toast {
-      bottom: 24px;
-    }
   }
 
   @media (width >= 900px) {

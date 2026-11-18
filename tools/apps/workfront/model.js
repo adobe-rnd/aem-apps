@@ -90,6 +90,24 @@ export function taskUpdates(task, values) {
   return updates;
 }
 
+const UPDATE_FIELDS = {
+  name: ['name', 'name'],
+  description: ['description', 'brief'],
+  status: ['statusCode', 'status'],
+  priority: ['priority', 'priority'],
+  percentComplete: ['percentComplete', 'progress'],
+  plannedCompletionDate: ['dueDate', 'due date'],
+};
+
+/** Lists the fields about to be written that someone else changed since the task was loaded. */
+export function conflictingFields(loaded, latest, updates) {
+  return Object.keys(updates).filter((key) => {
+    const [field] = UPDATE_FIELDS[key];
+    if (field === 'dueDate') return dateInputValue(loaded.dueDate) !== dateInputValue(latest.dueDate);
+    return loaded[field] !== latest[field];
+  }).map((key) => UPDATE_FIELDS[key][1]);
+}
+
 function decode(value) {
   try {
     return decodeURIComponent(value);

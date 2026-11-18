@@ -21,6 +21,9 @@
     <meta name="color-scheme" content="light">
     <title>Workfront | Experience Workspace</title>
     <link rel="icon" href="data:,">
+    <script type="importmap">
+      { "imports": { "da-lit": "/tools/deps/lit/dist/index.js" } }
+    </script>
     <link rel="stylesheet" href="https://main--da-nx--adobe.aem.live/nx2/styles/styles.css">
     <link rel="stylesheet" href="https://main--da-nx--adobe.aem.live/nx2/styles/form.css">
     <link rel="stylesheet" href="https://main--da-nx--adobe.aem.live/nx2/styles/buttons.css">
@@ -88,13 +91,13 @@
       <form id="create-form">
         <div class="dialog-heading"><div><p class="eyebrow">WORKFRONT</p><h2 id="create-title">New task</h2></div><button type="button" class="icon-button nx-action-btn-icon" data-close="create-dialog" aria-label="Close new task" title="Close"><span class="icon" data-icon="x" aria-hidden="true"></span></button></div>
         <div class="dialog-fields">
-          <label class="field nx-form-field">Project <select id="task-project" class="nx-input" name="projectId" required></select></label>
-          <label class="field nx-form-field">Task name <input id="task-name" class="nx-input" name="name" type="text" maxlength="255" required></label>
-          <label class="field nx-form-field">Brief <textarea id="task-brief" class="nx-input" name="description" rows="4" maxlength="4000"></textarea></label>
-          <label class="field nx-form-field">Due date <input id="task-due" class="nx-input" name="dueDate" type="date"></label>
-          <label class="field nx-form-field">Priority <select id="task-priority" class="nx-input" name="priority"><option value="0">None</option><option value="1">Low</option><option value="2" selected>Normal</option><option value="3">High</option><option value="4">Urgent</option></select></label>
+          <div class="field nx-form-field"><label for="task-project">Project</label><select id="task-project" class="nx-input" name="projectId" required></select></div>
+          <div class="field nx-form-field"><label for="task-name">Task name</label><input id="task-name" class="nx-input" name="name" type="text" maxlength="255" required></div>
+          <div class="field nx-form-field"><label for="task-brief">Brief</label><textarea id="task-brief" class="nx-input" name="description" rows="4" maxlength="4000"></textarea></div>
+          <div class="field nx-form-field"><label for="task-due">Due date</label><input id="task-due" class="nx-input" name="dueDate" type="date"></div>
+          <div class="field nx-form-field"><label for="task-priority">Priority</label><select id="task-priority" class="nx-input" name="priority"><option value="0">None</option><option value="1">Low</option><option value="2" selected>Normal</option><option value="3">High</option><option value="4">Urgent</option></select></div>
           <label class="nx-checkbox"><input id="task-assign-me" name="assignMe" type="checkbox">Assign to me</label>
-          <label class="field field-page nx-form-field"><span><span class="icon" data-icon="link" aria-hidden="true"></span>Page link</span><textarea id="task-page" class="nx-input" rows="2" readonly></textarea></label>
+          <div class="field field-page nx-form-field"><label for="task-page"><span class="icon" data-icon="link" aria-hidden="true"></span>Page link</label><textarea id="task-page" class="nx-input" rows="2" readonly></textarea></div>
           <p id="create-error" class="inline-error" role="alert" hidden></p>
         </div>
         <div class="dialog-footer"><button id="cancel-create" type="button" class="button nx-form-btn-secondary" data-close="create-dialog">Cancel</button><button id="submit-task" type="submit" class="button nx-form-btn-primary"><span class="icon" data-icon="plus" aria-hidden="true"></span>Create task</button></div>
@@ -105,19 +108,18 @@
       <form id="edit-form">
         <div class="dialog-heading"><h2 id="edit-title">Edit task</h2><button type="button" class="icon-button nx-action-btn-icon" data-close="edit-dialog" aria-label="Close edit task"><span class="icon" data-icon="x" aria-hidden="true"></span></button></div>
         <div class="dialog-fields">
-          <label class="field nx-form-field">Task name <input id="edit-name" class="nx-input" type="text" maxlength="255" required></label>
-          <label class="field nx-form-field">Status <select id="edit-status" class="nx-input"></select></label>
-          <label class="field nx-form-field">Priority <select id="edit-priority" class="nx-input"></select></label>
-          <label class="field nx-form-field">Progress (%) <input id="edit-progress" class="nx-input" type="number" min="0" max="100" step="1" required></label>
-          <label class="field nx-form-field">Due date <input id="edit-due" class="nx-input" type="date"></label>
-          <label class="field nx-form-field">Brief <textarea id="edit-description" class="nx-input" rows="4"></textarea></label>
+          <div class="field nx-form-field"><label for="edit-name">Task name</label><input id="edit-name" class="nx-input" name="name" type="text" maxlength="255" required></div>
+          <div class="field nx-form-field"><label for="edit-status">Status</label><select id="edit-status" class="nx-input"></select></div>
+          <div class="field nx-form-field"><label for="edit-priority">Priority</label><select id="edit-priority" class="nx-input"></select></div>
+          <div class="field nx-form-field"><label for="edit-progress">Progress (%)</label><input id="edit-progress" class="nx-input" type="number" min="0" max="100" step="1" required></div>
+          <div class="field nx-form-field"><label for="edit-due">Due date</label><input id="edit-due" class="nx-input" type="date"></div>
+          <div class="field nx-form-field"><label for="edit-description">Brief</label><textarea id="edit-description" class="nx-input" rows="4"></textarea></div>
           <p id="edit-error" class="inline-error" role="alert" hidden></p>
         </div>
         <div class="dialog-footer"><button type="button" class="button nx-form-btn-secondary" data-close="edit-dialog">Cancel</button><button id="save-task" type="submit" class="button nx-form-btn-primary">Save changes</button></div>
       </form>
     </dialog>
 
-    <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true" hidden><span id="toast-icon"></span><span id="toast-text"></span><button id="dismiss-toast" class="icon-button small nx-action-btn-icon nx-btn-sm" type="button" title="Dismiss notification" aria-label="Dismiss notification"><span class="icon" data-icon="x" aria-hidden="true"></span></button></div>
     <noscript><p class="noscript">JavaScript is required to connect to Workfront.</p></noscript>
   </body>
 </html>

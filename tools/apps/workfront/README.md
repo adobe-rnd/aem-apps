@@ -121,6 +121,37 @@ write, further writes to that task are blocked until you refresh and check
 Workfront; failed edit drafts stay in the dialog. Never retry an uncertain create
 or comment without checking whether it already succeeded.
 
+### Concurrent changes
+
+The Workfront API has no conditional (compare-and-set) writes, so the app
+detects most concurrent changes but cannot rule them out.
+
+- **Edits** send only changed fields, so edits to unrelated fields are not
+  overwritten. Before saving, the app rereads the task; if someone else changed
+  any field being saved since it was loaded, nothing is written and the dialog
+  asks you to refresh.
+- **Page linking** rereads the task and refuses to replace a URL that already
+  points elsewhere. After writing, it rereads the URL again; if another user's
+  overlapping link replaced it, you get an error instead of a success message,
+  and further writes to that task are blocked until refresh.
+
+A write that lands between another user's reread and write, or after their
+verification, still wins (**last-write-wins**). Busy flags and duplicate-click
+protection apply only within one app instance, not across users or browsers.
+Refresh and check Workfront when coordinating concurrent changes.
+
+### Form feedback and notifications
+
+Create and edit forms associate field-validation errors with their inputs,
+mark invalid fields, and clear the error state when corrected. Error text sits
+outside the field label, so it is announced as a description rather than as
+part of the field name. Request failures remain separate, form-level alerts.
+Notifications use the shared EW `showToast` component, with dismissible,
+six-second success/error messages; multiple notifications can stack. The
+component is loaded without blocking startup; if it cannot be loaded, the app
+logs the failure and shows a minimal local notification instead. The forms
+retain native dialogs for now.
+
 ## Contribution
 
 Node 18 or later, from the repository root:
@@ -131,6 +162,14 @@ node --test test/tools/apps/workfront/*.test.js
 
 Or run `npm test` inside this directory. The repository-root `npm test` also
 includes these tests. No `npm install` is needed.
+
+For browser regression tests, open the local app with `?demo` and run in the
+browser console (this creates a demo task and edits it in memory):
+
+```js
+const { default: runFormTests } = await import('/test/tools/apps/workfront/forms.browser.js');
+await runFormTests();
+```
 
 ### Scrolling regression check
 

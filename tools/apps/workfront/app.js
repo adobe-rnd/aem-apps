@@ -66,7 +66,14 @@ const scopeNames = {
   project: 'Selected project',
 };
 const avatarColors = ['teal', 'coral', 'blue', 'gold'];
-let toastTimer;
+// Load the shared toast without blocking startup, so a da-nx outage cannot stop the app loading.
+// eslint-disable-next-line import/no-unresolved
+const sharedToast = import('https://main--da-nx--adobe.aem.live/nx2/blocks/shared/toast/toast.js')
+  .catch((error) => {
+    // eslint-disable-next-line no-console
+    console.error('Shared EW toast unavailable; using fallback notifications.', error);
+    return null;
+  });
 let loadVersion = 0;
 
 function node(tag, className = '', text = '') {
@@ -159,13 +166,29 @@ function reasonElement(reason) {
   return element;
 }
 
+function fallbackToast(message, error) {
+  find('.toast-fallback')?.remove();
+  const toast = node('div', `toast-fallback${error ? ' is-error' : ''}`);
+  toast.setAttribute('role', error ? 'alert' : 'status');
+  const dismiss = node('button', 'icon-button small nx-action-btn-icon nx-btn-sm');
+  dismiss.type = 'button';
+  dismiss.setAttribute('aria-label', 'Dismiss');
+  dismiss.append(icon('x'));
+  dismiss.addEventListener('click', () => toast.remove());
+  toast.append(node('span', '', message), dismiss);
+  document.body.append(toast);
+  setTimeout(() => toast.remove(), 6000);
+}
+
 function notify(message, error = false) {
-  clearTimeout(toastTimer);
-  find('#toast-text').textContent = message;
-  find('#toast-icon').replaceChildren(icon(error ? 'circle-alert' : 'circle-check'));
-  find('#toast').classList.toggle('is-error', error);
-  find('#toast').hidden = false;
-  toastTimer = setTimeout(() => { find('#toast').hidden = true; }, 6000);
+  sharedToast.then((toast) => {
+    if (!toast) {
+      fallbackToast(message, error);
+      return;
+    }
+    const variant = error ? toast.VARIANT_ERROR : toast.VARIANT_SUCCESS;
+    toast.showToast({ text: message, variant });
+  });
 }
 
 function notifyWrite(message, demoMessage) {
@@ -756,6 +779,59 @@ function copyBrief(item) {
   }
 }
 
+function setFieldError(control, message = '') {
+  const id = `${control.id}-error`;
+  let error = document.getElementById(id);
+  const descriptions = (control.getAttribute('aria-describedby') || '').split(/\s+/)
+    .filter((description) => description && description !== id);
+  if (message) {
+    if (!error) {
+      error = node('span', 'nx-input-error-msg');
+      error.id = id;
+      control.after(error);
+    }
+    error.textContent = message;
+    control.setAttribute('aria-invalid', 'true');
+    descriptions.push(id);
+  } else {
+    error?.remove();
+    control.removeAttribute('aria-invalid');
+  }
+  if (descriptions.length) control.setAttribute('aria-describedby', descriptions.join(' '));
+  else control.removeAttribute('aria-describedby');
+  control.closest('.nx-form-field').classList.toggle('nx-field-error', Boolean(message));
+}
+
+function resetFieldErrors(form) {
+  [...form.elements].filter((control) => control.matches('.nx-input'))
+    .forEach((control) => {
+      control.setCustomValidity('');
+      setFieldError(control);
+    });
+}
+
+function validateTaskName(form) {
+  const control = form.elements.namedItem('name');
+  control.setCustomValidity(control.value.trim() ? '' : 'Enter a task name.');
+}
+
+function setupFieldValidation(form) {
+  form.addEventListener('invalid', (event) => {
+    event.preventDefault();
+    setFieldError(event.target, event.target.validationMessage);
+    if (form.querySelector(':invalid') === event.target) event.target.focus();
+  }, true);
+  form.addEventListener('input', (event) => {
+    const control = event.target;
+    if (!control.matches('input, select, textarea')) return;
+    if (control.name === 'name') validateTaskName(form);
+    if (control.hasAttribute('aria-invalid')) {
+      setFieldError(control, control.validity.valid ? '' : control.validationMessage);
+    }
+  });
+}
+
+// Consider nx-dialog later; retain native dialogs until form and dismissal behavior is migrated.
 function openCreate(projectId) {
   if (!pageKey(state.context) || state.loading || state.error
     || state.catalog.capabilities?.canCreate === false) return;
@@ -763,6 +839,7 @@ function openCreate(projectId) {
   const chosen = projectId || state.projectFilter || (selected?.type === 'project' ? selected.id : selected?.projectId);
   const form = find('#create-form');
   form.reset();
+  resetFieldErrors(form);
   findAll('#create-form input, #create-form select, #create-form textarea, #create-form button').forEach((element) => { element.disabled = false; });
   state.createUncertain = false;
   find('#create-error').hidden = true;
@@ -787,6 +864,8 @@ function updateCreatePermissions() {
 async function createTask(event) {
   event.preventDefault();
   if (state.creating || state.createUncertain) return;
+  validateTaskName(find('#create-form'));
+  if (!find('#create-form').reportValidity()) return;
   const values = {
     name: find('#task-name').value,
     projectId: find('#task-project').value,
@@ -832,6 +911,7 @@ async function createTask(event) {
 function openEdit(task) {
   if (!canEdit(task) || taskBusy(task)) return;
   state.editing = task.id;
+  resetFieldErrors(find('#edit-form'));
   find('#edit-name').value = task.name;
   find('#edit-description').value = task.description;
   find('#edit-status').replaceChildren(...Object.entries(TASK_STATUSES)
@@ -854,6 +934,8 @@ async function saveTask(event) {
   event.preventDefault();
   const task = state.catalog.tasks.find((entry) => entry.id === state.editing);
   if (!task || !canEdit(task) || taskBusy(task)) return;
+  validateTaskName(find('#edit-form'));
+  if (!find('#edit-form').reportValidity()) return;
   const values = {
     name: find('#edit-name').value,
     description: find('#edit-description').value,
@@ -989,6 +1071,8 @@ find('.results-tabs').addEventListener('keydown', (event) => {
 });
 find('#refresh').addEventListener('click', reload);
 find('#new-task').addEventListener('click', () => openCreate());
+setupFieldValidation(find('#create-form'));
+setupFieldValidation(find('#edit-form'));
 find('#create-form').addEventListener('submit', createTask);
 find('#task-project').addEventListener('change', () => {
   if (!state.createUncertain) find('#create-error').hidden = true;
@@ -1004,5 +1088,4 @@ findAll('[data-close]').forEach((control) => control.addEventListener('click', (
   if (control.dataset.close === 'edit-dialog' && state.writing.has(state.editing)) return;
   find(`#${control.dataset.close}`).close();
 }));
-find('#dismiss-toast').addEventListener('click', () => { clearTimeout(toastTimer); find('#toast').hidden = true; });
 reload();

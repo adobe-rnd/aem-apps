@@ -131,6 +131,7 @@ test('a task is reread before linking and an existing association is never rewri
 
 test('concurrent clicks share one write to the URL field', async () => {
   let writes = 0;
+  const record = { ...task, URL: '' };
   const client = createWorkfrontClient({
     ...options,
     fetchImpl: async (url, init) => {
@@ -138,13 +139,99 @@ test('concurrent clicks share one write to the URL field', async () => {
         writes += 1;
         assert.deepEqual([...init.body.keys()], ['URL']);
         assert.equal(init.body.get('URL'), page.url);
+        record.URL = init.body.get('URL');
         return response({ ID: task.ID });
       }
-      return response({ ...task, URL: '' });
+      return response({ ...record });
     },
   });
   await Promise.all([client.linkPage(task.ID, page), client.linkPage(task.ID, page)]);
   assert.equal(writes, 1);
+});
+
+// Resolves for every caller once `count` callers have arrived.
+function barrier(count) {
+  let arrived = 0;
+  let release;
+  const done = new Promise((resolve) => { release = resolve; });
+  return () => {
+    arrived += 1;
+    if (arrived === count) release();
+    return done;
+  };
+}
+
+test('when two users link different pages after both read an empty URL, the overwritten user gets an error', async () => {
+  const otherPage = { siteId: 'northstar/website', path: '/about.html', url: 'https://da.live/canvas#/northstar/website/about' };
+  const record = { ...task, URL: '' };
+  const bothRead = barrier(2);
+  const bothWrote = barrier(2);
+  let reads = 0;
+  const fetchImpl = async (url, init) => {
+    if (init.method === 'PUT') {
+      record.URL = init.body.get('URL');
+      await bothWrote();
+      return response({ ID: task.ID });
+    }
+    reads += 1;
+    const snapshot = { ...record };
+    if (reads <= 2) await bothRead();
+    return response(snapshot);
+  };
+  const first = createWorkfrontClient({ ...options, fetchImpl });
+  const second = createWorkfrontClient({ ...options, fetchImpl });
+  const results = await Promise.allSettled([
+    first.linkPage(task.ID, page), second.linkPage(task.ID, otherPage),
+  ]);
+  const rejected = results.filter((result) => result.status === 'rejected');
+  const fulfilled = results.filter((result) => result.status === 'fulfilled');
+  assert.equal(rejected.length, 1);
+  assert.equal(fulfilled.length, 1);
+  assert.equal(fulfilled[0].value.item.pageUrl, record.URL);
+  assert.match(rejected[0].reason.message, /Someone else changed the link of "Write copy" at the same time to https:\/\/da\.live/);
+  assert.equal(rejected[0].reason.uncertain, true);
+});
+
+test('a link write that lands after the other user verified still wins (documented last-write-wins)', async () => {
+  const otherPage = { siteId: 'northstar/website', path: '/about.html', url: 'https://da.live/canvas#/northstar/website/about' };
+  const record = { ...task, URL: '' };
+  const fetchImpl = async (url, init) => {
+    if (init.method === 'PUT') record.URL = init.body.get('URL');
+    return response({ ...record });
+  };
+  let releaseLate;
+  const lateGate = new Promise((resolve) => { releaseLate = resolve; });
+  let lateReads = 0;
+  const late = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      if (init.method !== 'GET' || lateReads > 0) return fetchImpl(url, init);
+      lateReads += 1;
+      const snapshot = { ...record };
+      await lateGate;
+      return response(snapshot);
+    },
+  });
+  const lateLink = late.linkPage(task.ID, otherPage);
+  const early = createWorkfrontClient({ ...options, fetchImpl });
+  assert.equal((await early.linkPage(task.ID, page)).added, true);
+  releaseLate();
+  assert.equal((await lateLink).added, true);
+  assert.equal(record.URL, otherPage.url);
+});
+
+test('a saved link that cannot be verified is reported as uncertain', async () => {
+  let reads = 0;
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      if (init.method === 'PUT') return response({ ID: task.ID });
+      reads += 1;
+      if (reads > 1) throw new TypeError('Network failure');
+      return response({ ...task, URL: '' });
+    },
+  });
+  await assert.rejects(client.linkPage(task.ID, page), (error) => error.uncertain && /could not be verified/.test(error.message));
 });
 
 test('linking never overwrites a URL that points elsewhere', async () => {
@@ -199,6 +286,7 @@ test('task editing changes only edited fields and completion writes status and p
   const client = createWorkfrontClient({
     ...options,
     fetchImpl: async (url, init) => {
+      if (init.method === 'GET') return response({ ...task, description: 'Original', percentComplete: 25 });
       calls.push({ url, init });
       return response({
         ...task, description: init.body.get('description') || '', status: init.body.get('status') || 'INP', percentComplete: Number(init.body.get('percentComplete') || 25),
@@ -220,6 +308,38 @@ test('task editing changes only edited fields and completion writes status and p
   assert.equal(completed.percentComplete, 100);
   assert.equal(calls[1].init.body.get('status'), 'CPL');
   assert.equal(calls[1].init.body.get('percentComplete'), '100');
+});
+
+test('an edit is refused without writing when someone else changed the same field', async () => {
+  const methods = [];
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      methods.push(init.method);
+      return response({ ...task, description: 'Their brief' });
+    },
+  });
+  const loaded = { id: task.ID, name: 'Write copy', description: 'Original' };
+  await assert.rejects(
+    client.updateTask(loaded, { description: 'My brief' }),
+    /Someone else changed the brief of "Write copy" in Workfront. Your changes were not saved/,
+  );
+  assert.deepEqual(methods, ['GET']);
+});
+
+test('an edit still saves when someone else changed only other fields', async () => {
+  const writes = [];
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      if (init.method === 'PUT') writes.push([...init.body.keys()]);
+      return response({ ...task, name: 'Renamed by someone else', description: init.body?.get('description') || 'Original' });
+    },
+  });
+  const loaded = { id: task.ID, name: 'Write copy', description: 'Original' };
+  const saved = await client.updateTask(loaded, { description: 'My brief' });
+  assert.deepEqual(writes, [['description', 'fields']]);
+  assert.equal(saved.description, 'My brief');
 });
 
 test('posting an update targets the task and returns the attributed note', async () => {
@@ -257,7 +377,8 @@ test('new write operations surface permission failures and flag unconfirmed resp
       let calls = 0;
       const client = createWorkfrontClient({
         ...options,
-        fetchImpl: async () => {
+        fetchImpl: async (url, init) => {
+          if (init.method === 'GET') return response({ ID: 'task-1', name: 'Old' });
           calls += 1;
           if (failure === 'network') throw new TypeError('Network failure');
           return failure === 'permission' ? response(null, 403) : response({ ID: 'task-1' });
