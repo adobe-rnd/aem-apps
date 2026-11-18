@@ -525,3 +525,67 @@ describe('inbox v2 setup link and detection', () => {
     });
   });
 });
+
+describe('inbox v2 and the worker contract of publish-requests-worker#41', () => {
+  const local = (test) => {
+    global.window = { location: { hostname: 'localhost', search: '' } };
+    test.after(() => { delete global.window; });
+  };
+  const DOMAIN_MSG = 'Some recipients were not emailed because their domains are not allowed for this site: example.org.';
+
+  it('shows a refused resend as a recipient-domain problem, naming the domains', async (test) => {
+    local(test);
+    test.mock.method(global, 'fetch', async () => Response.json({
+      error: 'One or more approver or CC email domains are not allowed for this org',
+      code: 'recipient-domain-not-allowed',
+      domains: ['example.org'],
+    }, { status: 403 }));
+    const result = await api.resendPublishRequest('org', 'site', '/page', null, 'token');
+    assert.equal(result.success, false);
+    assert.equal(result.status, 403);
+    assert.equal(result.code, 'recipient-domain-not-allowed');
+    assert.match(result.error, /email domains aren't allowed for this site: example\.org\./);
+    assert.match(result.error, /config admin can allow them under Registration/);
+    assert.doesNotMatch(result.error, /not registered/i);
+  });
+
+  it('recognises the resend refusal by its message without a code', async (test) => {
+    local(test);
+    test.mock.method(global, 'fetch', async () => Response.json({
+      error: 'One or more approver or CC email domains are not allowed for this org',
+    }, { status: 403 }));
+    const result = await api.resendPublishRequest('org', 'site', '/page', null, 'token');
+    assert.equal(result.code, 'recipient-domain-not-allowed');
+    assert.match(result.error, /^Some approver or CC email domains aren't allowed for this site\./);
+  });
+
+  it('reports an unreadable registration as an outage, not as unregistered', async (test) => {
+    local(test);
+    test.mock.method(global, 'fetch', async () => Response.json({
+      error: 'Unable to read the site registration. Please try again.', code: 'registration-unavailable',
+    }, { status: 503 }));
+    await assert.rejects(
+      api.getAllPendingRequestsForUser('org', 'site', null, 'token'),
+      (error) => error.status === 503 && /can't check this site's registration right now/i.test(error.message)
+        && !/not registered/i.test(error.message),
+    );
+  });
+
+  it('carries on when the registration can\'t be read during the setup check', async (test) => {
+    global.window = { location: { hostname: 'da.live', search: '?env=ci' } };
+    test.after(() => { delete global.window; });
+    test.mock.method(global, 'fetch', async () => Response.json({
+      error: 'Unable to read the site registration.', code: 'registration-unavailable',
+    }, { status: 503 }));
+    assert.equal(await api.getSetupGap('org', 'site', 'token'), '');
+  });
+
+  it('adds refused recipient domains to the existing email warning', () => {
+    assert.equal(api.emailWarning([]), '');
+    assert.equal(api.emailWarning([{ error: 'Mail unavailable' }]), 'Some notification emails could not be sent.');
+    assert.equal(api.emailWarning([DOMAIN_MSG]), `Some notification emails could not be sent. ${DOMAIN_MSG}`);
+    const notice = fixture().mutationNotice({ emailErrors: [DOMAIN_MSG] }, 'Request rejected.');
+    assert.equal(notice.type, 'info');
+    assert.equal(notice.text, `Request rejected. Some notification emails could not be sent. ${DOMAIN_MSG}`);
+  });
+});

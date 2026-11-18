@@ -16,7 +16,7 @@
 /* eslint-disable no-underscore-dangle, import/no-unresolved */
 import { LitElement, html, nothing } from 'da-lit';
 import {
-  normalizeContext, deriveView, pageLinks, sameRequest, setupUrl,
+  normalizeContext, deriveView, pageLinks, sameRequest, setupUrl, emailWarning,
 } from './workflow.js';
 
 const style = new CSSStyleSheet();
@@ -231,14 +231,15 @@ class RequestForPublish extends LitElement {
       if (['submit', 'approve', 'reject', 'withdraw'].includes(action)) {
         this.workspace?.close?.().catch(() => {});
       }
-      const emailFailed = Array.isArray(result?.emailErrors) && result.emailErrors.length > 0;
+      const warning = emailWarning(result?.emailErrors);
+      const emailFailed = !!warning;
       let message = messages[action];
       if (emailFailed && action === 'resend') message = 'Your request is still pending.';
       else if (emailFailed && action === 'approve' && !final) message = 'Step approved.';
       this._notice = {
         type: emailFailed ? 'info' : 'success',
         text: emailFailed
-          ? `${message} Email notification delivery failed for one or more recipients. Do not repeat the action to retry notifications.`
+          ? `${message} ${warning} Do not repeat the action to retry notifications.`
           : message,
       };
       if (action === 'submit') this._comment = '';

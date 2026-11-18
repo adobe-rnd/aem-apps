@@ -424,6 +424,25 @@ export async function withdrawRequest(org, site, path, token) {
   }
 }
 
+// Request errors: a resend refuses approver or CC domains the site doesn't allow.
+const DOMAIN_HINT = 'A config admin can allow them under Registration in the Request Publish setup app.';
+
+/**
+ * The message for the worker's 403 "One or more approver or CC email domains are not allowed for
+ * this org" on `POST /api/requests`, naming the domains when the worker sends them. A
+ * recipient-domain problem, never a registration or setup one. null for other errors.
+ */
+function recipientDomainError(status, result) {
+  if (status !== 403) return null;
+  const refused = result?.code === 'recipient-domain-not-allowed'
+    || /email domains are not allowed/i.test(result?.error || '');
+  if (!refused) return null;
+  const domains = Array.isArray(result.domains) ? result.domains.filter((d) => typeof d === 'string' && d) : [];
+  return domains.length
+    ? `These approver or CC email domains aren't allowed for this site: ${domains.join(', ')}. ${DOMAIN_HINT}`
+    : `Some approver or CC email domains aren't allowed for this site. ${DOMAIN_HINT}`;
+}
+
 /**
  * Re-send the approval email for an existing request (no sheet change).
  * @param {string} requesterEmail - Unused; the worker resolves approvers itself.
@@ -435,7 +454,12 @@ export async function resendPublishRequest(org, site, path, requesterEmail, toke
       org, site, path, resend: true,
     }));
     const result = await resp.json();
-    if (!resp.ok) return { success: false, error: result.error || 'Failed to resend publish request' };
+    if (!resp.ok) {
+      return {
+        success: false,
+        error: recipientDomainError(resp.status, result) || result.error || 'Failed to resend publish request',
+      };
+    }
     return { success: true };
   } catch (error) {
     console.error('Error resending publish request:', error);

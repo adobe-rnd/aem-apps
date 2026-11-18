@@ -213,6 +213,33 @@ function failure(message, details = {}) {
   return Object.assign(new Error(message), details);
 }
 
+const RECIPIENT_DOMAINS = 'recipient-domain-not-allowed';
+const DOMAIN_HINT = 'A config admin can allow them under Registration in the Request Publish setup app.';
+
+// v2 create/resend refuse off-list approver or CC domains with this 403 (worker#41).
+// A worker without the code is recognised by its message. Never a setup or registration problem.
+function isRecipientDomainError(status, result) {
+  if (status !== 403) return false;
+  return result?.code === RECIPIENT_DOMAINS || /email domains are not allowed/i.test(result?.error || '');
+}
+
+function recipientDomainMessage(domains) {
+  const list = Array.isArray(domains) ? domains.filter((d) => typeof d === 'string' && d) : [];
+  return list.length
+    ? `These approver or CC email domains aren't allowed for this site: ${list.join(', ')}. ${DOMAIN_HINT}`
+    : `Some approver or CC email domains aren't allowed for this site. ${DOMAIN_HINT}`;
+}
+
+/**
+ * The warning for `emailErrors` on a successful change: the existing delivery warning, plus the
+ * worker's note naming refused recipient domains when it sends one.
+ */
+export function emailWarning(emailErrors) {
+  if (!Array.isArray(emailErrors) || !emailErrors.length) return '';
+  const domains = emailErrors.filter((entry) => typeof entry === 'string' && /domains are not allowed/i.test(entry));
+  return ['Email notification delivery failed for one or more recipients.', ...new Set(domains)].join(' ');
+}
+
 // The worker's 403 for an unregistered site carries code 'site-not-registered'
 // (publish-requests-worker#41). Workers without it send no code, so a code-less
 // 403 still falls back to the message; any other code is a different denial.
@@ -275,6 +302,17 @@ export function createClient({
       throw failure(`The workflow service returned an unreadable response (${resp.status}).`, { status: resp.status });
     }
     if (!resp.ok) {
+      if (isRecipientDomainError(resp.status, result)) {
+        throw failure(recipientDomainMessage(result.domains), {
+          status: 403, code: RECIPIENT_DOMAINS,
+        });
+      }
+      if (result.code === 'registration-unavailable') {
+        // An outage reading the registration (503), not an unregistered site.
+        throw failure("Can't check this site's registration right now. Try again in a moment.", {
+          status: resp.status, code: result.code,
+        });
+      }
       throw failure(result.error || `The workflow service returned ${resp.status}.`, {
         status: resp.status,
         ...(typeof result.code === 'string' && { code: result.code }),

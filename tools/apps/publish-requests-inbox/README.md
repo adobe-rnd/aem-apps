@@ -113,6 +113,8 @@ Before loading requests, the app checks that the site exists, is registered with
 
 The link is always the plain production URL `https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup?org={org}&site={site}`, with the values URL-encoded. It never carries `ref` or `env`, even when the inbox itself was opened with them, and opens in a new tab.
 
+A **Resend** whose approvers or CC include an email domain the site doesn't allow (`allowedEmailDomains` in its registration, else `adobe.com`) answers `403` ("One or more approver or CC email domains are not allowed for this org"), and nothing is sent. The inbox shows it as a recipient-domain problem, naming the domains when the worker sends them, with a hint that a config admin can allow them under Registration in the setup app; it is not a registration or setup problem.
+
 ### 12. Session/Login Issues
 
 If the user's email cannot be determined from the Adobe IMS token, a warning is shown and action buttons are disabled.

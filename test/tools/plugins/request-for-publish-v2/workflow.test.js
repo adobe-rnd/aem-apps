@@ -17,6 +17,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizeContext, deriveView, pageLinks, workerOrigin, createClient, buildStepModel, setupUrl,
+  emailWarning,
 } from '../../../../tools/plugins/request-for-publish-v2/workflow.js';
 
 const context = { org: 'example', site: 'website', path: '/drafts/page' };
@@ -763,5 +764,57 @@ describe('workflow operations', () => {
     const { client, calls } = fixture();
     await assert.rejects(client.withdraw(context, pending), /pending|changed/i);
     assert.equal(calls.length, 1);
+  });
+});
+
+describe('worker contract of publish-requests-worker#41', () => {
+  const refused = () => response({
+    error: 'One or more approver or CC email domains are not allowed for this org',
+    code: 'recipient-domain-not-allowed',
+    domains: ['example.org', 'partner.example'],
+  }, 403);
+  const isDomainError = (error) => error.status === 403
+    && error.code === 'recipient-domain-not-allowed'
+    && !error.setup
+    && /example\.org, partner\.example/.test(error.message)
+    && /config admin can allow them under Registration/i.test(error.message)
+    && !/not registered|finish setup|isn't set up/i.test(error.message);
+
+  it('shows a refused submit as a recipient-domain problem, naming the domains', async () => {
+    const { client } = fixture({ fail: (url, opts) => opts.method === 'POST' && refused() });
+    await assert.rejects(client.submit(context, 'A note'), isDomainError);
+  });
+
+  it('shows a refused resend as a recipient-domain problem', async () => {
+    const { client } = fixture({ own: [pending], fail: (url, opts) => opts.method === 'POST' && refused() });
+    await assert.rejects(client.resend(context, pending), isDomainError);
+  });
+
+  it('recognises the refusal by its message from a worker that sends no code', async () => {
+    const { client } = fixture({
+      fail: (url, opts) => opts.method === 'POST' && response({ error: 'One or more approver or CC email domains are not allowed for this org' }, 403),
+    });
+    await assert.rejects(client.submit(context, 'A note'), (error) => !error.setup
+      && /email domains aren't allowed for this site\./.test(error.message)
+      && /Registration/.test(error.message));
+  });
+
+  it('does not treat an unreadable registration as not registered', async () => {
+    const { client } = fixture({
+      fail: () => response({ error: 'Unable to read the site registration. Please try again.', code: 'registration-unavailable' }, 503),
+    });
+    await assert.rejects(client.load(context), (error) => !error.setup
+      && error.status === 503 && error.code === 'registration-unavailable'
+      && /can't check this site's registration right now/i.test(error.message));
+  });
+
+  it('adds refused recipient domains to the email warning', () => {
+    assert.equal(emailWarning(undefined), '');
+    assert.equal(emailWarning([]), '');
+    assert.equal(emailWarning([{ error: 'Delivery failed' }]), 'Email notification delivery failed for one or more recipients.');
+    assert.equal(
+      emailWarning(['Some recipients were not emailed because their domains are not allowed for this site: example.org.', 'Notification email could not be sent.']),
+      'Email notification delivery failed for one or more recipients. Some recipients were not emailed because their domains are not allowed for this site: example.org.',
+    );
   });
 });

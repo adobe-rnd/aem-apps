@@ -34,6 +34,7 @@ import {
   getLiveHostFromConfig,
   fetchAccentSettings,
   getSetupGap,
+  emailWarning,
 } from './api.js';
 
 // Super Lite (sl-*) — Spectrum-aligned controls for DA; pairs with S2 tokens in CSS.
@@ -476,10 +477,10 @@ class PublishRequestsApp extends LitElement {
   // ======== Single-request action handlers ========
 
   mutationNotice(result, text) {
-    const warning = result.emailErrors?.length;
+    const warning = emailWarning(result.emailErrors);
     return {
       type: warning ? 'info' : 'success',
-      text: warning ? `${text} Some notification emails could not be sent.` : text,
+      text: warning ? `${text} ${warning}` : text,
     };
   }
 
@@ -653,7 +654,8 @@ published,
           this._org, this._site, path, this.token,
         ).catch(() => {})));
       }
-      if (result.emailErrors?.length) warnings.push('Approval recorded, but some notification emails could not be sent.');
+      const emailed = emailWarning(result.emailErrors);
+      if (emailed) warnings.push(`Approval recorded. ${emailed}`);
     }, Promise.resolve());
 
     return { approved, error: errors.join(' ') || null, warning: warnings.join(' ') || null };
@@ -751,7 +753,9 @@ published,
     if (result.success) {
       this._message = this.mutationNotice(result, `Publish request re-sent for ${request.path}`);
     } else {
-      this._message = { type: 'error', text: `Failed to resend: ${result.error}` };
+      // A refused recipient domain is its own message, not a setup problem.
+      const text = result.code === 'recipient-domain-not-allowed' ? result.error : `Failed to resend: ${result.error}`;
+      this._message = { type: 'error', text };
     }
   }
 
