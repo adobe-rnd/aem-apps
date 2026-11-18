@@ -24,6 +24,34 @@ The plugin connects through the official [EW/DA SDK](https://da.live/nx/utils/sd
 - [cors](./cors/README.md): a Cloudflare Worker.
 - [adobeio](./adobeio/README.md): an Adobe App Builder (I/O Runtime) web action, for organizations entitled to App Builder.
 
+## Demo mode
+
+Append `?demo` to the app URL (or `&demo` if it already has query
+parameters), including in the EW library entry, to use sample data instead of
+Workfront. The presence of the `demo` parameter enables it regardless of its
+value, including `?demo=false`. Remove the parameter to use the normal Workfront
+connection.
+
+The status shows **Demo Mode** instead of **Workfront connected**, and write
+confirmations explicitly say **demo only**. No Workfront configuration, token,
+proxy, or API requests are used. Creating, editing, completing, commenting, and
+linking tasks operate only in memory. Refreshing the app resets all demo changes;
+there is no automatic demo fallback if a real connection fails.
+
+Inside EW, sample items use the current page context and the existing chat
+integration. The app can also be opened directly with `?demo`, using a
+sample page context; sending a brief to EW chat still requires the EW host.
+Sample records have no external Workfront links.
+
+The sample projects, tasks, statuses, priorities, assignments, relative due dates,
+and notes mirror the [reference Workfront app](https://github.com/markszulc/ew-ext-workfront).
+Its view-only legal sign-off task also rejects editing and completion. The first
+task is additionally linked to the current page so page-context filtering can be demonstrated.
+
+Demo data and operations live in `demo.js`, loaded only by the API connection
+boundary when explicitly requested. Rendering, searching, filtering, and task
+actions share the same client interface in both modes.
+
 ## Find items and users
 
 The compact toolbar keeps **New task** beside search and **Refresh** beside the

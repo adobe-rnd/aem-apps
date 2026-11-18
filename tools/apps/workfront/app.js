@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 /* eslint no-use-before-define: ["error", { "functions": false }] */
-import loadConfig from './config.js';
-import { createWorkfrontClient } from './api.js';
+import { connectWorkfront } from './api.js';
 import { connectToHost, putBriefInChat } from './host.js';
 import {
   dateInputValue, defaultScope, filterCatalog, formatBrief, isLinkedToPage, isOverdue, pageKey,
@@ -169,6 +168,10 @@ function notify(message, error = false) {
   toastTimer = setTimeout(() => { find('#toast').hidden = true; }, 6000);
 }
 
+function notifyWrite(message, demoMessage) {
+  notify(state.client.mode === 'demo' ? `${demoMessage} (demo only).` : message);
+}
+
 function chooseItem(item) {
   const selected = state.selected?.id === item.id && state.selected.type === item.type;
   state.selected = selected ? null : { id: item.id, type: item.type };
@@ -180,11 +183,13 @@ function renderEnvironment() {
   const user = state.catalog.users.find((entry) => entry.id === state.catalog.userId);
   find('#current-user').textContent = initials(user?.name);
   find('#current-user').title = user?.name || 'Current user unavailable';
-  let status = 'Workfront connected';
+  const demo = state.client?.mode === 'demo';
+  let status = demo ? 'Demo Mode' : 'Workfront connected';
   if (state.error) status = 'Not connected';
   if (state.loading) status = 'Connecting';
   find('#connection-status').replaceChildren(node('span', 'status-dot'), node('span', '', status));
-  find('#connection-status').classList.toggle('is-live', !state.loading && !state.error);
+  find('#connection-status').classList.toggle('is-live', !demo && !state.loading && !state.error);
+  find('#connection-status').title = demo ? 'Sample data. Changes are temporary and never sent to Workfront.' : '';
 }
 
 function chooseUser(user) {
@@ -467,7 +472,7 @@ async function completeTask(task) {
   render();
   try {
     replaceTask(await state.client.completeTask(task.id));
-    notify('Task completed in Workfront.');
+    notifyWrite('Task completed in Workfront.', 'Task completed');
   } catch (error) {
     writeError(error, task);
     notify(error.message, true);
@@ -505,7 +510,7 @@ function noteForm(task) {
       const note = await state.client.addNote(task.id, text);
       task.notes.unshift(note);
       state.noteDrafts.delete(task.id);
-      notify('Update posted to Workfront.');
+      notifyWrite('Update posted to Workfront.', 'Update posted');
     } catch (error) {
       writeError(error, task, true);
       notify(error.message, true);
@@ -526,7 +531,8 @@ function itemDetail(item) {
     node('span', 'eyebrow', item.type.toUpperCase()),
     node('span', 'detail-reference', `/ ${item.reference || item.id}`),
   );
-  top.append(type, externalLink(item.url, `Open ${item.name} in Workfront`, true));
+  top.append(type);
+  if (item.url) top.append(externalLink(item.url, `Open ${item.name} in Workfront`, true));
   inner.append(top);
   if (item.type === 'task') {
     const project = projectFor(item);
@@ -688,16 +694,12 @@ async function reload() {
     const host = await connectToHost();
     if (version !== loadVersion) return;
     state.host = host;
-    if (!host.embedded || !host.context) {
-      throw new Error('Open Workfront from the Experience Workspace editor to load page context.');
-    }
-    state.context = host.context;
-    const config = await loadConfig(host.context.siteId, host.actions?.daFetch);
+    const { client, context } = await connectWorkfront(host, window.location.search);
     if (version !== loadVersion) return;
-    const client = createWorkfrontClient({ ...config, getToken: () => host.getToken() });
     const catalog = await client.load();
     if (version !== loadVersion) return;
     state.client = client;
+    state.context = context;
     state.catalog = catalog;
     state.readOnly.clear();
     state.commentBlocked.clear();
@@ -731,7 +733,10 @@ async function linkTask(task) {
     const result = await state.client.linkPage(task.id, state.context);
     const index = state.catalog.tasks.findIndex((entry) => entry.id === task.id);
     state.catalog.tasks[index] = result.item;
-    notify(result.added ? 'Task linked to this page.' : 'This task is already linked to this page.');
+    notifyWrite(
+      result.added ? 'Task linked to this page.' : 'This task is already linked to this page.',
+      result.added ? 'Task linked to this page' : 'This task is already linked to this page',
+    );
   } catch (error) {
     writeError(error, task);
     notify(error.message, true);
@@ -809,7 +814,7 @@ async function createTask(event) {
     state.tab = 'tasks';
     state.search = '';
     find('#create-dialog').close();
-    notify('Task created and linked to this page.');
+    notifyWrite('Task created and linked to this page.', 'Task created and linked to this page');
   } catch (error) {
     find('#create-error').textContent = error.message;
     find('#create-error').hidden = false;
@@ -874,7 +879,7 @@ async function saveTask(event) {
   try {
     replaceTask(await state.client.updateTask(task, values));
     find('#edit-dialog').close();
-    notify('Task saved to Workfront.');
+    notifyWrite('Task saved to Workfront.', 'Task saved');
   } catch (error) {
     writeError(error, task);
     find('#edit-error').textContent = error.message;

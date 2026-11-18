@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 /* global globalThis */
+import loadConfig from './config.js';
 import {
   addPageLink, pageKey, parsePageUrl, taskCapabilities, taskDraft, taskUpdates,
 } from './model.js';
@@ -261,5 +262,21 @@ export function createWorkfrontClient({
         throw new WorkfrontError('The task may have been created, but its response was incomplete. Check Workfront before trying again.', { uncertain: true });
       }
     },
+  };
+}
+
+export async function connectWorkfront(host, search = '') {
+  if (new URLSearchParams(search).has('demo')) {
+    const { createDemoClient, DEMO_CONTEXT } = await import('./demo.js');
+    const context = host.context || { ...DEMO_CONTEXT };
+    return { client: createDemoClient(context), context };
+  }
+  if (!host.embedded || !host.context) {
+    throw new Error('Open Workfront from the Experience Workspace editor to load page context.');
+  }
+  const config = await loadConfig(host.context.siteId, host.actions?.daFetch);
+  return {
+    client: createWorkfrontClient({ ...config, getToken: () => host.getToken() }),
+    context: host.context,
   };
 }
