@@ -15,7 +15,7 @@ The panel shows every proposal the open page is involved in, whatever its role:
 | **Draft** page (`/drafts/proposals/{id}/…`) | The proposal for the target this draft belongs to, with links to the target and source pages. | Same as target |
 | **Diff view** page (`/drafts/proposals/{id}/preview/…`) | Same as the draft page. Approve or reject right where you read the markers. | Same as target |
 
-Other pages show "No content proposals involve this page", plus a "What the panel looked at" section with every proposal found and any record it could not read.
+Other pages show "No content proposals involve this page".
 
 ## Actions
 

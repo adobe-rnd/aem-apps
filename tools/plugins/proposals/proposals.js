@@ -20,7 +20,7 @@ import createStore from './store.js';
 import createMerger from './merge.js';
 import {
   pagePathFrom, involvement, pageState, mergeCheck, typeLabel, formatDate, canvasUrl,
-  applyMerged, applyRejected, previewPath, PROPOSALS_ROOT,
+  applyMerged, applyRejected, previewPath,
 } from './model.js';
 
 const NX = 'https://da.live/nx';
@@ -97,8 +97,6 @@ class ProposalsPlugin extends LitElement {
     closed: { state: true },
     cards: { state: true },
     notice: { state: true },
-    found: { state: true },
-    problems: { state: true },
   };
 
   constructor() {
@@ -106,8 +104,6 @@ class ProposalsPlugin extends LitElement {
     this.phase = 'loading';
     this.open = [];
     this.closed = [];
-    this.found = [];
-    this.problems = [];
     this.cards = new Map();
   }
 
@@ -129,11 +125,9 @@ class ProposalsPlugin extends LitElement {
     this.notice = null;
     this.cards = new Map();
     try {
-      const { proposals: loaded, problems } = await this.store.listProposals();
-      this.found = loaded.map((item) => item.proposal);
-      this.problems = problems;
+      const { proposals: loaded } = await this.store.listProposals();
       const byId = new Map(loaded.map((item) => [item.proposal.id, item]));
-      const { open, closed } = involvement(this.found, this.path);
+      const { open, closed } = involvement(loaded.map((item) => item.proposal), this.path);
       const withRecord = (item) => ({
         ...item, ...byId.get(item.proposal.id), proposal: item.proposal,
       });
@@ -312,18 +306,6 @@ class ProposalsPlugin extends LitElement {
       </article>`;
   }
 
-  renderFound() {
-    return html`
-      <details class="found">
-        <summary>What the panel looked at</summary>
-        <p class="muted">This page: ${this.path}. It lists proposals where this page is the source, a target, a draft or a preview page.</p>
-        ${this.found.length ? html`<ul>${this.found.map((proposal) => html`
-          <li><strong>${proposal.id}</strong>: ${proposal.status}, ${proposal.source.path} → ${proposal.pages.map((page) => page.target).join(', ')}</li>`)}</ul>`
-    : html`<p class="muted">No proposals found in ${PROPOSALS_ROOT}.</p>`}
-        ${this.problems.length ? html`<p class="muted">Could not use:</p><ul>${this.problems.map((item) => html`<li><strong>${item.id}</strong>: ${item.reason}</li>`)}</ul>` : nothing}
-      </details>`;
-  }
-
   renderReady() {
     return html`
       ${this.open.length ? this.open.map((item) => this.renderItem(item)) : html`<p class="muted">${this.closed.length ? 'No open content proposals involve this page.' : 'No content proposals involve this page.'}</p>`}
@@ -331,8 +313,7 @@ class ProposalsPlugin extends LitElement {
         <details class="closed">
           <summary>Closed (${this.closed.length})</summary>
           ${this.closed.map((item) => this.renderItem(item))}
-        </details>` : nothing}
-      ${this.open.length ? nothing : this.renderFound()}`;
+        </details>` : nothing}`;
   }
 
   render() {
