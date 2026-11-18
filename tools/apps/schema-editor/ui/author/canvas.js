@@ -444,7 +444,7 @@ class SeCanvas extends LitElement {
           </div>
         ` : html`
           <div class=${slot.className} data-parent-id=${node.id} data-slot data-scope=${ctx.scope}>
-            <span class="muted">Drop elements here</span>
+            <span class="muted">Drop the element for each entry</span>
             ${this._renderAdd(node.id, undefined, 'Choose')}
             ${slot.note}
           </div>
