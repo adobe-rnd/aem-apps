@@ -85,6 +85,10 @@ async function runWithConcurrency(tasks, limit = MAX_CONCURRENT) {
 // Folder listing via DA Admin (app-only)
 // ──────────────────────────────────────────────
 
+export function isDraftsPath(path) {
+  return /^\/drafts(\/|$)/.test(path);
+}
+
 export async function listFolder(org, site, path = '/') {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   const url = `${DA_ORIGIN}/list/${org}/${site}${cleanPath}`;
@@ -104,7 +108,7 @@ export async function listFolder(org, site, path = '/') {
       isFolder: !item.ext && !item.name.includes('.'),
       lastModified: item.lastModified || null,
     };
-  });
+  }).filter((item) => !isDraftsPath(item.path));
 }
 
 // Lists a folder for a linked site and merges in inherited entries from the
