@@ -45,6 +45,8 @@ import renderDetailPanel from './views/detail-panel.js';
 import renderActionDrawer from './views/action-drawer.js';
 import renderRolloutsView from './views/rollouts-view.js';
 import renderMapView from './views/map-view.js';
+import renderFolderMenu from './views/folder-menu.js';
+import { folderIndex, setFolder } from './data/folders.js';
 import { pageLabel } from './views/common.js';
 
 const NX = 'https://da.live/nx';
@@ -113,6 +115,7 @@ class MsmNextApp extends LitElement {
     view: { state: true },
     tab: { state: true },
     picked: { state: true },
+    folderMenuOpen: { state: true },
     drawer: { state: true },
     rollouts: { state: true },
     showCompleted: { state: true },
@@ -140,6 +143,7 @@ class MsmNextApp extends LitElement {
     this.view = 'tree';
     this.tab = 'pages';
     this.picked = new Set();
+    this.folderMenuOpen = false;
     this.drawer = null;
     this.rollouts = [];
     this.rolloutBusy = new Set();
@@ -442,6 +446,15 @@ class MsmNextApp extends LitElement {
       else picked.delete(node.key);
     });
     this.picked = picked;
+  }
+
+  pickFolder(folder, checked) {
+    this.picked = setFolder(this.picked, folder, checked);
+  }
+
+  folderList() {
+    const { rows } = this.visibleRows();
+    return folderIndex(rows.filter((row) => !row.node.parent).map((row) => row.node));
   }
 
   openDrawer(sources, focusLocationId = null) {
@@ -1022,6 +1035,14 @@ class MsmNextApp extends LitElement {
         <span>${count ? html`<strong>${count}</strong> source page${count === 1 ? '' : 's'} selected` : 'Select source pages to update or create their targets in one rollout.'}</span>
         ${count ? html`<button type="button" class="btn quiet small" @click=${() => { this.picked = new Set(); }}>Clear</button>` : nothing}
         <span class="spacer"></span>
+        ${renderFolderMenu(this.folderList(), {
+    picked: this.picked,
+    open: this.folderMenuOpen,
+    filtering: this.filtering(),
+    onOpen: () => { this.folderMenuOpen = !this.folderMenuOpen; },
+    onClose: () => { this.folderMenuOpen = false; },
+    onToggle: (folder, checked) => this.pickFolder(folder, checked),
+  })}
         <button type="button" class="btn accent" ?disabled=${!count} @click=${() => this.openPickedDrawer()}>Update / Create…</button>
       </div>`;
   }
