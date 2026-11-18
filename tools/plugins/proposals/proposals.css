@@ -305,3 +305,32 @@ a:hover {
   margin: 4px 0;
   padding-left: 18px;
 }
+
+.related {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.related-links {
+  font-size: 12px;
+}
+
+.closed > summary {
+  margin-bottom: 8px;
+  color: var(--s2-gray-600, #717171);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.closed .card {
+  margin-bottom: 8px;
+}
+
+.check.neutral {
+  background: var(--s2-gray-100, #f3f3f3);
+}

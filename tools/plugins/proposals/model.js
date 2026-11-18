@@ -35,6 +35,10 @@ export function pagePathFrom(path) {
   return last.includes('.') ? clean : `${clean}.html`;
 }
 
+export const proposalFolder = (id) => `${PROPOSALS_ROOT}/${id}`;
+export const recordPath = (id) => `${proposalFolder(id)}/proposal.json`;
+export const previewPath = (id, target) => `${proposalFolder(id)}/preview${pagePathFrom(target)}`;
+
 const asText = (value) => (typeof value === 'string' ? value : '');
 
 export function parseProposal(raw, id) {
@@ -72,36 +76,51 @@ export const isOpen = (proposal) => OPEN_STATUSES.includes(proposal.status);
 
 export const typeLabel = (type) => TYPE_LABELS[type] ?? (type || 'Changed');
 
-export function proposalsForPage(proposals, path) {
-  const page = pagePathFrom(path);
-  const targeting = [];
-  const sourceOf = [];
-  proposals.filter(isOpen).forEach((proposal) => {
-    const entry = proposal.pages
-      .find((candidate) => candidate.target === page && !candidate.mergeMode);
-    if (entry) {
-      targeting.push({
-        proposal,
-        page: entry,
-        changes: proposal.changes.filter((change) => !change.target || change.target === page),
-      });
-    } else if (proposal.source.path === page) {
-      sourceOf.push(proposal);
-    }
+const isClosed = (proposal) => !isOpen(proposal);
+
+const pageIsDone = (proposal, page) => Boolean(page.mergeMode) || isClosed(proposal);
+
+export function pageState(proposal, page) {
+  if (page.mergeMode) return 'merged';
+  if (proposal.status === 'rejected') return 'rejected';
+  return pageIsDone(proposal, page) ? 'closed' : 'open';
+}
+
+function roleFor(proposal, path) {
+  const target = proposal.pages.find((page) => page.target === path);
+  if (target) return { role: 'target', page: target };
+  const draft = proposal.pages.find((page) => pagePathFrom(page.draftPath) === path);
+  if (draft) return { role: 'draft', page: draft };
+  const preview = proposal.pages.find((page) => previewPath(proposal.id, page.target) === path);
+  if (preview) return { role: 'preview', page: preview };
+  if (proposal.source.path === path) return { role: 'source', page: null };
+  return null;
+}
+
+export function involvement(proposals, path) {
+  const here = pagePathFrom(path);
+  const items = [];
+  proposals.forEach((proposal) => {
+    const found = roleFor(proposal, here);
+    if (!found) return;
+    const changes = found.page
+      ? proposal.changes.filter((change) => !change.target || change.target === found.page.target)
+      : proposal.changes;
+    const pageless = isOpen(proposal) ? 'open' : 'closed';
+    const state = found.page ? pageState(proposal, found.page) : pageless;
+    items.push({
+      proposal, role: found.role, page: found.page, changes, state, actionable: Boolean(found.page) && state === 'open',
+    });
   });
-  const newest = (a, b) => b.createdAt.localeCompare(a.createdAt);
-  targeting.sort((a, b) => newest(a.proposal, b.proposal));
-  sourceOf.sort(newest);
-  return { targeting, sourceOf };
+  const newest = (a, b) => b.proposal.createdAt.localeCompare(a.proposal.createdAt);
+  const open = items.filter((item) => item.state === 'open').sort(newest);
+  const closed = items.filter((item) => item.state !== 'open').sort(newest);
+  return { open, closed };
 }
 
 export const isProposalPath = (path) => path === PROPOSALS_ROOT || path.startsWith(`${PROPOSALS_ROOT}/`);
 
 export const isDraftPath = (path) => /^\/drafts(\/|$)/.test(path);
-
-export const proposalFolder = (id) => `${PROPOSALS_ROOT}/${id}`;
-export const recordPath = (id) => `${proposalFolder(id)}/proposal.json`;
-export const previewPath = (id, target) => `${proposalFolder(id)}/preview${pagePathFrom(target)}`;
 
 export const canvasUrl = (org, site, path) => `https://da.live/canvas#/${org}/${site}${pagePathFrom(path).replace(/\.html$/, '')}`;
 

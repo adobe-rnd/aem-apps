@@ -19,7 +19,7 @@ import { LitElement, html, nothing } from 'da-lit';
 import createStore from './store.js';
 import createMerger from './merge.js';
 import {
-  pagePathFrom, proposalsForPage, isDraftPath, mergeCheck, typeLabel, formatDate, canvasUrl,
+  pagePathFrom, involvement, pageState, mergeCheck, typeLabel, formatDate, canvasUrl,
   applyMerged, applyRejected, previewPath, PROPOSALS_ROOT,
 } from './model.js';
 
@@ -37,13 +37,28 @@ try {
 
 const parse = (text) => new DOMParser().parseFromString(text, 'text/html');
 
+const STATE_LABELS = {
+  open: 'Open', partial: 'Partly merged', merged: 'Merged', rejected: 'Rejected', closed: 'Closed',
+};
+
+const STATE_TONES = {
+  open: 'notice', partial: 'informative', merged: 'positive', rejected: 'negative', closed: '',
+};
+
+const ROLE_LABELS = {
+  target: 'This page is the target',
+  source: 'This page is the source',
+  draft: 'This page is the draft',
+  preview: 'This page is the diff view',
+};
+
 const messageOf = (error) => error?.message || String(error);
 
-function renderChanges(entry) {
-  if (!entry.changes.length) return nothing;
+function renderChanges(item) {
+  if (!item.changes.length) return nothing;
   return html`
     <ul class="changes">
-      ${entry.changes.map((change) => html`
+      ${item.changes.map((change) => html`
         <li>
           <span class="change-type">${typeLabel(change.type)}</span>
           <span class="change-why">${change.rationale}</span>
@@ -58,6 +73,17 @@ function renderCheck(card) {
   return html`<p class="check ${check.tone}">${check.label}</p>`;
 }
 
+function renderHistory(item) {
+  const { proposal, raw, page } = item;
+  if (proposal.status === 'rejected') {
+    return html`<p class="check neutral">Rejected${raw?.rejectedAt ? ` on ${formatDate(raw.rejectedAt)}` : ''}${raw?.reason ? `: ${raw.reason}` : ''}.</p>`;
+  }
+  if (page?.mergeMode || proposal.status === 'merged') {
+    return html`<p class="check positive">Merged${raw?.mergedAt ? ` on ${formatDate(raw.mergedAt)}` : ''}.</p>`;
+  }
+  return nothing;
+}
+
 class ProposalsPlugin extends LitElement {
   static properties = {
     store: { attribute: false },
@@ -67,8 +93,8 @@ class ProposalsPlugin extends LitElement {
     path: { attribute: false },
     phase: { state: true },
     error: { state: true },
-    entries: { state: true },
-    sourceOf: { state: true },
+    open: { state: true },
+    closed: { state: true },
     cards: { state: true },
     notice: { state: true },
     found: { state: true },
@@ -78,8 +104,8 @@ class ProposalsPlugin extends LitElement {
   constructor() {
     super();
     this.phase = 'loading';
-    this.entries = [];
-    this.sourceOf = [];
+    this.open = [];
+    this.closed = [];
     this.found = [];
     this.problems = [];
     this.cards = new Map();
@@ -102,33 +128,27 @@ class ProposalsPlugin extends LitElement {
     this.error = null;
     this.notice = null;
     this.cards = new Map();
-    if (isDraftPath(this.path)) {
-      this.entries = [];
-      this.sourceOf = [];
-      this.phase = 'draft';
-      return;
-    }
     try {
       const { proposals: loaded, problems } = await this.store.listProposals();
       this.found = loaded.map((item) => item.proposal);
       this.problems = problems;
       const byId = new Map(loaded.map((item) => [item.proposal.id, item]));
-      const { targeting, sourceOf } = proposalsForPage(
-        loaded.map((item) => item.proposal),
-        this.path,
-      );
-      this.entries = targeting.map((entry) => ({ ...entry, ...byId.get(entry.proposal.id) }));
-      this.sourceOf = sourceOf;
+      const { open, closed } = involvement(this.found, this.path);
+      const withRecord = (item) => ({
+        ...item, ...byId.get(item.proposal.id), proposal: item.proposal,
+      });
+      this.open = open.map(withRecord);
+      this.closed = closed.map(withRecord);
       this.phase = 'ready';
-      this.entries.forEach((entry) => this.runCheck(entry));
+      this.open.filter((item) => item.actionable).forEach((item) => this.runCheck(item));
     } catch (error) {
       this.error = messageOf(error);
       this.phase = 'error';
     }
   }
 
-  async runCheck(entry) {
-    const { proposal, page } = entry;
+  async runCheck(item) {
+    const { proposal, page } = item;
     this.patchCard(proposal.id, { check: 'running', checkError: null });
     try {
       const result = await this.merger.check({
@@ -140,8 +160,8 @@ class ProposalsPlugin extends LitElement {
     }
   }
 
-  async showDiff(entry) {
-    const { proposal, page } = entry;
+  async showDiff(item) {
+    const { proposal, page } = item;
     this.patchCard(proposal.id, { busy: 'diff', message: null });
     try {
       const result = await this.merger.preview({
@@ -164,10 +184,10 @@ class ProposalsPlugin extends LitElement {
     }
   }
 
-  async approve(entry) {
+  async approve(item) {
     const {
       proposal, page, raw, etag,
-    } = entry;
+    } = item;
     this.patchCard(proposal.id, { busy: 'approve', message: null });
     try {
       const result = await this.merger.merge({
@@ -185,8 +205,8 @@ class ProposalsPlugin extends LitElement {
     }
   }
 
-  async reject(entry, reason) {
-    const { proposal, raw, etag } = entry;
+  async reject(item, reason) {
+    const { proposal, raw, etag } = item;
     this.patchCard(proposal.id, { busy: 'reject', message: null });
     try {
       await this.store.saveRecord(
@@ -201,8 +221,8 @@ class ProposalsPlugin extends LitElement {
     }
   }
 
-  renderConfirm(entry, card) {
-    const { proposal, page } = entry;
+  renderConfirm(item, card) {
+    const { proposal, page } = item;
     const { id } = proposal;
     if (card.confirm === 'approve') {
       const check = mergeCheck(card.result);
@@ -212,7 +232,7 @@ class ProposalsPlugin extends LitElement {
           ${proposal.pages.length > 1 ? html`<p class="muted">The proposal also covers ${proposal.pages.length - 1} other ${proposal.pages.length === 2 ? 'page' : 'pages'}. They stay open.</p>` : nothing}
           <div class="actions">
             <button type="button" class="btn accent" ?disabled=${card.busy}
-              @click=${() => this.approve(entry)}>${card.busy === 'approve' ? 'Merging…' : 'Merge now'}</button>
+              @click=${() => this.approve(item)}>${card.busy === 'approve' ? 'Merging…' : 'Merge now'}</button>
             <button type="button" class="btn" ?disabled=${card.busy}
               @click=${() => this.patchCard(id, { confirm: null })}>Cancel</button>
           </div>
@@ -228,7 +248,7 @@ class ProposalsPlugin extends LitElement {
           </label>
           <div class="actions">
             <button type="button" class="btn destructive-fill" ?disabled=${card.busy}
-              @click=${() => this.reject(entry, card.reason ?? '')}>${card.busy === 'reject' ? 'Rejecting…' : 'Reject proposal'}</button>
+              @click=${() => this.reject(item, card.reason ?? '')}>${card.busy === 'reject' ? 'Rejecting…' : 'Reject proposal'}</button>
             <button type="button" class="btn" ?disabled=${card.busy}
               @click=${() => this.patchCard(id, { confirm: null })}>Cancel</button>
           </div>
@@ -237,31 +257,58 @@ class ProposalsPlugin extends LitElement {
     return nothing;
   }
 
-  renderEntry(entry) {
-    const { proposal, page } = entry;
-    const card = this.cards.get(proposal.id) ?? {};
+  renderRelated(item) {
+    const { proposal, role, page } = item;
+    const link = (path, label) => html`<a href=${canvasUrl(this.org, this.site, path)} target="_blank" rel="noopener">${label}</a>`;
+    if (role === 'source') {
+      return html`
+        <ul class="related">${proposal.pages.map((entry) => html`
+          <li>${link(entry.target, entry.label || entry.target)}
+            <span class="pill small ${STATE_TONES[pageState(proposal, entry)]}">${STATE_LABELS[pageState(proposal, entry)]}</span></li>`)}
+        </ul>
+        <p class="muted">Open a target page to review, approve or reject.</p>`;
+    }
+    return html`
+      <p class="related-links">
+        ${role === 'target' ? nothing : html`Target page: ${link(page.target, page.label || page.target)} · `}
+        Source page: ${link(proposal.source.path, proposal.source.path)}
+      </p>`;
+  }
+
+  renderActions(item, card) {
+    const { proposal } = item;
     const mergeable = card.check === 'done';
+    return card.confirm ? this.renderConfirm(item, card) : html`
+      <div class="actions">
+        <button type="button" class="btn" ?disabled=${!mergeable || card.busy}
+          @click=${() => this.showDiff(item)}>${card.busy === 'diff' ? 'Preparing…' : 'Show diff view'}</button>
+        <button type="button" class="btn accent" ?disabled=${!mergeable || card.busy}
+          @click=${() => this.patchCard(proposal.id, { confirm: 'approve' })}>Approve</button>
+        <button type="button" class="btn" ?disabled=${card.busy}
+          @click=${() => this.patchCard(proposal.id, { confirm: 'reject' })}>Reject</button>
+      </div>`;
+  }
+
+  renderItem(item) {
+    const { proposal, role } = item;
+    const card = this.cards.get(proposal.id) ?? {};
+    const state = proposal.status === 'partially-merged' && item.state === 'open' ? 'partial' : item.state;
+    const label = proposal.status === 'merged' || proposal.status === 'rejected' ? proposal.status : state;
     return html`
       <article class="card" aria-label=${proposal.title}>
         <div class="card-head">
           <h2>${proposal.title}</h2>
-          <span class="pill small ${proposal.status === 'partially-merged' ? 'informative' : 'notice'}">${proposal.status === 'partially-merged' ? 'Partly merged' : 'Open'}</span>
+          <span class="pill small ${STATE_TONES[label]}">${STATE_LABELS[label]}</span>
         </div>
-        <p class="muted">${proposal.source.path} → ${page.label || page.target}${proposal.createdAt ? ` · ${formatDate(proposal.createdAt)}` : ''}</p>
+        <p class="muted">${ROLE_LABELS[role]} · ${proposal.source.path} → ${proposal.pages.length === 1 ? (proposal.pages[0].label || proposal.pages[0].target) : `${proposal.pages.length} pages`}${proposal.createdAt ? ` · ${formatDate(proposal.createdAt)}` : ''}</p>
         ${proposal.summary ? html`<p>${proposal.summary}</p>` : nothing}
-        ${renderChanges(entry)}
-        ${renderCheck(card)}
-        ${card.message ? html`<p class="check ${card.message.tone}">${card.message.text}</p>` : nothing}
-        ${card.diffUrl ? html`<p class="legend"><a href=${card.diffUrl} target="_blank" rel="noopener">Open the diff view again</a>. <strong>Upstream</strong> is the proposed change. <strong>Local</strong> is this page as it is now. Only read the markers; do not accept or reject them there.</p>` : nothing}
-        ${card.confirm ? this.renderConfirm(entry, card) : html`
-          <div class="actions">
-            <button type="button" class="btn" ?disabled=${!mergeable || card.busy}
-              @click=${() => this.showDiff(entry)}>${card.busy === 'diff' ? 'Preparing…' : 'Show diff view'}</button>
-            <button type="button" class="btn accent" ?disabled=${!mergeable || card.busy}
-              @click=${() => this.patchCard(proposal.id, { confirm: 'approve' })}>Approve</button>
-            <button type="button" class="btn" ?disabled=${card.busy}
-              @click=${() => this.patchCard(proposal.id, { confirm: 'reject' })}>Reject</button>
-          </div>`}
+        ${renderChanges(item)}
+        ${this.renderRelated(item)}
+        ${item.actionable ? html`
+          ${renderCheck(card)}
+          ${card.message ? html`<p class="check ${card.message.tone}">${card.message.text}</p>` : nothing}
+          ${card.diffUrl ? html`<p class="legend"><a href=${card.diffUrl} target="_blank" rel="noopener">Open the diff view again</a>. <strong>Upstream</strong> is the proposed change. <strong>Local</strong> is the page as it is now. Only read the markers; do not accept or reject them there.</p>` : nothing}
+          ${this.renderActions(item, card)}` : renderHistory(item)}
       </article>`;
   }
 
@@ -269,35 +316,36 @@ class ProposalsPlugin extends LitElement {
     return html`
       <details class="found">
         <summary>What the panel looked at</summary>
-        <p class="muted">This page: ${this.path}. It lists proposals whose target page is this page.</p>
+        <p class="muted">This page: ${this.path}. It lists proposals where this page is the source, a target, a draft or a preview page.</p>
         ${this.found.length ? html`<ul>${this.found.map((proposal) => html`
-          <li><strong>${proposal.id}</strong>: ${proposal.status}, target${proposal.pages.length === 1 ? '' : 's'} ${proposal.pages.map((page) => page.target).join(', ')}</li>`)}</ul>`
+          <li><strong>${proposal.id}</strong>: ${proposal.status}, ${proposal.source.path} → ${proposal.pages.map((page) => page.target).join(', ')}</li>`)}</ul>`
     : html`<p class="muted">No proposals found in ${PROPOSALS_ROOT}.</p>`}
         ${this.problems.length ? html`<p class="muted">Could not use:</p><ul>${this.problems.map((item) => html`<li><strong>${item.id}</strong>: ${item.reason}</li>`)}</ul>` : nothing}
       </details>`;
   }
 
-  renderEmpty() {
-    const sourceOf = this.sourceOf.length ? html`
-      <p class="muted">No open proposals target this page. It is the source of ${this.sourceOf.length === 1 ? 'a proposal' : `${this.sourceOf.length} proposals`}. Open the target page to act on ${this.sourceOf.length === 1 ? 'it' : 'them'}:</p>
-      <ul class="source-of">${this.sourceOf.map((proposal) => html`<li>${proposal.title}: ${proposal.pages.map((page) => page.target).join(', ')}</li>`)}</ul>`
-      : html`<p class="muted">No open content proposals for this page.</p>`;
-    return html`${sourceOf}${this.renderFound()}`;
+  renderReady() {
+    return html`
+      ${this.open.length ? this.open.map((item) => this.renderItem(item)) : html`<p class="muted">${this.closed.length ? 'No open content proposals involve this page.' : 'No content proposals involve this page.'}</p>`}
+      ${this.closed.length ? html`
+        <details class="closed">
+          <summary>Closed (${this.closed.length})</summary>
+          ${this.closed.map((item) => this.renderItem(item))}
+        </details>` : nothing}
+      ${this.open.length ? nothing : this.renderFound()}`;
   }
 
   render() {
     return html`
       <div class="top">
         <span class="panel-name">Content proposals</span>
-        ${this.phase === 'ready' && this.entries.length ? html`<span class="pill small informative">${this.entries.length}</span>` : nothing}
+        ${this.phase === 'ready' && this.open.length ? html`<span class="pill small informative">${this.open.length}</span>` : nothing}
         <button type="button" class="link-btn refresh" @click=${() => this.load()}>Refresh</button>
       </div>
       ${this.notice ? html`<p class="check ${this.notice.tone}" role="status">${this.notice.text}</p>` : nothing}
       ${this.phase === 'loading' ? html`<p class="state muted">Loading proposals…</p>` : nothing}
       ${this.phase === 'error' ? html`<p class="state error-text">Could not load proposals: ${this.error}</p>` : nothing}
-      ${this.phase === 'draft' ? html`<p class="state muted">Proposals are not shown for draft pages.</p>` : nothing}
-      ${this.phase === 'ready' ? html`
-        ${this.entries.length ? this.entries.map((entry) => this.renderEntry(entry)) : this.renderEmpty()}` : nothing}`;
+      ${this.phase === 'ready' ? this.renderReady() : nothing}`;
   }
 }
 

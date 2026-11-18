@@ -16,7 +16,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  parseProposal, proposalsForPage, mergeCheck, applyMerged, applyRejected, canvasUrl, previewPath,
+  parseProposal, involvement, pageState, mergeCheck, applyMerged, applyRejected, canvasUrl, previewPath,
   pagePathFrom, isDraftPath, typeLabel,
 } from '../../../../tools/plugins/proposals/model.js';
 
@@ -67,7 +67,7 @@ describe('parseProposal', () => {
   });
 });
 
-describe('proposalsForPage', () => {
+describe('involvement', () => {
   const list = [
     parseProposal(raw(), 'a'),
     parseProposal(raw({ id: 'b', status: 'merged' }), 'b'),
@@ -77,36 +77,73 @@ describe('proposalsForPage', () => {
     }), 'd'),
   ];
 
-  it('returns open proposals that target the page, newest first', () => {
-    const { targeting } = proposalsForPage(list, '/en-ca/index-ready');
-    assert.deepEqual(targeting.map((entry) => entry.proposal.id), ['c', '20261118-1902-hero']);
+  it('returns open proposals for a target page, newest first, and closed ones apart', () => {
+    const { open, closed } = involvement(list, '/en-ca/index-ready');
+    assert.deepEqual(open.map((item) => item.proposal.id), ['c', '20261118-1902-hero']);
+    assert.deepEqual(closed.map((item) => item.proposal.id), ['b']);
+    assert.equal(open[0].role, 'target');
+    assert.equal(open[0].actionable, true);
+    assert.equal(closed[0].actionable, false);
   });
 
   it('keeps only the changes for this page', () => {
-    const { targeting } = proposalsForPage([parseProposal(raw({
+    const { open } = involvement([parseProposal(raw({
       changes: [
         { target: '/en-ca/index-ready.html', type: 'a', rationale: '' },
         { target: '/fr-ca/index-ready.html', type: 'b', rationale: '' },
       ],
     }), 'a')], '/en-ca/index-ready.html');
-    assert.equal(targeting[0].changes.length, 1);
+    assert.equal(open[0].changes.length, 1);
   });
 
-  it('skips pages that were already merged', () => {
+  it('treats an already merged page of a partly merged proposal as closed', () => {
     const merged = parseProposal(raw({
       status: 'partially-merged',
       pages: [{
         target: '/en-ca/index-ready.html', draftPath: '/d', mergeMode: 'smart',
       }, { target: '/fr-ca/index-ready.html', draftPath: '/e' }],
     }), 'm');
-    assert.equal(proposalsForPage([merged], '/en-ca/index-ready.html').targeting.length, 0);
-    assert.equal(proposalsForPage([merged], '/fr-ca/index-ready.html').targeting.length, 1);
+    const en = involvement([merged], '/en-ca/index-ready.html');
+    assert.equal(en.open.length, 0);
+    assert.equal(en.closed[0].state, 'merged');
+    const fr = involvement([merged], '/fr-ca/index-ready.html');
+    assert.equal(fr.open.length, 1);
+    assert.equal(fr.open[0].actionable, true);
   });
 
-  it('reports proposals the page is the source of', () => {
-    const { targeting, sourceOf } = proposalsForPage(list, '/index-ready.html');
-    assert.equal(targeting.length, 0);
-    assert.equal(sourceOf.length, 3);
+  it('shows a proposal on its source page without actions', () => {
+    const { open } = involvement(list, '/index-ready.html');
+    assert.equal(open.length, 3);
+    assert.ok(open.every((item) => item.role === 'source' && !item.actionable && item.page === null));
+  });
+
+  it('recognizes the draft page and the diff view page, with actions for that target', () => {
+    const one = [parseProposal(raw({
+      id: 'x',
+      pages: [{
+        target: '/en-ca/index-ready.html',
+        draftPath: '/drafts/proposals/x/en-ca/index-ready.html',
+        baseVersionId: 'v1',
+      }],
+    }), 'x')];
+    const draft = involvement(one, '/drafts/proposals/x/en-ca/index-ready.html').open[0];
+    assert.equal(draft.role, 'draft');
+    assert.equal(draft.actionable, true);
+    assert.equal(draft.page.target, '/en-ca/index-ready.html');
+    const preview = involvement(one, '/drafts/proposals/x/preview/en-ca/index-ready').open[0];
+    assert.equal(preview.role, 'preview');
+    assert.equal(preview.actionable, true);
+  });
+
+  it('finds nothing for an unrelated page', () => {
+    const { open, closed } = involvement(list, '/de/other.html');
+    assert.equal(open.length + closed.length, 0);
+  });
+
+  it('classifies a rejected proposal as closed on every role', () => {
+    const rejected = parseProposal(raw({ status: 'rejected' }), 'r');
+    assert.equal(pageState(rejected, rejected.pages[0]), 'rejected');
+    assert.equal(involvement([rejected], '/index-ready.html').closed.length, 1);
   });
 });
 
