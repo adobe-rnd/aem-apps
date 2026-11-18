@@ -27,6 +27,15 @@ The compact toolbar keeps **New task** beside search and **Refresh** beside the
 connection status. Refresh is hidden while connecting. Page context still comes
 from EW for filtering, linking, and creating tasks, without repeating it in a header.
 
+**Assigned to me** is the first context filter; **This page** remains the default
+context. **Tasks** is the default tab, with **Projects** beside it. Both use the
+same accordion layout and start with no item open. Click a row, or focus it and
+press Enter or Space, to open its details directly beneath it. Opening another
+row closes the previous one; clicking the open row closes it. Switching tabs,
+changing context, or refreshing collapses the rows. Creating a task opens its
+new row, and a task's parent-project link opens that project's row in Projects.
+Item counts appear only in the tabs.
+
 Search filters project and task names in the selected context. Typing a user's
 name also suggests up to eight matching users. Select a suggestion with the mouse
 or Arrow keys and Enter to show that user's assignments and project teams.
@@ -49,6 +58,7 @@ includes these tests. No `npm install` is needed.
 
 Open the plugin in an EW side panel and select **All** with enough items to
 extend below the viewport. Verify that mouse-wheel or trackpad scrolling over
-the list reaches the last item and results summary, then returns to the top.
-Repeat with item details open and at narrow and wide panel widths. The app body
-must remain in normal document flow so the iframe document can scroll.
+the list reaches the last item, then returns to the top. Repeat in Tasks and
+Projects with a row expanded, at narrow and wide panel widths. Confirm that
+details appear between the expanded row and the next row, not after the list.
+The app body must remain in normal document flow so the iframe document can scroll.

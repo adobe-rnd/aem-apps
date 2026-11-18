@@ -30,7 +30,7 @@ const state = {
   catalog: { projects: [], tasks: [], users: [] },
   scope: 'page',
   userFilter: '',
-  tab: 'all',
+  tab: 'tasks',
   search: '',
   searchOpen: false,
   searchIndex: -1,
@@ -38,7 +38,6 @@ const state = {
   selected: null,
   loading: true,
   error: null,
-  mobileDetail: false,
   linking: new Set(),
   creating: false,
   createUncertain: false,
@@ -150,10 +149,10 @@ function notify(message, error = false) {
 }
 
 function chooseItem(item) {
-  state.selected = { id: item.id, type: item.type };
-  state.mobileDetail = true;
+  const selected = state.selected?.id === item.id && state.selected.type === item.type;
+  state.selected = selected ? null : { id: item.id, type: item.type };
   render();
-  find('.mobile-back')?.focus();
+  document.getElementById(itemId(item))?.focus();
 }
 
 function renderEnvironment() {
@@ -174,7 +173,7 @@ function chooseUser(user) {
   state.search = '';
   state.searchOpen = false;
   state.searchIndex = -1;
-  state.mobileDetail = false;
+  state.selected = null;
   render();
   find('#search').focus();
 }
@@ -225,7 +224,6 @@ function renderControls(filtered) {
   if (find('#search').value !== state.search) find('#search').value = state.search;
   renderSearch();
   const counts = {
-    all: filtered.projects.length + filtered.tasks.length,
     projects: filtered.projects.length,
     tasks: filtered.tasks.length,
   };
@@ -238,57 +236,50 @@ function renderControls(filtered) {
   find('#results').setAttribute('aria-busy', String(state.loading));
 }
 
-function sectionHeading(title, count, iconName) {
-  const heading = node('h2', 'section-heading');
-  heading.append(icon(iconName), document.createTextNode(title), node('span', 'count-badge', String(count)));
-  return heading;
+function itemId(item) {
+  return `item-${item.type}-${encodeURIComponent(item.id)}`;
 }
 
-function projectCard(project) {
-  const card = node('button', 'project-card');
-  card.type = 'button';
-  card.classList.toggle('is-selected', state.selected?.type === 'project' && state.selected.id === project.id);
-  card.setAttribute('aria-label', `View project: ${project.name}. ${project.matchReason}`);
-  card.setAttribute('aria-pressed', String(state.selected?.type === 'project' && state.selected.id === project.id));
-  const top = node('span', 'project-card-top');
-  const symbol = node('span', 'project-symbol');
-  symbol.append(icon('folder'));
-  top.append(symbol, node('span', 'project-reference', project.reference || project.id), icon('arrow-up-right'));
-  const bottom = node('span', 'project-card-bottom');
-  const stack = node('span', 'avatar-stack');
-  const tasks = state.catalog.tasks.filter((task) => task.projectId === project.id);
-  const people = [...new Set(tasks.flatMap((task) => task.assigneeIds || []))].slice(0, 3);
-  people.forEach((id) => stack.append(avatar(state.catalog.users.find((user) => user.id === id))));
-  bottom.append(stack, node('span', 'task-total', `${tasks.length} task${tasks.length === 1 ? '' : 's'}`));
-  card.append(top, node('span', 'project-name', project.name), node('span', 'project-description', project.description || 'No project brief added.'), bottom, reasonElement(project.matchReason));
-  card.addEventListener('click', () => chooseItem(project));
-  return card;
-}
-
-function taskRow(task) {
-  const row = node('button', 'task-row');
+function itemAccordion(item) {
+  const container = node('article', 'item-accordion');
+  const heading = node('h2');
+  const row = node('button', 'item-row');
   row.type = 'button';
-  const selected = state.selected?.type === 'task' && state.selected.id === task.id;
-  row.classList.toggle('is-selected', selected);
-  row.setAttribute('aria-pressed', String(selected));
-  row.setAttribute('aria-label', `View task: ${task.name}. ${task.matchReason}`);
-  const summary = node('span', 'task-summary');
-  summary.append(node('span', 'task-name', task.name), node('span', 'task-project', projectFor(task)?.name || 'Project unavailable'), reasonElement(task.matchReason));
-  const owner = node('span', 'task-owner');
-  const users = (task.assigneeIds || [])
+  row.id = itemId(item);
+  const expanded = state.selected?.type === item.type && state.selected.id === item.id;
+  row.setAttribute('aria-expanded', String(expanded));
+  row.setAttribute('aria-controls', `${row.id}-details`);
+  row.setAttribute('aria-label', `${item.type === 'task' ? 'Task' : 'Project'}: ${item.name}. ${item.matchReason}`);
+  const summary = node('span', 'item-summary');
+  const tasks = item.type === 'project' ? state.catalog.tasks.filter((task) => task.projectId === item.id) : [];
+  const subtitle = item.type === 'task'
+    ? projectFor(item)?.name || 'Project unavailable'
+    : `${tasks.length} task${tasks.length === 1 ? '' : 's'}`;
+  summary.append(node('span', 'item-name', item.name), node('span', 'item-subtitle', subtitle), reasonElement(item.matchReason));
+  const owner = node('span', 'item-owner');
+  const ownerIds = item.type === 'task' ? item.assigneeIds || [] : [item.ownerId];
+  const users = ownerIds
     .map((id) => state.catalog.users.find((user) => user.id === id)).filter(Boolean);
   if (users.length) {
     const firstName = users[0].name.split(' ')[0];
     const ownerName = users.length > 1 ? `${firstName} +${users.length - 1}` : firstName;
-    owner.append(avatar(users[0]), node('span', 'task-owner-name', ownerName));
+    owner.append(avatar(users[0]), node('span', 'item-owner-name', ownerName));
     owner.title = users.map((user) => user.name).join(', ');
   } else {
-    owner.append(node('span', 'task-owner-name', 'Unassigned'));
+    owner.append(node('span', 'item-owner-name', 'Unassigned'));
     owner.title = 'Unassigned';
   }
-  row.append(summary, owner, node('span', 'task-due', dateLabel(task.dueDate)), icon('chevron-right', 'row-chevron'));
-  row.addEventListener('click', () => chooseItem(task));
-  return row;
+  row.append(summary, owner, node('span', 'item-due', dateLabel(item.dueDate)), icon('chevron-right', 'row-chevron'));
+  row.addEventListener('click', () => chooseItem(item));
+  heading.append(row);
+  const detail = node('div', 'item-detail');
+  detail.id = `${row.id}-details`;
+  detail.setAttribute('role', 'region');
+  detail.setAttribute('aria-labelledby', row.id);
+  detail.hidden = !expanded;
+  if (expanded) detail.append(itemDetail(item));
+  container.append(heading, detail);
+  return container;
 }
 
 function stateMessage(kind, title, text, actions = []) {
@@ -305,16 +296,11 @@ function stateMessage(kind, title, text, actions = []) {
 function renderResults(filtered) {
   const results = find('#results');
   results.replaceChildren();
-  find('#results-summary').textContent = '';
   if (state.loading) {
     const loading = node('div', 'loading-state');
     loading.setAttribute('role', 'status');
-    const cards = node('div', 'skeleton-projects');
-    cards.append(node('div', 'skeleton skeleton-card'), node('div', 'skeleton skeleton-card'));
     loading.append(
-      node('span', 'sr-only', 'Loading Workfront projects and tasks'),
-      node('div', 'skeleton skeleton-heading'),
-      cards,
+      node('span', 'sr-only', `Loading Workfront ${state.tab}`),
       node('div', 'skeleton skeleton-row'),
       node('div', 'skeleton skeleton-row'),
       node('div', 'skeleton skeleton-row'),
@@ -330,15 +316,16 @@ function renderResults(filtered) {
     results.append(message);
     return;
   }
-  const showProjects = state.tab !== 'tasks';
-  const showTasks = state.tab !== 'projects';
-  const visible = [
-    ...(showProjects ? filtered.projects : []), ...(showTasks ? filtered.tasks : []),
-  ];
+  const visible = filtered[state.tab];
+  const selectedVisible = visible.some(
+    (item) => item.id === state.selected?.id && item.type === state.selected.type,
+  );
+  if (!selectedVisible) {
+    state.selected = null;
+  }
   if (!visible.length) {
-    let title = `No ${state.tab === 'all' ? 'items' : state.tab} in this context`;
-    const itemType = state.tab === 'all' ? 'projects or tasks' : state.tab;
-    let text = `No ${itemType} are associated with ${scopeNames[state.scope].toLowerCase()}.`;
+    let title = `No ${state.tab} in this context`;
+    let text = `No ${state.tab} are associated with ${scopeNames[state.scope].toLowerCase()}.`;
     const actions = [];
     if (state.search) {
       title = 'No matching items';
@@ -350,8 +337,8 @@ function renderResults(filtered) {
       title = 'No page selected';
       text = 'The current page is unavailable from Experience Workspace.';
     } else if (state.scope === 'page') {
-      title = `No ${state.tab === 'all' ? 'items' : state.tab} linked to this page`;
-      text = `There are no ${itemType} associated with ${state.context.path}.`;
+      title = `No ${state.tab} linked to this page`;
+      text = `There are no ${state.tab} associated with ${state.context.path}.`;
     }
     if (!state.search && state.scope !== 'all') {
       const all = button('View all items', 'layers');
@@ -360,30 +347,8 @@ function renderResults(filtered) {
     }
     results.append(stateMessage('empty', title, text, actions));
   } else {
-    if (!visible.some((item) => (
-      item.id === state.selected?.id && item.type === state.selected.type
-    ))) {
-      const first = showTasks && filtered.tasks.length ? filtered.tasks[0] : visible[0];
-      state.selected = { id: first.id, type: first.type };
-    }
-    if (showProjects && filtered.projects.length) {
-      const section = node('section', 'projects-section');
-      const grid = node('div', 'project-grid');
-      grid.append(...filtered.projects.map(projectCard));
-      section.append(sectionHeading('Projects', filtered.projects.length, 'folder'), grid);
-      results.append(section);
-    }
-    if (showTasks && filtered.tasks.length) {
-      const section = node('section', 'tasks-section');
-      const columns = node('div', 'task-table-heading');
-      columns.setAttribute('aria-hidden', 'true');
-      columns.append(node('span', '', 'TASK'), node('span', '', 'ASSIGNED TO'), node('span', '', 'DUE'), node('span'));
-      section.append(sectionHeading('Tasks', filtered.tasks.length, 'list-todo'), columns, ...filtered.tasks.map(taskRow));
-      results.append(section);
-    }
-    find('#results-summary').textContent = `${visible.length} item${visible.length === 1 ? '' : 's'} / ${state.scope === 'user' ? state.catalog.users.find((user) => user.id === state.userFilter)?.name || 'Selected user' : scopeNames[state.scope]}`;
+    results.append(...visible.map(itemAccordion));
   }
-  if (!visible.length) state.selected = null;
 }
 
 function metadata(label, content) {
@@ -394,24 +359,8 @@ function metadata(label, content) {
   return element;
 }
 
-function renderDetail(filtered) {
-  const pane = find('#detail-pane');
-  pane.replaceChildren();
-  pane.classList.toggle('is-open', state.mobileDetail && Boolean(state.selected) && !state.loading && !state.error);
-  const item = selectedItem();
-  if (!item || state.loading || state.error) {
-    const placeholder = node('div', 'detail-placeholder');
-    placeholder.append(icon('file-text'), node('p', '', state.loading ? 'Loading details' : 'No item selected'));
-    pane.append(placeholder);
-    return;
-  }
+function itemDetail(item) {
   const inner = node('div', 'detail-inner');
-  const back = button('Back to items', 'arrow-left', 'button nx-action-btn-quiet mobile-back');
-  back.addEventListener('click', () => {
-    state.mobileDetail = false;
-    render();
-    find('.task-row.is-selected, .project-card.is-selected')?.focus();
-  });
   const top = node('div', 'detail-topline');
   const type = node('div', 'detail-type');
   type.append(
@@ -420,13 +369,13 @@ function renderDetail(filtered) {
     node('span', 'detail-reference', `/ ${item.reference || item.id}`),
   );
   top.append(type, externalLink(item.url, `Open ${item.name} in Workfront`, true));
-  inner.append(back, top, node('h2', 'detail-title', item.name));
+  inner.append(top);
   if (item.type === 'task') {
     const project = projectFor(item);
     const parent = button(project?.name || 'Project unavailable', 'folder', 'detail-project nx-action-btn-quiet');
     parent.disabled = !project;
     parent.addEventListener('click', () => {
-      state.tab = 'all';
+      state.tab = 'projects';
       state.search = '';
       chooseItem(project);
     });
@@ -500,17 +449,14 @@ function renderDetail(filtered) {
     notes.append(note);
   });
   inner.append(notes);
-  const matched = [...filtered.tasks, ...filtered.projects].find(
-    (entry) => entry.id === item.id && entry.type === item.type,
-  );
   const links = node('div', 'detail-match');
-  if (matched) links.append(reasonElement(matched.matchReason));
+  links.append(reasonElement(item.matchReason));
   if (item.pageUrl) {
     const label = item.pageLinks?.[0]?.path || item.siteIds?.[0] || item.pageUrl;
     links.append(externalLink(item.pageUrl, label));
   }
   inner.append(links);
-  pane.append(inner);
+  return inner;
 }
 
 function render() {
@@ -521,7 +467,6 @@ function render() {
   renderEnvironment();
   renderControls(filtered);
   renderResults(filtered);
-  renderDetail(filtered);
 }
 
 async function reload() {
@@ -530,7 +475,7 @@ async function reload() {
   const version = loadVersion;
   state.loading = true;
   state.error = null;
-  state.mobileDetail = false;
+  state.selected = null;
   render();
   try {
     const host = await connectToHost();
@@ -619,7 +564,6 @@ async function createTask(event) {
     state.userFilter = '';
     state.tab = 'tasks';
     state.search = '';
-    state.mobileDetail = true;
     find('#create-dialog').close();
     notify('Task created and linked to this page.');
   } catch (error) {
@@ -646,13 +590,13 @@ function clearSearch() {
 findAll('input[name="context"]').forEach((input) => input.addEventListener('change', () => {
   state.scope = input.value;
   state.userFilter = '';
-  state.mobileDetail = false;
+  state.selected = null;
   render();
 }));
 find('#selected-user').addEventListener('click', () => {
   state.userFilter = '';
   state.scope = state.previousScope;
-  state.mobileDetail = false;
+  state.selected = null;
   render();
   find('#search').focus();
 });
@@ -700,7 +644,11 @@ find('#search').addEventListener('keydown', (event) => {
   }
 });
 find('#clear-search').addEventListener('click', clearSearch);
-findAll('[data-tab]').forEach((tab) => tab.addEventListener('click', () => { state.tab = tab.dataset.tab; render(); }));
+findAll('[data-tab]').forEach((tab) => tab.addEventListener('click', () => {
+  if (state.tab !== tab.dataset.tab) state.selected = null;
+  state.tab = tab.dataset.tab;
+  render();
+}));
 find('.results-tabs').addEventListener('keydown', (event) => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
   event.preventDefault();

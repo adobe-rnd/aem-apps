@@ -48,10 +48,10 @@
         <div class="context-controls">
           <fieldset class="context-filter">
             <legend class="sr-only">Context filter</legend>
+            <label><input type="radio" name="context" value="me"><span><span class="icon" data-icon="user-round" aria-hidden="true"></span>Assigned to me</span></label>
             <label><input type="radio" name="context" value="all"><span><span class="icon" data-icon="layers" aria-hidden="true"></span>All</span></label>
             <label><input type="radio" name="context" value="site"><span><span class="icon" data-icon="globe-2" aria-hidden="true"></span>This site</span></label>
             <label><input type="radio" name="context" value="page" checked><span><span class="icon" data-icon="file-text" aria-hidden="true"></span>This page</span></label>
-            <label><input type="radio" name="context" value="me"><span><span class="icon" data-icon="user-round" aria-hidden="true"></span>Assigned to me</span></label>
           </fieldset>
         </div>
         <div class="search-controls">
@@ -62,26 +62,21 @@
               <button id="clear-search" type="button" class="icon-button small nx-action-btn-icon nx-btn-sm" title="Clear search" aria-label="Clear search" hidden><span class="icon" data-icon="x" aria-hidden="true"></span></button>
               <div id="user-suggestions" class="user-suggestions" role="listbox" aria-label="Filter by user" hidden></div>
             </div>
-            <button id="new-task" class="button nx-btn-accent nx-btn-sm" type="button" disabled><span class="icon" data-icon="plus" aria-hidden="true"></span>New task</button>
+            <button id="new-task" class="button nx-btn-accent" type="button" disabled><span class="icon" data-icon="plus" aria-hidden="true"></span>New task</button>
           </div>
           <button id="selected-user" class="selected-user nx-action-btn nx-btn-sm" type="button" hidden><span class="icon" data-icon="user-round" aria-hidden="true"></span><span id="selected-user-name"></span><span class="icon" data-icon="x" aria-hidden="true"></span></button>
         </div>
       </div>
 
-      <div class="split-view">
-        <section class="items-pane" aria-label="Workfront items">
-          <div class="results-tabs" role="tablist" aria-label="Item type">
-            <button id="tab-all" role="tab" type="button" data-tab="all" aria-selected="true" aria-controls="results">All items<span id="count-all" class="count-badge">0</span></button>
-            <button id="tab-projects" role="tab" type="button" data-tab="projects" aria-selected="false" aria-controls="results" tabindex="-1">Projects<span id="count-projects" class="count-badge">0</span></button>
-            <button id="tab-tasks" role="tab" type="button" data-tab="tasks" aria-selected="false" aria-controls="results" tabindex="-1">Tasks<span id="count-tasks" class="count-badge">0</span></button>
-          </div>
-          <div id="results" role="tabpanel" aria-labelledby="tab-all" aria-busy="true">
-            <div class="loading-state" role="status"><span class="sr-only">Loading Workfront projects and tasks</span><div class="skeleton skeleton-heading"></div><div class="skeleton-projects"><div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>
-          </div>
-          <p id="results-summary" class="results-summary" aria-live="polite"></p>
-        </section>
-        <aside id="detail-pane" class="detail-pane" aria-label="Item details"></aside>
-      </div>
+      <section class="items-pane" aria-label="Workfront items">
+        <div class="results-tabs" role="tablist" aria-label="Item type">
+          <button id="tab-tasks" role="tab" type="button" data-tab="tasks" aria-selected="true" aria-controls="results"><span class="icon" data-icon="list-todo" aria-hidden="true"></span>Tasks<span id="count-tasks" class="count-badge">0</span></button>
+          <button id="tab-projects" role="tab" type="button" data-tab="projects" aria-selected="false" aria-controls="results" tabindex="-1"><span class="icon" data-icon="folder" aria-hidden="true"></span>Projects<span id="count-projects" class="count-badge">0</span></button>
+        </div>
+        <div id="results" role="tabpanel" aria-labelledby="tab-tasks" aria-busy="true">
+          <div class="loading-state" role="status"><span class="sr-only">Loading Workfront tasks</span><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>
+        </div>
+      </section>
 
     </main>
 
