@@ -644,13 +644,15 @@ class PublishRequestsSetup extends LitElement {
       ? html`<ul class="notes">${text.map((t) => html`<li>${t}</li>`)}</ul>` : text}</div>`;
   }
 
-  // A refused-domain warning links to the Registration section that fixes it.
+  // A refused-domain warning links "Edit registration" to the section that fixes it.
   describeNote(problem) {
     const text = describeProblem(problem);
-    const canOpen = problem.code === 'recipient-domain-not-allowed' && problem.domains?.length
+    const canOpen = problem.code === 'recipient-domain-not-allowed'
       && !this._readOnly && !this._open && this._registration?.status !== 'unknown';
     if (!canOpen) return text;
-    return html`${text} <a href="#registration" @click=${(e) => { e.preventDefault(); this.openSection('registration'); }}>Edit Registration</a>`;
+    const [before, after] = text.split('Edit registration');
+    const open = (e) => { e.preventDefault(); this.openSection('registration'); };
+    return html`${before}<a href="#registration" @click=${open}>Edit registration</a>${after}`;
   }
 
   renderNotes(notes) {
