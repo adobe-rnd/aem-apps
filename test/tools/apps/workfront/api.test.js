@@ -13,9 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+/* eslint-disable import/no-relative-packages -- Repository tests import the local app package. */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createWorkfrontClient } from '../api.js';
+import { createWorkfrontClient } from '../../../../tools/apps/workfront/api.js';
 
 const page = { siteId: 'northstar/website', path: '/collections/fall.html', url: 'https://da.live/canvas#/northstar/website/collections/fall' };
 const link = { siteId: 'northstar/website', path: '/collections/fall', url: page.url };

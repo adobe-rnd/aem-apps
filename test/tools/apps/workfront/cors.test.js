@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 /* global globalThis */
+/* eslint-disable import/no-relative-packages -- Repository tests import the local app package. */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import worker, { isAllowedOrigin } from '../cors/worker.js';
+import worker, { isAllowedOrigin } from '../../../../tools/apps/workfront/cors/worker.js';
 
 const env = {
   WORKFRONT_ORIGIN: 'https://cashubv2workfront.my.workfront.com',

@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 /* eslint-disable no-restricted-syntax, no-await-in-loop -- Test each case sequentially. */
+/* eslint-disable import/no-relative-packages -- Repository tests import the local app package. */
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import loadConfig from '../config.js';
-import { createTokenStore, normalizeContext, putBriefInChat } from '../host.js';
+import loadConfig from '../../../../tools/apps/workfront/config.js';
+import { createTokenStore, normalizeContext, putBriefInChat } from '../../../../tools/apps/workfront/host.js';
 
 const configResponse = (rows, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -163,7 +164,7 @@ test('DA config requires host context and authenticated SDK fetch', async () => 
 
 test('static icons use mapped local Spectrum SVGs without an icon runtime', async () => {
   const [html, css, app] = await Promise.all(['workfront.html', 'styles.css', 'app.js']
-    .map((name) => readFile(new URL(`../${name}`, import.meta.url), 'utf8')));
+    .map((name) => readFile(new URL(`../../../../tools/apps/workfront/${name}`, import.meta.url), 'utf8')));
   const mappings = new Set([...css.matchAll(/\[data-icon="([^"]+)"\]/g)]
     .map((match) => match[1]));
   const icons = [...html.matchAll(/data-icon="([^"]+)"/g)];
@@ -174,7 +175,7 @@ test('static icons use mapped local Spectrum SVGs without an icon runtime', asyn
   assert.ok(sources.length > 0);
   await Promise.all(sources.map(async (match) => {
     assert.match(match[1], /^\.\/assets\/icons\/S2_Icon_[A-Za-z]+_20_N\.svg$/);
-    const svg = await readFile(new URL(`../${match[1]}`, import.meta.url), 'utf8');
+    const svg = await readFile(new URL(`../../../../tools/apps/workfront/${match[1]}`, import.meta.url), 'utf8');
     assert.match(svg, /<svg\b/);
     assert.match(svg, /viewBox="0 0 20 20"/);
     assert.doesNotMatch(svg, /<script\b|<foreignObject\b|\bon\w+\s*=|(?:href|src)\s*=/i);

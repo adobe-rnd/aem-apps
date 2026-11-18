@@ -13,11 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+/* eslint-disable import/no-relative-packages -- Repository tests import the local app package. */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   addPageLink, filterCatalog, formatBrief, isLinkedToPage, parsePageUrl, taskDraft,
-} from '../model.js';
+} from '../../../../tools/apps/workfront/model.js';
 
 const page = {
   siteId: 'northstar/website',

@@ -26,10 +26,11 @@ The plugin connects through the official [EW/DA SDK](https://da.live/nx/utils/sd
 Node 18 or later, from the repository root:
 
 ```sh
-node --test tools/apps/workfront/tests/*.test.js
+node --test test/tools/apps/workfront/*.test.js
 ```
 
-Or run `npm test` inside this directory. No `npm install` is needed.
+Or run `npm test` inside this directory. The repository-root `npm test` also
+includes these tests. No `npm install` is needed.
 
 ### Scrolling regression check
 
