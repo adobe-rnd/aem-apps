@@ -80,23 +80,29 @@ export default function createStore({ org, site, fetch }) {
     try {
       items = await pageInfo.list(site, PROPOSALS_ROOT);
     } catch (error) {
-      if (error.status === 404) return [];
+      if (error.status === 404) return { proposals: [], problems: [] };
       throw error;
     }
     const folders = items.filter((item) => item.isFolder);
     const loaded = await Promise.all(folders.map(async (folder) => {
       const id = folder.path.slice(folder.path.lastIndexOf('/') + 1);
-      const record = await readSource(recordPath(id)).catch(() => null);
-      if (!record) return null;
+      const record = await readSource(recordPath(id)).catch((error) => ({ error: error.message }));
+      if (!record) return { problem: { id, reason: 'has no proposal.json' } };
+      if (record.error) return { problem: { id, reason: record.error } };
       try {
         const raw = JSON.parse(record.html);
         const proposal = parseProposal(raw, id);
-        return proposal ? { proposal, raw, etag: record.etag } : null;
+        return proposal
+          ? { found: { proposal, raw, etag: record.etag } }
+          : { problem: { id, reason: 'proposal.json has no usable pages (target and draftPath)' } };
       } catch {
-        return null;
+        return { problem: { id, reason: 'proposal.json is not valid JSON' } };
       }
     }));
-    return loaded.filter(Boolean);
+    return {
+      proposals: loaded.filter((item) => item.found).map((item) => item.found),
+      problems: loaded.filter((item) => item.problem).map((item) => item.problem),
+    };
   }
 
   const saveRecord = (id, raw, etag) => writeSource(

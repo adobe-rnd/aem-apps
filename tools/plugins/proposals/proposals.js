@@ -20,7 +20,7 @@ import createStore from './store.js';
 import createMerger from './merge.js';
 import {
   pagePathFrom, proposalsForPage, isDraftPath, mergeCheck, typeLabel, formatDate, canvasUrl,
-  applyMerged, applyRejected, previewPath,
+  applyMerged, applyRejected, previewPath, PROPOSALS_ROOT,
 } from './model.js';
 
 const NX = 'https://da.live/nx';
@@ -71,6 +71,8 @@ class ProposalsPlugin extends LitElement {
     sourceOf: { state: true },
     cards: { state: true },
     notice: { state: true },
+    found: { state: true },
+    problems: { state: true },
   };
 
   constructor() {
@@ -78,6 +80,8 @@ class ProposalsPlugin extends LitElement {
     this.phase = 'loading';
     this.entries = [];
     this.sourceOf = [];
+    this.found = [];
+    this.problems = [];
     this.cards = new Map();
   }
 
@@ -105,7 +109,9 @@ class ProposalsPlugin extends LitElement {
       return;
     }
     try {
-      const loaded = await this.store.listProposals();
+      const { proposals: loaded, problems } = await this.store.listProposals();
+      this.found = loaded.map((item) => item.proposal);
+      this.problems = problems;
       const byId = new Map(loaded.map((item) => [item.proposal.id, item]));
       const { targeting, sourceOf } = proposalsForPage(
         loaded.map((item) => item.proposal),
@@ -259,13 +265,24 @@ class ProposalsPlugin extends LitElement {
       </article>`;
   }
 
+  renderFound() {
+    return html`
+      <details class="found">
+        <summary>What the panel looked at</summary>
+        <p class="muted">This page: ${this.path}. It lists proposals whose target page is this page.</p>
+        ${this.found.length ? html`<ul>${this.found.map((proposal) => html`
+          <li><strong>${proposal.id}</strong>: ${proposal.status}, target${proposal.pages.length === 1 ? '' : 's'} ${proposal.pages.map((page) => page.target).join(', ')}</li>`)}</ul>`
+    : html`<p class="muted">No proposals found in ${PROPOSALS_ROOT}.</p>`}
+        ${this.problems.length ? html`<p class="muted">Could not use:</p><ul>${this.problems.map((item) => html`<li><strong>${item.id}</strong>: ${item.reason}</li>`)}</ul>` : nothing}
+      </details>`;
+  }
+
   renderEmpty() {
-    if (this.sourceOf.length) {
-      return html`
-        <p class="muted">No open proposals target this page. It is the source of ${this.sourceOf.length === 1 ? 'a proposal' : `${this.sourceOf.length} proposals`}:</p>
-        <ul class="source-of">${this.sourceOf.map((proposal) => html`<li>${proposal.title}</li>`)}</ul>`;
-    }
-    return html`<p class="muted">No open content proposals for this page.</p>`;
+    const sourceOf = this.sourceOf.length ? html`
+      <p class="muted">No open proposals target this page. It is the source of ${this.sourceOf.length === 1 ? 'a proposal' : `${this.sourceOf.length} proposals`}. Open the target page to act on ${this.sourceOf.length === 1 ? 'it' : 'them'}:</p>
+      <ul class="source-of">${this.sourceOf.map((proposal) => html`<li>${proposal.title}: ${proposal.pages.map((page) => page.target).join(', ')}</li>`)}</ul>`
+      : html`<p class="muted">No open content proposals for this page.</p>`;
+    return html`${sourceOf}${this.renderFound()}`;
   }
 
   render() {

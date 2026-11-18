@@ -53,15 +53,18 @@ describe('listProposals', () => {
       { match: (url) => url.endsWith('/proposals/a/proposal.json'), reply: () => json(record('a'), 200, { etag: 'W/"1"' }) },
       { match: (url) => url.endsWith('/proposals/b/proposal.json'), reply: () => new Response('not json') },
     ]);
-    const loaded = await store.listProposals();
-    assert.deepEqual(loaded.map((item) => item.proposal.id), ['a']);
-    assert.equal(loaded[0].etag, '"1"');
-    assert.equal(loaded[0].raw.title, 'a');
+    const { proposals, problems } = await store.listProposals();
+    assert.deepEqual(proposals.map((item) => item.proposal.id), ['a']);
+    assert.equal(proposals[0].etag, '"1"');
+    assert.equal(proposals[0].raw.title, 'a');
+    assert.deepEqual(problems.map((item) => item.id), ['b', 'c']);
+    assert.match(problems[0].reason, /not valid JSON/);
+    assert.match(problems[1].reason, /no proposal.json/);
   });
 
   it('returns nothing when the folder does not exist', async () => {
     const { store } = setup([]);
-    assert.deepEqual(await store.listProposals(), []);
+    assert.deepEqual(await store.listProposals(), { proposals: [], problems: [] });
   });
 });
 

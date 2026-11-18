@@ -291,3 +291,17 @@ a:hover {
   margin: 0;
   padding-left: 18px;
 }
+
+.found {
+  font-size: 12px;
+}
+
+.found summary {
+  cursor: pointer;
+  color: var(--s2-gray-600, #717171);
+}
+
+.found ul {
+  margin: 4px 0;
+  padding-left: 18px;
+}
