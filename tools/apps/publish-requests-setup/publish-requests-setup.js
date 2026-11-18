@@ -778,7 +778,7 @@ class PublishRequestsSetup extends LitElement {
   renderRegistration() {
     const reg = this._registration;
     const description = {
-      registered: 'Lets the publish requests service send approval emails for this site.',
+      registered: 'Onboards the site to use Request Publish.',
       unregistered: 'Register the site so the publish requests service can send approval emails.',
       unknown: SITE_PROBLEMS[reg.code] ? this.problemText(reg.code) : `${UNAVAILABLE} The other sections still work.`,
     }[reg.status];
