@@ -18,7 +18,7 @@ import loadConfig from './config.js';
 import { createWorkfrontClient } from './api.js';
 import { connectToHost, putBriefInChat } from './host.js';
 import {
-  filterCatalog, formatBrief, isLinkedToPage, pageKey,
+  filterCatalog, formatBrief, isLinkedToPage, pageKey, searchUsers,
 } from './model.js';
 
 const find = (selector) => document.querySelector(selector);
@@ -32,6 +32,9 @@ const state = {
   userFilter: '',
   tab: 'all',
   search: '',
+  searchOpen: false,
+  searchIndex: -1,
+  previousScope: 'page',
   selected: null,
   loading: true,
   error: null,
@@ -153,40 +156,59 @@ function chooseItem(item) {
   find('.mobile-back')?.focus();
 }
 
-function renderContext() {
-  const { context } = state;
-  const thumbnail = find('#page-thumbnail');
-  if (!thumbnail.querySelector('.icon')) {
-    thumbnail.replaceChildren(icon('file-text'));
-  }
-  const pageTitle = find('#page-title');
-  pageTitle.replaceChildren(document.createTextNode(context.title || (state.loading ? 'Getting page context' : 'No page selected')));
-  const href = safeUrl(context.url);
-  if (href) {
-    pageTitle.href = href;
-    pageTitle.append(icon('arrow-up-right'));
-  } else {
-    pageTitle.removeAttribute('href');
-  }
-  let pagePath = state.loading ? 'Waiting for Experience Workspace' : 'Page context is unavailable';
-  if (context.siteId) {
-    const path = context.path ? ` / ${context.path.replace(/^\//, '').replace(/\//g, ' / ')}` : '';
-    pagePath = `${context.siteId.replace('/', ' / ')}${path}`;
-  }
-  find('#page-path').textContent = pagePath;
-  const linked = state.catalog.tasks.filter((task) => isLinkedToPage(task, context)).length;
-  find('#page-link-count').replaceChildren(icon('link'), node('span', '', `${linked} linked task${linked === 1 ? '' : 's'}`));
-  find('#page-link-count').hidden = !pageKey(context);
-}
-
 function renderEnvironment() {
   const user = state.catalog.users.find((entry) => entry.id === state.catalog.userId);
   find('#current-user').textContent = initials(user?.name);
   find('#current-user').title = user?.name || 'Current user unavailable';
-  find('#connection-status').replaceChildren(node('span', 'status-dot'), node('span', '', 'Workfront connected'));
-  find('#connection-status').classList.add('is-live');
-  find('#user-filter').replaceChildren(new Option('Select a user', ''), ...state.catalog.users.map((entry) => new Option(entry.name, entry.id)));
-  find('#user-filter').value = state.userFilter;
+  let status = 'Workfront connected';
+  if (state.error) status = 'Not connected';
+  if (state.loading) status = 'Connecting';
+  find('#connection-status').replaceChildren(node('span', 'status-dot'), node('span', '', status));
+  find('#connection-status').classList.toggle('is-live', !state.loading && !state.error);
+}
+
+function chooseUser(user) {
+  if (state.scope !== 'user') state.previousScope = state.scope;
+  state.userFilter = user.id;
+  state.scope = 'user';
+  state.search = '';
+  state.searchOpen = false;
+  state.searchIndex = -1;
+  state.mobileDetail = false;
+  render();
+  find('#search').focus();
+}
+
+function renderSearch() {
+  const selected = state.catalog.users.find((user) => user.id === state.userFilter);
+  find('#selected-user').hidden = state.scope !== 'user';
+  find('#selected-user-name').textContent = selected?.name || 'Selected user';
+  find('#selected-user').setAttribute('aria-label', `Remove user filter: ${selected?.name || 'Selected user'}`);
+  const suggestions = find('#user-suggestions');
+  suggestions.replaceChildren();
+  const users = state.searchOpen && !state.loading && !state.error
+    ? searchUsers(state.catalog.users, state.search) : [];
+  if (state.searchIndex >= users.length) state.searchIndex = -1;
+  users.forEach((user, index) => {
+    const option = node('div', 'user-suggestion');
+    option.id = `user-option-${index}`;
+    option.setAttribute('role', 'option');
+    option.setAttribute('aria-label', user.name);
+    option.setAttribute('aria-selected', String(index === state.searchIndex));
+    option.append(avatar(user), node('span', '', user.name));
+    option.addEventListener('pointerdown', (event) => event.preventDefault());
+    option.addEventListener('click', () => chooseUser(user));
+    suggestions.append(option);
+  });
+  suggestions.hidden = !users.length;
+  const search = find('#search');
+  search.setAttribute('aria-expanded', String(Boolean(users.length)));
+  if (users[state.searchIndex]) {
+    search.setAttribute('aria-activedescendant', `user-option-${state.searchIndex}`);
+    suggestions.children[state.searchIndex].scrollIntoView({ block: 'nearest' });
+  } else {
+    search.removeAttribute('aria-activedescendant');
+  }
 }
 
 function renderControls(filtered) {
@@ -195,15 +217,13 @@ function renderControls(filtered) {
     input.disabled = state.loading || (input.value === 'page' && !pageKey(state.context))
       || (input.value === 'site' && !state.context.siteId) || (input.value === 'me' && !state.catalog.userId);
   });
-  find('#user-filter').disabled = state.loading || !state.catalog.users.length;
-  find('#user-filter').value = state.userFilter;
-  find('.user-filter-wrap').classList.toggle('is-active', state.scope === 'user');
   find('#new-task').disabled = state.loading || Boolean(state.error) || !pageKey(state.context) || !state.catalog.projects.length;
   find('#new-task').title = !pageKey(state.context) ? 'A current page is required' : 'Create a task for this page';
   find('#refresh').disabled = state.loading || state.creating || state.linking.size > 0;
-  find('#refresh').classList.toggle('spin', state.loading);
+  find('#refresh').hidden = state.loading;
   find('#clear-search').hidden = !state.search;
   if (find('#search').value !== state.search) find('#search').value = state.search;
+  renderSearch();
   const counts = {
     all: filtered.projects.length + filtered.tasks.length,
     projects: filtered.projects.length,
@@ -498,7 +518,7 @@ function render() {
     catalog, context, scope, userFilter, search,
   } = state;
   const filtered = filterCatalog(catalog, context, scope, userFilter, search);
-  renderContext();
+  renderEnvironment();
   renderControls(filtered);
   renderResults(filtered);
   renderDetail(filtered);
@@ -528,13 +548,10 @@ async function reload() {
     state.client = client;
     state.catalog = catalog;
     state.context = { ...state.context, userId: catalog.userId };
-    renderEnvironment();
   } catch (error) {
     console.error('Error while loading.', error);
     if (version !== loadVersion) return;
     state.error = error;
-    find('#connection-status').replaceChildren(node('span', 'status-dot'), node('span', '', 'Not connected'));
-    find('#connection-status').classList.remove('is-live');
   } finally {
     if (version === loadVersion) {
       state.loading = false;
@@ -620,6 +637,8 @@ async function createTask(event) {
 
 function clearSearch() {
   state.search = '';
+  state.searchOpen = false;
+  state.searchIndex = -1;
   render();
   find('#search').focus();
 }
@@ -630,14 +649,56 @@ findAll('input[name="context"]').forEach((input) => input.addEventListener('chan
   state.mobileDetail = false;
   render();
 }));
-find('#user-filter').addEventListener('change', (event) => {
-  state.userFilter = event.target.value;
-  state.scope = state.userFilter ? 'user' : 'page';
+find('#selected-user').addEventListener('click', () => {
+  state.userFilter = '';
+  state.scope = state.previousScope;
   state.mobileDetail = false;
   render();
+  find('#search').focus();
 });
-find('#search').addEventListener('input', (event) => { state.search = event.target.value; render(); });
-find('#search').addEventListener('keydown', (event) => { if (event.key === 'Escape') clearSearch(); });
+find('#search').addEventListener('input', (event) => {
+  state.search = event.target.value;
+  state.searchOpen = true;
+  state.searchIndex = -1;
+  render();
+});
+find('#search').addEventListener('focus', () => {
+  state.searchOpen = true;
+  renderSearch();
+});
+find('#search').addEventListener('blur', () => {
+  state.searchOpen = false;
+  state.searchIndex = -1;
+  renderSearch();
+});
+find('#search').addEventListener('keydown', (event) => {
+  if (event.isComposing) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    if (!find('#user-suggestions').hidden) {
+      state.searchOpen = false;
+      state.searchIndex = -1;
+      renderSearch();
+    } else {
+      clearSearch();
+    }
+  }
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    if (state.loading || state.error) return;
+    const users = searchUsers(state.catalog.users, state.search);
+    if (!users.length) return;
+    event.preventDefault();
+    state.searchOpen = true;
+    state.searchIndex = event.key === 'ArrowDown'
+      ? (state.searchIndex + 1) % users.length
+      : (state.searchIndex <= 0 ? users.length : state.searchIndex) - 1;
+    renderSearch();
+  }
+  if (event.key === 'Enter' && !find('#user-suggestions').hidden && state.searchIndex >= 0) {
+    event.preventDefault();
+    chooseUser(searchUsers(state.catalog.users, state.search)[state.searchIndex]);
+  }
+});
 find('#clear-search').addEventListener('click', clearSearch);
 findAll('[data-tab]').forEach((tab) => tab.addEventListener('click', () => { state.tab = tab.dataset.tab; render(); }));
 find('.results-tabs').addEventListener('keydown', (event) => {

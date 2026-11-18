@@ -37,33 +37,13 @@
         </div>
         <div class="topbar-account">
           <span id="connection-status" class="connection-status"><span class="status-dot"></span><span>Connecting</span></span>
+          <button id="refresh" class="icon-button small nx-action-btn-icon nx-btn-sm" type="button" title="Refresh Workfront" aria-label="Refresh Workfront" hidden><span class="icon" data-icon="refresh-cw" aria-hidden="true"></span></button>
           <span id="current-user" class="avatar avatar-teal" title="Current user">--</span>
         </div>
       </div>
     </header>
 
     <main class="workspace">
-      <div class="page-heading">
-        <div class="heading-text">
-          <p class="eyebrow">CONTENT OPERATIONS</p>
-          <h1>Workfront<span class="heading-period">.</span></h1>
-        </div>
-        <div class="heading-actions">
-          <button id="refresh" class="icon-button nx-action-btn-icon" type="button" title="Refresh Workfront" aria-label="Refresh Workfront"><span class="icon" data-icon="refresh-cw" aria-hidden="true"></span></button>
-          <button id="new-task" class="button nx-btn-accent" type="button" disabled><span class="icon" data-icon="plus" aria-hidden="true"></span>New task</button>
-        </div>
-      </div>
-
-      <section class="page-context" aria-label="Current page">
-        <div id="page-thumbnail" class="page-thumbnail"><span class="icon" data-icon="file-text" aria-hidden="true"></span></div>
-        <div class="page-context-text">
-          <p class="eyebrow">CURRENT PAGE</p>
-          <a id="page-title" class="current-page-title" target="_blank" rel="noopener noreferrer">Getting page context</a>
-          <p id="page-path" class="page-path">Waiting for Experience Workspace</p>
-        </div>
-        <div id="page-link-count" class="context-link-count"><span class="icon" data-icon="link" aria-hidden="true"></span><span>-- linked tasks</span></div>
-      </section>
-
       <div class="filter-toolbar">
         <div class="context-controls">
           <fieldset class="context-filter">
@@ -73,16 +53,18 @@
             <label><input type="radio" name="context" value="page" checked><span><span class="icon" data-icon="file-text" aria-hidden="true"></span>This page</span></label>
             <label><input type="radio" name="context" value="me"><span><span class="icon" data-icon="user-round" aria-hidden="true"></span>Assigned to me</span></label>
           </fieldset>
-          <div class="user-filter-wrap">
-            <span class="icon" data-icon="users-round" aria-hidden="true"></span>
-            <select id="user-filter" aria-label="Filter by selected user" disabled><option value="">Select a user</option></select>
-            <span class="icon select-arrow" data-icon="chevron-down" aria-hidden="true"></span>
-          </div>
         </div>
-        <div class="search-wrap">
-          <span class="icon" data-icon="search" aria-hidden="true"></span>
-          <input id="search" class="nx-input" type="search" placeholder="Search projects and tasks" aria-label="Search projects and tasks" autocomplete="off">
-          <button id="clear-search" type="button" class="icon-button small nx-action-btn-icon nx-btn-sm" title="Clear search" aria-label="Clear search" hidden><span class="icon" data-icon="x" aria-hidden="true"></span></button>
+        <div class="search-controls">
+          <div class="search-actions">
+            <div class="search-wrap">
+              <span class="icon" data-icon="search" aria-hidden="true"></span>
+              <input id="search" class="nx-input" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="user-suggestions" placeholder="Search projects, tasks, or users" aria-label="Search projects, tasks, or users" autocomplete="off">
+              <button id="clear-search" type="button" class="icon-button small nx-action-btn-icon nx-btn-sm" title="Clear search" aria-label="Clear search" hidden><span class="icon" data-icon="x" aria-hidden="true"></span></button>
+              <div id="user-suggestions" class="user-suggestions" role="listbox" aria-label="Filter by user" hidden></div>
+            </div>
+            <button id="new-task" class="button nx-btn-accent nx-btn-sm" type="button" disabled><span class="icon" data-icon="plus" aria-hidden="true"></span>New task</button>
+          </div>
+          <button id="selected-user" class="selected-user nx-action-btn nx-btn-sm" type="button" hidden><span class="icon" data-icon="user-round" aria-hidden="true"></span><span id="selected-user-name"></span><span class="icon" data-icon="x" aria-hidden="true"></span></button>
         </div>
       </div>
 

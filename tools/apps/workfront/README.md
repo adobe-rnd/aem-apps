@@ -21,6 +21,19 @@ The plugin connects through the official [EW/DA SDK](https://da.live/nx/utils/sd
 
 **Note** to access Workfront APIs currently a CORS proxy is needed, a sample implementation can be found in the `cors` subfolder.
 
+## Find items and users
+
+The compact toolbar keeps **New task** beside search and **Refresh** beside the
+connection status. Refresh is hidden while connecting. Page context still comes
+from EW for filtering, linking, and creating tasks, without repeating it in a header.
+
+Search filters project and task names in the selected context. Typing a user's
+name also suggests up to eight matching users. Select a suggestion with the mouse
+or Arrow keys and Enter to show that user's assignments and project teams.
+Continue typing to narrow their items by name. Remove the user chip to return to
+the previous context, or select a context filter. Escape closes suggestions;
+press it again to clear the text.
+
 ## Contribution
 
 Node 18 or later, from the repository root:

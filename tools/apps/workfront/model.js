@@ -142,6 +142,11 @@ export function matchReason(item, scope, context, catalog, selectedUserId) {
   return null;
 }
 
+export function searchUsers(users, search) {
+  const query = search.trim().toLowerCase();
+  return query ? users.filter((user) => user.name.toLowerCase().includes(query)).slice(0, 8) : [];
+}
+
 export function filterCatalog(catalog, context, scope = 'page', selectedUserId = '', search = '') {
   const query = search.trim().toLowerCase();
   const filter = (items) => items.flatMap((item) => {

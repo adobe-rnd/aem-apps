@@ -17,7 +17,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  addPageLink, filterCatalog, formatBrief, isLinkedToPage, parsePageUrl, taskDraft,
+  addPageLink, filterCatalog, formatBrief, isLinkedToPage, parsePageUrl, searchUsers, taskDraft,
 } from '../../../../tools/apps/workfront/model.js';
 
 const page = {
@@ -103,6 +103,21 @@ test('tasks assigned only to a job role match users who hold that role', () => {
 test('search narrows the selected context rather than bypassing it', () => {
   assert.equal(filterCatalog(catalog, page, 'page', '', 'Trail launch').tasks.length, 0);
   assert.equal(filterCatalog(catalog, page, 'page', '', 'product').tasks.length, 1);
+});
+
+test('user typeahead matches partial names without case or surrounding whitespace', () => {
+  assert.deepEqual(searchUsers(catalog.users, '  MORg  '), [catalog.users[0]]);
+  assert.deepEqual(searchUsers(catalog.users, 'sam ch'), [catalog.users[1]]);
+  assert.deepEqual(searchUsers(catalog.users, 'unknown'), []);
+  assert.deepEqual(searchUsers(catalog.users, '   '), []);
+});
+
+test('user suggestions stay bounded and preserve distinct IDs for identical names', () => {
+  const users = Array.from({ length: 10 }, (_, index) => ({ id: `user-${index}`, name: 'Sam Chen' }));
+  const suggestions = searchUsers(users, 'sam');
+  assert.deepEqual(suggestions.map((user) => user.id), users.slice(0, 8).map((user) => user.id));
+  const result = filterCatalog(catalog, page, 'user', searchUsers(catalog.users, 'sam')[0].id, 'navigation');
+  assert.deepEqual(result.tasks.map((task) => task.id), ['site-only']);
 });
 
 test('linking is immutable and does not duplicate a page-to-task association', () => {
