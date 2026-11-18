@@ -39,12 +39,52 @@ changing context, or refreshing collapses the rows. Creating a task opens its
 new row, and a task's parent-project link opens that project's row in Projects.
 Item counts appear only in the tabs.
 
-Search filters project and task names in the selected context. Typing a user's
-name also suggests up to eight matching users. Select a suggestion with the mouse
-or Arrow keys and Enter to show that user's assignments and project teams.
+Search filters project and task names in the selected context. It also suggests
+up to eight matching users and eight project/task titles across all accessible
+items, regardless of context or project filter. Select a suggestion with the mouse
+or Arrow keys and Enter. A title suggestion switches tabs and opens that exact
+item, replacing context and project filters with a removable title chip.
+A user suggestion shows that user's assignments and project teams.
 Continue typing to narrow their items by name. Remove the user chip to return to
 the previous context, or select a context filter. Escape closes suggestions;
 press it again to clear the text.
+
+**View project tasks** in a project's details switches to Tasks and adds a
+removable project chip, initially showing all accessible tasks in that project.
+Choose a context or type a search to narrow them further. Removing the project
+chip restores the previous context when still in the project-only view.
+
+## Manage tasks
+
+Task rows show status, progress, high/urgent priority, and overdue dates.
+Dates are displayed and edited in UTC, including Workfront's non-ISO timestamps.
+**Requested by me** shows tasks you created. **Completed (14 days)** shows
+completed tasks assigned to you (including your job roles) updated since midnight
+UTC 14 days ago; this is an update-date window, not a completion-date audit.
+Both filters also show projects containing matching tasks.
+Existing context filters retain their behavior and include completed tasks.
+
+Expand a task to **Edit task**, **Mark complete**, or **Post update**. Editing
+sends only changed fields. The status picker supports Not started, In progress,
+and Complete; an existing custom status is preserved unless you change it.
+Mark complete sets status to Complete and progress to 100%; tasks requiring an
+approval workflow may need to be completed in Workfront instead.
+Notes remain readable on both tasks and projects; posting is task-only.
+
+New tasks can also have a due date, priority, and optional **Assign to me**.
+They still require a project and the current page, saved in the Workfront URL
+field rather than appended to the description.
+
+The UI uses Workfront license and task access-level permissions when available;
+when absent, Workfront checks permissions on each request. Permission rejections
+disable the affected task's edit actions, task comments, or creation in the
+selected project until refresh. A project-specific creation denial does not
+prevent creating tasks in another project. Workfront remains authoritative for
+object-level sharing and approvals.
+Comment drafts survive filtering and failed requests. After an unconfirmed task
+write, further writes to that task are blocked until you refresh and check
+Workfront; failed edit drafts stay in the dialog. Never retry an uncertain create
+or comment without checking whether it already succeeded.
 
 ## Contribution
 

@@ -178,6 +178,99 @@ test('task creation submits the page URL in a single write', async () => {
   assert.deepEqual(created.pageLinks, [link]);
 });
 
+test('creation submits optional due date, priority and self-assignment together with the page URL', async () => {
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      assert.equal(init.body.get('priority'), '4');
+      assert.equal(init.body.get('assignedToID'), 'alex');
+      assert.equal(init.body.get('plannedCompletionDate'), '2026-11-25');
+      assert.equal(init.body.get('URL'), page.url);
+      return response({ ...task, URL: page.url });
+    },
+  });
+  await client.createTask({
+    name: 'Review', projectId: 'project-1', dueDate: '2026-11-25', priority: 4, assignMe: true,
+  }, { ...page, userId: 'alex' });
+});
+
+test('task editing changes only edited fields and completion writes status and progress together', async () => {
+  const calls = [];
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      return response({
+        ...task, description: init.body.get('description') || '', status: init.body.get('status') || 'INP', percentComplete: Number(init.body.get('percentComplete') || 25),
+      });
+    },
+  });
+  const original = {
+    id: 'task/1', name: 'Write copy', description: 'Original', percentComplete: 25,
+  };
+  assert.equal(await client.updateTask(original, { description: 'Original' }), original);
+  assert.equal(calls.length, 0);
+  const edited = await client.updateTask(original, { description: 'Changed' });
+  assert.equal(edited.description, 'Changed');
+  assert.match(calls[0].url, /task\/task%2F1$/);
+  assert.equal(calls[0].init.method, 'PUT');
+  assert.deepEqual([...calls[0].init.body.keys()], ['description', 'fields']);
+  const completed = await client.completeTask(original.id);
+  assert.equal(completed.statusCode, 'CPL');
+  assert.equal(completed.percentComplete, 100);
+  assert.equal(calls[1].init.body.get('status'), 'CPL');
+  assert.equal(calls[1].init.body.get('percentComplete'), '100');
+});
+
+test('posting an update targets the task and returns the attributed note', async () => {
+  let calls = 0;
+  const client = createWorkfrontClient({
+    ...options,
+    fetchImpl: async (url, init) => {
+      calls += 1;
+      assert.match(url, /\/note$/);
+      assert.equal(init.method, 'POST');
+      assert.equal(init.body.get('noteObjCode'), 'TASK');
+      assert.equal(init.body.get('objID'), 'task-1');
+      assert.equal(init.body.get('noteText'), 'Looks good');
+      return response({
+        ID: 'note-1', noteText: 'Looks good', owner: { name: 'Alex' }, entryDate: '2026-11-18',
+      });
+    },
+  });
+  await assert.rejects(client.addNote('task-1', ' '), /Enter an update/);
+  assert.equal(calls, 0);
+  assert.deepEqual(await client.addNote('task-1', ' Looks good '), {
+    text: 'Looks good', author: 'Alex', date: '2026-11-18',
+  });
+});
+
+test('new write operations surface permission failures and flag unconfirmed responses without retrying', async () => {
+  const operations = [
+    (client) => client.updateTask({ id: 'task-1', name: 'Old' }, { name: 'New' }),
+    (client) => client.completeTask('task-1'),
+    (client) => client.addNote('task-1', 'Update'),
+  ];
+  /* eslint-disable no-restricted-syntax, no-await-in-loop */
+  for (const operation of operations) {
+    for (const failure of ['permission', 'network', 'incomplete']) {
+      let calls = 0;
+      const client = createWorkfrontClient({
+        ...options,
+        fetchImpl: async () => {
+          calls += 1;
+          if (failure === 'network') throw new TypeError('Network failure');
+          return failure === 'permission' ? response(null, 403) : response({ ID: 'task-1' });
+        },
+      });
+      await assert.rejects(operation(client), (error) => (failure === 'permission'
+        ? error.status === 403 && !error.uncertain : error.uncertain));
+      assert.equal(calls, 1);
+    }
+  }
+  /* eslint-enable no-restricted-syntax, no-await-in-loop */
+});
+
 test('authentication and permission errors have actionable messages', async () => {
   // Test each status sequentially.
   /* eslint-disable no-restricted-syntax, no-await-in-loop */

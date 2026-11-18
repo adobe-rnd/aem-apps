@@ -292,6 +292,7 @@
 
   .context-filter {
     display: flex;
+    flex-wrap: wrap;
     gap: 2px;
     min-width: 0;
     width: 100%;
@@ -304,7 +305,7 @@
 
   .context-filter label {
     position: relative;
-    flex: 1;
+    flex: 1 0 auto;
     cursor: pointer;
   }
 
@@ -614,6 +615,39 @@
 
   .item-due {
     line-height: 1.5;
+  }
+
+  .task-health {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: var(--s2-component-xs-regular-font-size);
+    font-weight: normal;
+  }
+
+  .task-priority,
+  .item-due.is-overdue {
+    color: var(--s2-red-900);
+    font-weight: bold;
+  }
+
+  .task-progress {
+    width: 52px;
+    height: 6px;
+    accent-color: var(--accent);
+  }
+
+  .note-form {
+    display: grid;
+    gap: 8px;
+    margin-block: 12px;
+  }
+
+  .note-form .button {
+    justify-self: start;
   }
 
   .row-chevron {

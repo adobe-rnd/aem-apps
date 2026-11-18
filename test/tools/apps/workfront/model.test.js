@@ -17,7 +17,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  addPageLink, filterCatalog, formatBrief, isLinkedToPage, parsePageUrl, searchUsers, taskDraft,
+  addPageLink, dateInputValue, filterCatalog, formatBrief, isLinkedToPage, isOverdue,
+  parsePageUrl, parseWorkfrontDate, removeProjectFilter, searchTitles, searchUsers,
+  taskCapabilities, taskDraft, taskUpdates,
 } from '../../../../tools/apps/workfront/model.js';
 
 const page = {
@@ -105,6 +107,91 @@ test('search narrows the selected context rather than bypassing it', () => {
   assert.equal(filterCatalog(catalog, page, 'page', '', 'product').tasks.length, 1);
 });
 
+test('requested and completed queues use identity and recent update dates, including parent projects', () => {
+  const context = { ...page, now: '2026-11-18T12:00:00Z' };
+  const tasks = [
+    { ...catalog.tasks[0], requesterId: 'alex', statusCode: 'NEW' },
+    {
+      ...catalog.tasks[1], id: 'recent', assigneeIds: ['alex'], requesterId: 'sam', statusCode: 'CPL', lastUpdateDate: '2026-11-04T00:00:00:000+0000',
+    },
+    {
+      ...catalog.tasks[0], id: 'old', statusCode: 'CPL', lastUpdateDate: '2026-11-03T23:59:59Z',
+    },
+    {
+      ...catalog.tasks[0], id: 'future', statusCode: 'CPL', lastUpdateDate: '2026-11-19T00:00:00Z',
+    },
+    {
+      ...catalog.tasks[2], id: 'someone-else', statusCode: 'CPL', lastUpdateDate: '2026-11-18T00:00:00Z',
+    },
+  ];
+  const data = { ...catalog, tasks };
+  assert.deepEqual(filterCatalog(data, context, 'requested').tasks.map((task) => task.id), ['linked']);
+  const completed = filterCatalog(data, context, 'completed');
+  assert.deepEqual(completed.tasks.map((task) => task.id), ['recent']);
+  assert.deepEqual(completed.projects.map((project) => project.id), ['other']);
+  assert.equal(filterCatalog(data, context, 'completed', '', 'missing').tasks.length, 0);
+  assert.equal(filterCatalog(data, { ...context, userId: null }, 'requested').tasks.length, 0);
+});
+
+test('Workfront timestamps support date editing and overdue detection without flagging completed tasks', () => {
+  const value = '2026-11-17T09:00:00:000-0500';
+  assert.equal(parseWorkfrontDate(value).toISOString(), '2026-11-17T14:00:00.000Z');
+  assert.equal(dateInputValue(value), '2026-11-17');
+  assert.equal(parseWorkfrontDate('invalid'), null);
+  assert.equal(dateInputValue(''), '');
+  const task = { dueDate: value, statusCode: 'INP' };
+  assert.equal(isOverdue(task, new Date('2026-11-18')), true);
+  assert.equal(isOverdue({ ...task, statusCode: 'CPL' }, new Date('2026-11-18')), false);
+  assert.equal(isOverdue({ ...task, dueDate: null }), false);
+});
+
+test('task capabilities honor license, task access level and forbidden creation', () => {
+  const user = (coreAction, forbiddenActions = []) => ({
+    accessLevel: { accessLevelPermissions: [{ objObjCode: 'TASK', coreAction, forbiddenActions }] },
+  });
+  assert.deepEqual(taskCapabilities(user('VIEW')), { canEdit: false, canCreate: false, canComment: true });
+  assert.deepEqual(taskCapabilities(user('NONE')), { canEdit: false, canCreate: false, canComment: false });
+  assert.deepEqual(taskCapabilities(user('EDIT', ['ADD'])), { canEdit: true, canCreate: false, canComment: true });
+  assert.equal(taskCapabilities({ ...user('EDIT'), licenseType: 'REVIEW' }).canEdit, false);
+  assert.equal(taskCapabilities(user('EDIT')).canCreate, true);
+});
+
+test('editing sends changed fields only and preserves unrecognized custom statuses', () => {
+  const task = {
+    name: 'Write copy',
+    description: 'Original',
+    statusCode: 'CUSTOM',
+    priority: 2,
+    percentComplete: 25,
+    dueDate: '2026-11-20T09:00:00:000+0000',
+  };
+  assert.deepEqual(taskUpdates(task, {
+    ...task, name: ' Write copy ', description: 'Revised', dueDate: '2026-11-20',
+  }), { description: 'Revised' });
+  assert.deepEqual(taskUpdates(task, { dueDate: '', percentComplete: 50 }), {
+    plannedCompletionDate: '', percentComplete: 50,
+  });
+  assert.throws(() => taskUpdates(task, { name: ' ' }), /task name/);
+  assert.throws(() => taskUpdates(task, { percentComplete: 101 }), /Progress/);
+  assert.throws(() => taskUpdates(task, { percentComplete: 2.5 }), /Progress/);
+  assert.throws(() => taskUpdates(task, { dueDate: '2026-02-30' }), /valid due date/);
+  assert.throws(() => taskUpdates(task, { priority: 5 }), /priority/);
+  assert.throws(() => taskUpdates(task, { statusCode: 'UNKNOWN' }), /supported task status/);
+});
+
+test('creation validates due date and priority and assigns only to the current user', () => {
+  const task = taskDraft({
+    name: 'Review', projectId: 'launch', dueDate: '2026-11-25', priority: 4, assignMe: true,
+  }, page);
+  assert.equal(task.dueDate, '2026-11-25');
+  assert.equal(task.priority, 4);
+  assert.deepEqual(task.assigneeIds, ['alex']);
+  assert.equal(task.pageUrl, page.url);
+  assert.throws(() => taskDraft({ name: 'Review', projectId: 'launch', dueDate: 'yesterday' }, page), /valid due date/);
+  assert.throws(() => taskDraft({ name: 'Review', projectId: 'launch', priority: -1 }, page), /priority/);
+  assert.throws(() => taskDraft({ name: 'Review', projectId: 'launch', assignMe: true }, { ...page, userId: null }), /current Workfront user/);
+});
+
 test('user typeahead matches partial names without case or surrounding whitespace', () => {
   assert.deepEqual(searchUsers(catalog.users, '  MORg  '), [catalog.users[0]]);
   assert.deepEqual(searchUsers(catalog.users, 'sam ch'), [catalog.users[1]]);
@@ -118,6 +205,38 @@ test('user suggestions stay bounded and preserve distinct IDs for identical name
   assert.deepEqual(suggestions.map((user) => user.id), users.slice(0, 8).map((user) => user.id));
   const result = filterCatalog(catalog, page, 'user', searchUsers(catalog.users, 'sam')[0].id, 'navigation');
   assert.deepEqual(result.tasks.map((task) => task.id), ['site-only']);
+});
+
+test('title typeahead searches all accessible projects and tasks, independent of context', () => {
+  assert.deepEqual(searchTitles(catalog, '  TRAIL  ').map((item) => item.id), ['launch', 'other', 'title-only']);
+  assert.equal(searchTitles(catalog, '').length, 0);
+  assert.equal(searchTitles(catalog, 'missing').length, 0);
+  const result = filterCatalog(catalog, { ...page, titleTarget: { id: 'title-only', type: 'task' } }, 'title');
+  assert.deepEqual(result.tasks.map((item) => item.id), ['title-only']);
+  assert.equal(result.projects.length, 0);
+  const many = { projects: [], tasks: Array.from({ length: 10 }, (_, index) => ({ id: index, name: 'Task' })) };
+  assert.equal(searchTitles(many, 'task').length, 8);
+});
+
+test('project task view starts with project tasks and can be narrowed by context and search', () => {
+  const context = { ...page, projectId: 'launch' };
+  assert.deepEqual(filterCatalog(catalog, context, 'project', '', '', 'launch').tasks.map((item) => item.id), ['linked', 'site-only']);
+  assert.deepEqual(filterCatalog(catalog, context, 'page', '', '', 'launch').tasks.map((item) => item.id), ['linked']);
+  assert.deepEqual(filterCatalog(catalog, context, 'project', '', 'navigation', 'launch').tasks.map((item) => item.id), ['site-only']);
+  assert.equal(filterCatalog(catalog, context, 'page', '', '', 'other').tasks.length, 0);
+});
+
+test('removing a project chip while filtering by user preserves a valid return context', () => {
+  const filters = {
+    scope: 'user', previousScope: 'project', previousProjectScope: 'page', projectFilter: 'launch',
+  };
+  const updated = { ...filters, ...removeProjectFilter(filters) };
+  assert.equal(updated.scope, 'user');
+  assert.equal(updated.projectFilter, '');
+  const result = filterCatalog(catalog, page, updated.previousScope);
+  assert.deepEqual(result.tasks.map((item) => item.id), ['linked']);
+  const projectOnly = removeProjectFilter({ ...filters, scope: 'project' });
+  assert.equal(projectOnly.scope, 'page');
 });
 
 test('linking is immutable and does not duplicate a page-to-task association', () => {

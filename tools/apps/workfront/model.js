@@ -15,6 +15,81 @@
  */
 const AEM_HOST = /^[a-z0-9-]+--([a-z0-9-]+)--([a-z0-9-]+)\.aem\.(?:page|live)$/i;
 
+export const TASK_STATUSES = { NEW: 'Not started', INP: 'In progress', CPL: 'Complete' };
+export const PRIORITIES = ['None', 'Low', 'Normal', 'High', 'Urgent'];
+
+export function parseWorkfrontDate(value) {
+  if (!value) return null;
+  const date = new Date(String(value)
+    .replace(/T(\d{2}:\d{2}:\d{2}):(\d{3})/, 'T$1.$2')
+    .replace(/([+-]\d{2})(\d{2})$/, '$1:$2'));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function dateInputValue(value) {
+  const date = parseWorkfrontDate(value);
+  return date ? date.toISOString().slice(0, 10) : '';
+}
+
+export function isOverdue(task, now = new Date()) {
+  const due = parseWorkfrontDate(task.dueDate);
+  return task.statusCode !== 'CPL' && Boolean(due && due < now);
+}
+
+export function taskCapabilities(user) {
+  const license = String(user.licenseType || '').toUpperCase();
+  const limited = ['REVIEW', 'REQUESTOR', 'CONTRIBUTOR', 'LIMITED', 'EXTERNAL'].includes(license);
+  const permission = user.accessLevel?.accessLevelPermissions?.find((entry) => entry.objObjCode === 'TASK');
+  const core = permission?.coreAction?.toUpperCase();
+  const canEdit = !limited && (!permission || ['EDIT', 'MANAGE', 'DELETE'].includes(core));
+  return {
+    canEdit,
+    canCreate: canEdit && !(permission?.forbiddenActions || []).includes('ADD'),
+    canComment: !permission || ['VIEW', 'EDIT', 'MANAGE', 'DELETE'].includes(core),
+  };
+}
+
+function validateDate(value) {
+  if (value && (!/^\d{4}-\d{2}-\d{2}$/.test(value) || dateInputValue(value) !== value)) {
+    throw new Error('Enter a valid due date.');
+  }
+}
+
+function validatePriority(value) {
+  if (!Number.isInteger(value) || !PRIORITIES[value]) throw new Error('Select a valid priority.');
+}
+
+export function taskUpdates(task, values) {
+  const updates = {};
+  if (values.name !== undefined && values.name.trim() !== task.name) {
+    if (!values.name.trim() || values.name.trim().length > 255) throw new Error('Enter a task name of at most 255 characters.');
+    updates.name = values.name.trim();
+  }
+  if (values.description !== undefined && values.description !== task.description) {
+    updates.description = values.description;
+  }
+  if (values.statusCode !== undefined && values.statusCode !== task.statusCode) {
+    if (!TASK_STATUSES[values.statusCode]) throw new Error('Select a supported task status.');
+    updates.status = values.statusCode;
+  }
+  if (values.priority !== undefined && values.priority !== task.priority) {
+    validatePriority(values.priority);
+    updates.priority = values.priority;
+  }
+  if (values.percentComplete !== undefined && values.percentComplete !== task.percentComplete) {
+    if (!Number.isInteger(values.percentComplete)
+      || values.percentComplete < 0 || values.percentComplete > 100) {
+      throw new Error('Progress must be a whole number between 0 and 100.');
+    }
+    updates.percentComplete = values.percentComplete;
+  }
+  if (values.dueDate !== undefined && values.dueDate !== dateInputValue(task.dueDate)) {
+    validateDate(values.dueDate);
+    updates.plannedCompletionDate = values.dueDate;
+  }
+  return updates;
+}
+
 function decode(value) {
   try {
     return decodeURIComponent(value);
@@ -94,6 +169,34 @@ export function matchReason(item, scope, context, catalog, selectedUserId) {
     ? catalog.tasks.filter((task) => task.projectId === item.id)
     : [];
 
+  if (scope === 'title') {
+    return item.id === context.titleTarget?.id && item.type === context.titleTarget.type
+      ? 'Selected from title search' : null;
+  }
+
+  if (scope === 'project') {
+    return (item.type === 'project' ? item.id : item.projectId) === context.projectId
+      ? 'In selected project' : null;
+  }
+
+  if (scope === 'requested' || scope === 'completed') {
+    if (!context?.userId) return null;
+    const matches = (task) => {
+      if (scope === 'requested') return task.requesterId === context.userId;
+      const updated = parseWorkfrontDate(task.lastUpdateDate);
+      const now = context.now ? new Date(context.now) : new Date();
+      const cutoff = new Date(now);
+      cutoff.setUTCDate(cutoff.getUTCDate() - 14);
+      cutoff.setUTCHours(0, 0, 0, 0);
+      return task.statusCode === 'CPL' && isAssignedTo(task, context.userId, catalog)
+        && updated && updated >= cutoff && updated <= now;
+    };
+    if (item.type === 'task' ? matches(item) : children.some(matches)) {
+      return scope === 'requested' ? 'Requested by you' : 'Completed task updated in the last 14 days';
+    }
+    return null;
+  }
+
   if (scope === 'all') {
     const userId = context?.userId;
     if (!userId) return null;
@@ -147,11 +250,27 @@ export function searchUsers(users, search) {
   return query ? users.filter((user) => user.name.toLowerCase().includes(query)).slice(0, 8) : [];
 }
 
-export function filterCatalog(catalog, context, scope = 'page', selectedUserId = '', search = '') {
+export function searchTitles(catalog, search) {
+  const query = search.trim().toLowerCase();
+  return query ? [...catalog.projects, ...catalog.tasks]
+    .filter((item) => item.name.toLowerCase().includes(query)).slice(0, 8) : [];
+}
+
+export function removeProjectFilter(filters) {
+  const restore = (scope) => (scope === 'project' ? filters.previousProjectScope : scope);
+  return {
+    projectFilter: '',
+    scope: restore(filters.scope),
+    previousScope: restore(filters.previousScope),
+  };
+}
+
+export function filterCatalog(catalog, context, scope = 'page', selectedUserId = '', search = '', projectId = '') {
   const query = search.trim().toLowerCase();
   const filter = (items) => items.flatMap((item) => {
     const reason = matchReason(item, scope, context, catalog, selectedUserId);
     if (!reason || (query && !item.name.toLowerCase().includes(query))) return [];
+    if (item.type === 'task' && projectId && item.projectId !== projectId) return [];
     return [{ ...item, matchReason: reason }];
   });
   return { projects: filter(catalog.projects), tasks: filter(catalog.tasks) };
@@ -172,16 +291,23 @@ export function addPageLink(item, page) {
   };
 }
 
-export function taskDraft({ name, projectId, description = '' }, page) {
+export function taskDraft({
+  name, projectId, description = '', dueDate = '', priority = 2, assignMe = false,
+}, page) {
   if (!name?.trim()) throw new Error('Enter a task name.');
   if (!projectId) throw new Error('Select a project.');
   if (!pageKey(page) || !page.url) throw new Error('A current page is required to create a task.');
+  validateDate(dueDate);
+  validatePriority(priority);
+  if (assignMe && !page.userId) throw new Error('The current Workfront user is required for self-assignment.');
   const task = {
     type: 'task',
     name: name.trim(),
     projectId,
     description: description.trim(),
-    assigneeIds: [],
+    dueDate,
+    priority,
+    assigneeIds: assignMe ? [page.userId] : [],
     notes: [],
     pageUrl: '',
     siteIds: [],

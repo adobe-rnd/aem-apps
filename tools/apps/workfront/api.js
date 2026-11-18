@@ -15,14 +15,15 @@
  */
 /* global globalThis */
 import {
-  addPageLink, pageKey, parsePageUrl, taskDraft,
+  addPageLink, pageKey, parsePageUrl, taskCapabilities, taskDraft, taskUpdates,
 } from './model.js';
 
 const API_VERSION = 'v21.0';
 const COMMON_FIELDS = 'ID,referenceNumber,name,description,status,plannedCompletionDate,URL,notes:noteText,notes:owner:name,notes:entryDate';
 const PROJECT_FIELDS = `${COMMON_FIELDS},ownerID,projectUsers:userID`;
-const TASK_FIELDS = `${COMMON_FIELDS},projectID,assignedToID,assignments:assignedToID,assignments:roleID`;
+const TASK_FIELDS = `${COMMON_FIELDS},projectID,assignedToID,assignments:assignedToID,assignments:roleID,priority,percentComplete,enteredByID,enteredBy:name,lastUpdateDate`;
 const USER_FIELDS = 'ID,name,roleID,userRoles:roleID';
+const CURRENT_USER_FIELDS = `${USER_FIELDS},licenseType,accessLevel:accessLevelPermissions:*`;
 const PAGE_SIZE = 100;
 
 export class WorkfrontError extends Error {
@@ -50,7 +51,13 @@ function normalize(raw, type, origin) {
     description: raw.description || '',
     url: `${origin}/${type}/${encodeURIComponent(raw.ID)}/overview`,
     status: statuses[raw.status] || raw.status || '',
+    statusCode: raw.status || '',
     dueDate: raw.plannedCompletionDate || null,
+    priority: raw.priority ?? 2,
+    percentComplete: raw.percentComplete ?? 0,
+    requesterId: raw.enteredByID,
+    requesterName: raw.enteredBy?.name || '',
+    lastUpdateDate: raw.lastUpdateDate || null,
     projectId: raw.projectID,
     ownerId: raw.ownerID,
     memberIds: [...new Set([
@@ -162,12 +169,23 @@ export function createWorkfrontClient({
     }
   }
 
+  async function writeTask(taskId, updates) {
+    const raw = await request(`task/${encodeURIComponent(taskId)}`, {
+      ...updates, fields: TASK_FIELDS,
+    }, 'PUT');
+    try {
+      return normalize(raw, 'task', origin);
+    } catch {
+      throw new WorkfrontError('The task may have changed, but its response was incomplete. Refresh and check Workfront before trying again.', { uncertain: true });
+    }
+  }
+
   return {
     mode: 'live',
     origin,
     async load() {
       const [currentUsers, projects, tasks, users] = await Promise.all([
-        request('user/search', { ID: '$$USER.ID', fields: USER_FIELDS }),
+        request('user/search', { ID: '$$USER.ID', fields: CURRENT_USER_FIELDS }),
         readAll('project', PROJECT_FIELDS),
         readAll('task', TASK_FIELDS),
         readAll('user', USER_FIELDS),
@@ -178,6 +196,7 @@ export function createWorkfrontClient({
       people.set(currentUser.ID, currentUser);
       return {
         userId: currentUser.ID,
+        capabilities: taskCapabilities(currentUser),
         projects: projects.map((raw) => normalize(raw, 'project', origin)),
         tasks: tasks.map((raw) => normalize(raw, 'task', origin)),
         users: [...people.values()].map((user) => ({
@@ -203,6 +222,27 @@ export function createWorkfrontClient({
       pendingLinks.set(key, operation);
       return operation;
     },
+    async updateTask(task, values) {
+      const updates = taskUpdates(task, values);
+      if (!Object.keys(updates).length) return task;
+      return writeTask(task.id, updates);
+    },
+    completeTask(taskId) {
+      return writeTask(taskId, { status: 'CPL', percentComplete: 100 });
+    },
+    async addNote(taskId, text) {
+      if (!text.trim()) throw new WorkfrontError('Enter an update before posting.');
+      const raw = await request('note', {
+        noteObjCode: 'TASK',
+        objID: taskId,
+        noteText: text.trim(),
+        fields: 'ID,noteText,owner:name,entryDate',
+      }, 'POST');
+      if (!raw?.ID || typeof raw.noteText !== 'string') {
+        throw new WorkfrontError('The update may have been posted, but its response was incomplete. Refresh and check Workfront before posting again.', { uncertain: true });
+      }
+      return { text: raw.noteText, author: raw.owner?.name || '', date: raw.entryDate || null };
+    },
     async createTask(values, page) {
       const draft = taskDraft(values, page);
       const raw = await request('task', {
@@ -210,6 +250,9 @@ export function createWorkfrontClient({
         projectID: draft.projectId,
         description: draft.description,
         URL: draft.pageUrl,
+        priority: draft.priority,
+        ...(draft.dueDate ? { plannedCompletionDate: draft.dueDate } : {}),
+        ...(draft.assigneeIds.length ? { assignedToID: draft.assigneeIds[0] } : {}),
         fields: TASK_FIELDS,
       }, 'POST');
       try {
