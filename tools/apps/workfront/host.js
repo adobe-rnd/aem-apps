@@ -17,8 +17,25 @@ const embedded = typeof window !== 'undefined' && window.self !== window.top;
 // eslint-disable-next-line import/no-unresolved
 const connection = embedded ? import('https://da.live/nx/utils/sdk.js').then((module) => module.default) : null;
 if (connection) connection.catch(() => {});
-let currentToken = '';
 let watchingForRefresh = false;
+
+export function createTokenStore() {
+  let token = '';
+  let initialized = false;
+  return {
+    initialize(value) {
+      if (initialized) return;
+      token = typeof value === 'string' ? value : '';
+      initialized = true;
+    },
+    update(value) {
+      if (typeof value === 'string') token = value;
+    },
+    get: () => token,
+  };
+}
+
+const tokenStore = createTokenStore();
 
 export function normalizeContext(context = {}) {
   const { org, repo } = context;
@@ -48,11 +65,11 @@ export async function connectToHost() {
         timer = setTimeout(() => reject(new Error('Experience Workspace did not provide page context. Reopen the plugin and retry.')), 8000);
       }),
     ]);
-    currentToken = typeof sdk.token === 'string' ? sdk.token : '';
+    tokenStore.initialize(sdk.token);
     if (!watchingForRefresh) {
       window.addEventListener('message', (event) => {
         if (event.source === window.parent && typeof event.data?.token === 'string') {
-          currentToken = event.data.token;
+          tokenStore.update(event.data.token);
         }
       });
       watchingForRefresh = true;
@@ -61,7 +78,7 @@ export async function connectToHost() {
       embedded: true,
       context: normalizeContext(sdk.context),
       actions: sdk.actions,
-      getToken: () => currentToken,
+      getToken: tokenStore.get,
     };
   } finally {
     clearTimeout(timer);

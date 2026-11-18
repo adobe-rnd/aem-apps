@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import loadConfig from '../config.js';
-import { normalizeContext, putBriefInChat } from '../host.js';
+import { createTokenStore, normalizeContext, putBriefInChat } from '../host.js';
 
 const configResponse = (rows, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -187,6 +187,14 @@ test('EW context uses the exact organization, repository and document path', () 
   assert.equal(context.path, '/collections/fall.html');
   assert.equal(context.url, 'https://da.live/canvas#/northstar/website/collections/fall');
   assert.equal(context.title, 'Fall');
+});
+
+test('a refreshed host token is not replaced when the initial SDK token is read again', () => {
+  const tokens = createTokenStore();
+  tokens.initialize('initial-ims-token');
+  tokens.update('refreshed-ims-token');
+  tokens.initialize('initial-ims-token');
+  assert.equal(tokens.get(), 'refreshed-ims-token');
 });
 
 test('missing host context is not replaced with a guessed page', () => {
