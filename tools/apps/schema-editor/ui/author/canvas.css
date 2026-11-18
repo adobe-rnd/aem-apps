@@ -370,12 +370,6 @@
   margin-block-start: 0;
 }
 
-.add-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
 /* A component use wears the component colour (indigo, as in the panel) on
    its icon and the guide along its rows; its kind names the component and
    how often it is used (its menu opens it on the Components page). Its kind

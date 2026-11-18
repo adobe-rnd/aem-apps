@@ -309,7 +309,7 @@ class SeCanvas extends LitElement {
     return html`
       <nx-menu placement="below-end" .items=${paletteMenuItems(this.model, parentId)}
         @select=${(e) => this._onAdd(parentId, index, e.detail.id)}>
-        <button slot="trigger" type="button" class="nx-action-btn-quiet add-btn"
+        <button slot="trigger" type="button" class="nx-btn-accent nx-btn-sm"
           @click=${(e) => e.stopPropagation()}>${icon('add')} ${label}</button>
       </nx-menu>
     `;
