@@ -86,18 +86,22 @@ export function createWorkfrontClient({
   } catch {
     throw new WorkfrontError('Configure a valid HTTPS Workfront origin.');
   }
-  let apiOrigin = origin;
+  let apiBase = origin;
   if (proxyOrigin) {
     try {
       const url = new URL(proxyOrigin);
       const local = url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname);
-      if ((url.protocol !== 'https:' && !local) || url.username || url.password) throw new Error('Invalid proxy');
-      apiOrigin = url.origin;
+      const credentials = url.username || url.password;
+      if ((url.protocol !== 'https:' && !local) || credentials || url.search || url.hash) {
+        throw new Error('Invalid proxy');
+      }
+      // Keep the path so an Adobe I/O Runtime action URL can be used as the proxy.
+      apiBase = `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
     } catch {
-      throw new WorkfrontError('Configure a valid HTTPS Workfront proxy origin.');
+      throw new WorkfrontError('Configure a valid HTTPS Workfront proxy URL.');
     }
   }
-  const base = `${apiOrigin}/attask/api/${API_VERSION}`;
+  const base = `${apiBase}/attask/api/${API_VERSION}`;
   const pendingLinks = new Map();
 
   async function request(resource, parameters = {}, method = 'GET') {

@@ -24,7 +24,7 @@ npx wrangler dev      # local at http://localhost:8787
 npx wrangler deploy   # https://workfront-cors-proxy.<your-subdomain>.workers.dev
 ```
 
-Then set `workfront.origin.proxy` in the DA Config default **data** sheet to the deployed Worker origin, alongside `workfront.origin`. The Worker's `WORKFRONT_ORIGIN` must match that tenant, and `ALLOWED_ORIGINS` must contain the deployed plugin origin. Links to Workfront records still use `workfront.origin`. Leave the proxy key blank or omit it to call Workfront directly; see the [configuration rules](../README.md#live-connection).
+Then set `workfront.origin.proxy` in the DA Config default **data** sheet to the deployed Worker origin, alongside `workfront.origin`. The Worker's `WORKFRONT_ORIGIN` must match that tenant, and `ALLOWED_ORIGINS` must contain the deployed plugin origin. Links to Workfront records still use `workfront.origin`. Leave the proxy key blank or omit it to call Workfront directly; see the [configuration rules](../README.md#add-to-experience-workspace). For an Adobe-hosted alternative, see the [Adobe I/O Runtime proxy](../adobeio/README.md).
 
 ## Test
 

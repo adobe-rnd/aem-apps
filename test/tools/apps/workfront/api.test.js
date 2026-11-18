@@ -51,6 +51,25 @@ test('proxy mode sends API calls to the proxy but keeps tenant links', async () 
   assert.equal(catalog.tasks[0].url, 'https://northstar.my.workfront.com/task/task-1/overview');
 });
 
+test('proxy mode keeps the path of an Adobe I/O Runtime action URL', async () => {
+  const action = 'https://12345-wfproxy-stage.adobeioruntime.net/api/v1/web/workfront/proxy';
+  assert.throws(() => createWorkfrontClient({ ...options, proxyOrigin: `${action}?x=1` }), /valid HTTPS Workfront proxy/);
+  await Promise.all([action, `${action}/`].map(async (proxyOrigin) => {
+    const urls = [];
+    const client = createWorkfrontClient({
+      ...options,
+      proxyOrigin,
+      fetchImpl: async (url) => {
+        urls.push(url);
+        return response(isCurrentUser(url) ? [{ ID: 'alex', name: 'Alex' }] : []);
+      },
+    });
+    await client.load();
+    assert.equal(urls.length > 0, true);
+    assert.equal(urls.every((url) => url.startsWith(`${action}/attask/api/v21.0/`)), true);
+  }));
+});
+
 test('catalog calls the tenant API with the host bearer token and normalizes records', async () => {
   const calls = [];
   const client = createWorkfrontClient({

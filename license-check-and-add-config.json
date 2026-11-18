@@ -18,6 +18,7 @@
     ".eslintignore",
     ".eslintrc.js",
     "**/.gitignore",
+    "**/.env.example",
     ".hlxignore",
     ".idea/**",
     "**/.wrangler/**",

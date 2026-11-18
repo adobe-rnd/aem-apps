@@ -15,11 +15,14 @@ and add the following keys to the `data` sheet:
 | key | value |
 | --- | --- |
 | `workfront.origin` | `https://your-tenant.my.workfront.com` |
-| `workfront.origin.proxy` | Optional HTTPS proxy origin; leave blank or omit for direct requests |
+| `workfront.origin.proxy` | Optional HTTPS proxy URL: an origin, or a base URL with a path such as an Adobe I/O Runtime action URL. Leave blank or omit for direct requests |
 
 The plugin connects through the official [EW/DA SDK](https://da.live/nx/utils/sdk.js).
 
-**Note** to access Workfront APIs currently a CORS proxy is needed, a sample implementation can be found in the `cors` subfolder.
+**Note** to access Workfront APIs currently a CORS proxy is needed. API calls go to `<proxy URL>/attask/api/...`; links to Workfront records keep using `workfront.origin`. Two sample implementations are available:
+
+- [cors](./cors/README.md): a Cloudflare Worker.
+- [adobeio](./adobeio/README.md): an Adobe App Builder (I/O Runtime) web action, for organizations entitled to App Builder.
 
 ## Find items and users
 
