@@ -88,14 +88,16 @@ export function pageState(proposal, page) {
 
 function roleFor(proposal, path) {
   const target = proposal.pages.find((page) => page.target === path);
-  if (target) return { role: 'target', page: target };
+  if (target) return { role: 'target', pages: [target] };
   const draft = proposal.pages.find((page) => pagePathFrom(page.draftPath) === path);
-  if (draft) return { role: 'draft', page: draft };
+  if (draft) return { role: 'draft', pages: [draft] };
   const preview = proposal.pages.find((page) => previewPath(proposal.id, page.target) === path);
-  if (preview) return { role: 'preview', page: preview };
-  if (proposal.source.path === path) return { role: 'source', page: null };
+  if (preview) return { role: 'preview', pages: [preview] };
+  if (proposal.source.path === path) return { role: 'source', pages: proposal.pages };
   return null;
 }
+
+export const cardKey = (proposal, page) => `${proposal.id}|${page.target}`;
 
 export function involvement(proposals, path) {
   const here = pagePathFrom(path);
@@ -103,19 +105,33 @@ export function involvement(proposals, path) {
   proposals.forEach((proposal) => {
     const found = roleFor(proposal, here);
     if (!found) return;
-    const changes = found.page
-      ? proposal.changes.filter((change) => !change.target || change.target === found.page.target)
-      : proposal.changes;
-    const pageless = isOpen(proposal) ? 'open' : 'closed';
-    const state = found.page ? pageState(proposal, found.page) : pageless;
-    items.push({
-      proposal, role: found.role, page: found.page, changes, state, actionable: Boolean(found.page) && state === 'open',
+    found.pages.forEach((page) => {
+      const state = pageState(proposal, page);
+      items.push({
+        proposal,
+        role: found.role,
+        page,
+        changes: proposal.changes
+          .filter((change) => !change.target || change.target === page.target),
+        state,
+        actionable: state === 'open',
+      });
     });
   });
   const newest = (a, b) => b.proposal.createdAt.localeCompare(a.proposal.createdAt);
   const open = items.filter((item) => item.state === 'open').sort(newest);
   const closed = items.filter((item) => item.state !== 'open').sort(newest);
   return { open, closed };
+}
+
+export function groupByProposal(items) {
+  const groups = new Map();
+  items.forEach((item) => {
+    const { id } = item.proposal;
+    if (!groups.has(id)) groups.set(id, { proposal: item.proposal, items: [] });
+    groups.get(item.proposal.id).items.push(item);
+  });
+  return [...groups.values()];
 }
 
 export const isProposalPath = (path) => path === PROPOSALS_ROOT || path.startsWith(`${PROPOSALS_ROOT}/`);

@@ -321,3 +321,21 @@ a:hover {
 .check.neutral {
   background: var(--s2-gray-100, #f3f3f3);
 }
+
+.page-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.page-block + .page-block {
+  padding-top: 10px;
+  border-top: 1px solid var(--s2-gray-200, #e1e1e1);
+}
+
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}

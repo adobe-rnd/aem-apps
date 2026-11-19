@@ -11,7 +11,7 @@ The panel shows every proposal the open page is involved in, whatever its role:
 | Page open | Shown | Actions |
 |---|---|---|
 | **Target** page | Open proposals for this page: summary, changes, merge check. Closed ones are listed under "Closed". | Show diff view, Approve, Reject |
-| **Source** page | The proposal, its targets and the state of each (open, merged, rejected), with links to open them. | None. Open a target page to act. |
+| **Source** page | The proposal with one block per target page: state, changes, merge check, and links to the target page and the proposed (draft) page. | Show diff view and Approve per target page, and Reject for the whole proposal |
 | **Draft** page (`/drafts/proposals/{id}/…`) | The proposal for the target this draft belongs to, with links to the target and source pages. | Same as target |
 | **Diff view** page (`/drafts/proposals/{id}/preview/…`) | Same as the draft page. Approve or reject right where you read the markers. | Same as target |
 

@@ -16,7 +16,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  parseProposal, involvement, pageState, mergeCheck, applyMerged, applyRejected, canvasUrl, previewPath,
+  parseProposal, involvement, groupByProposal, cardKey, pageState, mergeCheck, applyMerged,
+  applyRejected, canvasUrl, previewPath,
   pagePathFrom, isDraftPath, typeLabel,
 } from '../../../../tools/plugins/proposals/model.js';
 
@@ -111,10 +112,48 @@ describe('involvement', () => {
     assert.equal(fr.open[0].actionable, true);
   });
 
-  it('shows a proposal on its source page without actions', () => {
+  it('shows a proposal on its source page, one actionable item per target page', () => {
     const { open } = involvement(list, '/index-ready.html');
     assert.equal(open.length, 3);
-    assert.ok(open.every((item) => item.role === 'source' && !item.actionable && item.page === null));
+    assert.ok(open.every((item) => item.role === 'source' && item.actionable && item.page));
+  });
+
+  it('gives a source page one item per target of a multi-page proposal', () => {
+    const multi = parseProposal(raw({
+      pages: [
+        { target: '/en-ca/index-ready.html', draftPath: '/d1', baseVersionId: 'v1' },
+        { target: '/fr-ca/index-ready.html', draftPath: '/d2', baseVersionId: 'v2' },
+      ],
+      changes: [
+        { target: '/en-ca/index-ready.html', type: 'a', rationale: '' },
+        { target: '/fr-ca/index-ready.html', type: 'b', rationale: '' },
+      ],
+    }), 'multi');
+    const { open } = involvement([multi], '/index-ready.html');
+    assert.deepEqual(open.map((item) => item.page.target), [
+      '/en-ca/index-ready.html', '/fr-ca/index-ready.html',
+    ]);
+    assert.deepEqual(open.map((item) => item.changes[0].type), ['a', 'b']);
+    const groups = groupByProposal(open);
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].items.length, 2);
+    assert.equal(
+      cardKey(multi, multi.pages[0]),
+      '20261118-1902-hero|/en-ca/index-ready.html',
+    );
+  });
+
+  it('splits a partly merged proposal on the source page into open and closed items', () => {
+    const partly = parseProposal(raw({
+      status: 'partially-merged',
+      pages: [
+        { target: '/en-ca/index-ready.html', draftPath: '/d1', mergeMode: 'smart' },
+        { target: '/fr-ca/index-ready.html', draftPath: '/d2' },
+      ],
+    }), 'p');
+    const { open, closed } = involvement([partly], '/index-ready.html');
+    assert.deepEqual(open.map((item) => item.page.target), ['/fr-ca/index-ready.html']);
+    assert.deepEqual(closed.map((item) => item.page.target), ['/en-ca/index-ready.html']);
   });
 
   it('recognizes the draft page and the diff view page, with actions for that target', () => {
