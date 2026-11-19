@@ -60,7 +60,7 @@ const UNAVAILABLE = "The publish requests service didn't answer.";
 // Worker codes that mean the site itself isn't ready, rather than an outage.
 const SITE_PROBLEMS = {
   'site-not-found': 'Edge Delivery Services site does not exist. Please create it first.',
-  'preview-write-required': 'You need at least the basic_author role on the Edge Delivery Services site.',
+  'preview-write-required': html`You need at least the <code>basic_author</code> role on the Edge Delivery Services site.`,
 };
 const ROLES_DOCS = 'https://www.aem.live/docs/authentication-setup-authoring#admin-roles';
 const DEFAULT_PROVIDER_WARNING = "Adobe's default email provider is for proof-of-concept, demos and non-production use only. Production sites must use their own email provider (custom-api).";
@@ -1135,7 +1135,7 @@ class PublishRequestsSetup extends LitElement {
         key: 'settings',
         title: 'Settings',
         description: html`${this.version === 'v2' ? 'Comment rules, author guidance, support contact and colors.' : 'Comment rules, CC approvals, support contact and colors.'}
-          ${hasVersion ? html`<a href=${SETTINGS_DOCS[this.version]} target="_blank" rel="noopener">What each setting does</a>` : nothing}${needsVersion}${unavailable}`,
+          ${hasVersion ? html`<a href=${SETTINGS_DOCS[this.version]} target="_blank" rel="noopener">What each setting does</a>.` : nothing}${needsVersion}${unavailable}`,
         status: this.settingsStatus(),
         body: () => this.renderSettingsBody(),
         editable: workflowReady && this.source !== 'org',
