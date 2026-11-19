@@ -73,5 +73,6 @@ export async function loadPageSnapshots({ api, path }) {
   return {
     containing: loaded.filter((snap) => snap.resource),
     others: loaded.filter((snap) => !snap.resource),
+    failed: loaded.filter((snap) => snap.error).map((snap) => snap.name),
   };
 }

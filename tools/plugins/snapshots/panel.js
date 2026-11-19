@@ -17,6 +17,8 @@
 import { LitElement, html, nothing } from 'da-lit';
 import 'https://da.live/nx2/blocks/shared/dialog/dialog.js';
 import 'https://da.live/nx2/blocks/shared/picker/picker.js';
+import { loadHrefSvg } from 'https://da.live/nx2/utils/svg.js';
+import getStyle from 'https://da.live/nx/public/utils/styles.js';
 import {
   loadPageSnapshots, normalizeContext, sanitizeName, scheduledPublish, snapshotAppHref,
   snapshotStatus,
@@ -24,22 +26,17 @@ import {
 
 const NX2 = 'https://da.live/nx2';
 
-async function loadSheet(href) {
-  try {
-    const resp = await fetch(href);
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(await resp.text());
-    return sheet;
-  } catch {
-    return undefined;
-  }
+let sheets = [];
+try {
+  sheets = await Promise.all([
+    getStyle(`${NX2}/styles/buttons.css`),
+    getStyle(`${NX2}/styles/form.css`),
+    getStyle(new URL('./snapshots.css', import.meta.url).href),
+  ]);
+} catch (e) {
+  // eslint-disable-next-line no-console
+  console.warn('Failed to load snapshot panel styles:', e);
 }
-
-const sheets = (await Promise.all([
-  loadSheet(`${NX2}/styles/buttons.css`),
-  loadSheet(`${NX2}/styles/form.css`),
-  loadSheet(new URL('./snapshots.css', import.meta.url).href),
-])).filter(Boolean);
 
 const COPY_MODE_ACTIONS = [
   { label: 'Cancel', value: 'cancel', variant: 'secondary' },
@@ -61,8 +58,19 @@ function renderSchedule(manifest) {
   return html`<span class="status scheduled" title="Scheduled to publish ${date.toLocaleString()}">Scheduled · ${short}</span>`;
 }
 
-const ARROW_DOWN = html`<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v12m0 0l-5-5m5 5l5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-const ARROW_UP = html`<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 17V5m0 0l-5 5m5-5l5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const s2Icon = (name) => `${NX2}/public/icons/S2_Icon_${name}_20_N.svg`;
+const [arrowDownSvg, arrowUpSvg] = await Promise.all([
+  loadHrefSvg(s2Icon('ArrowDown')),
+  loadHrefSvg(s2Icon('ArrowUp')),
+]);
+
+// Clone per use: one SVG node can only sit in one place in the DOM
+const inlineIcon = (svg) => {
+  if (!svg) return nothing;
+  const el = svg.cloneNode(true);
+  el.setAttribute('aria-hidden', 'true');
+  return el;
+};
 
 const NEW_SNAPSHOT_MANIFEST = { title: '', description: '', metadata: { reviewPassword: '' } };
 
@@ -74,6 +82,7 @@ class SnapshotsPanel extends LitElement {
     _error: { state: true },
     _containing: { state: true },
     _others: { state: true },
+    _failed: { state: true },
     _permissions: { state: true },
     _busy: { state: true },
     _notice: { state: true },
@@ -84,9 +93,19 @@ class SnapshotsPanel extends LitElement {
 
   _epoch = 0;
 
+  _return = () => {
+    if (document.visibilityState === 'visible' && !this._busy && !this._dialog) this.refresh();
+  };
+
   connectedCallback() {
     super.connectedCallback();
     this.shadowRoot.adoptedStyleSheets = sheets;
+    document.addEventListener('visibilitychange', this._return);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    document.removeEventListener('visibilitychange', this._return);
   }
 
   updated(changed) {
@@ -118,6 +137,7 @@ class SnapshotsPanel extends LitElement {
     }
     this._containing = result.containing;
     this._others = result.others;
+    this._failed = result.failed;
     this._state = 'ready';
   }
 
@@ -270,8 +290,8 @@ class SnapshotsPanel extends LitElement {
         ${launch ? html`
           <p class="group-label">Content</p>
           <div class="snapshot-content">
-            <button type="button" class="nx-action-btn nx-btn-sm" title="Sync from main content" ?disabled=${busy} @click=${() => this.handleCopy(snap, 'fork')}>${ARROW_DOWN} Sync</button>
-            ${hasSource ? html`<button type="button" class="nx-action-btn nx-btn-sm" title="Promote to main content" ?disabled=${busy} @click=${() => this.handleCopy(snap, 'promote')}>${ARROW_UP} Promote</button>` : nothing}
+            <button type="button" class="nx-action-btn nx-btn-sm" title="Sync from main content" ?disabled=${busy} @click=${() => this.handleCopy(snap, 'fork')}>${inlineIcon(arrowDownSvg)} Sync</button>
+            ${hasSource ? html`<button type="button" class="nx-action-btn nx-btn-sm" title="Promote to main content" ?disabled=${busy} @click=${() => this.handleCopy(snap, 'promote')}>${inlineIcon(arrowUpSvg)} Promote</button>` : nothing}
           </div>
         ` : nothing}
         <p class="group-label">Review</p>
@@ -347,7 +367,14 @@ class SnapshotsPanel extends LitElement {
 
   renderReady() {
     const count = this._containing.length;
+    const failed = this._failed?.length || 0;
     return html`
+      ${failed ? html`
+        <div class="notice warning" role="alert">
+          <span>Couldn't load ${failed} snapshot${failed === 1 ? '' : 's'}, so this list may be incomplete.</span>
+          <button type="button" class="nx-action-btn-quiet nx-btn-sm" ?disabled=${!!this._busy} @click=${() => this.refresh()}>Retry</button>
+        </div>
+      ` : nothing}
       <section class="current">
         <h2>${count ? `In ${count} snapshot${count === 1 ? '' : 's'}` : 'Not in a snapshot'}</h2>
         ${count ? html`<ul class="snapshots">${this._containing.map((snap) => this.renderSnapshot(snap))}</ul>` : nothing}

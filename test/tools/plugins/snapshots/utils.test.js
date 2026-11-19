@@ -76,7 +76,7 @@ describe('loadPageSnapshots', () => {
   };
 
   it('splits snapshots containing the page from the rest', async () => {
-    const { containing, others } = await loadPageSnapshots({ api, path: '/' });
+    const { containing, others, failed } = await loadPageSnapshots({ api, path: '/' });
     const pick = ({ name, resource, hasSource }) => ({ name, resource, hasSource });
     assert.deepEqual(containing.map(pick), [
       { name: 'spring', resource: { path: '/' }, hasSource: true },
@@ -85,6 +85,7 @@ describe('loadPageSnapshots', () => {
       { name: 'summer', error: undefined },
       { name: 'broken', error: 'nope' },
     ]);
+    assert.deepEqual(failed, ['broken']);
   });
 
   it('returns list errors', async () => {

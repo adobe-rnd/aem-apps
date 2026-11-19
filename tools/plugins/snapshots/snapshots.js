@@ -17,6 +17,7 @@
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { daFetch, setImsDetails } from 'https://da.live/nx/utils/daFetch.js';
 import { createSnapshotApi } from 'https://da.live/nx/public/snapshot/api.js';
+import { getColorScheme } from 'https://da.live/nx2/scripts/nx.js';
 import { normalizeContext } from './utils.js';
 import './panel.js';
 
@@ -41,6 +42,7 @@ export default async function init(sdk) {
 }
 
 if (document.querySelector('script[src$="/snapshots.js"]')) {
+  document.documentElement.style.colorScheme = getColorScheme() === 'dark-scheme' ? 'dark' : 'light';
   try {
     document.body.append(makePanel(await DA_SDK));
   } catch {
