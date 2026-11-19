@@ -67,17 +67,26 @@ The plugin clearly shows which approvers and CC recipients will receive the requ
 - **Config-based**: "Approvers and CC determined by content path rules" — matched from the workflow config
 - **Error**: If no matching rule is found or the config is missing, an error message is shown instead of the form
 
-### 6. Missing Configuration
+### 6. Site Not Set Up
 
-If the `publish-workflow-config` tab is not found in the DA config at either the site level (`/config/{org}/{site}/`) or the org level (`/config/{org}/`), the plugin displays an error:
+If the site isn't registered with the worker, or has no `publish-workflow-config` in the site or org config, the plugin shows **Site Not Registered** or **Setup Incomplete** with a link to the [Publish Requests Setup](../../apps/publish-requests-setup/README.md) app, where a config admin can finish setup for Request Publish - Single Step.
 
-> *"Publish workflow configuration not found. Please ensure the "publish-workflow-config" tab exists in the DA config for site "{org}/{site}" or org "{org}"."*
+- **Not registered**: `GET /api/config` answers `403`, and `GET /api/site-config` then answers `404` with `availableProviders`.
+- **No approval rules**: `GET /api/config` answers `{ "config": null }`.
 
-Similarly, if the config exists but no rule matches the current content path, an error is shown:
+Any other answer (no access, an outage, a network failure) shows the error below instead, without the link.
+
+The link is always the plain production URL `https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup?org={org}&site={site}`, with the values URL-encoded. It never carries `ref` or `env`, even when the plugin itself was opened with them.
+
+### Recipient domains not allowed
+
+The worker emails only addresses in the site's allowed email domains (`allowedEmailDomains` in its registration, else `adobe.com`). Submitting or resending a request whose approvers or CC include another domain answers `403` ("One or more approver or CC email domains are not allowed for this org"), and nothing is saved or sent. The plugin shows this as a recipient-domain problem, naming the domains when the worker sends them, with a hint that a config admin can allow them under Registration in the setup app. It is not a registration or setup problem.
+
+If the config exists but no rule matches the current content path, an error is shown:
 
 > *"No approver rule found matching path "{path}". Please add a matching pattern to the "publish-workflow-config" tab."*
 
-In both cases, the submission form is not rendered and the author cannot submit a request.
+In all cases, the submission form is not rendered and the author cannot submit a request.
 
 ### 7. Session/Auth Issues
 

@@ -153,6 +153,11 @@ class RequestForPublishPlugin extends LitElement {
     return `https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-inbox/publish-requests-inbox?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}&requester=true`;
   }
 
+  get setupUrl() {
+    const { org, site } = getContextOrgSite(this.context);
+    return `https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
+  }
+
   async init() {
     this._isLoading = true;
 
@@ -177,6 +182,10 @@ class RequestForPublishPlugin extends LitElement {
     }
 
     // Show error if config is missing or no matching rule found
+    if (result.source === 'unregistered' || result.source === 'no-config') {
+      this._isLoading = false;
+      return;
+    }
     if (result.error) {
       this._message = { type: 'error', text: result.error };
       this._isLoading = false;
@@ -365,6 +374,27 @@ class RequestForPublishPlugin extends LitElement {
     `;
   }
 
+  renderSetupNeeded() {
+    const unregistered = this._approversSource === 'unregistered';
+    const reason = unregistered
+      ? 'This site isn\'t registered for the publish workflow yet.'
+      : 'This site has no approver rules yet.';
+    return html`
+      <div class="status-page">
+        <div class="status-icon status-icon--neutral">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 15a1 1 0 1 1 1-1 1 1 0 0 1-1 1Zm1-4.5a1 1 0 0 1-2 0v-4a1 1 0 0 1 2 0Z" fill="currentColor"/></svg>
+        </div>
+        <h3 class="status-heading">${unregistered ? 'Site Not Registered' : 'Setup Incomplete'}</h3>
+        <p class="status-body">
+          ${reason} A config admin for the site needs to finish setup before publish requests can be submitted.
+        </p>
+        <p class="status-note">
+          <a href=${this.setupUrl} target="_blank" rel="noopener" class="action-link">Open publish requests setup</a>
+        </p>
+      </div>
+    `;
+  }
+
   renderWithdrawn() {
     return html`
       <div class="status-page">
@@ -498,6 +528,10 @@ class RequestForPublishPlugin extends LitElement {
   render() {
     if (this._isLoading) {
       return this.renderLoading();
+    }
+
+    if (this._approversSource === 'unregistered' || this._approversSource === 'no-config') {
+      return this.renderSetupNeeded();
     }
 
     if (this._withdrawn) {
