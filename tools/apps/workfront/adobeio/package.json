@@ -1,0 +1,13 @@
+{
+  "name": "workfront-adobeio-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Adobe I/O Runtime proxy for the Workfront Experience Workspace plugin",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "deploy": "aio app deploy",
+    "undeploy": "aio app undeploy"
+  }
+}

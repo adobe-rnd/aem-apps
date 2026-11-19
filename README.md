@@ -15,6 +15,7 @@ A collection of Adobe owned apps & plugins for Experience Workspace & Document A
 | **Snapshots** |https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/snapshots/snapshots.html | [`tools/plugins/snapshots`](tools/plugins/snapshots/README.md) | Manage the current page's snapshots: sync, promote, review and add to a snapshot  | Plugin |
 | **CUG** |https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/cug/cug.html | `tools/plugins/cug` | Apply or remove closed user group (page access) restrictions  | Plugin |
 | **FindReplace Pro** |https://da.live/app/adobe-rnd/aem-apps/tools/apps/findreplace-pro/findreplace-pro | [FindReplace Pro](tools/apps/findreplace-pro/README.md) | Search site content, bulk-replace matches with version backups, and preview, publish, or unpublish selected files | App |
+| **Workfront (PoC)** |https://main--aem-apps--adobe-rnd.aem.page/tools/apps/workfront/workfront.html | [Workfront](tools/apps/workfront/README.md) | Link pages to Workfront tasks and prepare task briefs for chat; tenant configuration required | Plugin |
 
 ## Developing
 
