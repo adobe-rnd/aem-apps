@@ -23,7 +23,7 @@ const entrySource = source.slice(source.indexOf('function getContextOrgSite('))
   .replace('(async function initAsDialog()', 'const dialogReady = (async function initAsDialog()')
   .replace('export default async function init(', 'async function init(');
 
-async function fixture(mode, context) {
+async function fixture(mode, context, { config, window = {} } = {}) {
   const calls = [];
   const errors = [];
   const components = [];
@@ -42,13 +42,15 @@ async function fixture(mode, context) {
       body: mode === 'dialog' ? body : null,
       createElement: () => new Component(),
     },
-    window: {},
+    window,
+    html: (strings, ...values) => strings.reduce((text, part, index) => `${text}${part}${values[index] ?? ''}`, ''),
+    nothing: '',
     console: { log: () => {}, error: (...args) => errors.push(args) },
     URLSearchParams,
     getUserEmail: async () => 'author@example.com',
     resolveWorkflowConfig: async (...args) => {
       calls.push({ action: 'config', args });
-      return { approvers: ['approver@example.com'] };
+      return config || { approvers: ['approver@example.com'] };
     },
     checkExistingRequest: async (...args) => {
       calls.push({ action: 'existing', args });
@@ -131,5 +133,52 @@ async function fixture(mode, context) {
       });
       assert.equal(component.contentPath, '/docs/brochure.pdf');
     });
+  });
+});
+
+describe('setup link', () => {
+  const SETUP = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup';
+  const page = { search: '?org=x&site=y&ref=local&env=ci' };
+
+  it('is the plain setup app URL with only org and site, even when the page has ref and env', async () => {
+    const { component } = await fixture('dialog', {
+      org: 'example', site: 'website', path: '/news/article.html',
+    }, { window: { location: page } });
+    assert.equal(component.setupUrl, `${SETUP}?org=example&site=website`);
+    const encoded = await fixture('dialog', { org: 'my org', repo: 'a&b', path: '/index' }, { window: { location: page } });
+    assert.equal(encoded.component.setupUrl, `${SETUP}?org=my%20org&site=a%26b`);
+  });
+
+  [
+    ['unregistered', 'Site Not Registered', /isn't registered for the publish workflow/],
+    ['no-config', 'Setup Incomplete', /has no approver rules/],
+  ].forEach(([gap, heading, reason]) => {
+    it(`shows the setup link for ${gap} sites without loading requests`, async () => {
+      const config = {
+        approvers: [], cc: [], source: gap, error: 'Not set up',
+      };
+      const { component, calls } = await fixture('dialog', {
+        org: 'example', site: 'website', path: '/index',
+      }, { config, window: { location: page } });
+      await component.init();
+      assert.equal(calls.some((call) => call.action === 'existing'), false);
+      const rendered = component.render();
+      assert.ok(rendered.includes(`href=${SETUP}?org=example&site=website target="_blank" rel="noopener"`));
+      assert.ok(rendered.includes(heading));
+      assert.match(rendered, reason);
+    });
+  });
+
+  it('shows an error without the setup link when the worker cannot say', async () => {
+    const { component } = await fixture('dialog', {
+      org: 'example', site: 'website', path: '/index',
+    }, {
+      config: {
+        approvers: [], cc: [], source: 'error', error: 'Could not load (503).',
+      },
+    });
+    await component.init();
+    assert.match(component.render(), /Could not load \(503\)\./);
+    assert.equal(component.render().includes('publish-requests-setup'), false);
   });
 });

@@ -109,7 +109,11 @@ If the user has no pending requests to act on, the inbox displays an empty state
 
 ### 11. Site Not Set Up
 
-Before loading requests, the app checks that the site exists, is registered with the worker (`GET /api/site-config`), and has `publish-workflow-config` rules in the site or org config. If it isn't registered or has no rules, it shows **Not Set Up Yet** with a link to the [Publish Requests Setup](../publish-requests-setup/README.md) app and a **Check Again** button. If the config can't be read, or the worker has no `/api/site-config` route, the app carries on and lets the worker gate each call.
+Before loading requests, the app checks that the site exists, is registered with the worker (`GET /api/site-config`), and has `publish-workflow-config` rules in the site or org config. If it isn't registered (`404` with `availableProviders`) or has no rules, it shows **Not Set Up Yet** with a link to the [Publish Requests Setup](../publish-requests-setup/README.md) app and a **Check Again** button. A site or org config that doesn't exist (`404`) counts as having no rules. If either config can't be read, or the worker can't say (no access, an outage, or no `/api/site-config` route), the app carries on and lets the worker gate each call.
+
+The link is always the plain production URL `https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup?org={org}&site={site}`, with the values URL-encoded. It never carries `ref` or `env`, even when the inbox itself was opened with them, and opens in a new tab.
+
+A **Resend** whose approvers or CC include an email domain the site doesn't allow (`allowedEmailDomains` in its registration, else `adobe.com`) answers `403` ("One or more approver or CC email domains are not allowed for this org"), and nothing is sent. The inbox shows it as a recipient-domain problem, naming the domains when the worker sends them, with a hint that a config admin can allow them under Registration in the setup app; it is not a registration or setup problem.
 
 ### 12. Session/Login Issues
 

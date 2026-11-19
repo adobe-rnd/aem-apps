@@ -38,8 +38,6 @@ import {
   checkSiteRegistration,
 } from './api.js';
 
-const SETUP_APP_PATH = 'tools/apps/publish-requests-setup/publish-requests-setup';
-
 const INFO_ICON = html`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 15a1 1 0 1 1 1-1 1 1 0 0 1-1 1Zm1-4.5a1 1 0 0 1-2 0v-4a1 1 0 0 1 2 0Z" fill="currentColor"/></svg>`;
 
 // Super Lite (sl-*) — Spectrum-aligned controls for DA; pairs with S2 tokens in CSS.
@@ -188,12 +186,10 @@ class PublishRequestsApp extends LitElement {
     return `${this.appBaseUrl}?${params.toString()}`;
   }
 
+  // Always the production setup app with only org and site: never `ref` or `env`.
   get setupUrl() {
-    const { org, repo } = this.context || {};
-    const params = new URLSearchParams({ org: this._org, site: this._site });
-    const env = new URLSearchParams(window.location.search).get('env');
-    if (env) params.set('env', env);
-    return `https://da.live/app/${org}/${repo}/${SETUP_APP_PATH}?${params}`;
+    const app = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup';
+    return `${app}?org=${encodeURIComponent(this._org)}&site=${encodeURIComponent(this._site)}`;
   }
 
   getInboxUrl() {
@@ -269,11 +265,12 @@ class PublishRequestsApp extends LitElement {
       this._state = 'site-not-found';
       return false;
     }
-    const unreadable = !siteConfig && !orgConfig;
+    // A missing config reads as {}; an unreadable one (null) can't rule out org or site rules.
+    const readable = !!siteConfig && !!orgConfig;
     const hasRules = (config) => config?.['publish-workflow-config']?.data?.length > 0;
     if (registration.status === 'unregistered') {
       this._setupReason = "isn't registered for publish requests";
-    } else if (!unreadable && !hasRules(siteConfig) && !hasRules(orgConfig)) {
+    } else if (readable && !hasRules(siteConfig) && !hasRules(orgConfig)) {
       this._setupReason = 'has no approval rules';
     } else {
       return true;

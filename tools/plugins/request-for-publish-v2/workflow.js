@@ -158,6 +158,13 @@ export function deriveView(context, data) {
   };
 }
 
+/**
+ * The setup app link: always the production app with only `org` and `site`, never `ref` or `env`.
+ */
+export function setupUrl({ org, site }) {
+  return `${SETUP}?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
+}
+
 export function pageLinks(context, env, moduleUrl = import.meta.url) {
   const {
     org, site, path, ref: contentRef = 'main',
@@ -173,7 +180,7 @@ export function pageLinks(context, env, moduleUrl = import.meta.url) {
     live: `https://${contentRef}--${site}--${org}.aem.live${delivered}`,
     inbox: `${INBOX}?${query}`,
     myRequests: `${INBOX}?${query}&requester=true`,
-    setup: `${SETUP}?${query}`,
+    setup: setupUrl(context),
   };
 }
 
@@ -204,6 +211,42 @@ export function createWorkspaceActions({ actions = {} } = {}) {
 
 function failure(message, details = {}) {
   return Object.assign(new Error(message), details);
+}
+
+const RECIPIENT_DOMAINS = 'recipient-domain-not-allowed';
+const DOMAIN_HINT = 'A config admin can allow them under Registration in the Request Publish setup app.';
+
+// v2 create/resend refuse off-list approver or CC domains with this 403 (worker#41).
+// A worker without the code is recognised by its message. Never a setup or registration problem.
+function isRecipientDomainError(status, result) {
+  if (status !== 403) return false;
+  return result?.code === RECIPIENT_DOMAINS || /email domains are not allowed/i.test(result?.error || '');
+}
+
+function recipientDomainMessage(domains) {
+  const list = Array.isArray(domains) ? domains.filter((d) => typeof d === 'string' && d) : [];
+  return list.length
+    ? `These approver or CC email domains aren't allowed for this site: ${list.join(', ')}. ${DOMAIN_HINT}`
+    : `Some approver or CC email domains aren't allowed for this site. ${DOMAIN_HINT}`;
+}
+
+/**
+ * The warning for `emailErrors` on a successful change: the existing delivery warning, plus the
+ * worker's note naming refused recipient domains when it sends one.
+ */
+export function emailWarning(emailErrors) {
+  if (!Array.isArray(emailErrors) || !emailErrors.length) return '';
+  const domains = emailErrors.filter((entry) => typeof entry === 'string' && /domains are not allowed/i.test(entry));
+  return ['Email notification delivery failed for one or more recipients.', ...new Set(domains)].join(' ');
+}
+
+// The worker's 403 for an unregistered site carries code 'site-not-registered'
+// (publish-requests-worker#41). Workers without it send no code, so a code-less
+// 403 still falls back to the message; any other code is a different denial.
+function isUnregistered(error) {
+  if (error.status !== 403) return false;
+  if (error.code) return error.code === 'site-not-registered';
+  return /not registered/i.test(error.message);
 }
 
 function settingsFrom(config) {
@@ -258,7 +301,23 @@ export function createClient({
     try { result = await resp.json(); } catch {
       throw failure(`The workflow service returned an unreadable response (${resp.status}).`, { status: resp.status });
     }
-    if (!resp.ok) throw failure(result.error || `The workflow service returned ${resp.status}.`, { status: resp.status });
+    if (!resp.ok) {
+      if (isRecipientDomainError(resp.status, result)) {
+        throw failure(recipientDomainMessage(result.domains), {
+          status: 403, code: RECIPIENT_DOMAINS,
+        });
+      }
+      if (result.code === 'registration-unavailable') {
+        // An outage reading the registration (503), not an unregistered site.
+        throw failure("Can't check this site's registration right now. Try again in a moment.", {
+          status: resp.status, code: result.code,
+        });
+      }
+      throw failure(result.error || `The workflow service returned ${resp.status}.`, {
+        status: resp.status,
+        ...(typeof result.code === 'string' && { code: result.code }),
+      });
+    }
     return result;
   }
 
@@ -341,8 +400,10 @@ export function createClient({
         list(context, { role: 'approver', path: context.path }),
         list(context, { role: 'page', path: context.path }),
       ]).catch((error) => {
-        if (error.status !== 403 || !/not registered/i.test(error.message)) throw error;
-        throw failure(`This site isn't registered for publish requests yet. ${SETUP_HINT}`, { status: 403, setup: true });
+        if (!isUnregistered(error)) throw error;
+        throw failure(`This site isn't registered for publish requests yet. ${SETUP_HINT}`, {
+          status: 403, code: 'site-not-registered', setup: true,
+        });
       });
       if (!configResult.config) {
         throw failure(`The publish workflow is not configured for this site. ${SETUP_HINT}`, { setup: true });

@@ -16,7 +16,7 @@
 /* eslint-disable no-underscore-dangle, import/no-unresolved */
 import { LitElement, html, nothing } from 'da-lit';
 import {
-  normalizeContext, deriveView, pageLinks, sameRequest,
+  normalizeContext, deriveView, pageLinks, sameRequest, setupUrl, emailWarning,
 } from './workflow.js';
 
 const style = new CSSStyleSheet();
@@ -231,14 +231,15 @@ class RequestForPublish extends LitElement {
       if (['submit', 'approve', 'reject', 'withdraw'].includes(action)) {
         this.workspace?.close?.().catch(() => {});
       }
-      const emailFailed = Array.isArray(result?.emailErrors) && result.emailErrors.length > 0;
+      const warning = emailWarning(result?.emailErrors);
+      const emailFailed = !!warning;
       let message = messages[action];
       if (emailFailed && action === 'resend') message = 'Your request is still pending.';
       else if (emailFailed && action === 'approve' && !final) message = 'Step approved.';
       this._notice = {
         type: emailFailed ? 'info' : 'success',
         text: emailFailed
-          ? `${message} Email notification delivery failed for one or more recipients. Do not repeat the action to retry notifications.`
+          ? `${message} ${warning} Do not repeat the action to retry notifications.`
           : message,
       };
       if (action === 'submit') this._comment = '';
@@ -404,7 +405,7 @@ class RequestForPublish extends LitElement {
     if (this._error) {
       return html`<section class="empty"><h2>Request status unavailable</h2>
       <p>${this._error.status === 401 ? 'Your session has expired. Reopen the plugin after signing in.' : this._error.message}</p>
-      ${this._error.setup && this.page ? html`<a href=${pageLinks(this.page, new URLSearchParams(window.location.search).get('env')).setup} target="_blank" rel="noopener noreferrer">Open publish requests setup <span aria-hidden="true">↗</span></a>` : nothing}</section>`;
+      ${this._error.setup && this.page ? html`<a href=${setupUrl(this.page)} target="_blank" rel="noopener noreferrer">Open publish requests setup <span aria-hidden="true">↗</span></a>` : nothing}</section>`;
     }
     const { state } = this;
     if (state.view === 'loading') return html`<p class="loading" role="status">Checking publish request…</p>`;

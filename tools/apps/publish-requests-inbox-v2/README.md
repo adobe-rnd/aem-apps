@@ -8,7 +8,7 @@ the inbox publishes content under the approver's Helix session.
 
 ## Opting in
 
-V2 is opt-in. The [Publish Requests Setup](../publish-requests-setup/README.md) app does all of this from one page; when a site isn't registered or has no approval rules, this inbox shows **Not Set Up Yet** with a link to it. By hand, it takes three pieces:
+V2 is opt-in. The [Publish Requests Setup](../publish-requests-setup/README.md) app does all of this from one page for Request Publish - Multi Step. When a site isn't registered (`GET /api/v2/site-config` answers `404` with `availableProviders`) or has no approval rules (`GET /api/v2/config` answers `config: null`), this inbox shows **Not Set Up Yet** with a link to it; when the worker can't say, it carries on. The link is always the plain production URL `https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup?org={org}&site={site}`, URL-encoded and without `ref` or `env`, even when the inbox was opened with them. By hand, it takes three pieces:
 
 1. Deploy a worker with the `/api/v2/` contract described below and register the site with access to its requests sheet.
 2. Point the site's inline library entry to `/tools/plugins/request-for-publish-v2/request-for-publish-v2.html`. See the [v2 plugin setup](../../plugins/request-for-publish-v2/README.md#opting-in).
@@ -89,8 +89,10 @@ publication. Inspect per-path `stale`, `unauthorized` and `notFound` results;
 partial bulk success must not complete failed paths.
 
 - `409` means the request is gone or the step/finality is stale: refresh worker state and require a new decision; never automatically retry the old approval.
-- `emailErrors` in a successful response are success warnings: the sheet mutation succeeded but notification delivery failed. Surface the warning and refresh; do not repeat the mutation to resend email.
+- `emailErrors` in a successful response are success warnings: the sheet mutation succeeded but notification delivery failed. Surface the warning and refresh; do not repeat the mutation to resend email. The warning repeats the worker's note naming recipient domains the site doesn't allow, when it sends one.
 - `401` is an authentication failure; `403` is an authorization or site-registration denial, not an empty queue.
+- A resend (`POST /api/v2/requests` with `resend: true`) answers `403` with `code: "recipient-domain-not-allowed"` and `domains` when an approver or CC of the current step is outside the site's allowed email domains. The inbox shows it as a recipient-domain problem naming the domains, with a hint that a config admin can allow them under Registration in the setup app; it is not a registration or setup problem.
+- `503` with `code: "registration-unavailable"` means the worker couldn't read the site registration. The inbox says it can't check right now, like any other outage, and never treats the site as unregistered.
 - `500` and `502` indicate configuration/backend failures, not missing requests or an empty inbox. Keep an error state and refresh after resolving the cause.
 
 ## Publication and review

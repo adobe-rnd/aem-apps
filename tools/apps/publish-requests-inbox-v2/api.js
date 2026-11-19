@@ -119,11 +119,16 @@ export function getLiveHostFromConfig(org, site, config) {
   return `main--${site}--${org}.aem.live`;
 }
 
-// Why the site can't take requests yet, or '' when it can or the worker can't say.
+/**
+ * Why the site can't take requests yet, or '' when it can or the worker can't say.
+ * Unregistered: `GET /api/v2/site-config` answers 404 with `availableProviders`.
+ * No rules: `GET /api/v2/config` answers `config: null` (no `publish-workflow-config`
+ * in the site or org config). Denials, outages and network failures report nothing.
+ */
 export async function getSetupGap(org, site, token) {
   const query = `org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
   try {
-    const regResp = await fetch(`${getWorkerUrl()}/api/site-config?${query}`, getOpts(token));
+    const regResp = await fetch(`${getWorkerUrl()}/api/v2/site-config?${query}`, getOpts(token));
     if (!regResp.ok) {
       const { availableProviders } = await regResp.json().catch(() => ({}));
       if (Array.isArray(availableProviders)) return "isn't registered for publish requests";
@@ -301,6 +306,10 @@ export async function pollJobStatus(jobSelfUrl, maxWaitMs = 60000, intervalMs = 
  */
 async function readWorkerResponse(resp) {
   const result = await resp.json().catch(() => null);
+  if (result?.code === 'registration-unavailable') {
+    // The worker couldn't read the registration (503): an outage, not an unregistered site.
+    throw Object.assign(new Error(`Can't check this site's registration right now. Retry later. (${resp.status})`), { status: resp.status });
+  }
   if (!resp.ok || !result) {
     const labels = {
       401: 'Your session has expired. Reopen the app.',
@@ -441,6 +450,33 @@ export async function withdrawRequest(org, site, path, token) {
   }
 }
 
+const RECIPIENT_DOMAINS = 'recipient-domain-not-allowed';
+const DOMAIN_HINT = 'A config admin can allow them under Registration in the Request Publish setup app.';
+
+/**
+ * The worker refuses a create or resend whose approver or CC domains aren't allowed for the site:
+ * 403 with `code: recipient-domain-not-allowed` and `domains` (a worker without the code is known
+ * by its message). Not a registration or setup problem. Returns the message to show, else null.
+ */
+export function recipientDomainError(status, result) {
+  if (status !== 403) return null;
+  if (result?.code !== RECIPIENT_DOMAINS && !/email domains are not allowed/i.test(result?.error || '')) return null;
+  const domains = Array.isArray(result.domains) ? result.domains.filter((d) => typeof d === 'string' && d) : [];
+  return domains.length
+    ? `These approver or CC email domains aren't allowed for this site: ${domains.join(', ')}. ${DOMAIN_HINT}`
+    : `Some approver or CC email domains aren't allowed for this site. ${DOMAIN_HINT}`;
+}
+
+/**
+ * The warning for `emailErrors` on a successful change: the existing warning, plus the worker's
+ * note naming refused recipient domains when it sends one. '' when there are none.
+ */
+export function emailWarning(emailErrors) {
+  if (!Array.isArray(emailErrors) || !emailErrors.length) return '';
+  const domains = emailErrors.filter((entry) => typeof entry === 'string' && /domains are not allowed/i.test(entry));
+  return ['Some notification emails could not be sent.', ...new Set(domains)].join(' ');
+}
+
 /**
  * Re-send the approval email for an existing request (no sheet change).
  * @param {string} requesterEmail - Unused; the worker resolves approvers itself.
@@ -452,7 +488,15 @@ export async function resendPublishRequest(org, site, path, requesterEmail, toke
       org, site, path, resend: true,
     }));
     const result = await resp.json();
-    if (!resp.ok) return { success: false, status: resp.status, error: result.error || 'Failed to resend publish request' };
+    if (!resp.ok) {
+      const domainError = recipientDomainError(resp.status, result);
+      if (domainError) {
+        return {
+          success: false, status: resp.status, code: RECIPIENT_DOMAINS, error: domainError,
+        };
+      }
+      return { success: false, status: resp.status, error: result.error || 'Failed to resend publish request' };
+    }
     return { ...result, success: result.success === true };
   } catch (error) {
     console.error('Error resending publish request:', error);
