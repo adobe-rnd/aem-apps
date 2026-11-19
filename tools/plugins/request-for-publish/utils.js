@@ -76,6 +76,19 @@ function getOpts(token, method = 'GET', body = null) {
   return opts;
 }
 
+// True only when the worker says so (GET /api/site-config lists providers for unregistered sites).
+async function isSiteUnregistered(org, site, token) {
+  try {
+    const url = `${getWorkerUrl()}/api/site-config?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
+    const resp = await fetch(url, getOpts(token));
+    if (resp.ok) return false;
+    const { availableProviders } = await resp.json().catch(() => ({}));
+    return Array.isArray(availableProviders);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Resolve the publish-workflow configuration for a content path.
  *
@@ -96,10 +109,11 @@ export async function resolveWorkflowConfig(path, org, site, token) {
   // Display settings come from the raw config.
   const configResp = await fetch(`${base}/api/config?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`, opts);
   if (!configResp.ok) {
+    const unregistered = configResp.status === 403 && await isSiteUnregistered(org, site, token);
     return {
       approvers: [],
       cc: [],
-      source: 'error',
+      source: unregistered ? 'unregistered' : 'error',
       commentsRequired: false,
       commentsMinLength: 10,
       error: configResp.status === 403
@@ -112,7 +126,7 @@ export async function resolveWorkflowConfig(path, org, site, token) {
     return {
       approvers: [],
       cc: [],
-      source: 'error',
+      source: 'no-config',
       commentsRequired: false,
       commentsMinLength: 10,
       error: 'Publish workflow configuration not found for this site or org.',

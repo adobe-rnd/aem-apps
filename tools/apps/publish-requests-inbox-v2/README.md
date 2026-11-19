@@ -8,7 +8,7 @@ the inbox publishes content under the approver's Helix session.
 
 ## Opting in
 
-V2 is opt-in and requires all three pieces:
+V2 is opt-in. The [Publish Requests Setup](../publish-requests-setup/README.md) app does all of this from one page; when a site isn't registered or has no approval rules, this inbox shows **Not Set Up Yet** with a link to it. By hand, it takes three pieces:
 
 1. Deploy a worker with the `/api/v2/` contract described below and register the site with access to its requests sheet.
 2. Point the site's inline library entry to `/tools/plugins/request-for-publish-v2/request-for-publish-v2.html`. See the [v2 plugin setup](../../plugins/request-for-publish-v2/README.md#opting-in).

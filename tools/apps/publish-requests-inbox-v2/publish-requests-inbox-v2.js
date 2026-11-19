@@ -33,6 +33,7 @@ import {
   fetchSiteConfig,
   getLiveHostFromConfig,
   fetchAccentSettings,
+  getSetupGap,
 } from './api.js';
 
 // Super Lite (sl-*) — Spectrum-aligned controls for DA; pairs with S2 tokens in CSS.
@@ -112,6 +113,7 @@ class PublishRequestsApp extends LitElement {
     _orgSiteValue: { state: true },
     // Inline reject error
     _rejectError: { state: true },
+    _setupReason: { state: true },
   };
 
   constructor() {
@@ -179,6 +181,18 @@ class PublishRequestsApp extends LitElement {
     return `${this.appBaseUrl}?${params.toString()}`;
   }
 
+  get setupUrl() {
+    const { org, repo } = this.context || {};
+    const params = this.navigationParams({ org: this._org, site: this._site });
+    return `https://da.live/app/${org}/${repo}/tools/apps/publish-requests-setup/publish-requests-setup?${params}`;
+  }
+
+  async isSetUp() {
+    this._setupReason = await getSetupGap(this._org, this._site, this.token);
+    if (this._setupReason) this._state = 'not-set-up';
+    return !this._setupReason;
+  }
+
   navigationParams(values) {
     const current = new URLSearchParams(window.location.search);
     const params = new URLSearchParams(values);
@@ -235,6 +249,7 @@ class PublishRequestsApp extends LitElement {
       return;
     }
 
+    if (!await this.isSetUp()) return;
     await this.loadSiteSettings(this._org, this._site);
 
     // Sample RUM enhancer if the RUM script is loaded
@@ -393,11 +408,12 @@ class PublishRequestsApp extends LitElement {
     this._path = '';
     this._pendingRequests = [];
 
-    await this.loadSiteSettings(org, site);
-
     const urlParams = { org, site };
     if (this._requester) urlParams.requester = 'true';
     this.updateUrl(urlParams);
+
+    if (!await this.isSetUp()) return;
+    await this.loadSiteSettings(org, site);
 
     // Load inbox inline — these methods set _state to 'inbox'/'my-requests' when done
     if (this._requester) {
@@ -836,9 +852,30 @@ published,
         return this.renderRejected();
       case 'review':
         return this.renderReview();
+      case 'not-set-up':
+        return this.renderNotSetUp();
       default:
         return nothing;
     }
+  }
+
+  renderNotSetUp() {
+    return html`
+      <div class="status-page">
+        <div class="status-icon status-icon--neutral">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 15a1 1 0 1 1 1-1 1 1 0 0 1-1 1Zm1-4.5a1 1 0 0 1-2 0v-4a1 1 0 0 1 2 0Z" fill="currentColor"/></svg>
+        </div>
+        <h2 class="status-heading">Not Set Up Yet</h2>
+        <p class="status-body">
+          <strong>${this._org}/${this._site}</strong> ${this._setupReason}.
+          A config admin for the site can finish setup.
+        </p>
+        <div class="decision-actions">
+          <a class="setup-link" href=${this.setupUrl} target="_blank" rel="noopener">Open setup</a>
+          <sl-button class="pw-quiet-secondary" @click=${() => { this._state = 'loading'; this.init(); }}>Check Again</sl-button>
+        </div>
+      </div>
+    `;
   }
 
   // ======== Inbox renders ========
