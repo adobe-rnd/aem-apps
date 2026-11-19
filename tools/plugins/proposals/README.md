@@ -17,6 +17,20 @@ The panel shows every proposal the open page is involved in, whatever its role:
 
 Other pages show "No content proposals involve this page".
 
+## Create a proposal
+
+**Create proposal…** (top of the panel, on any page outside `/drafts`) lists the target pages of the open page from the site's locations config, nested ones indented. Ticking a page also ticks the pages it depends on. **Send to chat** puts a ready request into the chat and sends it (`actions.setPrompt(text, { autoSend: true })`):
+
+```
+Create a content proposal for the latest changes on /index-ready.html.
+Compare the page with its previous saved version to find the changes.
+Targets:
+- Canada (English) (en-CA): /en-ca/index-ready.html
+Do not write to the target pages.
+```
+
+The `create-proposal` skill does the work, including Experience Context. The panel writes nothing. If the host has no `setPrompt`, the request is copied to the clipboard; if that fails, it is shown for copying. To only fill the chat box without sending, change `autoSend` in `create.js`.
+
 ## Actions
 
 - **Show diff view**: writes the marked page to `/drafts/proposals/{id}/preview/<page>` and opens it in `da.live/canvas`. In that view **Upstream** is the proposed change and **Local** is the page as it is now. Read the markers; do not accept or reject them there.
@@ -43,6 +57,7 @@ The merge engine is da-nx's own: `smartMerge`, `regionalDiff` and `getBlockHashe
 | `model.js` | Pure helpers: parse records, match a page, record updates, paths |
 | `store.js` | DA reads and writes (source, versions, proposals list) |
 | `merge.js` | Merge check, diff preview and merge, with the engine injected |
+| `create.js` | Target pages from the locations config, the chat request, sending it to the chat |
 
 ## Limits
 

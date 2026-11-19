@@ -339,3 +339,44 @@ a:hover {
   justify-content: space-between;
   gap: 8px;
 }
+
+.create-btn {
+  margin-left: auto;
+}
+
+.create-btn + .refresh {
+  margin-left: 0;
+}
+
+.targets {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.targets li {
+  padding-left: calc(var(--indent, 0) * 16px);
+}
+
+.targets label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  cursor: pointer;
+}
+
+.target-name {
+  font-weight: 600;
+}
+
+.create textarea {
+  padding: 6px 8px;
+  border: 1px solid var(--s2-gray-300, #dadada);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+}

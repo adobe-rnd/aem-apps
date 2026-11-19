@@ -18,8 +18,11 @@ import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from 'da-lit';
 import createStore from './store.js';
 import createMerger from './merge.js';
+import { loadTargets, buildPrompt, sendToChat } from './create.js';
+import { togglePick } from '../msm-next/model.js';
 import {
-  pagePathFrom, involvement, groupByProposal, cardKey, pageState, mergeCheck, typeLabel,
+  pagePathFrom, isDraftPath, involvement, groupByProposal, cardKey, pageState, mergeCheck,
+  typeLabel,
   formatDate, canvasUrl,
   applyMerged, applyRejected, previewPath,
 } from './model.js';
@@ -98,6 +101,8 @@ class ProposalsPlugin extends LitElement {
     closed: { state: true },
     cards: { state: true },
     notice: { state: true },
+    creating: { state: true },
+    actions: { attribute: false },
   };
 
   constructor() {
@@ -106,6 +111,7 @@ class ProposalsPlugin extends LitElement {
     this.open = [];
     this.closed = [];
     this.cards = new Map();
+    this.creating = null;
   }
 
   connectedCallback() {
@@ -217,6 +223,77 @@ class ProposalsPlugin extends LitElement {
     } catch (error) {
       this.patchCard(proposal.id, { busy: null, confirm: null, message: { tone: 'negative', text: messageOf(error) } });
     }
+  }
+
+  async openCreate() {
+    this.creating = { phase: 'loading', rows: [], picked: new Set() };
+    try {
+      const rows = await loadTargets({
+        org: this.org, site: this.site, path: this.path, daFetch: this.actions.daFetch,
+      });
+      this.creating = { phase: 'ready', rows, picked: new Set() };
+    } catch (error) {
+      this.creating = {
+        phase: 'error', error: messageOf(error), rows: [], picked: new Set(),
+      };
+    }
+  }
+
+  pickTarget(id, checked) {
+    const { rows, picked } = this.creating;
+    this.creating = { ...this.creating, picked: togglePick(rows, picked, id, checked) };
+  }
+
+  async sendCreate() {
+    const { rows, picked } = this.creating;
+    const targets = rows.filter((row) => picked.has(row.id));
+    const text = buildPrompt({ source: this.path, targets });
+    const outcome = await sendToChat(this.actions, text);
+    if (outcome === 'unsupported') {
+      this.creating = { ...this.creating, prompt: text };
+      return;
+    }
+    this.creating = null;
+    this.notice = {
+      tone: 'positive',
+      text: outcome === 'copied'
+        ? 'The request was copied. Paste it into the chat to create the proposal.'
+        : 'Sent to the chat. The agent will create the proposal and report back. Refresh to see it here.',
+    };
+  }
+
+  renderCreate() {
+    const form = this.creating;
+    if (!form) return nothing;
+    const count = form.picked.size;
+    return html`
+      <section class="card create" aria-label="Create a content proposal">
+        <div class="card-head"><h2>Create a content proposal</h2></div>
+        <p class="muted">The agent compares this page with its last saved version and adapts the changes for the pages you pick. Nothing is written to the target pages.</p>
+        ${form.phase === 'loading' ? html`<p class="muted">Loading target pages…</p>` : nothing}
+        ${form.phase === 'error' ? html`<p class="check negative">Could not load the target pages: ${form.error}</p>` : nothing}
+        ${form.phase === 'ready' && !form.rows.length ? html`<p class="muted">This page has no target pages. Open the source page to create a proposal.</p>` : nothing}
+        ${form.rows.length ? html`
+          <ul class="targets">
+            ${form.rows.map((row) => html`
+              <li style="--indent: ${row.depth}">
+                <label>
+                  <input type="checkbox" .checked=${form.picked.has(row.id)}
+                    @change=${(event) => this.pickTarget(row.id, event.target.checked)}>
+                  <span class="target-name">${row.label}</span>
+                  <span class="muted">${row.path}</span>
+                </label>
+              </li>`)}
+          </ul>` : nothing}
+        ${form.prompt ? html`
+          <p class="check notice">This host cannot send to the chat. Copy this request into the chat:</p>
+          <textarea rows="6" readonly .value=${form.prompt}></textarea>` : nothing}
+        <div class="actions">
+          <button type="button" class="btn accent" ?disabled=${!count}
+            @click=${() => this.sendCreate()}>Send to chat</button>
+          <button type="button" class="btn" @click=${() => { this.creating = null; }}>Cancel</button>
+        </div>
+      </section>`;
   }
 
   renderApproveConfirm(item, card) {
@@ -345,9 +422,12 @@ class ProposalsPlugin extends LitElement {
       <div class="top">
         <span class="panel-name">Content proposals</span>
         ${this.phase === 'ready' && this.open.length ? html`<span class="pill small informative">${groupByProposal(this.open).length}</span>` : nothing}
+        ${isDraftPath(this.path) || this.creating ? nothing : html`
+          <button type="button" class="btn small create-btn" @click=${() => this.openCreate()}>Create proposal…</button>`}
         <button type="button" class="link-btn refresh" @click=${() => this.load()}>Refresh</button>
       </div>
       ${this.notice ? html`<p class="check ${this.notice.tone}" role="status">${this.notice.text}</p>` : nothing}
+      ${this.renderCreate()}
       ${this.phase === 'loading' ? html`<p class="state muted">Loading proposals…</p>` : nothing}
       ${this.phase === 'error' ? html`<p class="state error-text">Could not load proposals: ${this.error}</p>` : nothing}
       ${this.phase === 'ready' ? this.renderReady() : nothing}`;
@@ -372,6 +452,7 @@ async function resolveSetup() {
     site,
     path: pagePathFrom(context.path),
     store,
+    actions,
     merger: createMerger({
       engine, parse, store, site,
     }),
