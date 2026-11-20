@@ -15,9 +15,9 @@
  */
 /* eslint-disable import/no-unresolved */
 import { html, nothing } from 'da-lit';
-import { ACTIONS, MISSING_PAGES, ON_COMPLETE } from '../../../localization/core/domain/config.js';
+import { ACTIONS, MISSING_PAGES } from '../../../localization/core/domain/config.js';
 import {
-  ACTION_HELP, MISSING_PAGES_HELP, ON_COMPLETE_LABELS, CONFLICT_LABELS, TRANSLATION_PROVIDERS,
+  ACTION_HELP, MISSING_PAGES_HELP, CONFLICT_LABELS, TRANSLATION_PROVIDERS,
   DEFAULT_PROVIDER, isRoot, actionsOf, conflictOf, sourceOptions, describeRow, providerLabel,
   idOf,
 } from '../data/config-draft.js';
@@ -132,21 +132,11 @@ function renderRelationship(row, ctx) {
           @change=${(event) => set('missingPages', event.target.value)}>
           ${MISSING_PAGES.map((value) => html`<option value=${value} ?selected=${(row.values.missingPages || 'none') === value}>${value === 'linked' ? 'Serve from source' : 'Leave missing'}</option>`)}
         </select>`, MISSING_PAGES_HELP[row.values.missingPages || 'none'])}
-      ${field('After rollout or translation', html`
-        <select .value=${row.values.onComplete || 'none'}
-          @change=${(event) => set('onComplete', event.target.value)}>
-          ${ON_COMPLETE.map((value) => html`<option value=${value} ?selected=${(row.values.onComplete || 'none') === value}>${ON_COMPLETE_LABELS[value]}</option>`)}
-        </select>`)}
       ${field('When local edits conflict', html`
         <select .value=${conflict.first}
           @change=${(event) => ctx.onChange(ctx.setConflict(row, { ...conflict, first: event.target.value }))}>
           ${Object.entries(CONFLICT_LABELS).map(([value, label]) => html`<option value=${value} ?selected=${conflict.first === value}>${label}</option>`)}
         </select>`, 'Default choice in the rollout drawer.')}
-      <label class="config-check config-check-inline">
-        <input type="checkbox" .checked=${conflict.both}
-          @change=${(event) => ctx.onChange(ctx.setConflict(row, { ...conflict, both: event.target.checked }))}>
-        <span>Let people pick the other conflict option</span>
-      </label>
     </div>`;
 }
 

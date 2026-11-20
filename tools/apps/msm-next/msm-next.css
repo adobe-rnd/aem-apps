@@ -1829,10 +1829,6 @@ p {
   gap: 8px;
 }
 
-.config-check-inline {
-  align-items: center;
-}
-
 .config-editor-actions {
   display: flex;
   gap: 8px;
