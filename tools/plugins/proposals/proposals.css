@@ -204,6 +204,17 @@ a:hover {
   font-weight: 700;
 }
 
+.changes-details > summary {
+  margin-bottom: 6px;
+  color: var(--s2-blue-900, #3b63fb);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.changes li.skipped {
+  background: var(--s2-orange-100, #fff3e0);
+}
+
 .changes {
   display: flex;
   flex-direction: column;

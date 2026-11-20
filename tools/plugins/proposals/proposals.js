@@ -22,7 +22,7 @@ import { loadTargets, buildPrompt, sendToChat } from './create.js';
 import { togglePick } from '../msm-next/model.js';
 import {
   pagePathFrom, isDraftPath, involvement, groupByProposal, cardKey, pageState, mergeCheck,
-  typeLabel, roleSummary,
+  typeLabel, roleSummary, changeSummary,
   formatDate, canvasUrl,
   applyMerged, applyRejected, previewPath,
 } from './model.js';
@@ -53,14 +53,18 @@ const messageOf = (error) => error?.message || String(error);
 
 function renderChanges(item) {
   if (!item.changes.length) return nothing;
+  const { label, skipped } = changeSummary(item.changes);
   return html`
-    <ul class="changes">
-      ${item.changes.map((change) => html`
-        <li>
-          <span class="change-type">${typeLabel(change.type)}</span>
-          <span class="change-why">${change.rationale}</span>
-        </li>`)}
-    </ul>`;
+    <details class="changes-details" ?open=${skipped > 0}>
+      <summary>${label}</summary>
+      <ul class="changes">
+        ${item.changes.map((change) => html`
+          <li class=${change.type === 'skipped' ? 'skipped' : ''}>
+            <span class="change-type">${typeLabel(change.type)}</span>
+            <span class="change-why">${change.rationale}</span>
+          </li>`)}
+      </ul>
+    </details>`;
 }
 
 function renderCheck(card) {
@@ -328,9 +332,9 @@ class ProposalsPlugin extends LitElement {
     const { proposal, role, page } = item;
     const link = (path, label) => html`<a href=${canvasUrl(this.org, this.site, path)} target="_blank" rel="noopener">${label}</a>`;
     const parts = [];
-    if (role !== 'target') parts.push(html`Target page: ${link(page.target, page.label || page.target)}`);
-    if (role !== 'draft') parts.push(html`Proposed page: ${link(page.draftPath, 'draft')}`);
-    if (role !== 'source') parts.push(html`Source page: ${link(proposal.source.path, proposal.source.path)}`);
+    if (role !== 'target') parts.push(link(page.target, `Open ${page.label || page.target}`));
+    if (role !== 'draft') parts.push(link(page.draftPath, 'Open proposed draft'));
+    if (role !== 'source') parts.push(link(proposal.source.path, 'Open source page'));
     return html`<p class="related-links">${parts.map((part, index) => html`${index ? ' · ' : ''}${part}`)}</p>`;
   }
 
@@ -342,7 +346,7 @@ class ProposalsPlugin extends LitElement {
     return html`
       <div class="actions">
         <button type="button" class="btn" ?disabled=${!mergeable || card.busy}
-          @click=${() => this.showDiff(item)}>${card.busy === 'diff' ? 'Preparing…' : 'Show diff view'}</button>
+          @click=${() => this.showDiff(item)}>${card.busy === 'diff' ? 'Preparing…' : 'Review changes'}</button>
         <button type="button" class="btn accent" ?disabled=${!mergeable || card.busy}
           @click=${() => this.patchCard(key, { confirm: 'approve' })}>Approve</button>
         ${withReject ? html`

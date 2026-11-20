@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 import {
   parseProposal, involvement, groupByProposal, cardKey, pageState, mergeCheck, applyMerged,
   applyRejected, canvasUrl, previewPath,
-  pagePathFrom, isDraftPath, typeLabel, roleSummary,
+  pagePathFrom, isDraftPath, typeLabel, roleSummary, changeSummary,
 } from '../../../../tools/plugins/proposals/model.js';
 
 const raw = (extra = {}) => ({
@@ -188,9 +188,9 @@ describe('involvement', () => {
 
 describe('mergeCheck', () => {
   it('describes the outcomes', () => {
-    assert.equal(mergeCheck({ skipped: 0 }).label, 'Merges cleanly');
+    assert.equal(mergeCheck({ skipped: 0 }).label, 'Ready to approve. No conflicts with edits on this page.');
     assert.equal(mergeCheck({ skipped: 2 }).tone, 'notice');
-    assert.match(mergeCheck({ skipped: 1 }).label, /1 block also changed/);
+    assert.match(mergeCheck({ skipped: 1 }).label, /1 block also edited on this page\. Your version is kept/);
     assert.equal(mergeCheck({ unchanged: true }).label, 'Already up to date');
     assert.equal(mergeCheck(null).label, 'Not checked');
   });
@@ -264,5 +264,14 @@ describe('roleSummary', () => {
   it('counts the pages when there are several targets', () => {
     const many = { ...proposal, pages: [proposal.pages[0], proposal.pages[0]] };
     assert.equal(roleSummary('source', many), 'Sent from this page to 2 pages');
+  });
+});
+
+describe('changeSummary', () => {
+  it('counts changes and skipped ones', () => {
+    assert.equal(changeSummary([{ type: 'text-adaptation' }]).label, '1 change');
+    const two = changeSummary([{ type: 'text-adaptation' }, { type: 'skipped' }]);
+    assert.equal(two.label, '2 changes, 1 skipped');
+    assert.equal(two.skipped, 1);
   });
 });

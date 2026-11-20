@@ -86,6 +86,13 @@ export function roleSummary(role, proposal) {
   }
 }
 
+export function changeSummary(changes) {
+  const total = changes.length;
+  const skipped = changes.filter((change) => change.type === 'skipped').length;
+  const noun = total === 1 ? 'change' : 'changes';
+  return { total, skipped, label: `${total} ${noun}${skipped ? `, ${skipped} skipped` : ''}` };
+}
+
 export const typeLabel = (type) => TYPE_LABELS[type] ?? (type || 'Changed');
 
 const isClosed = (proposal) => !isOpen(proposal);
@@ -159,10 +166,10 @@ export function mergeCheck(result) {
     const noun = result.skipped === 1 ? 'block' : 'blocks';
     return {
       tone: 'notice',
-      label: `${result.skipped} ${noun} also changed on this page since the proposal was opened. The page keeps its own version of ${result.skipped === 1 ? 'it' : 'them'}.`,
+      label: `${result.skipped} ${noun} also edited on this page. Your ${result.skipped === 1 ? 'version is' : 'versions are'} kept.`,
     };
   }
-  return { tone: 'positive', label: 'Merges cleanly' };
+  return { tone: 'positive', label: 'Ready to approve. No conflicts with edits on this page.' };
 }
 
 export function applyMerged(raw, merged, at) {

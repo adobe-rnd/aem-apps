@@ -10,8 +10,8 @@ The panel shows every proposal the open page is involved in, whatever its role:
 
 | Page open | Shown | Actions |
 |---|---|---|
-| **Target** page | Open proposals for this page: summary, changes, merge check. Closed ones are listed under "Closed". | Show diff view, Approve, Reject |
-| **Source** page | The proposal with one block per target page: state, changes, merge check, and links to the target page and the proposed (draft) page. | Show diff view and Approve per target page, and Reject for the whole proposal |
+| **Target** page | Open proposals for this page: summary, changes, merge check. Closed ones are listed under "Closed". | Review changes, Approve, Reject |
+| **Source** page | The proposal with one block per target page: state, changes, merge check, and links to the target page and the proposed (draft) page. | Review changes and Approve per target page, and Reject for the whole proposal |
 | **Draft** page (`/drafts/proposals/{id}/…`) | The proposal for the target this draft belongs to, with links to the target and source pages. | Same as target |
 | **Diff view** page (`/drafts/proposals/{id}/preview/…`) | Same as the draft page. Approve or reject right where you read the markers. | Same as target |
 
@@ -33,7 +33,7 @@ The `create-proposal` skill does the work, including Experience Context. The pan
 
 ## Actions
 
-- **Show diff view**: writes the marked page to `/drafts/proposals/{id}/preview/<page>` and opens it in `da.live/canvas`. In that view **Upstream** is the proposed change and **Local** is the page as it is now. Read the markers; do not accept or reject them there.
+- **Review changes**: writes the marked page to `/drafts/proposals/{id}/preview/<page>` and opens it in `da.live/canvas`. In that view **Upstream** is the proposed change and **Local** is the page as it is now. Read the markers; do not accept or reject them there.
 - **Approve**: asks for a confirmation, merges the draft into the page (three-way smart merge against the proposal's base version, the page's own edits are kept), saves a version "Merged from <draft>", and sets the record to `merged` (or `partially-merged` when other pages remain). It does not preview or publish.
 - **Reject**: sets the record to `rejected` with an optional reason. Nothing is merged; the drafts are kept. It rejects the whole proposal, not one page.
 
