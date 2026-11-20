@@ -36,6 +36,8 @@ const [buttonStyle, style] = await Promise.all([
 
 const EL_NAME = 'gql-endpoint-screen';
 
+const saveLabel = (resave) => (resave ? 'Resave' : 'Save');
+
 // One endpoint's screen; `isNew` starts an unsaved endpoint called `name`.
 class EndpointScreen extends LitElement {
   static properties = {
@@ -157,7 +159,7 @@ class EndpointScreen extends LitElement {
     if (!draft || !this.site.canWrite) return nothing;
     const { dirty } = this;
     const busy = !!this._busy;
-    const { canSave, hint } = getSaveState({
+    const { canSave, resave, hint } = getSaveState({
       draft, blocker: this.blocker, dirty, busy,
     });
     return html`
@@ -169,7 +171,8 @@ class EndpointScreen extends LitElement {
         <sl-button class="primary outline" ?disabled=${(!dirty && !draft.isNew) || busy}
           @click=${() => this.discard()}>${draft.isNew ? 'Cancel' : 'Discard'}</sl-button>
         <sl-button class="primary" ?disabled=${!canSave}
-          @click=${() => this.save()}>${busy ? 'Saving…' : 'Save'}</sl-button>
+          title=${resave ? 'Regenerate the SDL from the current schemas, then save and publish it again' : nothing}
+          @click=${() => this.save()}>${busy ? 'Saving…' : saveLabel(resave)}</sl-button>
       </div>`;
   }
 

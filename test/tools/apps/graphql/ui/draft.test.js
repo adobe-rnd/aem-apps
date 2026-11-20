@@ -52,17 +52,34 @@ describe('draft', () => {
   it('decides whether Save is enabled and why not', () => {
     const saved = { name: 'main', isNew: false };
     const fresh = { name: '', isNew: true };
-    const enabled = { canSave: true, hint: undefined };
-    assert.deepEqual(getSaveState({ draft: saved }), { canSave: false, hint: undefined });
+    const enabled = { canSave: true, resave: false, hint: undefined };
     assert.deepEqual(getSaveState({ draft: saved, dirty: true }), enabled);
     assert.deepEqual(getSaveState({ draft: { ...fresh, name: 'main' } }), enabled);
     assert.equal(getSaveState({ draft: saved, dirty: true, busy: true }).canSave, false);
-    assert.deepEqual(getSaveState({ draft: saved, dirty: true, blocker: 'Fix it.' }), { canSave: false, hint: 'Fix it.' });
-    assert.deepEqual(getSaveState({ draft: saved, blocker: 'Fix it.' }), { canSave: false, hint: undefined });
-    assert.deepEqual(getSaveState({ draft: fresh, blocker: 'Select a schema.' }), { canSave: false, hint: 'Select a schema.' });
+    assert.deepEqual(
+      getSaveState({ draft: saved, dirty: true, blocker: 'Fix it.' }),
+      { canSave: false, resave: false, hint: 'Fix it.' },
+    );
+    assert.deepEqual(
+      getSaveState({ draft: fresh, blocker: 'Select a schema.' }),
+      { canSave: false, resave: false, hint: 'Select a schema.' },
+    );
     assert.deepEqual(
       getSaveState({ draft: fresh, blocker: NO_SCHEMAS_MESSAGE }),
-      { canSave: false, hint: undefined },
+      { canSave: false, resave: false, hint: undefined },
+    );
+  });
+
+  it('offers to resave a saved endpoint without changes', () => {
+    const saved = { name: 'main', isNew: false };
+    assert.deepEqual(
+      getSaveState({ draft: saved }),
+      { canSave: true, resave: true, hint: undefined },
+    );
+    assert.equal(getSaveState({ draft: saved, busy: true }).canSave, false);
+    assert.deepEqual(
+      getSaveState({ draft: saved, blocker: 'Fix it.' }),
+      { canSave: false, resave: true, hint: 'Fix it.' },
     );
   });
 

@@ -35,9 +35,11 @@ per-site sections later.
   `#/{org}/{site}/endpoints`, and so do saving and deleting an endpoint.
 - Saving writes the config and a new SDL from the current schemas as one
   document, publishes it so the engine serves it, then returns to the list.
-  Save is enabled only for a new endpoint or unsaved changes. If publishing
-  fails, the document stays saved and the changes stay unsaved; save again to
-  retry.
+  If publishing fails, the document stays saved and the changes stay unsaved;
+  save again to retry.
+- A saved endpoint without unsaved changes shows Resave instead of Save. It
+  regenerates the SDL from the current schemas, then saves and publishes the
+  document again, and notifies the reindex service, as Save does.
 - Deleting unpublishes the endpoint, so the engine stops serving it, then
   removes its document. If unpublishing fails, the endpoint is kept; delete
   again to retry.
@@ -139,8 +141,8 @@ the generated SDL as is, so the SDL needs no JSON escaping:
   [core/README.md](core/README.md#operations)).
 - The app reads only `name` and `schemas`; unknown keys are ignored.
 - A newly selected schema is only included in the SDL after saving.
-- The app does not detect when source schemas change after a save; saving the
-  endpoint again refreshes the SDL
+- The app does not detect when source schemas change after a save; Resave
+  refreshes the SDL
   (see [core/README.md](core/README.md#keeping-the-sdl-up-to-date)).
 
 ## SDL generation
