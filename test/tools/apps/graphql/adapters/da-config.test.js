@@ -16,7 +16,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createDaApi } from '../../../../../tools/apps/graphql/adapters/da-api.js';
-import { loadEndpointPattern } from '../../../../../tools/apps/graphql/adapters/da-config.js';
+import { loadEndpointPattern, loadReindexUrl } from '../../../../../tools/apps/graphql/adapters/da-config.js';
 import { createFakeSdk, json, status } from './helpers/fake-sdk.js';
 
 const ORG_CONFIG = 'GET https://admin.da.live/config/acme/';
@@ -53,5 +53,44 @@ describe('loadEndpointPattern', () => {
   it('is undefined when unset or unreadable', async () => {
     assert.equal(await load({ routes: { [ORG_CONFIG]: status(403) } }), undefined);
     assert.equal(await load({ routes: { [ORG_CONFIG]: () => new Response('not json') } }), undefined);
+  });
+});
+
+const inFlags = (rows) => json({
+  ':type': 'multi-sheet', ':names': ['data', 'flags'], data: { data: [] }, flags: { data: rows },
+});
+const reindexUrl = (value) => [{ key: 'sc.reindex.url', value }];
+
+const loadUrl = (options) => {
+  const { sdk } = createFakeSdk(options);
+  return loadReindexUrl({ api: createDaApi(sdk), org: 'acme', site: 'web' });
+};
+
+describe('loadReindexUrl', () => {
+  it('prefers the site\'s URL over the org\'s, without trailing slashes', async () => {
+    const routes = {
+      [ORG_CONFIG]: sheet(reindexUrl('https://org.example.com')),
+      [SITE_CONFIG]: multiSheet(reindexUrl(' https://site.example.com/ ')),
+    };
+    assert.equal(await loadUrl({ routes }), 'https://site.example.com');
+  });
+
+  it('falls back to the org\'s URL', async () => {
+    const routes = { [ORG_CONFIG]: multiSheet(reindexUrl('https://org.example.com')) };
+    assert.equal(await loadUrl({ routes }), 'https://org.example.com');
+  });
+
+  it('ignores the key outside the first sheet', async () => {
+    const routes = { [ORG_CONFIG]: inFlags(reindexUrl('https://org.example.com')) };
+    assert.equal(await loadUrl({ routes }), undefined);
+  });
+
+  it('is undefined unless set to an https URL', async () => {
+    assert.equal(await loadUrl({ routes: { [ORG_CONFIG]: status(403) } }), undefined);
+    const values = ['not a url', 'http://insecure.example.com'];
+    const urls = await Promise.all(values.map((value) => loadUrl({
+      routes: { [ORG_CONFIG]: sheet(reindexUrl(value)) },
+    })));
+    assert.deepEqual(urls, [undefined, undefined]);
   });
 });

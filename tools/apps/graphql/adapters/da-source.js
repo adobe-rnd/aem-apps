@@ -37,9 +37,10 @@ function fromSourceBus({ name: fileName, 'content-type': type }, folder) {
 /**
  * The core's store over DA and the AEM source bus.
  * @param {{ request: Function, locate: Function }} api from `createDaApi`
+ * @param {{ notifyReindex?: Function }} [options] told about every published document
  */
 // eslint-disable-next-line import/prefer-default-export
-export function createDaStore(api) {
+export function createDaStore(api, { notifyReindex = () => {} } = {}) {
   async function listAll({ path, continuationToken, items = [] }) {
     const { hlx6, list: url } = await api.locate(path);
     const headers = continuationToken ? { 'da-continuation-token': continuationToken } : {};
@@ -80,11 +81,14 @@ export function createDaStore(api) {
     return done(await api.request(source, { method: 'DELETE' }));
   }
 
-  // AEM only publishes what is previewed.
+  // AEM only publishes what is previewed. A published document is sent to the reindex service.
   async function publish({ path }) {
     const { preview, live } = await api.locate(path);
     const previewed = done(await api.request(preview, { method: 'POST' }));
-    return previewed.error ? previewed : done(await api.request(live, { method: 'POST' }));
+    if (previewed.error) return previewed;
+    const published = done(await api.request(live, { method: 'POST' }));
+    if (published.ok) notifyReindex(path);
+    return published;
   }
 
   // A document missing from live may still be previewed.

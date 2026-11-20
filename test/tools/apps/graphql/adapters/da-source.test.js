@@ -28,7 +28,9 @@ const AEM_DOC = '/.da/graphql/endpoints/main/endpoint';
 
 function setup(options) {
   const fake = createFakeSdk(options);
-  return { ...fake, store: createDaStore(createDaApi(fake.sdk)) };
+  const notified = [];
+  const notifyReindex = (path) => notified.push(path);
+  return { ...fake, notified, store: createDaStore(createDaApi(fake.sdk), { notifyReindex }) };
 }
 
 const summary = (fake) => fake.requests().map(({ method, url }) => `${method} ${url}`);
@@ -147,10 +149,17 @@ describe('createDaStore publish and unpublish', () => {
   const preview = `${HLX}/preview/acme/web/main${AEM_DOC}`;
   const live = `${HLX}/live/acme/web/main${AEM_DOC}`;
 
-  it('previews, then publishes', async () => {
+  it('previews, publishes, then notifies the SC GraphQL worker', async () => {
     const fake = setup({ routes: { [`POST ${preview}`]: status(200), [`POST ${live}`]: status(200) } });
     assert.deepEqual(await fake.store.publish({ path: DOC }), { ok: true });
     assert.deepEqual(summary(fake), [`POST ${preview}`, `POST ${live}`]);
+    assert.deepEqual(fake.notified, [DOC]);
+  });
+
+  it('does not notify the worker when publishing fails', async () => {
+    const fake = setup({ routes: { [`POST ${preview}`]: status(200), [`POST ${live}`]: status(503) } });
+    assert.deepEqual(await fake.store.publish({ path: DOC }), { error: 'Request failed.', status: 503 });
+    assert.deepEqual(fake.notified, []);
   });
 
   it('publishes a Helix 6 document through the source bus', async () => {

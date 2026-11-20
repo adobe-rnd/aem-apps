@@ -17,13 +17,21 @@
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { createGraphqlCore } from '../core/operations.js';
 import { createDaApi } from './da-api.js';
-import { loadEndpointPattern as loadPattern } from './da-config.js';
+import { loadEndpointPattern as loadPattern, loadReindexUrl } from './da-config.js';
 import { createDaStore } from './da-source.js';
+import { createReindexNotifier } from './reindex.js';
 import { loadValidator } from './sc-validator.js';
 
 // Requests wait for the shell's DA SDK handshake and go through its token-aware fetch.
 const api = createDaApi(DA_SDK);
 
-export const core = createGraphqlCore({ store: createDaStore(api), loadValidator });
+const notifyReindex = createReindexNotifier({
+  loadUrl: ({ org, site }) => loadReindexUrl({ api, org, site }),
+});
+
+export const core = createGraphqlCore({
+  store: createDaStore(api, { notifyReindex }),
+  loadValidator,
+});
 
 export const loadEndpointPattern = ({ org, site }) => loadPattern({ api, org, site });
