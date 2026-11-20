@@ -15,7 +15,7 @@
  */
 
 const ENDPOINT_PATTERN_KEY = 'graphql.endpoint';
-const REINDEX_URL_KEY = 'sc.reindex.url';
+const REINDEX_URL_KEY = 'sc.graphql.url';
 
 // DA serves a config as a sheet; the source bus serves a site's as `{ [sheetName]: rows }`.
 function firstSheetRows(json, hlx6) {
@@ -53,7 +53,7 @@ export const loadEndpointPattern = ({ api, org, site }) => loadValue({
   api, org, site, key: ENDPOINT_PATTERN_KEY,
 });
 
-// The site's `sc.reindex.url`, else the org's; undefined unless an https URL.
+// The site's `sc.graphql.url`, else the org's; undefined unless an https URL.
 export async function loadReindexUrl({ api, org, site }) {
   const value = await loadValue({
     api, org, site, key: REINDEX_URL_KEY,

@@ -59,7 +59,7 @@ describe('loadEndpointPattern', () => {
 const inFlags = (rows) => json({
   ':type': 'multi-sheet', ':names': ['data', 'flags'], data: { data: [] }, flags: { data: rows },
 });
-const reindexUrl = (value) => [{ key: 'sc.reindex.url', value }];
+const reindexUrl = (value) => [{ key: 'sc.graphql.url', value }];
 
 const loadUrl = (options) => {
   const { sdk } = createFakeSdk(options);

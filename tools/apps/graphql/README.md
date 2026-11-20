@@ -129,8 +129,8 @@ the generated SDL as is, so the SDL needs no JSON escaping:
   `/.da/graphql/endpoints/{name}/endpoint`, from the site's delivery. Saving
   publishes it and deleting unpublishes it.
 - After publishing, the app notifies the reindex service set by the
-  `sc.reindex.url` key of the DA site config, else of the org config (https
-  only): `POST {sc.reindex.url}/{org}/{site}/reindex`, body
+  `sc.graphql.url` key of the DA site config, else of the org config (https
+  only): `POST {sc.graphql.url}/{org}/{site}/reindex`, body
   `{ "tiers": ["live"], "paths": ["/.da/graphql/endpoints/{name}/endpoint"] }`.
   Without the key nothing is sent. The call is fire and forget: it never
   fails or delays a save (`adapters/reindex.js`).
@@ -228,7 +228,7 @@ adapters/                   the app's core instance and DA config
   index.js                  core and config bound to the DA SDK
   da-api.js                 SDK fetch, DA admin, Helix 6 detection, API URLs
   da-source.js              store port over DA and the AEM source bus
-  da-config.js              `graphql.endpoint` and `sc.reindex.url` from the DA config
+  da-config.js              `graphql.endpoint` and `sc.graphql.url` from the DA config
   sc-validator.js           da-sc-sdk validator, lazy
 ui/                         custom elements, UI helpers and icons
   endpoints-screen/         endpoint list, new endpoint dialog, delete, read-only notice
