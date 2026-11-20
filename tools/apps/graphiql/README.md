@@ -13,10 +13,10 @@ Without an endpoint, the first endpoint of the site opens; without a site, a sit
 - Renders [GraphiQL](https://github.com/graphql/graphiql) 3 for the selected endpoint. GraphiQL,
   React 18 and graphql-js load from unpkg and esm.sh; GraphiQL 3 is the last release with a UMD
   build.
-- Gets the schema Content AI serves for the endpoint by introspection, with the same URL and API
-  key as the queries, so GraphiQL shows the real `Query`, filter and `orderBy` types. It
-  introspects again when the API key changes. If introspection fails (no or wrong API key, CORS),
-  the app shows the error instead of GraphiQL; it never builds the schema from the saved SDL.
+- Gets the schema Content AI serves for the endpoint by introspection, through the same URL as the
+  queries, so GraphiQL shows the real `Query`, filter and `orderBy` types. If introspection fails
+  (site not served by the worker, endpoint missing, worker unreachable), the app shows the error
+  instead of GraphiQL; it never builds the schema from the saved SDL.
 - Starts with a query on the first `{type}List` query. GraphiQL keeps the tabs and history of each
   endpoint apart in the browser's local storage.
 - GraphiQL is rendered in the light DOM, slotted into the app, so that its global styles and
@@ -24,16 +24,17 @@ Without an endpoint, the first endpoint of the site opens; without a site, a sit
 
 ## Endpoint URL
 
-The app queries the Content AI GraphQL endpoint directly:
+Content AI cannot be called from a browser: its CORS preflight carries no API key and is rejected.
+The app queries the query proxy of the `da-sc-graphql` worker instead, which answers the preflight
+and adds the API key:
 
 ```text
-https://publish-p153659-e1614585.adobeaemcloud.com/adobe/experimental/aemcontentai-expires-20261231/contentAI/graphql/${org}--${site}/endpoints/${endpoint}/graphql
+https://da-sc-graphql.adobeaem.workers.dev/${org}/${site}/endpoints/${endpoint}/graphql
 ```
 
-`${org}`, `${site}`, and `${endpoint}` are replaced. Content AI needs an API key: enter it in the toolbar's
-**API key** field. It is sent as `x-api-key` and kept in the browser's local storage.
-
-The browser can only call Content AI if it allows the da.live origin (CORS).
+`${org}`, `${site}`, and `${endpoint}` are replaced. No API key is needed in the browser. A site or
+org config can override the URL with `graphql.endpoint`. The worker only serves the sites it is
+configured for.
 
 ## Structure
 

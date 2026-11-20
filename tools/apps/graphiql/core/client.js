@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
-// The Content AI GraphQL endpoint. It needs the `x-api-key` header.
-export const DEFAULT_ENDPOINT_PATTERN = 'https://publish-p153659-e1614585.adobeaemcloud.com'
+// The query proxy of the da-sc-graphql worker, used when neither the site nor the org config sets
+// `graphql.endpoint`. Content AI cannot be called from a browser (its CORS preflight is rejected),
+// so the worker answers the preflight and adds the Content AI API key.
+export const DEFAULT_ENDPOINT_PATTERN = 'https://da-sc-graphql.adobeaem.workers.dev'
   // eslint-disable-next-line no-template-curly-in-string
-  + '/adobe/experimental/aemcontentai-expires-20261231/contentAI/graphql/${org}--${site}/endpoints/${endpoint}/graphql';
+  + '/${org}/${site}/endpoints/${endpoint}/graphql';
 
 const URL_PLACEHOLDER = /\$\{(endpoint|org|site)\}/g;
 
