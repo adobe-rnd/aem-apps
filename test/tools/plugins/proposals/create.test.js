@@ -15,7 +15,9 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { targetRows, buildPrompt, sendToChat } from '../../../../tools/plugins/proposals/create.js';
+import {
+  targetRows, buildPrompt, sendToChat, loadTargets,
+} from '../../../../tools/plugins/proposals/create.js';
 import createMockLocalization from '../../../../tools/apps/msm-next/data/mock/mock-localization.js';
 import { MOCK_SITE } from '../../../../tools/apps/msm-next/data/mock/fixture.js';
 import { togglePick } from '../../../../tools/plugins/msm-next/model.js';
@@ -43,6 +45,31 @@ describe('targetRows', () => {
     const child = rows.find((row) => row.parentId);
     const picked = togglePick(rows, new Set(), child.id, true);
     assert.equal(picked.has(child.parentId), true);
+  });
+});
+
+describe('loadTargets', () => {
+  it('builds the localization facade and lists targets from the site config', async () => {
+    const config = {
+      ':type': 'multi-sheet',
+      locations: {
+        data: [
+          { path: '/', language: 'en' },
+          {
+            path: '/en-ca', language: 'en-CA', source: '/', actions: 'rollout',
+          },
+        ],
+      },
+    };
+    const daFetch = async (url) => {
+      if (url.includes('/config/acme/brand')) return new Response(JSON.stringify(config));
+      if (url.includes('/list/acme')) return new Response(JSON.stringify([{ name: 'brand' }]));
+      return new Response('', { status: 404 });
+    };
+    const rows = await loadTargets({
+      org: 'acme', site: 'brand', path: '/sean-tests/home.html', daFetch,
+    });
+    assert.deepEqual(rows.map((row) => row.path), ['/en-ca/sean-tests/home.html']);
   });
 });
 

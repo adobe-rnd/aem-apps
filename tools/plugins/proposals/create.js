@@ -39,7 +39,7 @@ export function targetRows(model, site, path) {
 export async function loadTargets({
   org, site, path, daFetch,
 }) {
-  const [{ default: createLocalization }, { default: guardFetch }] = await Promise.all([
+  const [{ createLocalization }, { default: guardFetch }] = await Promise.all([
     import('../../localization/core/index.js'),
     import('../../localization/core/api/guard-fetch.js'),
   ]);
