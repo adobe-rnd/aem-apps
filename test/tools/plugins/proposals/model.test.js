@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 import {
   parseProposal, involvement, groupByProposal, cardKey, pageState, mergeCheck, applyMerged,
   applyRejected, canvasUrl, previewPath,
-  pagePathFrom, isDraftPath, typeLabel,
+  pagePathFrom, isDraftPath, typeLabel, roleSummary,
 } from '../../../../tools/plugins/proposals/model.js';
 
 const raw = (extra = {}) => ({
@@ -246,5 +246,23 @@ describe('paths', () => {
   it('labels change types', () => {
     assert.equal(typeLabel('claim-adjusted'), 'Claim adjusted');
     assert.equal(typeLabel('weird'), 'weird');
+  });
+});
+
+describe('roleSummary', () => {
+  const proposal = parseProposal(raw());
+  it('says where the proposal goes from the source page', () => {
+    assert.match(roleSummary('source', proposal), /^Sent from this page to /);
+  });
+
+  it('names the source on the target, draft and diff view pages', () => {
+    assert.equal(roleSummary('target', proposal), 'Proposed for this page, from /index-ready.html');
+    assert.match(roleSummary('draft', proposal), /^Draft for .+, from \/index-ready\.html$/);
+    assert.match(roleSummary('preview', proposal), /^Diff view for /);
+  });
+
+  it('counts the pages when there are several targets', () => {
+    const many = { ...proposal, pages: [proposal.pages[0], proposal.pages[0]] };
+    assert.equal(roleSummary('source', many), 'Sent from this page to 2 pages');
   });
 });

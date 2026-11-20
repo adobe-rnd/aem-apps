@@ -22,7 +22,7 @@ import { loadTargets, buildPrompt, sendToChat } from './create.js';
 import { togglePick } from '../msm-next/model.js';
 import {
   pagePathFrom, isDraftPath, involvement, groupByProposal, cardKey, pageState, mergeCheck,
-  typeLabel,
+  typeLabel, roleSummary,
   formatDate, canvasUrl,
   applyMerged, applyRejected, previewPath,
 } from './model.js';
@@ -47,13 +47,6 @@ const STATE_LABELS = {
 
 const STATE_TONES = {
   open: 'notice', partial: 'informative', merged: 'positive', rejected: 'negative', closed: '',
-};
-
-const ROLE_LABELS = {
-  target: 'This page is the target',
-  source: 'This page is the source',
-  draft: 'This page is the draft',
-  preview: 'This page is the diff view',
 };
 
 const messageOf = (error) => error?.message || String(error);
@@ -382,7 +375,7 @@ class ProposalsPlugin extends LitElement {
   renderGroup(group) {
     const { proposal, items } = group;
     const first = items[0];
-    const many = items.length > 1 || first.role === 'source';
+    const many = items.length > 1;
     const actionable = items.filter((item) => item.actionable);
     const single = actionable.length === 1 && items.length === 1;
     const proposalCard = this.cards.get(proposal.id) ?? {};
@@ -394,7 +387,7 @@ class ProposalsPlugin extends LitElement {
           <h2>${proposal.title}</h2>
           <span class="pill small ${STATE_TONES[label]}">${STATE_LABELS[label]}</span>
         </div>
-        <p class="muted">${ROLE_LABELS[first.role]} · ${proposal.source.path} → ${proposal.pages.length === 1 ? (proposal.pages[0].label || proposal.pages[0].target) : `${proposal.pages.length} pages`}${proposal.createdAt ? ` · ${formatDate(proposal.createdAt)}` : ''}</p>
+        <p class="muted">${roleSummary(first.role, proposal)}${proposal.createdAt ? ` · ${formatDate(proposal.createdAt)}` : ''}</p>
         ${proposal.summary ? html`<p>${proposal.summary}</p>` : nothing}
         ${items.map((item) => this.renderPage(item, many, single))}
         ${actionable.length && !single ? html`

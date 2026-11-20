@@ -74,6 +74,18 @@ export function parseProposal(raw, id) {
 
 export const isOpen = (proposal) => OPEN_STATUSES.includes(proposal.status);
 
+export function roleSummary(role, proposal) {
+  const { pages, source } = proposal;
+  const targets = pages.length === 1 ? (pages[0].label || pages[0].target) : `${pages.length} pages`;
+  switch (role) {
+    case 'source': return `Sent from this page to ${targets}`;
+    case 'target': return `Proposed for this page, from ${source.path}`;
+    case 'draft': return `Draft for ${targets}, from ${source.path}`;
+    case 'preview': return `Diff view for ${targets}, from ${source.path}`;
+    default: return source.path;
+  }
+}
+
 export const typeLabel = (type) => TYPE_LABELS[type] ?? (type || 'Changed');
 
 const isClosed = (proposal) => !isOpen(proposal);
