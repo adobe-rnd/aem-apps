@@ -46,6 +46,12 @@ import renderActionDrawer from './views/action-drawer.js';
 import renderRolloutsView from './views/rollouts-view.js';
 import renderMapView from './views/map-view.js';
 import renderFolderMenu from './views/folder-menu.js';
+import renderConfigView from './views/config-view.js';
+import {
+  toDraft, toRows, isDirty, isBlank, newRow, copyRow, setValue, toggleAction, setConflict,
+  validateDraft,
+} from './data/config-draft.js';
+import { normalizePath } from '../../localization/core/domain/config.js';
 import { folderIndex, setFolder } from './data/folders.js';
 import { pageLabel } from './views/common.js';
 
@@ -128,6 +134,14 @@ class MsmNextApp extends LitElement {
     jobInfo: { state: true },
     checking: { state: true },
     mapState: { state: true },
+    configDraft: { state: true },
+    configBase: { state: true },
+    configSites: { state: true },
+    configSelected: { state: true },
+    configLoading: { state: true },
+    configSaving: { state: true },
+    configError: { state: true },
+    configSaveError: { state: true },
   };
 
   constructor() {
@@ -156,6 +170,14 @@ class MsmNextApp extends LitElement {
     this.jobChecked = new Set();
     this.checking = new Set();
     this.visibleKeys = [];
+    this.configDraft = null;
+    this.configBase = [];
+    this.configSites = {};
+    this.configSelected = null;
+    this.configLoading = false;
+    this.configSaving = false;
+    this.configError = '';
+    this.configSaveError = '';
     this.mapState = {
       root: 'all',
       collapsed: new Set(),
@@ -698,6 +720,132 @@ class MsmNextApp extends LitElement {
   showTab(tab) {
     this.tab = tab;
     if (tab === 'rollouts') this.loadRollouts();
+    if (tab === 'config' && !this.configLoading && (!this.configDraft || !this.configDirty())) {
+      this.loadConfig();
+    }
+  }
+
+  configDirty() {
+    return Boolean(this.configDraft) && isDirty(this.configDraft, this.configBase);
+  }
+
+  async loadConfig() {
+    const { config } = this.localization;
+    if (!config) {
+      this.configError = 'This environment does not provide configuration access.';
+      return;
+    }
+    this.configLoading = true;
+    this.configError = '';
+    this.configSaveError = '';
+    try {
+      const listed = await config.listSites().catch(() => []);
+      const names = [...new Set([this.site, ...listed])];
+      const entries = await Promise.all(names.map(async (name) => {
+        try {
+          return [name, await config.read(name)];
+        } catch (e) {
+          if (name === this.site) throw e;
+          return [name, null];
+        }
+      }));
+      const rows = Object.fromEntries(entries)[this.site];
+      if (rows === null) throw new Error(`The configuration of ${this.site} is not readable`);
+      this.configBase = rows;
+      this.configDraft = toDraft(rows);
+      this.configSites = Object.fromEntries(
+        entries.filter(([name, value]) => name !== this.site && value),
+      );
+      this.configSelected = this.configDraft[0]?.uid ?? null;
+    } catch (e) {
+      console.error(e);
+      this.configError = friendlyError(e);
+    } finally {
+      this.configLoading = false;
+    }
+  }
+
+  configContext() {
+    const draft = this.configDraft ?? [];
+    const validation = validateDraft({ site: this.site, draft, sites: this.configSites });
+    const dirty = this.configDirty();
+    const writable = Boolean(this.localization.config?.writable);
+    const replace = (row) => {
+      this.configDraft = draft.map((each) => (each.uid === row.uid ? row : each));
+      this.configSaveError = '';
+    };
+    const insert = (row, after) => {
+      const index = after ? draft.findIndex((each) => each.uid === after.uid) + 1 : draft.length;
+      this.configDraft = [...draft.slice(0, index), row, ...draft.slice(index)];
+      this.configSelected = row.uid;
+      this.configSaveError = '';
+    };
+    return {
+      site: this.site,
+      sites: this.configSites,
+      draft,
+      validation,
+      dirty,
+      writable,
+      saving: this.configSaving,
+      saveError: this.configSaveError,
+      canSave: writable && dirty && !this.configSaving && !validation.errors.length,
+      selectedUid: this.configSelected,
+      setValue,
+      toggleAction,
+      setConflict,
+      onSelect: (uid) => { this.configSelected = uid; },
+      onChange: replace,
+      onAdd: (parent) => insert(newRow(draft, parent
+        ? {
+          source: normalizePath(parent.values.path),
+          language: parent.values.language,
+        }
+        : {}), parent),
+      onDuplicate: (row) => insert(copyRow(draft, row), row),
+      onDelete: (row) => {
+        const index = draft.findIndex((each) => each.uid === row.uid);
+        this.configDraft = draft.filter((each) => each.uid !== row.uid);
+        const next = this.configDraft[Math.min(index, this.configDraft.length - 1)];
+        this.configSelected = next?.uid ?? null;
+        this.configSaveError = '';
+      },
+      onDiscard: () => {
+        this.configDraft = toDraft(this.configBase);
+        this.configSelected = this.configDraft[0]?.uid ?? null;
+        this.configSaveError = '';
+      },
+      onSave: () => this.saveConfig(),
+    };
+  }
+
+  async saveConfig() {
+    const rows = toRows(this.configDraft.filter((row) => !isBlank(row)));
+    this.configSaving = true;
+    this.configSaveError = '';
+    try {
+      await this.localization.config.write(this.site, rows);
+      this.configBase = rows;
+      this.configDraft = toDraft(rows);
+      this.configSelected = this.configDraft[0]?.uid ?? null;
+      this.showToast('Configuration saved', 'positive');
+      this.load();
+    } catch (e) {
+      console.error(e);
+      this.configSaveError = `Could not save: ${friendlyError(e)}`;
+    } finally {
+      this.configSaving = false;
+    }
+  }
+
+  renderConfigTab() {
+    if (this.configLoading || (!this.configDraft && !this.configError)) {
+      return html`${this.renderTabs()}<div class="state"><span class="spinner"></span> Loading configuration…</div>`;
+    }
+    if (this.configError) {
+      return html`${this.renderTabs()}<div class="state error-text" role="alert">Could not load configuration: ${this.configError}</div>`;
+    }
+    return html`${this.renderTabs()}${renderConfigView(this.configContext())}`;
   }
 
   rolloutsContext() {
@@ -1105,7 +1253,7 @@ class MsmNextApp extends LitElement {
     const active = this.rollouts.filter((run) => needsMe(run, this.rolloutBusy.has(run.id))).length;
     return html`
       <nav class="tabs" aria-label="Sections">
-        ${[['pages', 'Pages'], ['rollouts', 'Rollouts']].map(([tab, label]) => html`
+        ${[['pages', 'Pages'], ['rollouts', 'Rollouts'], ['config', 'Configuration']].map(([tab, label]) => html`
           <button type="button" class="tab ${this.tab === tab ? 'active' : ''}" aria-current=${this.tab === tab ? 'page' : 'false'}
             @click=${() => this.showTab(tab)}>${label}
             ${tab === 'rollouts' && (active || this.starting) ? html`<span class="count-pill">${active + (this.starting ? 1 : 0)}</span>` : nothing}
@@ -1114,6 +1262,7 @@ class MsmNextApp extends LitElement {
   }
 
   renderBody() {
+    if (this.tab === 'config' && this.phase !== 'loading') return this.renderConfigTab();
     if (this.phase === 'error') {
       return html`<div class="state error-text" role="alert">Could not load: ${this.error}</div>`;
     }
@@ -1121,7 +1270,8 @@ class MsmNextApp extends LitElement {
       return html`<div class="state"><span class="spinner"></span> Loading locations and pages…</div>`;
     }
     if (this.phase === 'empty') {
-      return html`<div class="state">No localization locations are configured for <strong>${this.site}</strong>.</div>`;
+      return html`<div class="state">No localization locations are configured for <strong>${this.site}</strong>.
+        ${this.localization.config ? html`<p><button type="button" class="btn accent" @click=${() => this.showTab('config')}>Configure locations</button></p>` : nothing}</div>`;
     }
     if (this.tab === 'rollouts') {
       return html`${this.renderTabs()}${renderRolloutsView(this.rolloutsContext())}`;

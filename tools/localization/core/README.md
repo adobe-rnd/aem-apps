@@ -105,7 +105,9 @@ Each site has a `locations` sheet in its own config. **The target defines the re
 | missingPages | `linked` · `none` (don't use `linked` on a translation relationship; not validated yet, UIs show it as configured) | `none` |
 | conflictBehavior | `merge`, `overwrite`; first is the default | `merge` |
 | onComplete | `none` · `preview` · `publish` | `none` |
+| translationProvider | connector id, e.g. `google`. Written by the app's Configuration tab; the core does not read it yet (only Google runs) | empty |
 
+- `localization.config` (`listSites`, `read`, `write`, `writable`) reads and writes the `locations` sheet. `write(site, rows)` re-reads the site config, replaces only that sheet and POSTs the whole config, so other sheets survive. It refuses a single-sheet config.
 - Headers are matched case-insensitively, ignoring spaces, `-` and `_`.
 - Values are trimmed. Site names and the values of `actions`, `missingPages`, `conflictBehavior` and `onComplete` are lowercased; languages are canonicalized (`en-us` → `en-US`); paths and labels keep their case.
 - A root row must leave the relationship columns empty.

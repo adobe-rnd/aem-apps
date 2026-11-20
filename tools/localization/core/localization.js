@@ -304,5 +304,20 @@ export default function createLocalization({
     cancelRun: runner.cancelRun,
     archiveRun: runner.archiveRun,
     runs: providers.runs ?? null,
+    config: {
+      listSites: () => providers.config.listSites(),
+      read: (site) => providers.config.read(site),
+      writable: typeof providers.config.write === 'function',
+      write: async (site, rows) => {
+        if (typeof providers.config.write !== 'function') {
+          throw new Error('Saving the configuration is not supported here');
+        }
+        try {
+          await providers.config.write(site, rows);
+        } finally {
+          refresh();
+        }
+      },
+    },
   };
 }

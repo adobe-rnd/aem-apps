@@ -90,14 +90,19 @@ export default function createMockLocalization({
   const emit = (page) => listeners.forEach((listener) => listener(page));
   const readIndex = (id) => clone(indexes.get(id) ?? { pages: {}, pending: {} });
 
+  const configs = clone(CONFIGS);
   const config = {
     listSites: async () => {
       await wait();
-      return Object.keys(CONFIGS);
+      return Object.keys(configs);
     },
     read: async (site) => {
       await wait();
-      return clone(CONFIGS[site] ?? []);
+      return clone(configs[site] ?? []);
+    },
+    write: async (site, rows) => {
+      await wait();
+      configs[site] = clone(rows);
     },
   };
 

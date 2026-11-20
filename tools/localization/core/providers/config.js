@@ -28,10 +28,38 @@ export default function createConfigProvider({ org, api }) {
     return config?.[LOCATIONS_SHEET]?.data ?? [];
   }
 
+  async function write(site, rows) {
+    const current = await api.config.get({ org, site });
+    if (!current.ok && current.status !== 404) {
+      throw requestFailed(`Reading config for ${org}/${site}`, current);
+    }
+    const existing = current.ok ? await current.json() : {};
+    if (Array.isArray(existing.data)) {
+      throw new Error(`The config of ${org}/${site} is a single sheet and cannot hold a locations sheet`);
+    }
+    const names = Object.keys(existing).filter((key) => !key.startsWith(':'));
+    const config = {
+      ...existing,
+      ':version': existing[':version'] ?? 3,
+      ':type': 'multi-sheet',
+      ':names': [...new Set([...(existing[':names'] ?? names), LOCATIONS_SHEET])],
+      [LOCATIONS_SHEET]: {
+        ...existing[LOCATIONS_SHEET],
+        total: rows.length,
+        limit: rows.length,
+        offset: 0,
+        data: rows,
+        ':type': 'sheet',
+      },
+    };
+    const response = await api.config.save({ org, site, config });
+    if (!response.ok) throw requestFailed(`Saving config for ${org}/${site}`, response);
+  }
+
   async function listSites() {
     const items = await listAll(api, { org }, `Listing sites for ${org}`);
     return items.filter((item) => !item.ext).map((item) => item.name);
   }
 
-  return { read, listSites };
+  return { read, write, listSites };
 }

@@ -111,3 +111,76 @@ describe('config provider: listSites', () => {
     await assert.rejects(provider.listSites(), /403/);
   });
 });
+
+describe('config provider: write', () => {
+  const url = `${DA_ORIGIN}/config/acme/global`;
+
+  function writing(existing) {
+    const requests = [];
+    const fetch = async (target, options = {}) => {
+      requests.push({ url: target, options });
+      if (options.method === 'POST') return new Response('', { status: 201 });
+      if (existing === null) return new Response('', { status: 404 });
+      return new Response(JSON.stringify(existing), { status: 200 });
+    };
+    return {
+      provider: createConfigProvider({ org: 'acme', api: apiOver(fetch) }),
+      requests,
+      saved: () => JSON.parse(requests.find((r) => r.options.method === 'POST').options.body.get('config')),
+    };
+  }
+
+  const rows = [{ path: '/en', language: 'en' }];
+
+  it('replaces the locations sheet and keeps other sheets', async () => {
+    const { provider, saved, requests } = writing({
+      ':version': 3,
+      ':names': ['locations', 'library'],
+      ':type': 'multi-sheet',
+      locations: { total: 0, data: [], ':colWidths': [1] },
+      library: { total: 1, data: [{ title: 'x' }] },
+    });
+    await provider.write('global', rows);
+    const config = saved();
+    assert.deepEqual(config.locations.data, rows);
+    assert.equal(config.locations.total, 1);
+    assert.deepEqual(config.locations[':colWidths'], [1]);
+    assert.deepEqual(config.library.data, [{ title: 'x' }]);
+    assert.deepEqual(config[':names'], ['locations', 'library']);
+    assert.equal(requests.at(-1).url, url);
+  });
+
+  it('adds the sheet name when the sheet is new', async () => {
+    const { provider, saved } = writing({ ':names': ['library'], library: { data: [] } });
+    await provider.write('global', rows);
+    assert.deepEqual(saved()[':names'], ['library', 'locations']);
+  });
+
+  it('creates a multi-sheet config when the site has none', async () => {
+    const { provider, saved } = writing(null);
+    await provider.write('global', rows);
+    const config = saved();
+    assert.equal(config[':type'], 'multi-sheet');
+    assert.deepEqual(config[':names'], ['locations']);
+    assert.deepEqual(config.locations.data, rows);
+  });
+
+  it('refuses to overwrite a single-sheet config', async () => {
+    const { provider, requests } = writing({ ':type': 'sheet', data: [{ key: 'a' }] });
+    await assert.rejects(provider.write('global', rows), /single sheet/);
+    assert.ok(!requests.some((r) => r.options.method === 'POST'));
+  });
+
+  it('throws when the config cannot be read or saved', async () => {
+    const unreadable = createConfigProvider({
+      org: 'acme',
+      api: apiOver(async () => new Response('', { status: 403 })),
+    });
+    await assert.rejects(unreadable.write('global', rows), /403/);
+    const rejecting = createConfigProvider({
+      org: 'acme',
+      api: apiOver(async (target, options = {}) => new Response('{}', { status: options.method ? 500 : 200 })),
+    });
+    await assert.rejects(rejecting.write('global', rows), /Saving config.*500/);
+  });
+});

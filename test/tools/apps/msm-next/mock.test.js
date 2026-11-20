@@ -305,3 +305,15 @@ describe('mock runs', () => {
     assert.equal(restored.archivedAt, undefined);
   });
 });
+
+describe('mock localization: config', () => {
+  it('saves rows that the next read returns and that change the model', async () => {
+    const localization = createMockLocalization({ latency: false, seedRuns: false });
+    assert.equal(localization.config.writable, true);
+    const rows = await localization.config.read('gamebox');
+    await localization.config.write('gamebox', [...rows, { path: '/zz', language: 'en', source: '/global' }]);
+    assert.equal((await localization.config.read('gamebox')).length, rows.length + 1);
+    const model = await localization.orgModel();
+    assert.ok(model.locations.has('gamebox:/zz'));
+  });
+});

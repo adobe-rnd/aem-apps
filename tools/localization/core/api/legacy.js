@@ -67,6 +67,11 @@ export default function createLegacyApi({
 
   const config = {
     get: ({ org, site }) => fetch(`${daOrigin}/config/${org}/${site}`, { cache: 'no-store' }),
+    save: ({ org, site, config: body }) => {
+      const formData = new FormData();
+      formData.append('config', JSON.stringify(body));
+      return fetch(`${daOrigin}/config/${org}/${site}`, { method: 'POST', body: formData });
+    },
   };
 
   const aemUrl = (route, { org, site, path }) => `${aemOrigin}/${route}/${org}/${site}/main${path}`;

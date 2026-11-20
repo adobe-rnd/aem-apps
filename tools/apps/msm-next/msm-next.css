@@ -1704,3 +1704,163 @@ p {
   font-weight: 700;
   text-transform: uppercase;
 }
+
+.config-intro {
+  margin-bottom: var(--spacing-200);
+}
+
+.config-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-200);
+  margin-bottom: var(--spacing-300);
+}
+
+.config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--spacing-300);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.config-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.config-list-head h2 {
+  font-size: var(--s2-font-size-200, 16px);
+}
+
+.config-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.config-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.config-row.active {
+  border-color: var(--s2-blue-800);
+  background: var(--s2-blue-100);
+}
+
+.config-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.config-row-path {
+  color: var(--s2-gray-700);
+  font-family: monospace;
+  font-size: var(--s2-font-size-75, 12px);
+}
+
+.config-editor {
+  top: var(--spacing-300);
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-200);
+}
+
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.config-label {
+  font-weight: 700;
+}
+
+.config-field input[type='text'],
+.config-field select {
+  width: 100%;
+  min-height: 34px;
+  padding: 4px 10px;
+  border: 1px solid var(--s2-gray-400);
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+}
+
+.config-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.config-group legend {
+  margin-bottom: 4px;
+  padding: 0;
+  font-weight: 700;
+}
+
+.config-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.config-check-inline {
+  align-items: center;
+}
+
+.config-editor-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: var(--spacing-200);
+  border-top: 1px solid var(--line);
+}
+
+.config-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.config-issues li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+@media (width >= 1200px) {
+  .config-view .workspace {
+    grid-template-columns: 380px minmax(0, 1fr);
+  }
+
+  .config-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
