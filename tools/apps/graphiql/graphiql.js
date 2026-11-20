@@ -83,9 +83,7 @@ class GraphiqlApp extends LitElement {
       this._view?.remove();
       return;
     }
-    this._view ??= Object.assign(document.createElement('gqi-graphiql'), {
-      loadEndpoint: (args) => da.loadEndpoint(args),
-    });
+    this._view ??= document.createElement('gqi-graphiql');
     this._view.site = this._site;
     this._view.endpoint = this._route.endpoint;
     this._view.apiKey = this._apiKey;

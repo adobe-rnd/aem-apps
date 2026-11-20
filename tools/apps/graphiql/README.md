@@ -13,12 +13,11 @@ Without an endpoint, the first endpoint of the site opens; without a site, a sit
 - Renders [GraphiQL](https://github.com/graphql/graphiql) 3 for the selected endpoint. GraphiQL,
   React 18 and graphql-js load from unpkg and esm.sh; GraphiQL 3 is the last release with a UMD
   build.
-- Builds the schema from the SDL saved in the endpoint's `endpoint.html` (its second code block),
-  not by introspection. It adds what Content AI generates when serving it: the `@contentType` and
-  `@source` directives, `PageInfo`, a `{Type}Page` and a `{type}List` query per document type.
-  The generated filter and sort inputs are typed `JSON`, so any `filter` or `orderBy` object
-  literal validates; Content AI checks them when the query runs.
-- Starts with a query on the first document type. GraphiQL keeps the tabs and history of each
+- Gets the schema Content AI serves for the endpoint by introspection, with the same URL and API
+  key as the queries, so GraphiQL shows the real `Query`, filter and `orderBy` types. It
+  introspects again when the API key changes. If introspection fails (no or wrong API key, CORS),
+  the app shows the error instead of GraphiQL; it never builds the schema from the saved SDL.
+- Starts with a query on the first `{type}List` query. GraphiQL keeps the tabs and history of each
   endpoint apart in the browser's local storage.
 - GraphiQL is rendered in the light DOM, slotted into the app, so that its global styles and
   popups apply.
@@ -39,9 +38,9 @@ The browser can only call Content AI if it allows the da.live origin (CORS).
 ## Structure
 
 - `graphiql.js`: the `gqi-app` element; routes the hash, loads the site, selects the endpoint.
-- `adapters/da.js`: reads the endpoint folders, `endpoint.html` and the config over the DA SDK.
-- `core/client.js`: the endpoint URL.
-- `core/sdl.js`: reads the SDL from `endpoint.html` and adds the generated queries.
+- `adapters/da.js`: reads the endpoint folders over the DA SDK.
+- `core/client.js`: the endpoint URL and the introspection.
+- `core/query.js`: the starter query.
 - `ui/graphiql`: the `gqi-graphiql` element that loads and renders GraphiQL.
 - `ui/shared`: the message and site-picker, copied from the GraphQL Endpoints app.
 

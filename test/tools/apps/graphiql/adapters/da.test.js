@@ -79,26 +79,3 @@ describe('createDaAdapter().loadSite', () => {
     assert.ok(urls.every((url) => !url.includes('evil.example')));
   });
 });
-
-describe('createDaAdapter().loadEndpoint', () => {
-  const route = { org: 'acme', site: 'web', endpoint: 'products' };
-
-  it('reads endpoint.html from DA, or from the source bus of a Helix 6 site', async () => {
-    const file = '.da/graphql/endpoints/products/endpoint.html';
-    const da = createDaAdapter(sdkWith({
-      [`https://admin.da.live/source/acme/web/${file}`]: new Response('<main>da</main>'),
-    }));
-    assert.deepEqual(await da.loadEndpoint(route), { html: '<main>da</main>' });
-    const hlx6 = createDaAdapter(sdkWith({
-      [`https://api.aem.live/acme/sites/web/source/${file}`]: new Response('<main>hlx6</main>'),
-    }, { hlx6: true }));
-    assert.deepEqual(await hlx6.loadEndpoint(route), { html: '<main>hlx6</main>' });
-  });
-
-  it('reports an endpoint that cannot be read', async () => {
-    const da = createDaAdapter(sdkWith({}));
-    assert.deepEqual(await da.loadEndpoint(route), {
-      error: 'Could not load the products endpoint of acme/web.',
-    });
-  });
-});

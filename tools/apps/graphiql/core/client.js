@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-// The Content AI GraphQL endpoint, used when neither the site nor the org config sets
-// `graphql.endpoint`. It needs the `x-api-key` header.
+// The Content AI GraphQL endpoint. It needs the `x-api-key` header.
 export const DEFAULT_ENDPOINT_PATTERN = 'https://publish-p153659-e1614585.adobeaemcloud.com'
   // eslint-disable-next-line no-template-curly-in-string
   + '/adobe/experimental/aemcontentai-expires-20261231/contentAI/graphql/${org}--${site}/endpoints/${endpoint}/graphql';
@@ -34,4 +33,22 @@ export function getEndpointUrl({
   } catch {
     return undefined;
   }
+}
+
+const reason = (e) => e?.message || String(e);
+
+/**
+ * The schema Content AI serves for an endpoint, by sending the introspection `query` through
+ * `fetcher`: `{ schema }` (an introspection result GraphiQL takes) or `{ error }`.
+ */
+export async function introspect({ fetcher, query }) {
+  let result;
+  try {
+    result = await fetcher({ query, operationName: 'IntrospectionQuery' });
+  } catch (e) {
+    return { error: `Content AI could not be reached (${reason(e)}). It may not allow this origin (CORS).` };
+  }
+  // eslint-disable-next-line no-underscore-dangle
+  if (result?.data?.__schema) return { schema: result.data };
+  return { error: result?.errors?.[0]?.message ?? 'Content AI returned no schema.' };
 }

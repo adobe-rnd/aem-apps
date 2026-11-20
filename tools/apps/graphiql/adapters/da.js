@@ -81,19 +81,5 @@ export function createDaAdapter(sdk) {
     return { endpoints };
   }
 
-  /**
-   * The saved source of `/.da/graphql/endpoints/{endpoint}/endpoint.html`: `{ html }` or
-   * `{ error }`.
-   */
-  async function loadEndpoint({ org, site, endpoint }) {
-    const [{ daAdmin }, hlx6] = await Promise.all([connection, isHlx6({ org, site })]);
-    const file = `.da/graphql/endpoints/${endpoint}/endpoint.html`;
-    const resp = await request(hlx6
-      ? `${AEM_API}/${org}/sites/${site}/source/${file}`
-      : `${daAdmin}/source/${org}/${site}/${file}`);
-    if (!resp?.ok) return { error: `Could not load the ${endpoint} endpoint of ${org}/${site}.` };
-    return { html: await resp.text() };
-  }
-
-  return { loadSite, loadEndpoint };
+  return { loadSite };
 }

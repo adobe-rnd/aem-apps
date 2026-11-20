@@ -17,8 +17,8 @@
 import { html, LitElement, nothing } from 'da-lit';
 import { loadStyle } from 'https://da.live/nx2/utils/utils.js';
 import { getColorScheme } from 'https://da.live/nx2/scripts/nx.js';
-import { getEndpointUrl } from '../../core/client.js';
-import { extractSdl, starterQuery, toServedSdl } from '../../core/sdl.js';
+import { getEndpointUrl, introspect } from '../../core/client.js';
+import { firstListField, listQuery } from '../../core/query.js';
 
 const CDN = {
   react: 'https://unpkg.com/react@18.3.1/umd/react.production.min.js',
@@ -29,6 +29,9 @@ const CDN = {
 };
 
 const EL_NAME = 'gqi-graphiql';
+
+// Wait for the API key to settle before introspecting again.
+const KEY_DELAY = 600;
 
 const loadScript = (src) => new Promise((resolve, reject) => {
   const script = document.createElement('script');
@@ -96,14 +99,13 @@ const createFetcher = ({ url, apiKey }) => async (params, options) => {
   }
 };
 
-// GraphiQL for one endpoint, with the schema built from the SDL the endpoint was saved with.
-// Rendered in the light DOM so that GraphiQL's styles and popups apply.
+// GraphiQL for one endpoint, with the schema Content AI serves, by introspection. Rendered in
+// the light DOM so that GraphiQL's styles and popups apply.
 class GraphiqlView extends LitElement {
   static properties = {
     site: { attribute: false },
     endpoint: { type: String },
     apiKey: { type: String },
-    loadEndpoint: { attribute: false },
     _status: { state: true },
   };
 
@@ -119,6 +121,7 @@ class GraphiqlView extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    clearTimeout(this._keyTimer);
     this._root?.unmount();
     this._root = undefined;
     this._container = undefined;
@@ -131,13 +134,21 @@ class GraphiqlView extends LitElement {
 
   updated(props) {
     if ((props.has('endpoint') || props.has('site')) && this.endpoint) this.load();
-    else if (props.has('apiKey') && this._rendered) this.renderGraphiql(this._rendered);
+    else if (props.has('apiKey') && this.endpoint) {
+      clearTimeout(this._keyTimer);
+      this._keyTimer = setTimeout(() => this.load({ quiet: true }), KEY_DELAY);
+    }
   }
 
-  async load() {
-    const { site, endpoint, url } = this;
-    const current = () => site === this.site && endpoint === this.endpoint;
-    this._status = { text: 'Loading the schema…' };
+  // `quiet` keeps GraphiQL on screen while the schema reloads.
+  async load({ quiet = false } = {}) {
+    clearTimeout(this._keyTimer);
+    const {
+      site, endpoint, url, apiKey,
+    } = this;
+    const current = () => site === this.site && endpoint === this.endpoint
+      && apiKey === this.apiKey;
+    if (!quiet) this._status = { text: 'Loading the schema…' };
     if (!url) {
       this._status = { error: `No valid endpoint URL for ${endpoint}.` };
       return;
@@ -149,32 +160,27 @@ class GraphiqlView extends LitElement {
       if (current()) this._status = { error: 'GraphiQL could not be loaded. Reload the page.' };
       return;
     }
-    const saved = await this.loadEndpoint({ org: site.org, site: site.site, endpoint });
+    const fetcher = createFetcher({ url, apiKey });
+    const served = await introspect({ fetcher, query: libs.graphql.getIntrospectionQuery() });
     if (!current()) return;
-    const sdl = extractSdl(saved.html);
-    if (saved.error || !sdl) {
-      this._status = {
-        error: saved.error ?? `The ${endpoint} endpoint has no SDL. Save it in the GraphQL Endpoints app.`,
-      };
-      return;
-    }
-    let schema;
-    try {
-      schema = libs.graphql.introspectionFromSchema(libs.graphql.buildSchema(toServedSdl(sdl)));
-    } catch (e) {
-      this._status = { error: `The SDL of the ${endpoint} endpoint is not valid: ${e.message}` };
+    if (served.error) {
+      this._status = { error: `Could not load the schema of ${endpoint}: ${served.error}` };
       return;
     }
     this._status = undefined;
     await this.updateComplete;
     this._rendered = {
-      libs, schema, sdl, url, key: `${site.org}/${site.site}/${endpoint}`,
+      libs,
+      fetcher,
+      schema: served.schema,
+      query: listQuery(firstListField(served.schema)),
+      key: `${site.org}/${site.site}/${endpoint}`,
     };
     this.renderGraphiql(this._rendered);
   }
 
   renderGraphiql({
-    libs, schema, sdl, url, key,
+    libs, fetcher, schema, query, key,
   }) {
     const { React, ReactDOM, GraphiQL } = libs;
     const container = this.querySelector('.graphiql-root');
@@ -186,9 +192,9 @@ class GraphiqlView extends LitElement {
     // The key remounts GraphiQL, with its own storage, when the endpoint changes.
     this._root.render(React.createElement(GraphiQL, {
       key,
-      fetcher: createFetcher({ url, apiKey: this.apiKey }),
+      fetcher,
       schema,
-      defaultQuery: starterQuery(sdl),
+      defaultQuery: query,
       storage: endpointStorage(`gqi:${key}:`),
       forcedTheme: getColorScheme() === 'dark-scheme' ? 'dark' : 'light',
       shouldPersistHeaders: false,
