@@ -121,16 +121,23 @@ describe('versions', () => {
     ]);
     assert.equal(await store.readVersion('/t.html', 'label:proposal-x-base'), '<body>newest</body>');
     assert.equal(await store.readVersion('/t.html', 'proposal-x-base'), '<body>newest</body>');
+    assert.equal(
+      await store.readVersion('/t.html', 'proposal-x-base (/versionsource/o/s/t.html)'),
+      '<body>newest</body>',
+    );
   });
 
-  it('does not treat a label reference as an id', async () => {
+  it('lists the saved labels when the base version is missing', async () => {
     const { store } = setup([{ match: (url) => url.includes('/versionlist/'), reply: () => json(list) }]);
-    await assert.rejects(store.readVersion('/t.html', 'label:v1'), /was not found/);
+    await assert.rejects(
+      store.readVersion('/t.html', 'other (/versionsource/o/s/t.html)'),
+      /Base version "other \(\/versionsource\/o\/s\/t.html\)" of \/t.html was not found. Labels saved on this page: base\./,
+    );
   });
 
   it('fails clearly for an unknown version', async () => {
     const { store } = setup([{ match: (url) => url.includes('/versionlist/'), reply: () => json(list) }]);
-    await assert.rejects(store.readVersion('/t.html', 'nope'), /Version nope of \/t.html was not found/);
+    await assert.rejects(store.readVersion('/t.html', 'nope'), /Base version "nope" of \/t.html was not found/);
   });
 
   it('creates a labelled version', async () => {

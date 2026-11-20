@@ -29,22 +29,32 @@ const versionEntry = (entry) => ({
   createdAt: new Date(entry.timestamp).toISOString(),
 });
 
-const LABEL_PREFIX = 'label:';
+// The agent writes the base version reference in its own words: a version id, a version
+// url, a label, "label:<label>", or a label followed by a url in brackets. Try every part.
+function versionRefs(ref) {
+  const text = String(ref ?? '').trim().replace(/^label:\s*/i, '');
+  const bracket = text.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+  const parts = bracket ? [bracket[1], bracket[2]] : [text];
+  return [...new Set(parts.map((part) => part.trim().replace(/^label:\s*/i, '')).filter(Boolean))];
+}
 
-// A base version is named by its id, its url, or by its label as "label:<label>".
-// The agent saves the base as a labelled version, so a label is the usual reference.
 // When several versions share a label, the newest one is used.
 export function findVersion(entries, ref) {
-  if (!ref) return null;
-  const label = ref.startsWith(LABEL_PREFIX) ? ref.slice(LABEL_PREFIX.length).trim() : null;
   const newestWithLabel = (name) => entries
     .filter((item) => item.label?.trim() === name)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-  if (label !== null) return newestWithLabel(label) ?? null;
-  return entries.find((item) => item.versionId === ref || item.url === ref)
-    ?? entries.find((item) => item.url.endsWith(`/${ref}`))
-    ?? newestWithLabel(ref)
-    ?? null;
+  const match = (part) => entries.find((item) => item.versionId === part || item.url === part)
+    ?? (/^[\w-]+(\.html)?$/.test(part) ? entries.find((item) => item.url.endsWith(`/${part}`)) : null)
+    ?? newestWithLabel(part);
+  return versionRefs(ref).map(match).find(Boolean) ?? null;
+}
+
+function notFound(path, ref, entries) {
+  const labels = [...new Set(entries.map((item) => item.label?.trim()).filter(Boolean))];
+  const known = labels.length
+    ? ` Labels saved on this page: ${labels.slice(-5).join(', ')}.`
+    : ` This page has ${entries.length} saved ${entries.length === 1 ? 'version' : 'versions'} and none has a label.`;
+  return new Error(`Base version "${ref}" of ${path} was not found.${known}`);
 }
 
 export default function createStore({ org, site, fetch }) {
@@ -78,7 +88,7 @@ export default function createStore({ org, site, fetch }) {
   async function readVersion(path, versionId) {
     const entries = await listVersions(path);
     const entry = findVersion(entries, versionId);
-    if (!entry) throw new Error(`Version ${versionId} of ${path} was not found.`);
+    if (!entry) throw notFound(path, versionId, entries);
     const response = await fetch(`${DA_ORIGIN}${entry.url}`, { cache: 'no-store' });
     if (!response.ok) throw requestFailed(`Reading version ${versionId} of ${path}`, response);
     return response.text();
