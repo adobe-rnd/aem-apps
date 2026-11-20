@@ -388,7 +388,7 @@ class SnapshotsPanel extends LitElement {
     return html`
       <header class="panel-header">
         <p class="page-path" title=${page?.path || nothing}>${page?.path || ''}</p>
-        ${page ? html`<a class="nx-action-btn-quiet nx-btn-sm" href=${snapshotAppHref(page)} target="_blank" rel="noopener">All snapshots</a>` : nothing}
+        ${page ? html`<a class="nx-action-btn nx-btn-sm" href=${snapshotAppHref(page)} target="_blank" rel="noopener">All snapshots</a>` : nothing}
       </header>
       ${this._busy ? html`<p class="notice busy" role="status">${this._busy}…</p>` : nothing}
       ${this._notice ? html`<p class="notice ${this._notice.tone}" role="status">${this._notice.text}</p>` : nothing}
