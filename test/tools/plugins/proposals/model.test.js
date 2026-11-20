@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 import {
   parseProposal, involvement, groupByProposal, cardKey, pageState, mergeCheck, applyMerged,
   applyRejected, canvasUrl, previewPath,
-  pagePathFrom, isDraftPath, typeLabel, roleSummary, changeSummary,
+  pagePathFrom, isDraftPath, typeLabel, roleSummary, changeSummary, showPageHeads,
 } from '../../../../tools/plugins/proposals/model.js';
 
 const raw = (extra = {}) => ({
@@ -273,5 +273,21 @@ describe('changeSummary', () => {
     const two = changeSummary([{ type: 'text-adaptation' }, { type: 'skipped' }]);
     assert.equal(two.label, '2 changes, 1 skipped');
     assert.equal(two.skipped, 1);
+  });
+});
+
+describe('showPageHeads', () => {
+  const one = parseProposal(raw());
+  const two = { ...one, pages: [one.pages[0], one.pages[0]] };
+
+  it('hides the per-target row for a single-target proposal', () => {
+    assert.equal(showPageHeads('source', one, [{}]), false);
+    assert.equal(showPageHeads('target', one, [{}]), false);
+  });
+
+  it('keeps the row on the source page when the proposal has several targets, even if one is left', () => {
+    assert.equal(showPageHeads('source', two, [{}]), true);
+    assert.equal(showPageHeads('target', two, [{}]), false);
+    assert.equal(showPageHeads('target', two, [{}, {}]), true);
   });
 });

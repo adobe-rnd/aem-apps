@@ -22,7 +22,7 @@ import { loadTargets, buildPrompt, sendToChat } from './create.js';
 import { togglePick } from '../msm-next/model.js';
 import {
   pagePathFrom, isDraftPath, involvement, groupByProposal, cardKey, pageState, mergeCheck,
-  typeLabel, roleSummary, changeSummary,
+  typeLabel, roleSummary, changeSummary, showPageHeads,
   formatDate, canvasUrl,
   applyMerged, applyRejected, previewPath,
 } from './model.js';
@@ -379,7 +379,7 @@ class ProposalsPlugin extends LitElement {
   renderGroup(group) {
     const { proposal, items } = group;
     const first = items[0];
-    const many = items.length > 1;
+    const many = showPageHeads(first.role, proposal, items);
     const actionable = items.filter((item) => item.actionable);
     const single = actionable.length === 1 && items.length === 1;
     const proposalCard = this.cards.get(proposal.id) ?? {};

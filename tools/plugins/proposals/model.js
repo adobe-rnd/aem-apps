@@ -86,6 +86,9 @@ export function roleSummary(role, proposal) {
   }
 }
 
+export const showPageHeads = (role, proposal, items) => items.length > 1
+  || (role === 'source' && proposal.pages.length > 1);
+
 export function changeSummary(changes) {
   const total = changes.length;
   const skipped = changes.filter((change) => change.type === 'skipped').length;
