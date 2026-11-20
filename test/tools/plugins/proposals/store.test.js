@@ -105,6 +105,29 @@ describe('versions', () => {
     assert.equal(await store.readVersion('/t.html', 'v1'), '<body>old</body>');
   });
 
+  it('reads a version by its label', async () => {
+    const labelled = [
+      ...list,
+      {
+        url: '/versionsource/f/v3.html', versionId: 'v3', timestamp: 3, label: 'proposal-x-base',
+      },
+      {
+        url: '/versionsource/f/v4.html', versionId: 'v4', timestamp: 4, label: 'proposal-x-base',
+      },
+    ];
+    const { store } = setup([
+      { match: (url) => url.includes('/versionlist/o/s/t.html'), reply: () => json(labelled) },
+      { match: (url) => url.endsWith('/versionsource/f/v4.html'), reply: () => new Response('<body>newest</body>') },
+    ]);
+    assert.equal(await store.readVersion('/t.html', 'label:proposal-x-base'), '<body>newest</body>');
+    assert.equal(await store.readVersion('/t.html', 'proposal-x-base'), '<body>newest</body>');
+  });
+
+  it('does not treat a label reference as an id', async () => {
+    const { store } = setup([{ match: (url) => url.includes('/versionlist/'), reply: () => json(list) }]);
+    await assert.rejects(store.readVersion('/t.html', 'label:v1'), /was not found/);
+  });
+
   it('fails clearly for an unknown version', async () => {
     const { store } = setup([{ match: (url) => url.includes('/versionlist/'), reply: () => json(list) }]);
     await assert.rejects(store.readVersion('/t.html', 'nope'), /Version nope of \/t.html was not found/);

@@ -29,6 +29,24 @@ const versionEntry = (entry) => ({
   createdAt: new Date(entry.timestamp).toISOString(),
 });
 
+const LABEL_PREFIX = 'label:';
+
+// A base version is named by its id, its url, or by its label as "label:<label>".
+// The agent saves the base as a labelled version, so a label is the usual reference.
+// When several versions share a label, the newest one is used.
+export function findVersion(entries, ref) {
+  if (!ref) return null;
+  const label = ref.startsWith(LABEL_PREFIX) ? ref.slice(LABEL_PREFIX.length).trim() : null;
+  const newestWithLabel = (name) => entries
+    .filter((item) => item.label?.trim() === name)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  if (label !== null) return newestWithLabel(label) ?? null;
+  return entries.find((item) => item.versionId === ref || item.url === ref)
+    ?? entries.find((item) => item.url.endsWith(`/${ref}`))
+    ?? newestWithLabel(ref)
+    ?? null;
+}
+
 export default function createStore({ org, site, fetch }) {
   const api = createLegacyApi({ fetch });
   const pageInfo = createPageInfoProvider({ org, api });
@@ -59,8 +77,7 @@ export default function createStore({ org, site, fetch }) {
 
   async function readVersion(path, versionId) {
     const entries = await listVersions(path);
-    const entry = entries.find((item) => item.versionId === versionId || item.url === versionId)
-      ?? entries.find((item) => item.url.endsWith(`/${versionId}`));
+    const entry = findVersion(entries, versionId);
     if (!entry) throw new Error(`Version ${versionId} of ${path} was not found.`);
     const response = await fetch(`${DA_ORIGIN}${entry.url}`, { cache: 'no-store' });
     if (!response.ok) throw requestFailed(`Reading version ${versionId} of ${path}`, response);

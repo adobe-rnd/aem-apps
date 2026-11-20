@@ -61,6 +61,7 @@ The merge engine is da-nx's own: `smartMerge`, `regionalDiff` and `getBlockHashe
 
 ## Limits
 
+- `baseVersionId` can be a version id, a version url, or a version label written as `label:<label>` (the newest version with that label is used).
 - A proposal for a page that does not exist yet (no `baseVersionId`) cannot be merged here. Use the agent.
 - Reject applies to the whole proposal, not one page.
 - Counts of applied and kept blocks are not shown, only skipped blocks.
