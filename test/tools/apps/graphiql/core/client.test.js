@@ -18,10 +18,10 @@ import assert from 'node:assert/strict';
 import { getEndpointUrl, introspect } from '../../../../../tools/apps/graphiql/core/client.js';
 
 describe('getEndpointUrl', () => {
-  it('fills the default Content AI pattern', () => {
+  it('fills the default worker pattern', () => {
     assert.equal(
       getEndpointUrl({ org: 'acme', site: 'web', endpoint: 'products' }),
-      'https://publish-p153659-e1614585.adobeaemcloud.com/adobe/experimental/aemcontentai-expires-20261231/contentAI/graphql/acme--web/endpoints/products/graphql',
+      'https://da-sc-graphql.adobeaem.workers.dev/acme/web/endpoints/products/graphql',
     );
   });
 

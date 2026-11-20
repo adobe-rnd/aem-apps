@@ -44,8 +44,6 @@ const setHash = ({ route, replace }) => {
   else window.history.pushState(null, '', url);
 };
 
-const API_KEY_STORAGE = 'gqi:apiKey';
-
 const isSameSite = (a, b) => a?.org === b?.org && a?.site === b?.site;
 
 // Routes #/{org}/{site}/{endpoint} and loads the endpoints of the site.
@@ -54,13 +52,7 @@ class GraphiqlApp extends LitElement {
     _route: { state: true },
     _site: { state: true },
     _changingSite: { state: true },
-    _apiKey: { state: true },
   };
-
-  constructor() {
-    super();
-    this._apiKey = window.localStorage.getItem(API_KEY_STORAGE) ?? '';
-  }
 
   connectedCallback() {
     super.connectedCallback();
@@ -86,7 +78,6 @@ class GraphiqlApp extends LitElement {
     this._view ??= document.createElement('gqi-graphiql');
     this._view.site = this._site;
     this._view.endpoint = this._route.endpoint;
-    this._view.apiKey = this._apiKey;
     if (!this._view.isConnected) this.append(this._view);
   }
 
@@ -132,12 +123,6 @@ class GraphiqlApp extends LitElement {
     window.location.hash = buildHash(detail);
   }
 
-  handleApiKey({ target }) {
-    this._apiKey = target.value.trim();
-    if (this._apiKey) window.localStorage.setItem(API_KEY_STORAGE, this._apiKey);
-    else window.localStorage.removeItem(API_KEY_STORAGE);
-  }
-
   renderEndpoint() {
     if (!this.ready) return nothing;
     const { endpoint } = this._route;
@@ -152,11 +137,6 @@ class GraphiqlApp extends LitElement {
           ${names.map((name) => html`
             <option value=${name} ?selected=${name === endpoint}>${name}</option>`)}
         </select>
-      </label>
-      <label class="api-key">
-        <span>API key</span>
-        <input class="nx-input" type="password" autocomplete="off" spellcheck="false"
-          .value=${this._apiKey} @input=${this.handleApiKey}>
       </label>
       <code class="url" aria-label="Endpoint URL">POST ${url ?? ''}</code>`;
   }

@@ -31,7 +31,6 @@ const CDN = {
 const EL_NAME = 'gqi-graphiql';
 
 // Wait for the API key to settle before introspecting again.
-const KEY_DELAY = 600;
 
 const loadScript = (src) => new Promise((resolve, reject) => {
   const script = document.createElement('script');
@@ -81,12 +80,11 @@ const endpointStorage = (prefix) => ({
   },
 });
 
-const createFetcher = ({ url, apiKey }) => async (params, options) => {
+const createFetcher = ({ url }) => async (params, options) => {
   const resp = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(apiKey && { 'x-api-key': apiKey }),
       ...options?.headers,
     },
     body: JSON.stringify(params),
@@ -105,7 +103,6 @@ class GraphiqlView extends LitElement {
   static properties = {
     site: { attribute: false },
     endpoint: { type: String },
-    apiKey: { type: String },
     _status: { state: true },
   };
 
@@ -121,7 +118,6 @@ class GraphiqlView extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    clearTimeout(this._keyTimer);
     this._root?.unmount();
     this._root = undefined;
     this._container = undefined;
@@ -134,21 +130,12 @@ class GraphiqlView extends LitElement {
 
   updated(props) {
     if ((props.has('endpoint') || props.has('site')) && this.endpoint) this.load();
-    else if (props.has('apiKey') && this.endpoint) {
-      clearTimeout(this._keyTimer);
-      this._keyTimer = setTimeout(() => this.load({ quiet: true }), KEY_DELAY);
-    }
   }
 
-  // `quiet` keeps GraphiQL on screen while the schema reloads.
-  async load({ quiet = false } = {}) {
-    clearTimeout(this._keyTimer);
-    const {
-      site, endpoint, url, apiKey,
-    } = this;
-    const current = () => site === this.site && endpoint === this.endpoint
-      && apiKey === this.apiKey;
-    if (!quiet) this._status = { text: 'Loading the schema…' };
+  async load() {
+    const { site, endpoint, url } = this;
+    const current = () => site === this.site && endpoint === this.endpoint;
+    this._status = { text: 'Loading the schema…' };
     if (!url) {
       this._status = { error: `No valid endpoint URL for ${endpoint}.` };
       return;
@@ -160,7 +147,7 @@ class GraphiqlView extends LitElement {
       if (current()) this._status = { error: 'GraphiQL could not be loaded. Reload the page.' };
       return;
     }
-    const fetcher = createFetcher({ url, apiKey });
+    const fetcher = createFetcher({ url });
     const served = await introspect({ fetcher, query: libs.graphql.getIntrospectionQuery() });
     if (!current()) return;
     if (served.error) {

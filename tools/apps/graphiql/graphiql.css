@@ -55,16 +55,6 @@ slot {
   }
 }
 
-.api-key {
-  display: flex;
-  align-items: center;
-  gap: var(--s2-spacing-100);
-
-  input {
-    width: 200px;
-  }
-}
-
 .url {
   flex-basis: 100%;
   order: 1;
