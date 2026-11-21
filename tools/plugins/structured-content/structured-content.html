@@ -1,0 +1,72 @@
+<!--
+ Copyright 2026 Adobe Systems Incorporated
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Structured Content Picker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="https://da.live/nx2/styles/styles.css">
+  <link rel="stylesheet" href="/tools/plugins/structured-content/structured-content.css">
+  <script src="https://da.live/nx/utils/sdk.js" type="module"></script>
+</head>
+<body>
+  <div class="sc-container">
+    <div class="sc-panel">
+      <div class="panel-header">
+        <label class="panel-title" for="sc-schema">Schema</label>
+        <select id="sc-schema" class="sc-schema" disabled>
+          <option value="">Loading schemas…</option>
+        </select>
+      </div>
+
+      <input type="search" class="sc-search" placeholder="Filter documents" aria-label="Filter documents" disabled>
+
+      <div class="sc-status loading" role="status" aria-live="polite">Loading…</div>
+
+      <ul class="sc-list" aria-label="Structured content documents"></ul>
+    </div>
+
+    <div class="sc-preview">
+      <div class="panel-header sc-preview-header">
+        <h2 class="panel-title sc-preview-title">Select a document</h2>
+        <div class="sc-preview-actions">
+          <a class="action-btn sc-open hidden" target="_blank" rel="noopener">Open in editor</a>
+          <button class="action-btn sc-insert" type="button" disabled aria-label="Insert selected document">Insert</button>
+        </div>
+      </div>
+      <div class="sc-preview-body">
+        <div class="sc-placeholder">
+          <svg class="sc-placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="7" y1="8" x2="17" y2="8"></line>
+            <line x1="7" y1="12" x2="17" y2="12"></line>
+            <line x1="7" y1="16" x2="13" y2="16"></line>
+          </svg>
+          <p>Pick a schema, then a document to preview its fields</p>
+        </div>
+        <table class="sc-fields hidden">
+          <thead><tr><th scope="col">Field</th><th scope="col">Value</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/tools/plugins/structured-content/structured-content.js"></script>
+</body>
+</html>
