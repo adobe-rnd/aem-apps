@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Date Inserter</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="date-inserter.css">
+</head>
+<body class="date-inserter-page sl-loading">
+  <main class="date-inserter">
+    <section class="date-card" aria-label="Date inserter">
+      <div class="input-row">
+        <div class="date-field">
+          <div class="date-entry">
+            <sl-input type="text" id="date-picker" name="date-picker" label="Date" placeholder="YYYY-MM-DD" inputmode="numeric" required></sl-input>
+            <button class="calendar-trigger" id="calendar-trigger" type="button" aria-label="Choose date" aria-haspopup="dialog" aria-expanded="false" aria-controls="date-calendar" disabled>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="16" rx="2"></rect>
+                <path d="M7 3v4M17 3v4M3 10h18M7 14h2M12 14h2M7 17h2M12 17h2"></path>
+              </svg>
+            </button>
+          </div>
+          <div class="date-calendar" id="date-calendar" role="dialog" aria-label="Choose date" hidden>
+            <div class="calendar-header">
+              <button class="calendar-nav" type="button" data-month="-1" aria-label="Previous month">
+                <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m12 5-5 5 5 5"></path></svg>
+              </button>
+              <h3 id="calendar-month" aria-live="polite" aria-atomic="true"></h3>
+              <button class="calendar-nav" type="button" data-month="1" aria-label="Next month">
+                <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m8 5 5 5-5 5"></path></svg>
+              </button>
+            </div>
+            <table class="calendar-grid" role="grid" aria-labelledby="calendar-month">
+              <thead>
+                <tr>
+                  <th scope="col" abbr="Sunday">S</th>
+                  <th scope="col" abbr="Monday">M</th>
+                  <th scope="col" abbr="Tuesday">T</th>
+                  <th scope="col" abbr="Wednesday">W</th>
+                  <th scope="col" abbr="Thursday">T</th>
+                  <th scope="col" abbr="Friday">F</th>
+                  <th scope="col" abbr="Saturday">S</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+            <div class="calendar-footer">
+              <sl-button class="primary outline" type="button" data-calendar-action="clear">Clear</sl-button>
+              <sl-button type="button" data-calendar-action="today">Today</sl-button>
+            </div>
+          </div>
+        </div>
+        <div class="time-field">
+          <label for="time-picker">Time <span>(optional)</span></label>
+          <div class="time-entry">
+            <input type="time" id="time-picker" name="time">
+            <button class="time-trigger" id="time-trigger" type="button" aria-label="Choose time" aria-haspopup="dialog" aria-expanded="false" aria-controls="time-popup" disabled>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"></circle>
+                <path d="M12 6v6l4 2"></path>
+              </svg>
+            </button>
+          </div>
+          <div class="time-popup" id="time-popup" role="dialog" aria-label="Choose time" hidden>
+            <output class="time-preview" aria-live="polite" aria-atomic="true"></output>
+            <div class="time-columns">
+              <div class="time-column">
+                <span class="time-column-label" id="time-hour-label">Hour</span>
+                <div class="time-options" data-unit="hour" role="listbox" aria-labelledby="time-hour-label"></div>
+              </div>
+              <div class="time-column">
+                <span class="time-column-label" id="time-minute-label">Minute</span>
+                <div class="time-options" data-unit="minute" role="listbox" aria-labelledby="time-minute-label"></div>
+              </div>
+              <div class="time-column">
+                <span class="time-column-label" id="time-period-label">Period</span>
+                <div class="time-options" data-unit="period" role="listbox" aria-labelledby="time-period-label"></div>
+              </div>
+            </div>
+            <div class="time-footer">
+              <sl-button class="primary outline" type="button" data-time-action="clear">Clear</sl-button>
+              <sl-button type="button" data-time-action="done">Done</sl-button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <sl-button id="insert-custom-btn" type="button" disabled>Insert</sl-button>
+    </section>
+
+    <p class="feedback" id="feedback" role="status" aria-live="polite" aria-atomic="true"></p>
+  </main>
+  <script type="module" src="date-inserter.js"></script>
+</body>
+</html>
