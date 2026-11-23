@@ -18,7 +18,7 @@ An EW plugin for generating anchor links to headings on your page. Useful for bu
 
 Register in your DA site config:
 
-| title         | path                                           | format   |
+| title         | path                                           | experience   |
 | ------------- | ---------------------------------------------- | -------- |
 | `Anchor Links`  | `https://main--aem-apps--adobe-rnd.aem.page/tools/plugins/anchor-links/anchor-links.html`    | `dialog` |
 
