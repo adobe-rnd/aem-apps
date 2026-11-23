@@ -61,6 +61,9 @@ describe('v1 inbox DA versions', () => {
     assert.equal(versionSourcePath('/drafts/page'), 'drafts/page.html');
     assert.equal(versionSourcePath('/data/sheet.json'), 'data/sheet.json');
     assert.equal(versionSourcePath('/v1.2/page'), 'v1.2/page.html');
+    assert.equal(versionSourcePath('/'), 'index.html');
+    assert.equal(versionSourcePath('/drafts/'), 'drafts/index.html');
+    assert.equal(versionSourcePath('/assets/file.pdf'), null);
   });
 
   it('posts the Approved & Published label to versionsource', async () => {
@@ -88,14 +91,15 @@ describe('v1 inbox DA versions', () => {
     assert.deepEqual(calls, ['HEAD']);
   });
 
-  it('creates a version after a single publish succeeds', async () => {
+  it('records approval before creating a version after a single publish', async () => {
     const calls = [];
     const inbox = app({
       createVersion: async (_org, _site, path) => { calls.push(`version ${path}`); return { success: true }; },
       publishContent: async () => { calls.push('publish'); return { success: true }; },
+      approveRequests: async () => { calls.push('approve'); return { success: true }; },
     });
     await inbox.handleApprove();
-    assert.deepEqual(calls, ['publish', 'version /page']);
+    assert.deepEqual(calls, ['publish', 'approve', 'version /page']);
     assert.equal(inbox._state, 'approved');
     assert.equal(inbox._message, null);
   });
@@ -115,12 +119,13 @@ describe('v1 inbox DA versions', () => {
   it('still publishes and warns when the version fails', async () => {
     const calls = [];
     const inbox = app({
-      createVersion: async () => ({ success: false, error: 'Version failed: 500' }),
+      createVersion: async () => { calls.push('version'); return { success: false, error: 'Version failed: 500' }; },
+      approveRequests: async () => { calls.push('approve'); return { success: true }; },
       publishContent: async () => { calls.push('publish'); return { success: true }; },
     });
     inbox._pendingRequests = [{ path: '/page' }];
     await inbox.handleInboxApprove({ path: '/page' });
-    assert.deepEqual(calls, ['publish']);
+    assert.deepEqual(calls, ['publish', 'approve', 'version']);
     assert.equal(inbox._message.type, 'info');
     assert.match(inbox._message.text, /Published: \/page DA version not created \(Version failed: 500\)/);
   });
@@ -158,10 +163,30 @@ describe('v1 inbox DA versions', () => {
     });
     inbox._pendingRequests = [{ path: '/one' }, { path: '/two' }, { path: '/failed' }, { path: '/unknown' }];
     await inbox.handleApproveAll();
-    assert.deepEqual(calls, ['bulk', 'poll', 'version /one', 'version /two', 'approve /one, /two']);
+    assert.deepEqual(calls, ['bulk', 'poll', 'approve /one, /two', 'version /one', 'version /two']);
     assert.equal(inbox._message.type, 'error');
     assert.match(inbox._message.text, /Published 2 of 4.*DA version not created for: \/two\./);
     assert.deepEqual(inbox._pendingRequests.map((row) => row.path), ['/failed', '/unknown']);
+  });
+
+  it('limits concurrent version requests', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const calls = [];
+    const inbox = app({
+      createVersion: async (_org, _site, path) => {
+        calls.push(path);
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await Promise.resolve();
+        inFlight -= 1;
+        return { success: true };
+      },
+    });
+    const paths = Array.from({ length: 8 }, (_, index) => `/page-${index}`);
+    assert.equal(await inbox.versionPublishedPaths(paths), '');
+    assert.deepEqual(calls, paths);
+    assert.equal(peak, 6);
   });
 
   it('does not approve or version a bulk response without a job link', async () => {

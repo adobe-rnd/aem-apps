@@ -417,7 +417,7 @@ describe('inbox v2 approval handlers', () => {
     });
     app._pendingRequests = rows;
     await app.handleApproveAll();
-    assert.deepEqual(calls, ['version /page', 'approve /page']);
+    assert.deepEqual(calls, ['approve /page', 'version /page']);
     assert.deepEqual(Array.from(app._pendingRequests, (row) => row.path), ['/unknown']);
     assert.match(app._message.text, /1 published/);
   });
@@ -465,6 +465,8 @@ describe('inbox v2 approval handlers', () => {
     assert.equal(api.versionSourcePath('/drafts/page'), 'drafts/page.html');
     assert.equal(api.versionSourcePath('/data/sheet.json'), 'data/sheet.json');
     assert.equal(api.versionSourcePath('/v1.2/page'), 'v1.2/page.html');
+    assert.equal(api.versionSourcePath('/'), 'index.html');
+    assert.equal(api.versionSourcePath('/drafts/'), 'drafts/index.html');
   });
 
   function versionApi(daFetch) {
@@ -490,7 +492,7 @@ describe('inbox v2 approval handlers', () => {
     ]);
   });
 
-  it('creates a version after a final single publish succeeds', async () => {
+  it('records final approval before creating a version', async () => {
     const calls = [];
     const app = fixture({
       checkPublishRequest: async () => finalRow,
@@ -499,11 +501,14 @@ describe('inbox v2 approval handlers', () => {
         return { success: true };
       },
       publishContent: async () => { calls.push(['publish']); return { success: true }; },
-      approveRequests: async () => ({ success: true, completed: ['/page'] }),
+      approveRequests: async () => {
+        calls.push(['approve']);
+        return { success: true, completed: ['/page'] };
+      },
     });
     app._reviewRequest = finalRow;
     await app.handleApprove();
-    assert.deepEqual(calls, [['publish'], ['version', '/page']]);
+    assert.deepEqual(calls, [['publish'], ['approve'], ['version', '/page']]);
     assert.equal(app._message.type, 'success');
   });
 
@@ -585,6 +590,35 @@ describe('inbox v2 approval handlers', () => {
     assert.deepEqual(calls, ['bulk', 'poll', 'version /page', 'version /two']);
     assert.match(app._message.text, /2 published/);
     assert.match(app._message.text, /DA version not created for: \/two/);
+  });
+
+  it('limits concurrent version requests after bulk approval', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const calls = [];
+    const rows = Array.from({ length: 8 }, (_, index) => ({ ...finalRow, path: `/page-${index}` }));
+    const app = fixture({
+      checkPublishRequest: async (_org, _site, path) => rows.find((row) => row.path === path),
+      createVersion: async (_org, _site, path) => {
+        calls.push(path);
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await Promise.resolve();
+        inFlight -= 1;
+        return { success: true };
+      },
+      bulkPublishContent: async () => ({ success: true, links: { self: 'https://admin.example/job' } }),
+      pollJobStatus: async () => ({
+        success: true,
+        job: { data: { resources: rows.map(({ path }) => ({ path, status: 200 })) } },
+      }),
+      approveRequests: async (_org, _site, paths) => ({ completed: paths }),
+      getAllPendingRequestsForUser: async () => [],
+    });
+    app._pendingRequests = rows;
+    await app.handleApproveAll();
+    assert.deepEqual(calls, rows.map(({ path }) => path));
+    assert.equal(peak, 6);
   });
 
   it('does not approve or version a bulk response without a job link', async () => {
