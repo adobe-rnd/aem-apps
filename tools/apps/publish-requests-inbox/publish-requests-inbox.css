@@ -725,3 +725,24 @@ sl-button.pw-quiet-secondary::part(base):hover:not(:disabled) {
   margin: 0;
   color: var(--s2-gray-700);
 }
+
+/* ========== Not set up ========== */
+.status-page .decision-actions {
+  justify-content: center;
+  align-items: center;
+  gap: var(--s2-spacing-200);
+}
+
+.setup-link {
+  display: inline-block;
+  padding: var(--s2-spacing-100) var(--s2-spacing-300);
+  border-radius: var(--s2-corner-radius-800);
+  background: var(--pw-accent);
+  color: var(--s2-gray-75);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.setup-link:hover {
+  background: var(--pw-accent-hover);
+}

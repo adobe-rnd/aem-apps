@@ -20,6 +20,7 @@ const CI_WORKER_URL = 'https://publish-requests-ci.aem-poc-lab.workers.dev';
 const LOCAL_WORKER_URL = 'http://localhost:8787';
 
 const CORS_PROXY = 'https://da-etc.adobeaem.workers.dev/cors';
+const DA_ADMIN = 'https://admin.da.live';
 
 // daFetch ensures a fresh IMS token is used on every request (handles token expiry)
 const { daFetch } = await import('https://da.live/nx/utils/daFetch.js');
@@ -138,6 +139,52 @@ export async function fetchAccentSettings(org, site, token) {
     console.warn('Failed to fetch accent settings:', error);
     return { accentColor: null, accentColorHover: null };
   }
+}
+
+// ===========================================================================
+// Site onboarding: DA existence + config (admin.da.live), worker registration
+// ===========================================================================
+
+// The JSON, `missing` on a 404, or null when it can't be read.
+async function getDaJson(url, missing = null) {
+  try {
+    const resp = await daFetch(url);
+    if (resp.status === 404) return missing;
+    return resp.ok ? await resp.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+// A config that doesn't exist is {} (no tabs); one that can't be read is null.
+export async function fetchDaConfigs(org, site) {
+  const [siteConfig, orgConfig] = await Promise.all([
+    getDaJson(`${DA_ADMIN}/config/${org}/${site}/`, {}),
+    getDaJson(`${DA_ADMIN}/config/${org}/`, {}),
+  ]);
+  return { siteConfig, orgConfig };
+}
+
+// False only when the org listing loads without the site; an unreadable listing doesn't block.
+export async function checkSiteExists(org, site) {
+  const items = await getDaJson(`${DA_ADMIN}/list/${org}`);
+  return !Array.isArray(items) || items.some((item) => item.name === site);
+}
+
+/**
+ * 'registered', 'unregistered' (with the email providers the org may choose),
+ * or 'unknown' when the worker can't say (no access, or no /api/site-config
+ * route yet). Callers proceed on 'unknown'; every worker call gates anyway.
+ */
+export async function checkSiteRegistration(org, site, token) {
+  try {
+    const url = `${getWorkerUrl()}/api/site-config?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
+    const resp = await fetch(url, getOpts(token));
+    if (resp.ok) return { status: 'registered' };
+    const { availableProviders } = await resp.json().catch(() => ({}));
+    if (Array.isArray(availableProviders)) return { status: 'unregistered', availableProviders };
+  } catch { /* unknown */ }
+  return { status: 'unknown' };
 }
 
 // ===========================================================================
@@ -377,6 +424,25 @@ export async function withdrawRequest(org, site, path, token) {
   }
 }
 
+// Request errors: a resend refuses approver or CC domains the site doesn't allow.
+const DOMAIN_HINT = 'A config admin can allow them under Registration in the Request Publish setup app.';
+
+/**
+ * The message for the worker's 403 "One or more approver or CC email domains are not allowed for
+ * this org" on `POST /api/requests`, naming the domains when the worker sends them. A
+ * recipient-domain problem, never a registration or setup one. null for other errors.
+ */
+function recipientDomainError(status, result) {
+  if (status !== 403) return null;
+  const refused = result?.code === 'recipient-domain-not-allowed'
+    || /email domains are not allowed/i.test(result?.error || '');
+  if (!refused) return null;
+  const domains = Array.isArray(result.domains) ? result.domains.filter((d) => typeof d === 'string' && d) : [];
+  return domains.length
+    ? `These approver or CC email domains aren't allowed for this site: ${domains.join(', ')}. ${DOMAIN_HINT}`
+    : `Some approver or CC email domains aren't allowed for this site. ${DOMAIN_HINT}`;
+}
+
 /**
  * Re-send the approval email for an existing request (no sheet change).
  * @param {string} requesterEmail - Unused; the worker resolves approvers itself.
@@ -388,7 +454,12 @@ export async function resendPublishRequest(org, site, path, requesterEmail, toke
       org, site, path, resend: true,
     }));
     const result = await resp.json();
-    if (!resp.ok) return { success: false, error: result.error || 'Failed to resend publish request' };
+    if (!resp.ok) {
+      return {
+        success: false,
+        error: recipientDomainError(resp.status, result) || result.error || 'Failed to resend publish request',
+      };
+    }
     return { success: true };
   } catch (error) {
     console.error('Error resending publish request:', error);

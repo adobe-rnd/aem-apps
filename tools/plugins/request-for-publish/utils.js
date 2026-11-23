@@ -76,6 +76,19 @@ function getOpts(token, method = 'GET', body = null) {
   return opts;
 }
 
+// True only when the worker says so (GET /api/site-config lists providers for unregistered sites).
+async function isSiteUnregistered(org, site, token) {
+  try {
+    const url = `${getWorkerUrl()}/api/site-config?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`;
+    const resp = await fetch(url, getOpts(token));
+    if (resp.ok) return false;
+    const { availableProviders } = await resp.json().catch(() => ({}));
+    return Array.isArray(availableProviders);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Resolve the publish-workflow configuration for a content path.
  *
@@ -96,10 +109,11 @@ export async function resolveWorkflowConfig(path, org, site, token) {
   // Display settings come from the raw config.
   const configResp = await fetch(`${base}/api/config?org=${encodeURIComponent(org)}&site=${encodeURIComponent(site)}`, opts);
   if (!configResp.ok) {
+    const unregistered = configResp.status === 403 && await isSiteUnregistered(org, site, token);
     return {
       approvers: [],
       cc: [],
-      source: 'error',
+      source: unregistered ? 'unregistered' : 'error',
       commentsRequired: false,
       commentsMinLength: 10,
       error: configResp.status === 403
@@ -112,7 +126,7 @@ export async function resolveWorkflowConfig(path, org, site, token) {
     return {
       approvers: [],
       cc: [],
-      source: 'error',
+      source: 'no-config',
       commentsRequired: false,
       commentsMinLength: 10,
       error: 'Publish workflow configuration not found for this site or org.',
@@ -192,6 +206,28 @@ export async function previewContent(org, site, path) {
   }
 }
 
+// Request errors: create and resend refuse approver or CC domains the site doesn't allow.
+const DOMAIN_HINT = 'A config admin can allow them under Registration in the Request Publish setup app.';
+
+/**
+ * The message for the worker's 403 "One or more approver or CC email domains are not allowed for
+ * this org" on `POST /api/requests` (create or resend), naming the domains when the worker sends
+ * them. A recipient-domain problem, never a registration or setup one. null for other errors.
+ * @param {number} status - HTTP status
+ * @param {Object} result - The worker's error body
+ * @returns {string|null}
+ */
+function recipientDomainError(status, result) {
+  if (status !== 403) return null;
+  const refused = result?.code === 'recipient-domain-not-allowed'
+    || /email domains are not allowed/i.test(result?.error || '');
+  if (!refused) return null;
+  const domains = Array.isArray(result.domains) ? result.domains.filter((d) => typeof d === 'string' && d) : [];
+  return domains.length
+    ? `These approver or CC email domains aren't allowed for this site: ${domains.join(', ')}. ${DOMAIN_HINT}`
+    : `Some approver or CC email domains aren't allowed for this site. ${DOMAIN_HINT}`;
+}
+
 /**
  * Submit a publish request. The worker resolves approvers, records the pending
  * row, and emails approvers — all under the caller's token.
@@ -211,7 +247,10 @@ export async function submitPublishRequest(requestData, token) {
     const result = await response.json();
 
     if (!response.ok) {
-      return { success: false, message: result.error || 'Failed to submit publish request' };
+      return {
+        success: false,
+        message: recipientDomainError(response.status, result) || result.error || 'Failed to submit publish request',
+      };
     }
     return {
       success: true,
@@ -241,7 +280,10 @@ export async function resendPublishRequest(requestData, token) {
     const result = await response.json();
 
     if (!response.ok) {
-      return { success: false, message: result.error || 'Failed to resend publish request' };
+      return {
+        success: false,
+        message: recipientDomainError(response.status, result) || result.error || 'Failed to resend publish request',
+      };
     }
     return {
       success: true,

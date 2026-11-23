@@ -33,7 +33,12 @@ import {
   fetchSiteConfig,
   getLiveHostFromConfig,
   fetchAccentSettings,
+  fetchDaConfigs,
+  checkSiteExists,
+  checkSiteRegistration,
 } from './api.js';
+
+const INFO_ICON = html`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 15a1 1 0 1 1 1-1 1 1 0 0 1-1 1Zm1-4.5a1 1 0 0 1-2 0v-4a1 1 0 0 1 2 0Z" fill="currentColor"/></svg>`;
 
 // Super Lite (sl-*) — Spectrum-aligned controls for DA; pairs with S2 tokens in CSS.
 // NX style pipeline matches other da.live shell apps (e.g. MSM): nx.js loadStyle + getStyle.
@@ -84,7 +89,8 @@ class PublishRequestsApp extends LitElement {
     context: { attribute: false },
     token: { attribute: false },
     // view states: 'loading', 'idle', 'inbox', 'review', 'approved',
-    //               'rejected', 'error', 'unauthorized', 'no-request'
+    //               'rejected', 'error', 'unauthorized', 'no-request',
+    //               'site-not-found', 'not-set-up'
     _state: { state: true },
     _isProcessing: { state: true },
     _message: { state: true },
@@ -109,6 +115,7 @@ class PublishRequestsApp extends LitElement {
     _orgSiteValue: { state: true },
     // Inline reject error
     _rejectError: { state: true },
+    _setupReason: { state: true },
   };
 
   constructor() {
@@ -131,6 +138,7 @@ class PublishRequestsApp extends LitElement {
     this._requester = false;
     this._myRequestActions = new Map();
     this._orgSiteValue = '';
+    this._setupReason = '';
   }
 
   connectedCallback() {
@@ -176,6 +184,12 @@ class PublishRequestsApp extends LitElement {
     const previewUrl = `https://main--${this._site}--${this._org}.aem.page${path}`;
     params.set('preview', previewUrl);
     return `${this.appBaseUrl}?${params.toString()}`;
+  }
+
+  // Always the production setup app with only org and site: never `ref` or `env`.
+  get setupUrl() {
+    const app = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup';
+    return `${app}?org=${encodeURIComponent(this._org)}&site=${encodeURIComponent(this._site)}`;
   }
 
   getInboxUrl() {
@@ -232,25 +246,49 @@ class PublishRequestsApp extends LitElement {
       return;
     }
 
-    await this.loadSiteSettings(this._org, this._site);
-
     // Sample RUM enhancer if the RUM script is loaded
     window.hlx?.rum?.sampleRUM?.enhance?.();
 
     sampleRUM('publish-requests-app:loaded', { source: window.location.href });
 
-    // If no path specified → inbox or my-requests mode
-    if (!this._path) {
-      if (this._requester) {
-        await this.initMyRequests();
-      } else {
-        await this.initInbox();
-      }
-      return;
-    }
+    await this.loadSite();
+  }
 
-    // Path specified → single-request review mode
-    await this.initReview();
+  /** Returns false when the site still needs onboarding; `_state` then shows that step. */
+  async checkOnboarding() {
+    const [exists, registration, { siteConfig, orgConfig }] = await Promise.all([
+      checkSiteExists(this._org, this._site),
+      checkSiteRegistration(this._org, this._site, this.token),
+      fetchDaConfigs(this._org, this._site),
+    ]);
+    if (!exists) {
+      this._state = 'site-not-found';
+      return false;
+    }
+    // A missing config reads as {}; an unreadable one (null) can't rule out org or site rules.
+    const readable = !!siteConfig && !!orgConfig;
+    const hasRules = (config) => config?.['publish-workflow-config']?.data?.length > 0;
+    if (registration.status === 'unregistered') {
+      this._setupReason = "isn't registered for publish requests";
+    } else if (readable && !hasRules(siteConfig) && !hasRules(orgConfig)) {
+      this._setupReason = 'has no approval rules';
+    } else {
+      return true;
+    }
+    this._state = 'not-set-up';
+    return false;
+  }
+
+  async loadSite() {
+    if (!await this.checkOnboarding()) return;
+    await this.loadSiteSettings(this._org, this._site);
+    if (this._path) {
+      await this.initReview();
+    } else if (this._requester) {
+      await this.initMyRequests();
+    } else {
+      await this.initInbox();
+    }
   }
 
   /**
@@ -385,18 +423,17 @@ class PublishRequestsApp extends LitElement {
     this._path = '';
     this._pendingRequests = [];
 
-    await this.loadSiteSettings(org, site);
-
     const urlParams = { org, site };
     if (this._requester) urlParams.requester = 'true';
     this.updateUrl(urlParams);
 
-    // Load inbox inline — these methods set _state to 'inbox'/'my-requests' when done
-    if (this._requester) {
-      await this.initMyRequests();
-    } else {
-      await this.initInbox();
-    }
+    await this.loadSite();
+  }
+
+  async handleRecheck() {
+    this._message = null;
+    this._state = 'loading';
+    await this.loadSite();
   }
 
   // ======== Inline review — opens detail view without page navigation ========
@@ -726,6 +763,10 @@ class PublishRequestsApp extends LitElement {
         return this.renderUnauthorized();
       case 'no-request':
         return this.renderNoRequest();
+      case 'site-not-found':
+        return this.renderSiteNotFound();
+      case 'not-set-up':
+        return this.renderNotSetUp();
       case 'inbox':
         return this.renderInbox();
       case 'my-requests':
@@ -739,6 +780,38 @@ class PublishRequestsApp extends LitElement {
       default:
         return nothing;
     }
+  }
+
+  // ======== Onboarding renders ========
+
+  renderSiteNotFound() {
+    return html`
+      <div class="status-page">
+        <div class="status-icon status-icon--error">${INFO_ICON}</div>
+        <h2 class="status-heading">Site Not Found</h2>
+        <p class="status-body">
+          <strong>${this._org}/${this._site}</strong> doesn't exist.
+          Check the organization and site names and try again.
+        </p>
+      </div>
+    `;
+  }
+
+  renderNotSetUp() {
+    return html`
+      <div class="status-page">
+        <div class="status-icon status-icon--neutral">${INFO_ICON}</div>
+        <h2 class="status-heading">Not Set Up Yet</h2>
+        <p class="status-body">
+          <strong>${this._org}/${this._site}</strong> ${this._setupReason}.
+          A config admin for the site can finish setup.
+        </p>
+        <div class="decision-actions">
+          <a class="setup-link" href=${this.setupUrl} target="_blank" rel="noopener">Open setup</a>
+          <sl-button class="pw-quiet-secondary" @click=${this.handleRecheck}>Check Again</sl-button>
+        </div>
+      </div>
+    `;
   }
 
   // ======== Inbox renders ========

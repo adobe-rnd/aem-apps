@@ -456,3 +456,136 @@ describe('inbox v2 approval handlers', () => {
     assert.doesNotMatch(app.renderContent(), /Published!|View Published|aem.live/);
   });
 });
+
+describe('inbox v2 setup link and detection', () => {
+  const SETUP = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup';
+  const workerUrl = (href) => new URL(href).pathname;
+
+  it('links to the plain setup app with only org and site, whatever the page carries', () => {
+    const app = fixture({ window: { location: { search: '?org=x&site=y&env=ci&ref=local', pathname: '/inbox' } } });
+    app.context = { org: 'someone', repo: 'a-fork' };
+    app._org = 'my org';
+    app._site = 'a&b';
+    assert.equal(app.setupUrl, `${SETUP}?org=my%20org&site=a%26b`);
+    app._state = 'not-set-up';
+    app._setupReason = 'has no approval rules';
+    assert.ok(app.renderContent().includes(`href=${SETUP}?org=my%20org&site=a%26b target="_blank" rel="noopener"`));
+  });
+
+  const gap = async (test, responses) => {
+    global.window = { location: { hostname: 'da.live', search: '?env=ci' } };
+    test.after(() => { delete global.window; });
+    const calls = [];
+    test.mock.method(global, 'fetch', async (href) => {
+      calls.push(workerUrl(href));
+      const answer = responses[workerUrl(href)];
+      if (answer instanceof Error) throw answer;
+      const { body = {}, status = 500 } = answer || {};
+      return Response.json(body, { status });
+    });
+    return { reason: await api.getSetupGap('org', 'site', 'token'), calls };
+  };
+
+  it('reports an unregistered site from the worker\'s v2 site-config answer', async (test) => {
+    const { reason, calls } = await gap(test, {
+      '/api/v2/site-config': { status: 404, body: { error: 'Site is not registered', availableProviders: ['default'], canEdit: true } },
+    });
+    assert.equal(reason, "isn't registered for publish requests");
+    assert.deepEqual(calls, ['/api/v2/site-config']);
+  });
+
+  it('reports a registered site without rules', async (test) => {
+    const { reason } = await gap(test, {
+      '/api/v2/site-config': { status: 200, body: { org: 'org', site: 'site', availableProviders: ['default'] } },
+      '/api/v2/config': { status: 200, body: { config: null } },
+    });
+    assert.equal(reason, 'has no approval rules');
+  });
+
+  it('reports nothing for a set-up site', async (test) => {
+    const { reason } = await gap(test, {
+      '/api/v2/site-config': { status: 200, body: { org: 'org', site: 'site' } },
+      '/api/v2/config': { status: 200, body: { config: { 'publish-workflow-config': { data: [] } } } },
+    });
+    assert.equal(reason, '');
+  });
+
+  [
+    ['no preview write', { status: 403, body: { error: 'denied', code: 'preview-write-required' } }],
+    ['an unknown site', { status: 404, body: { error: 'missing', code: 'site-not-found' } }],
+    ['an outage', { status: 503, body: { error: 'later', code: 'permission-check-unavailable' } }],
+    ['a network failure', new TypeError('Failed to fetch')],
+  ].forEach(([label, siteConfig]) => {
+    it(`carries on when the worker can't say (${label})`, async (test) => {
+      const { reason } = await gap(test, {
+        '/api/v2/site-config': siteConfig,
+        '/api/v2/config': { status: 403, body: { error: 'Admin status check failed' } },
+      });
+      assert.equal(reason, '');
+    });
+  });
+});
+
+describe('inbox v2 and the worker contract of publish-requests-worker#41', () => {
+  const local = (test) => {
+    global.window = { location: { hostname: 'localhost', search: '' } };
+    test.after(() => { delete global.window; });
+  };
+  const DOMAIN_MSG = 'Some recipients were not emailed because their domains are not allowed for this site: example.org.';
+
+  it('shows a refused resend as a recipient-domain problem, naming the domains', async (test) => {
+    local(test);
+    test.mock.method(global, 'fetch', async () => Response.json({
+      error: 'One or more approver or CC email domains are not allowed for this org',
+      code: 'recipient-domain-not-allowed',
+      domains: ['example.org'],
+    }, { status: 403 }));
+    const result = await api.resendPublishRequest('org', 'site', '/page', null, 'token');
+    assert.equal(result.success, false);
+    assert.equal(result.status, 403);
+    assert.equal(result.code, 'recipient-domain-not-allowed');
+    assert.match(result.error, /email domains aren't allowed for this site: example\.org\./);
+    assert.match(result.error, /config admin can allow them under Registration/);
+    assert.doesNotMatch(result.error, /not registered/i);
+  });
+
+  it('recognises the resend refusal by its message without a code', async (test) => {
+    local(test);
+    test.mock.method(global, 'fetch', async () => Response.json({
+      error: 'One or more approver or CC email domains are not allowed for this org',
+    }, { status: 403 }));
+    const result = await api.resendPublishRequest('org', 'site', '/page', null, 'token');
+    assert.equal(result.code, 'recipient-domain-not-allowed');
+    assert.match(result.error, /^Some approver or CC email domains aren't allowed for this site\./);
+  });
+
+  it('reports an unreadable registration as an outage, not as unregistered', async (test) => {
+    local(test);
+    test.mock.method(global, 'fetch', async () => Response.json({
+      error: 'Unable to read the site registration. Please try again.', code: 'registration-unavailable',
+    }, { status: 503 }));
+    await assert.rejects(
+      api.getAllPendingRequestsForUser('org', 'site', null, 'token'),
+      (error) => error.status === 503 && /can't check this site's registration right now/i.test(error.message)
+        && !/not registered/i.test(error.message),
+    );
+  });
+
+  it('carries on when the registration can\'t be read during the setup check', async (test) => {
+    global.window = { location: { hostname: 'da.live', search: '?env=ci' } };
+    test.after(() => { delete global.window; });
+    test.mock.method(global, 'fetch', async () => Response.json({
+      error: 'Unable to read the site registration.', code: 'registration-unavailable',
+    }, { status: 503 }));
+    assert.equal(await api.getSetupGap('org', 'site', 'token'), '');
+  });
+
+  it('adds refused recipient domains to the existing email warning', () => {
+    assert.equal(api.emailWarning([]), '');
+    assert.equal(api.emailWarning([{ error: 'Mail unavailable' }]), 'Some notification emails could not be sent.');
+    assert.equal(api.emailWarning([DOMAIN_MSG]), `Some notification emails could not be sent. ${DOMAIN_MSG}`);
+    const notice = fixture().mutationNotice({ emailErrors: [DOMAIN_MSG] }, 'Request rejected.');
+    assert.equal(notice.type, 'info');
+    assert.equal(notice.text, `Request rejected. Some notification emails could not be sent. ${DOMAIN_MSG}`);
+  });
+});

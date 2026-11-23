@@ -1,0 +1,8 @@
+{
+  "name": "workfront-ew",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test ../../../test/tools/apps/workfront/*.test.js"
+  }
+}
