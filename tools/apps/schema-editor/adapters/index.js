@@ -16,7 +16,6 @@
 /* eslint-disable import/no-unresolved */
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { createChat } from './chat.js';
-import { requestFrameless } from './frame.js';
 import { createDaApi } from './da-api.js';
 import { createDaSource } from './da-source.js';
 import { createSchemaRepository } from './schemas.js';
@@ -24,8 +23,6 @@ import { createSchemaRepository } from './schemas.js';
 export { loadScSdk } from './sc-sdk.js';
 
 export const loadChat = () => DA_SDK.then(createChat, () => createChat());
-
-export const loadFrameless = () => DA_SDK.then(requestFrameless, () => false);
 
 // Requests wait for the shell's DA SDK handshake and go through its token-aware fetch.
 export const repository = createSchemaRepository(createDaSource(createDaApi(DA_SDK)));

@@ -91,25 +91,3 @@ se-tool-panel {
   }
 }
 
-/* Where the shell drops its frame (SDK `setFrameless`), each surface draws
-   the edge the frame drew around the whole app: a hairline border and 16px
-   top corners on the frame's grey. The gap beside the tool panel then reads
-   as the frame's grey all the way up, with no shared line across its top. */
-:host([frameless]) {
-  background: var(--s2-gray-50);
-
-  :is(.no-site, se-browse, se-author, se-tool-panel) {
-    box-sizing: border-box;
-    border: 1px solid var(--s2-gray-100);
-    border-radius: var(--s2-corner-radius-800, 16px) var(--s2-corner-radius-800, 16px) 0 0;
-    background: var(--s2-gray-25, #fff);
-  }
-
-  .no-site {
-    max-width: none;
-    height: 100%;
-    margin: 0;
-    padding-inline: max(24px, calc((100% - 432px) / 2));
-    align-content: start;
-  }
-}

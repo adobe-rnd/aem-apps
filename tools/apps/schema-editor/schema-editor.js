@@ -16,9 +16,7 @@
 import { LitElement, html, nothing } from 'da-lit';
 import { hashChange } from 'https://da.live/nx2/utils/utils.js';
 import { getColorScheme } from 'https://da.live/nx2/scripts/nx.js';
-import {
-  repository, loadScSdk, loadChat, loadFrameless,
-} from './adapters/index.js';
+import { repository, loadScSdk, loadChat } from './adapters/index.js';
 import { SchemaStore } from './core/session/store.js';
 import { connectChat } from './core/session/chat.js';
 import {
@@ -195,9 +193,6 @@ class SeApp extends LitElement {
 if (!customElements.get(EL_NAME)) customElements.define(EL_NAME, SeApp);
 
 document.documentElement.style.colorScheme = getColorScheme() === 'dark-scheme' ? 'dark' : 'light';
-// The adapters fetch through the DA SDK and nx2 components need their config, both before the
-// first screen loads. `frameless`: the shell dropped its frame, so the app draws its own surfaces.
-const [frameless] = await Promise.all([loadFrameless(), configureNx()]);
-const app = document.createElement(EL_NAME);
-app.toggleAttribute('frameless', frameless);
-document.body.append(app);
+// nx2 components need their config before the first screen loads.
+await configureNx();
+document.body.append(document.createElement(EL_NAME));
