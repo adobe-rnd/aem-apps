@@ -19,8 +19,9 @@ import { html, nothing } from 'da-lit';
 import { testPattern } from '../../../core/model/lint.js';
 import { icon } from '../../shared/icons.js';
 import { section, numberField, textField } from './controls.js';
+import { getNx2 } from '../../shared/nx.js';
 
-await import('https://da.live/nx2/blocks/shared/menu/menu.js');
+await import(`${getNx2()}/blocks/shared/menu/menu.js`);
 
 const PATTERN_PRESETS = Object.freeze([
   { id: 'slug', label: 'Slug (lowercase-with-dashes)', pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' },

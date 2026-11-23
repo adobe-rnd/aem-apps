@@ -21,9 +21,10 @@ import { insertionPoint } from '../../core/dnd/targets.js';
 import { paletteSections, insertPaletteItem } from '../shared/palette.js';
 import { startDrag, endDrag } from '../shared/drag-session.js';
 import { loadStyle } from '../shared/styles.js';
+import { getNx2 } from '../shared/nx.js';
 import { PanelView } from './panel-view.js';
 
-await import('https://da.live/nx2/blocks/shared/search/search.js');
+await import(`${getNx2()}/blocks/shared/search/search.js`);
 
 const style = await loadStyle(import.meta.url);
 

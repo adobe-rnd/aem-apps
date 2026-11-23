@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 import { html, nothing } from 'da-lit';
-import { loadStyle } from 'https://da.live/nx2/utils/utils.js';
+import { loadStyle } from '../shared/styles.js';
 import { SeField } from './field.js';
 
 const style = await loadStyle(import.meta.url);

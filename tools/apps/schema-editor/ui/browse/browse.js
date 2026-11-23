@@ -28,11 +28,13 @@ import {
   newSchemaItems, ROW_ITEMS, openInOldEditor, createSchema, duplicateSchema, copySchemaJson,
   deleteSchema,
 } from './schema-actions.js';
+import { getNx2 } from '../shared/nx.js';
 
+const nx2 = getNx2();
 await Promise.all([
-  import('https://da.live/nx2/blocks/shared/menu/menu.js'),
-  import('https://da.live/nx2/blocks/shared/popover/popover.js'),
-  import('https://da.live/nx2/blocks/shared/search/search.js'),
+  import(`${nx2}/blocks/shared/menu/menu.js`),
+  import(`${nx2}/blocks/shared/popover/popover.js`),
+  import(`${nx2}/blocks/shared/search/search.js`),
 ]);
 
 // The schema list's sort orders, named for people, as on da.live browse: a Sort popover in the

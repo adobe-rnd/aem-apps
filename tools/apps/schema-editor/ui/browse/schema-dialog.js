@@ -19,8 +19,9 @@ import { deriveSchemaName, normalizeSchemaName } from '../../core/model/keys.js'
 import { checkNewName, parseImport } from '../../core/catalog.js';
 import '../fields/input.js';
 import '../fields/textarea.js';
+import { getNx2 } from '../shared/nx.js';
 
-await import('https://da.live/nx2/blocks/shared/dialog/dialog.js');
+await import(`${getNx2()}/blocks/shared/dialog/dialog.js`);
 
 const style = await loadStyle(import.meta.url);
 

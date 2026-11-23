@@ -23,8 +23,9 @@ import { newComponent, deleteComponent, editComponent } from '../shared/actions.
 import { loadStyle } from '../shared/styles.js';
 import { fieldStyles } from '../fields/field.js';
 import { PanelView } from './panel-view.js';
+import { getNx2 } from '../shared/nx.js';
 
-await import('https://da.live/nx2/blocks/shared/menu/menu.js');
+await import(`${getNx2()}/blocks/shared/menu/menu.js`);
 
 const style = await loadStyle(import.meta.url);
 

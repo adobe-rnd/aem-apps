@@ -1,3 +1,6 @@
+// eslint-disable-next-line import/extensions -- the package exports this subpath without one
+const { rules: airbnbStyle } = require('eslint-config-airbnb-base/rules/style');
+
 module.exports = {
   root: true,
   extends: 'airbnb-base',
@@ -50,6 +53,10 @@ module.exports = {
         'import/no-unresolved': ['error', { ignore: ['^da-lit$', '^https://'] }],
         'import/prefer-default-export': 'off',
         'class-methods-use-this': 'off',
+        'no-restricted-syntax': [...airbnbStyle['no-restricted-syntax'], {
+          selector: ':matches(Literal[value=/da\\.live.nx2/], TemplateElement[value.raw=/da\\.live.nx2/])',
+          message: 'Load nx2 through `getNx2()` (ui/shared/nx.js): nx2 is expected to become nx.',
+        }],
       },
     },
   ],

@@ -15,9 +15,10 @@
  */
 import { LitElement, html, nothing } from 'da-lit';
 import { buttons, shared, loadStyle } from './styles.js';
+import { getNx2 } from './nx.js';
 import '../fields/input.js';
 
-await import('https://da.live/nx2/blocks/shared/dialog/dialog.js');
+await import(`${getNx2()}/blocks/shared/dialog/dialog.js`);
 
 const style = await loadStyle(import.meta.url);
 

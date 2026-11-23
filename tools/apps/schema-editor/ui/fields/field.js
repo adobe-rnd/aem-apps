@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 import { LitElement, html, nothing } from 'da-lit';
-import { loadStyle } from 'https://da.live/nx2/utils/utils.js';
+import { loadStyle } from '../shared/styles.js';
 import { icon } from '../shared/icons.js';
 
 export const fieldStyles = await loadStyle(import.meta.url);

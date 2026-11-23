@@ -13,9 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {
+import { getNx2 } from './nx.js';
+
+const {
   showToast, VARIANT_ERROR, VARIANT_SUCCESS, VARIANT_WARNING,
-} from 'https://da.live/nx2/blocks/shared/toast/toast.js';
+} = await import(`${getNx2()}/blocks/shared/toast/toast.js`);
 
 const VARIANTS = {
   negative: VARIANT_ERROR,

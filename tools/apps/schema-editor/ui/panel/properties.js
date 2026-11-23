@@ -27,8 +27,9 @@ import { sectionsFor } from './inspector.js';
 import { SECTIONS } from './sections/index.js';
 import { PanelView } from './panel-view.js';
 import { renderNodeJson } from './node-json.js';
+import { getNx2 } from '../shared/nx.js';
 
-await import('https://da.live/nx2/blocks/shared/segmented-btn/segmented.js');
+await import(`${getNx2()}/blocks/shared/segmented-btn/segmented.js`);
 
 const style = await loadStyle(import.meta.url);
 

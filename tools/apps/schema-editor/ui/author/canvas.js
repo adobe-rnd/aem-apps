@@ -35,10 +35,12 @@ import {
 } from './navigation.js';
 import { CanvasDropController } from './canvas-drop.js';
 import { BusController } from '../shared/bus-controller.js';
+import { getNx2 } from '../shared/nx.js';
 
+const nx2 = getNx2();
 await Promise.all([
-  import('https://da.live/nx2/blocks/shared/menu/menu.js'),
-  import('https://da.live/nx2/blocks/shared/switch/switch.js'),
+  import(`${nx2}/blocks/shared/menu/menu.js`),
+  import(`${nx2}/blocks/shared/switch/switch.js`),
 ]);
 
 const style = await loadStyle(import.meta.url);

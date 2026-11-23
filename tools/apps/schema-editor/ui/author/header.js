@@ -21,8 +21,9 @@ import {
   buttons, shared, bar, loadStyle,
 } from '../shared/styles.js';
 import { modKey, severityCount } from '../shared/format.js';
+import { getNx2 } from '../shared/nx.js';
 
-await import('https://da.live/nx2/blocks/shared/segmented-btn/segmented.js');
+await import(`${getNx2()}/blocks/shared/segmented-btn/segmented.js`);
 
 const style = await loadStyle(import.meta.url);
 

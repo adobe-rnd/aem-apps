@@ -23,8 +23,9 @@ import { kindLabel, nodeIcon } from '../../author/card-info.js';
 import { makeReusable } from '../../shared/actions.js';
 import { paletteMenuItems, parseMenuId, insertPaletteItem } from '../../shared/palette.js';
 import { section, numberField } from './controls.js';
+import { getNx2 } from '../../shared/nx.js';
 
-await import('https://da.live/nx2/blocks/shared/menu/menu.js');
+await import(`${getNx2()}/blocks/shared/menu/menu.js`);
 
 function addMenu(ctx, label, target) {
   return html`

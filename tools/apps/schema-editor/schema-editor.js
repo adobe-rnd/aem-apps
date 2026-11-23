@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 import { LitElement, html, nothing } from 'da-lit';
-import { hashChange } from 'https://da.live/nx2/utils/utils.js';
-import { getColorScheme, setConfig } from 'https://da.live/nx2/scripts/nx.js';
 import { repository, loadScSdk, loadChat } from './adapters/index.js';
 import { SchemaStore } from './core/session/store.js';
 import { connectChat } from './core/session/chat.js';
@@ -26,6 +24,13 @@ import { buttons, shared, loadStyle } from './ui/shared/styles.js';
 import { confirmDialog } from './ui/shared/confirm.js';
 import { toast } from './ui/shared/toast.js';
 import './ui/fields/input.js';
+import { getNx2 } from './ui/shared/nx.js';
+
+const nx2 = getNx2();
+const [{ hashChange }, { getColorScheme, setConfig }] = await Promise.all([
+  import(`${nx2}/utils/utils.js`),
+  import(`${nx2}/scripts/nx.js`),
+]);
 
 const EL_NAME = 'se-app';
 

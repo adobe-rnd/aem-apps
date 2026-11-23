@@ -13,14 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { loadStyle } from 'https://da.live/nx2/utils/utils.js';
+import { getNx2 } from './nx.js';
+
+const nx2 = getNx2();
+const { loadStyle, loadPageStyle } = await import(`${nx2}/utils/utils.js`);
 
 // Sheets every view adopts: nx2 S2 buttons + the editor's shared primitives (chips, badges…).
-// `bar`: the top bar chrome the browse and author screens share.
+// `bar`: the top bar chrome the browse and author screens share. Alongside, the page gets the
+// nx2 S2 styles whose tokens (`--s2-*`) all of them read.
 export const [buttons, shared, bar] = await Promise.all([
-  loadStyle('https://da.live/nx2/styles/buttons.css'),
+  loadStyle(`${nx2}/styles/buttons.css`),
   loadStyle(import.meta.url),
   loadStyle(new URL('./bar.css', import.meta.url).href),
+  loadPageStyle(`${nx2}/styles/styles.css`),
 ]);
 
 export { loadStyle };
