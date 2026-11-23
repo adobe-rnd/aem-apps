@@ -317,6 +317,54 @@ export async function pollJobStatus(jobSelfUrl, maxWaitMs = 60000, intervalMs = 
 }
 
 // ===========================================================================
+// DA version (admin.da.live — snapshot of the current source after publish)
+// ===========================================================================
+
+const PUBLISH_VERSION_LABEL = 'Approved & Published';
+
+/**
+ * DA source path for a page or sheet. Media files are not versioned.
+ * @param {string} path - Site-relative content path
+ * @returns {string|null} Source path without leading slash, or null for unsupported files
+ */
+export function versionSourcePath(path) {
+  const cleanPath = path.replace(/^\/+/, '');
+  const lastSegment = cleanPath.split('/').pop();
+  if (!lastSegment) return `${cleanPath}index.html`;
+  if (!lastSegment.includes('.')) return `${cleanPath}.html`;
+  return /\.(html|json)$/.test(lastSegment) ? cleanPath : null;
+}
+
+/**
+ * Create a labelled version of an existing DA page or sheet.
+ * @param {string} org - Organization
+ * @param {string} site - Site
+ * @param {string} path - Content path (site-relative)
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function createVersion(org, site, path) {
+  try {
+    const sourcePath = versionSourcePath(path);
+    if (!sourcePath) return { success: true };
+
+    const key = `${org}/${site}/${sourcePath}`;
+    const source = await daFetch(`${DA_ADMIN}/source/${key}`, { method: 'HEAD', cache: 'no-store' });
+    if (!source.ok) return { success: false, error: `Source check failed: ${source.status}` };
+
+    const response = await daFetch(`${DA_ADMIN}/versionsource/${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: PUBLISH_VERSION_LABEL }),
+    });
+    if (!response.ok) return { success: false, error: `Version failed: ${response.status}` };
+    return { success: true };
+  } catch (error) {
+    console.warn('Error creating version:', error);
+    return { success: false, error: error.message || 'Version failed' };
+  }
+}
+
+// ===========================================================================
 // Workflow bookkeeping — thin REST client over publish-requests-worker.
 // Identity is derived server-side from the user's IMS token; the worker does
 // approver resolution, sheet I/O, and email. Publish/preview stay client-side.

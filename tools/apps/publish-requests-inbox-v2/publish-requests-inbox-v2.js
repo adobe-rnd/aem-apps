@@ -19,6 +19,7 @@ import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from 'da-lit';
 import {
   getUserEmail,
+  createVersion,
   publishContent,
   bulkPublishContent,
   pollJobStatus,
@@ -477,7 +478,8 @@ class PublishRequestsApp extends LitElement {
   // ======== Single-request action handlers ========
 
   mutationNotice(result, text) {
-    const warning = emailWarning(result.emailErrors);
+    const warning = [emailWarning(result.emailErrors), result.versionWarning]
+      .filter(Boolean).join(' ');
     return {
       type: warning ? 'info' : 'success',
       text: warning ? `${text} ${warning}` : text,
@@ -508,6 +510,11 @@ class PublishRequestsApp extends LitElement {
       const result = await approveRequests(
         this._org, this._site, [fresh.path], this.token, fresh.stepInfo.current, fresh.isFinal,
       );
+      let versionWarning = null;
+      if (published) {
+        const version = await createVersion(this._org, this._site, fresh.path);
+        if (!version.success) versionWarning = `DA version not created (${version.error}).`;
+      }
       if (result.status === 409 || result.stale?.includes(fresh.path)) {
         await checkPublishRequest(this._org, this._site, fresh.path, this.token).catch(() => {});
         return { success: false, published, error: 'Approval conflict. The request changed; refresh and review its current status.' };
@@ -527,8 +534,8 @@ published,
         this._org, this._site, fresh.path, this.token,
       ).catch(() => null);
       return {
- ...result, success: true, published, nextStep: nextRequest?.stepInfo,
-};
+        ...result, success: true, published, versionWarning, nextStep: nextRequest?.stepInfo,
+      };
     } catch (error) {
       return { success: false, published, error: error.message };
     }
@@ -705,7 +712,7 @@ published,
             publishError = `Publication not confirmed for: ${unconfirmed.join(', ') || 'remaining job resources'}. ${jobResult.error || ''} Check the live pages before retrying.`;
           }
         } else {
-          publishedPaths = paths;
+          publishError = 'Bulk publication could not be confirmed. No job link was returned. Check the live pages before retrying.';
         }
       } catch (error) {
         publishError = `Bulk publish could not be confirmed. ${error.message}`;
@@ -714,9 +721,23 @@ published,
 
     const publishedSet = new Set(publishedPaths);
     const finalResult = await this.approveGrouped(finals.filter((r) => publishedSet.has(r.path)));
+    const versions = [];
+    const batchSize = 6;
+    for (let i = 0; i < publishedPaths.length; i += batchSize) {
+      const batchPaths = publishedPaths.slice(i, i + batchSize);
+      // eslint-disable-next-line no-await-in-loop
+      const batch = await Promise.all(batchPaths.map((path) => createVersion(
+        this._org, this._site, path,
+      )));
+      versions.push(...batch);
+    }
+    const unversioned = publishedPaths.filter((path, i) => !versions[i].success);
+    const versionWarning = unversioned.length ? `DA version not created for: ${unversioned.join(', ')}.` : null;
+
     const approved = [...intermediateResult.approved, ...finalResult.approved];
     const error = [intermediateResult.error, finalResult.error].filter(Boolean).join(' ');
-    const warning = [intermediateResult.warning, finalResult.warning].filter(Boolean).join(' ');
+    const warning = [intermediateResult.warning, finalResult.warning, versionWarning]
+      .filter(Boolean).join(' ');
 
     const approvedSet = new Set(approved);
     await this.refreshInbox();
@@ -731,7 +752,7 @@ published,
     const summary = parts.length > 0 ? `${parts.join(', ')}.` : 'Nothing was approved.';
 
     this._message = publishError || error
-      ? { type: 'error', text: `${summary} ${publishError || ''} ${error || ''}`.trim() }
+      ? { type: 'error', text: `${summary} ${publishError || ''} ${error || ''} ${versionWarning || ''}`.trim() }
       : { type: warning ? 'info' : 'success', text: `${summary} ${warning || ''}`.trim() };
   }
 
