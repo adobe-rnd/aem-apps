@@ -25,7 +25,7 @@ import {
 import { relativeTime, plural, severityCount } from '../shared/format.js';
 import { createPrompt, sitePrompt } from '../../core/prompts.js';
 import {
-  newSchemaItems, ROW_ITEMS, openInOldEditor, createSchema, duplicateSchema, copySchemaJson,
+  newSchemaItems, ROW_ITEMS, createSchema, duplicateSchema, copySchemaJson,
   deleteSchema,
 } from './schema-actions.js';
 import { getNx2 } from '../shared/nx.js';
@@ -206,7 +206,6 @@ class SeBrowse extends LitElement {
         title: this._titleOf(item), names: this._names, onCreated: (name) => this._open(name),
       }),
       copy: () => copySchemaJson(this._catalog, item),
-      old: () => openInOldEditor(this),
       delete: () => this._delete(item),
     };
     actions[id]?.();
@@ -367,10 +366,12 @@ class SeBrowse extends LitElement {
   _renderControls() {
     if (this._status !== 'ready' || !this._items.length) return nothing;
     return html`
-      <nx-search size="m" placeholder="Search schemas" label="Search schemas" .value=${this._query}
-        @input=${(e) => { this._query = e.target.value ?? ''; }}></nx-search>
-      ${this._renderSort()}
-      <span class="divider" aria-hidden="true"></span>
+      <div class="tools">
+        <nx-search size="m" placeholder="Search schemas" label="Search schemas" .value=${this._query}
+          @input=${(e) => { this._query = e.target.value ?? ''; }}></nx-search>
+        ${this._renderSort()}
+        <span class="divider" aria-hidden="true"></span>
+      </div>
     `;
   }
 
@@ -462,7 +463,7 @@ class SeBrowse extends LitElement {
           ${this._renderChatToggle()}
           <span class="site" title=${key}>${key}</span>
           <button type="button" class="nx-action-btn-icon change-site"
-            title="Change site" aria-label="Change site"
+            title="Change site (${key})" aria-label="Change site, ${key}"
             @click=${() => this.dispatchEvent(new Event('change-site'))}>${icon('edit')}</button>
           <span class="divider" aria-hidden="true"></span>
           <h1 class="title">Schemas</h1>

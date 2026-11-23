@@ -103,3 +103,32 @@
     flex: none;
   }
 }
+
+/* Phone width: the view switch takes its own row under the bar, so the back link, title,
+ * undo/redo and Save keep their room on the first. Fixed rows, so the overlay panel
+ * (schema-editor.css) can sit just below. */
+@container (width < 560px) {
+  .bar {
+    flex-wrap: wrap;
+    align-content: flex-start;
+    row-gap: 0;
+    height: var(--se-bar-height-narrow, 88px);
+  }
+
+  .group-start,
+  .group-end {
+    height: var(--se-bar-height, 48px);
+  }
+
+  .group-start {
+    flex: 1 1 0;
+  }
+
+  .group-center {
+    order: 1;
+    flex: 1 0 100%;
+    align-items: flex-start;
+    justify-content: center;
+    height: calc(var(--se-bar-height-narrow, 88px) - var(--se-bar-height, 48px));
+  }
+}

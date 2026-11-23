@@ -235,10 +235,54 @@
   margin-top: 8px;
 }
 
-/* Narrow canvas: shorter labels keep the bar on one line. */
+/* Search and sort sit in the end group on a wide bar, and get a row of their own when narrow. */
+.tools {
+  display: contents;
+}
+
+/* Narrow canvas: the pencil names the site and Sort is its icon. The bar takes two rows:
+ * site, title and New on top; search and sort under them. */
 @container (width < 640px) {
-  .wide {
+  .wide,
+  .group-start .site,
+  .tools .divider {
     display: none;
+  }
+
+  .bar {
+    flex-wrap: wrap;
+    row-gap: 0;
+    height: auto;
+  }
+
+  .group-start,
+  .group-end {
+    height: var(--se-bar-height, 48px);
+  }
+
+  .group-start {
+    flex: 1 1 0;
+  }
+
+  .group-end {
+    display: contents;
+  }
+
+  .tools {
+    display: flex;
+    order: 1;
+    flex: 1 0 100%;
+    align-items: center;
+    gap: 4px;
+    padding-block-end: 8px;
+
+    /* Lines the search icon up with the icon buttons above. */
+    padding-inline-start: 7px;
+  }
+
+  .bar nx-search {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 }
 

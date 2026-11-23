@@ -18,6 +18,8 @@ Lists the site's schemas in columns: title, name, contents (field and component 
 issues) and last modified.
 Search, **Sort** and **New** sit in the top bar (the same 48px bar as the editor, as on
 the da.live browse page); use a row's menu to open, duplicate, copy the JSON or delete.
+On a phone-width canvas the pencil stands in for the site name, and search and **Sort** move
+to a second row of the bar; in the editor, the Build/Components/Schema switch does the same.
 **Sort** lists every order (title, name or last modified, either way); clicking the Title,
 Name or Modified heading also sorts by it, newest/Z-A first, and again reverses it.
 **New** starts a schema from blank or from pasted JSON.

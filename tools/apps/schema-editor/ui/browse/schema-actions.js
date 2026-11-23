@@ -23,8 +23,6 @@ import { iconFile } from '../shared/icons.js';
 import { toast } from '../shared/toast.js';
 import { schemaDialog } from './schema-dialog.js';
 
-const OLD_EDITOR = 'https://da.live/apps/schema';
-
 const NEW_ITEMS = [
   {
     id: 'blank', label: 'Blank', icon: iconFile('add'), description: 'Start from an empty schema.',
@@ -49,14 +47,9 @@ export const ROW_ITEMS = [
   { id: 'open', label: 'Open', icon: iconFile('edit') },
   { id: 'duplicate', label: 'Duplicate…', icon: iconFile('duplicate') },
   { id: 'copy', label: 'Copy JSON', icon: iconFile('code') },
-  { id: 'old', label: 'Open in old editor', icon: iconFile('schema') },
   { divider: true },
   { id: 'delete', label: 'Delete…', icon: iconFile('delete') },
 ];
-
-export function openInOldEditor({ org, site }) {
-  window.open(`${OLD_EDITOR}#/${org}/${site}`, '_blank', 'noopener');
-}
 
 /** Asks for a title and name (and, `fromJson`, the schema to import), then creates it. */
 export function createSchema(catalog, { names, fromJson, onCreated }) {

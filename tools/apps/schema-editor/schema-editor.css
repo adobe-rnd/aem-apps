@@ -84,3 +84,9 @@ se-tool-panel {
   }
 }
 
+/* The author bar takes two rows here (ui/author/header.css). */
+@media (width < 560px) {
+  se-tool-panel {
+    inset-block-start: var(--se-bar-height-narrow, 88px);
+  }
+}
