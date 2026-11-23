@@ -148,6 +148,26 @@ describe('SchemaStore', () => {
     expect(store.dirty).to.equal(false);
   });
 
+  it('locks only the keys a save stored, not those of fields added meanwhile', async () => {
+    let release;
+    const { store } = setup({
+      save: () => new Promise((resolve) => { release = () => resolve({ ok: true }); }),
+    });
+    await store.load();
+    const saved = createNode('text', { title: 'Saved', siblingKeys: ['a'] });
+    store.dispatch(insertNode, { parentId: store.model.root.id, node: saved });
+    const saving = store.save();
+    const later = createNode('text', { title: 'Later', siblingKeys: ['a', 'saved'] });
+    const { result } = store.dispatch(insertNode, { parentId: store.model.root.id, node: later });
+    release();
+    await saving;
+    const byId = (id) => store.model.root.children.find((node) => node.id === id);
+    expect(byId(saved.id).keyLocked).to.equal(true);
+    expect(byId(result.nodeId).keyLocked).to.not.equal(true);
+    store.dispatch(updateNode, { nodeId: result.nodeId, patch: { title: 'Renamed' } });
+    expect(byId(result.nodeId).key).to.equal('renamed');
+  });
+
   it('blocks saving on SDK issues and lists them', async () => {
     const validateSchema = () => ({
       valid: false,

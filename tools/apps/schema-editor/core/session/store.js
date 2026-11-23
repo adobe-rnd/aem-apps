@@ -227,8 +227,10 @@ export class SchemaStore {
     this.issues = [...this.#textIssues(), ...this.sdkIssues, ...lint(this.model)];
   }
 
-  /** `reveal` also scrolls the canvas to the node, switching to a page that shows it. */
-  /** Selects a node; `reveal` scrolls to its card, which takes focus unless `focus` is false. */
+  /**
+   * Selects a node; `reveal` scrolls to its card, switching to a page that shows it. The card
+   * takes focus unless `focus` is false.
+   */
   select(nodeId, { reveal = false, focus = true } = {}) {
     const entry = nodeId ? findNode(this.model, nodeId) : null;
     this.selection = entry ? nodeId : null;
@@ -327,7 +329,7 @@ export class SchemaStore {
       return { ok: false, error };
     }
     this.lastSavedJson = stringifySchema(saved);
-    this.model = lockKeys(this.model);
+    this.model = lockKeys(this.model, saved);
     this.#emitModel();
     this.#setSaveState({ state: this.dirty ? 'idle' : 'saved', savedAt: Date.now() });
     return { ok: true };

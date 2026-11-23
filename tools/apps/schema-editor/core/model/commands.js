@@ -377,26 +377,39 @@ export function replaceSchema(model, { json }) {
   return { model: next, label: 'Edit JSON', coalesceKey: 'schema-json' };
 }
 
-function lockNodeKeys(node) {
+function keyedIds(node, ids) {
+  if (!node) return ids;
+  if (node.key !== undefined) ids.add(node.id);
+  node.children?.forEach((child) => keyedIds(child, ids));
+  return keyedIds(node.item, ids);
+}
+
+function lockNodeKeys(node, ids) {
   if (!node) return node;
   let next = node;
-  if (node.key !== undefined && !node.keyLocked) next = { ...next, keyLocked: true };
+  if (ids.has(node.id) && !node.keyLocked) next = { ...next, keyLocked: true };
   if (node.children) {
-    const children = node.children.map(lockNodeKeys);
+    const children = node.children.map((child) => lockNodeKeys(child, ids));
     if (children.some((c, i) => c !== node.children[i])) next = { ...next, children };
   }
   if (node.item) {
-    const item = lockNodeKeys(node.item);
+    const item = lockNodeKeys(node.item, ids);
     if (item !== node.item) next = { ...next, item };
   }
   return next;
 }
 
-/** Applied after a successful save, not a user command: keys stop following their label. */
-export function lockKeys(model) {
-  const root = lockNodeKeys(model.root);
+/**
+ * Applied after a successful save, not a user command: the keys of the fields `saved` has stop
+ * following their label. `model` may have moved on while saving; fields added since stay free.
+ */
+export function lockKeys(model, saved = model) {
+  const ids = new Set();
+  keyedIds(saved.root, ids);
+  saved.defs.forEach((def) => keyedIds(def.node, ids));
+  const root = lockNodeKeys(model.root, ids);
   const defs = model.defs.map((def) => {
-    const node = lockNodeKeys(def.node);
+    const node = lockNodeKeys(def.node, ids);
     return node === def.node ? def : { ...def, node };
   });
   return { ...model, root, defs };
