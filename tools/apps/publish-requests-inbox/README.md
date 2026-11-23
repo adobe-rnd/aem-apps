@@ -15,6 +15,7 @@ The app is a **thin REST client of [`publish-requests-worker`](https://github.co
 - **Web Component**: LitElement custom element (`<publish-requests-inbox>`).
 - **DA SDK**: authentication and context.
 - **Helix Admin (client-side)**: publishes content — single `POST /live/{org}/{site}/main/{path}` or [bulk publish](https://www.aem.live/docs/admin.html#tag/publish/operation/bulkPublish) `POST /live/{org}/{site}/main/*` (Approve All) — under the approver's session.
+- **DA Admin (client-side)**: before every publish, creates a DA version labelled **Approved & Published** with `POST https://admin.da.live/versionsource/{org}/{site}/{path}.html` (paths with an extension, such as `.json`, are kept). A failed version shows a warning but does not block publication. The version captures the current DA source, which can differ from the preview being published if the page was edited after its last preview. Helix 6 sites (content in the AEM source bus) are not supported and will show the warning.
 - **publish-requests-worker (REST)** — the app calls:
   - `GET /api/requests` — pending requests the caller can approve; `?role=requester` for the caller's own
   - `GET /api/approvers`, `GET /api/config` — resolved approvers / config (display)
@@ -69,11 +70,12 @@ The landing page when no `path` is specified. Displays a list of all pending pub
 From the inbox, the approver can click **"Approve All"** to bulk-publish all visible pending requests in a single operation using the [AEM Admin bulk publish API](https://www.aem.live/docs/admin.html#tag/publish/operation/bulkPublish).
 
 **How it works:**
-1. All pending paths are sent in a single `POST` to `https://admin.hlx.page/live/{org}/{site}/main/*`
-2. The API returns a job; the app polls it to completion (up to 60 seconds, every 2 seconds)
-3. On completion, the app checks the job details for per-resource status codes
-4. For the successfully published paths, the app makes a single `POST /api/requests/approve` — the **worker** removes those pending rows and emails the authors
-5. If some paths failed, only the succeeded ones are approved and a summary is shown
+1. Each pending path gets an **Approved & Published** DA version (failures are listed in the result message, publication continues)
+2. All pending paths are sent in a single `POST` to `https://admin.hlx.page/live/{org}/{site}/main/*`
+3. The API returns a job; the app polls it to completion (up to 60 seconds, every 2 seconds)
+4. On completion, the app checks the job details for per-resource status codes
+5. For the successfully published paths, the app makes a single `POST /api/requests/approve` — the **worker** removes those pending rows and emails the authors
+6. If some paths failed, only the succeeded ones are approved and a summary is shown
 
 ### 3. Author Email Notification on Publish
 

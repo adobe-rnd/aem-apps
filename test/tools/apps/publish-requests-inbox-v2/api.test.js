@@ -455,6 +455,86 @@ describe('inbox v2 approval handlers', () => {
     assert.match(app.renderContent(), /Waiting on step 2/i);
     assert.doesNotMatch(app.renderContent(), /Published!|View Published|aem.live/);
   });
+
+  it('maps request paths to DA source paths for versioning', () => {
+    assert.equal(api.versionSourcePath('/drafts/page'), 'drafts/page.html');
+    assert.equal(api.versionSourcePath('/data/sheet.json'), 'data/sheet.json');
+    assert.equal(api.versionSourcePath('/v1.2/page'), 'v1.2/page.html');
+  });
+
+  it('creates a labelled version before a final single publish', async () => {
+    const calls = [];
+    const app = fixture({
+      checkPublishRequest: async () => finalRow,
+      createVersion: async (org, site, path) => {
+        calls.push(['version', path, api.PUBLISH_VERSION_LABEL]);
+        return { success: true };
+      },
+      publishContent: async () => { calls.push(['publish']); return { success: true }; },
+      approveRequests: async () => ({ success: true, completed: ['/page'] }),
+    });
+    app._reviewRequest = finalRow;
+    await app.handleApprove();
+    assert.deepEqual(calls, [['version', '/page', 'Approved & Published'], ['publish']]);
+    assert.equal(app._message.type, 'success');
+  });
+
+  it('still publishes and warns when the version fails', async () => {
+    const calls = [];
+    const app = fixture({
+      checkPublishRequest: async () => finalRow,
+      createVersion: async () => ({ success: false, error: 'Version failed: 500' }),
+      publishContent: async () => { calls.push('publish'); return { success: true }; },
+      approveRequests: async () => ({ success: true, completed: ['/page'] }),
+    });
+    app._reviewRequest = finalRow;
+    await app.handleApprove();
+    assert.deepEqual(calls, ['publish']);
+    assert.equal(app._state, 'approved');
+    assert.equal(app._message.type, 'info');
+    assert.match(app._message.text, /DA version not created/);
+  });
+
+  it('does not version an intermediate approval', async () => {
+    let versioned = false;
+    const row = {
+      path: '/page', isFinal: false, canApproveNow: true, stepInfo: { current: 1, lastStaffed: 2 },
+    };
+    const app = fixture({
+      checkPublishRequest: async () => row,
+      createVersion: async () => { versioned = true; return { success: true }; },
+      approveRequests: async () => ({ success: true, advanced: ['/page'] }),
+    });
+    app._reviewRequest = row;
+    await app.handleApprove();
+    assert.equal(versioned, false);
+  });
+
+  it('versions only final requests before a bulk publish and warns on failures', async () => {
+    const calls = [];
+    const rows = [
+      finalRow,
+      { ...finalRow, path: '/two' },
+      { ...finalRow, path: '/next', isFinal: false },
+    ];
+    const app = fixture({
+      checkPublishRequest: async (_org, _site, path) => rows.find((row) => row.path === path),
+      createVersion: async (_org, _site, path) => {
+        calls.push(`version ${path}`);
+        return { success: path !== '/two', error: 'Version failed: 500' };
+      },
+      bulkPublishContent: async () => { calls.push('bulk'); return { success: true }; },
+      approveRequests: async (_org, _site, paths, _token, _step, final) => (
+        final ? { completed: paths } : { advanced: paths }),
+      getAllPendingRequestsForUser: async () => [],
+      getAllPendingRequestsByRequester: async () => [],
+    });
+    app._pendingRequests = rows;
+    await app.handleApproveAll();
+    assert.deepEqual(calls, ['version /page', 'version /two', 'bulk']);
+    assert.match(app._message.text, /2 published/);
+    assert.match(app._message.text, /DA version not created for: \/two/);
+  });
 });
 
 describe('inbox v2 setup link and detection', () => {

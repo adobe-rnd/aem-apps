@@ -104,6 +104,15 @@ single approval promotes the current preview with
 for paths with confirmed success. Intermediate approvals perform no Helix content
 operation. Review links compare preview versus live in the Page Status diff tool.
 
+Before each final publish (single or bulk), the inbox creates a DA version of the
+page source labelled **Approved & Published** with
+`POST https://admin.da.live/versionsource/{org}/{site}/{path}.html` (paths that
+already have an extension, such as `.json`, are kept). A failed version shows a
+warning but does not block publication. The version captures the current DA
+source, which can differ from the preview being published if the page was edited
+after its last preview. Helix 6 sites (content in the AEM source bus) are not
+supported and will show the warning.
+
 **I-5 remains unresolved: unpinned preview.** The reviewed preview is not frozen
 at submission. If an author re-previews before the approval click, live-only
 publication can promote content the reviewer did not see. Fixing this requires

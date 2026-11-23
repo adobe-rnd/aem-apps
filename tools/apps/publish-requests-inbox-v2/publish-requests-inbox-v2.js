@@ -19,6 +19,7 @@ import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from 'da-lit';
 import {
   getUserEmail,
+  createVersion,
   publishContent,
   bulkPublishContent,
   pollJobStatus,
@@ -477,7 +478,8 @@ class PublishRequestsApp extends LitElement {
   // ======== Single-request action handlers ========
 
   mutationNotice(result, text) {
-    const warning = emailWarning(result.emailErrors);
+    const warning = [emailWarning(result.emailErrors), result.versionWarning]
+      .filter(Boolean).join(' ');
     return {
       type: warning ? 'info' : 'success',
       text: warning ? `${text} ${warning}` : text,
@@ -500,7 +502,11 @@ class PublishRequestsApp extends LitElement {
     let published = false;
     try {
       const fresh = await this.prepareApproval(request);
+      let versionWarning = null;
       if (fresh.isFinal) {
+        // Snapshot the approved source in DA; a failed version warns but does not block publish.
+        const version = await createVersion(this._org, this._site, fresh.path);
+        if (!version.success) versionWarning = `DA version not created (${version.error}).`;
         const publication = await publishContent(this._org, this._site, fresh.path);
         if (!publication.success) return publication;
         published = true;
@@ -527,8 +533,8 @@ published,
         this._org, this._site, fresh.path, this.token,
       ).catch(() => null);
       return {
- ...result, success: true, published, nextStep: nextRequest?.stepInfo,
-};
+        ...result, success: true, published, versionWarning, nextStep: nextRequest?.stepInfo,
+      };
     } catch (error) {
       return { success: false, published, error: error.message };
     }
@@ -683,12 +689,20 @@ published,
 
     let publishedPaths = [];
     let publishError = null;
+    let versionWarning = null;
 
     // Only requests on their last staffed step may go live.
     if (finals.length > 0) {
       const paths = finals.map((r) => r.path);
       this._message = { type: 'info', text: `Starting bulk publish of ${paths.length} pages...` };
       this.requestUpdate();
+
+      // Snapshot each approved source in DA; failures warn but do not block publish.
+      const versions = await Promise.all(paths.map((path) => createVersion(
+        this._org, this._site, path,
+      )));
+      const unversioned = paths.filter((path, i) => !versions[i].success);
+      if (unversioned.length) versionWarning = `DA version not created for: ${unversioned.join(', ')}.`;
 
       try {
         const bulkResult = await bulkPublishContent(this._org, this._site, paths);
@@ -716,7 +730,8 @@ published,
     const finalResult = await this.approveGrouped(finals.filter((r) => publishedSet.has(r.path)));
     const approved = [...intermediateResult.approved, ...finalResult.approved];
     const error = [intermediateResult.error, finalResult.error].filter(Boolean).join(' ');
-    const warning = [intermediateResult.warning, finalResult.warning].filter(Boolean).join(' ');
+    const warning = [intermediateResult.warning, finalResult.warning, versionWarning]
+      .filter(Boolean).join(' ');
 
     const approvedSet = new Set(approved);
     await this.refreshInbox();
@@ -731,7 +746,7 @@ published,
     const summary = parts.length > 0 ? `${parts.join(', ')}.` : 'Nothing was approved.';
 
     this._message = publishError || error
-      ? { type: 'error', text: `${summary} ${publishError || ''} ${error || ''}`.trim() }
+      ? { type: 'error', text: `${summary} ${publishError || ''} ${error || ''} ${versionWarning || ''}`.trim() }
       : { type: warning ? 'info' : 'success', text: `${summary} ${warning || ''}`.trim() };
   }
 

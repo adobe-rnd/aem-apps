@@ -317,6 +317,48 @@ export async function pollJobStatus(jobSelfUrl, maxWaitMs = 60000, intervalMs = 
 }
 
 // ===========================================================================
+// DA version (admin.da.live — snapshot of the source before publish)
+// ===========================================================================
+
+export const PUBLISH_VERSION_LABEL = 'Approved & Published';
+
+/**
+ * DA source path for a request path: extensionless paths are pages (`.html`);
+ * paths with an extension (e.g. `.json`) are kept.
+ * @param {string} path - Site-relative content path
+ * @returns {string} Source path without leading slash
+ */
+export function versionSourcePath(path) {
+  const cleanPath = path.replace(/^\/+/, '');
+  const lastSegment = cleanPath.split('/').pop();
+  return lastSegment.includes('.') ? cleanPath : `${cleanPath}.html`;
+}
+
+/**
+ * Create a labelled DA version of the page source.
+ * POST https://admin.da.live/versionsource/{org}/{site}/{path}.html
+ * @param {string} org - Organization
+ * @param {string} site - Site
+ * @param {string} path - Content path (site-relative)
+ * @param {string} [label] - Version label
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function createVersion(org, site, path, label = PUBLISH_VERSION_LABEL) {
+  try {
+    const response = await daFetch(`${DA_ADMIN}/versionsource/${org}/${site}/${versionSourcePath(path)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label }),
+    });
+    if (!response.ok) return { success: false, error: `Version failed: ${response.status}` };
+    return { success: true };
+  } catch (error) {
+    console.warn('Error creating version:', error);
+    return { success: false, error: error.message || 'Version failed' };
+  }
+}
+
+// ===========================================================================
 // Workflow bookkeeping — thin REST client over publish-requests-worker.
 // Identity is derived server-side from the user's IMS token; the worker does
 // approver resolution, sheet I/O, and email. Publish/preview stay client-side.

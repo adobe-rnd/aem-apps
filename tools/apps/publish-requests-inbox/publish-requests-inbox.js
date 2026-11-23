@@ -19,6 +19,7 @@ import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from 'da-lit';
 import {
   getUserEmail,
+  createVersion,
   publishContent,
   bulkPublishContent,
   pollJobStatus,
@@ -504,6 +505,8 @@ class PublishRequestsApp extends LitElement {
     this._message = null;
 
     try {
+      // Snapshot the approved source in DA; a failed version warns but does not block publish.
+      const versionWarning = await this.versionBeforePublish([this._path]);
       // Publish the content via Helix Admin API (under the user's session)
       const result = await publishContent(this._org, this._site, this._path);
 
@@ -512,7 +515,9 @@ class PublishRequestsApp extends LitElement {
         // Record the approval server-side: removes the pending row + emails the author.
         const bookkeep = await approveRequests(this._org, this._site, [this._path], this.token);
         if (!bookkeep.success) {
-          this._message = { type: 'info', text: `Published, but recording the approval failed: ${bookkeep.error}` };
+          this._message = { type: 'info', text: `Published, but recording the approval failed: ${bookkeep.error}${versionWarning}` };
+        } else if (versionWarning) {
+          this._message = { type: 'info', text: `Published.${versionWarning}` };
         }
       } else {
         this._message = { type: 'error', text: result.error };
@@ -554,11 +559,28 @@ class PublishRequestsApp extends LitElement {
 
   // ======== Inbox action handlers ========
 
+  /**
+   * Create an "Approved & Published" DA version for each path before publishing.
+   * Failures never block publication.
+   * @returns {Promise<string>} Warning text (leading space) or '' when all succeeded.
+   */
+  async versionBeforePublish(paths) {
+    const versions = await Promise.all(paths.map((path) => createVersion(
+      this._org, this._site, path,
+    )));
+    const failed = paths.filter((path, i) => !versions[i].success);
+    if (!failed.length) return '';
+    return failed.length === 1 && paths.length === 1
+      ? ` DA version not created (${versions[0].error}).`
+      : ` DA version not created for: ${failed.join(', ')}.`;
+  }
+
   async handleInboxApprove(request) {
     if (this._processingPaths.has(request.path)) return; // guard against re-entry
     this._processingPaths = new Set([...this._processingPaths, request.path]);
     this.requestUpdate();
 
+    const versionWarning = await this.versionBeforePublish([request.path]);
     const result = await publishContent(this._org, this._site, request.path);
 
     if (result.success) {
@@ -566,8 +588,8 @@ class PublishRequestsApp extends LitElement {
       // Record approval server-side (sheet removal + author email).
       const bookkeep = await approveRequests(this._org, this._site, [request.path], this.token);
       this._message = bookkeep.success
-        ? { type: 'success', text: `Published: ${request.path}` }
-        : { type: 'info', text: `Published: ${request.path}. Recording approval failed: ${bookkeep.error}` };
+        ? { type: versionWarning ? 'info' : 'success', text: `Published: ${request.path}${versionWarning}` }
+        : { type: 'info', text: `Published: ${request.path}. Recording approval failed: ${bookkeep.error}${versionWarning}` };
     } else {
       this._message = { type: 'error', text: `Failed to publish ${request.path}: ${result.error}` };
     }
@@ -586,6 +608,9 @@ class PublishRequestsApp extends LitElement {
     const allPaths = this._pendingRequests.map((r) => r.path);
     const totalCount = allPaths.length;
 
+    // Snapshot each approved source in DA; failures warn but do not block publish.
+    const versionWarning = await this.versionBeforePublish(allPaths);
+
     // Use bulk publish API for all paths in a single request
     // https://www.aem.live/docs/admin.html#tag/publish/operation/bulkPublish
     this._message = { type: 'info', text: `Starting bulk publish of ${totalCount} pages...` };
@@ -595,7 +620,7 @@ class PublishRequestsApp extends LitElement {
 
     if (!bulkResult.success) {
       this._approveAllProcessing = false;
-      this._message = { type: 'error', text: `Bulk publish failed: ${bulkResult.error}` };
+      this._message = { type: 'error', text: `Bulk publish failed: ${bulkResult.error}${versionWarning}` };
       return;
     }
 
@@ -611,7 +636,7 @@ class PublishRequestsApp extends LitElement {
         this._approveAllProcessing = false;
         this._message = {
           type: 'error',
-          text: `Bulk publish job did not complete in time. Some pages may still be publishing. ${jobResult.error || ''}`,
+          text: `Bulk publish job did not complete in time. Some pages may still be publishing. ${jobResult.error || ''}${versionWarning}`,
         };
         return;
       }
@@ -639,7 +664,7 @@ class PublishRequestsApp extends LitElement {
         this._approveAllProcessing = false;
         this._message = {
           type: 'error',
-          text: `Published ${succeededPaths.length} of ${totalCount}. Failed: ${failedPaths.join(', ')}${partialNotifyError ? ` Author notification failed: ${partialNotifyError}` : ''}`,
+          text: `Published ${succeededPaths.length} of ${totalCount}. Failed: ${failedPaths.join(', ')}${partialNotifyError ? ` Author notification failed: ${partialNotifyError}` : ''}${versionWarning}`,
         };
         return;
       }
@@ -652,8 +677,11 @@ class PublishRequestsApp extends LitElement {
     this._pendingRequests = [];
     this._approveAllProcessing = false;
     this._message = bulkNotifyError
-      ? { type: 'info', text: `All ${totalCount} requests published. Author notification failed: ${bulkNotifyError}` }
-      : { type: 'success', text: `All ${totalCount} requests published successfully!` };
+      ? { type: 'info', text: `All ${totalCount} requests published. Author notification failed: ${bulkNotifyError}${versionWarning}` }
+      : {
+        type: versionWarning ? 'info' : 'success',
+        text: `All ${totalCount} requests published successfully!${versionWarning}`,
+      };
   }
 
   // ======== My-requests action handlers ========
