@@ -72,8 +72,8 @@ From the inbox, the approver can click **"Approve All"** to bulk-publish all vis
 **How it works:**
 1. The inbox sends the pending paths in one `POST` to `https://admin.hlx.page/live/{org}/{site}/main/*`.
 2. The API returns a job. The inbox polls it every 2 seconds, for up to 60 seconds.
-3. For each confirmed page or sheet, the inbox tries to create an **Approved & Published** DA version.
-4. The inbox sends one `POST /api/requests/approve` for the confirmed paths. The **worker** removes those pending rows and emails the authors. Unconfirmed paths remain in the inbox.
+3. The inbox sends one `POST /api/requests/approve` for the confirmed paths. The **worker** removes those pending rows and emails the authors. Unconfirmed paths remain in the inbox.
+4. The inbox then tries to create an **Approved & Published** DA version for each confirmed page or sheet.
 
 ### 3. Author Email Notification on Publish
 

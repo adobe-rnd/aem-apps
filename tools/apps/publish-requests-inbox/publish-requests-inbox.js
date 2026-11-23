@@ -506,13 +506,14 @@ class PublishRequestsApp extends LitElement {
 
     try {
       // Publish the content via Helix Admin API (under the user's session)
-      const result = await publishContent(this._org, this._site, this._path);
+      const path = this._path;
+      const result = await publishContent(this._org, this._site, path);
 
       if (result.success) {
-        const versionWarning = await this.versionPublishedPaths([this._path]);
-        this._state = 'approved';
         // Record the approval server-side: removes the pending row + emails the author.
-        const bookkeep = await approveRequests(this._org, this._site, [this._path], this.token);
+        const bookkeep = await approveRequests(this._org, this._site, [path], this.token);
+        const versionWarning = await this.versionPublishedPaths([path]);
+        this._state = 'approved';
         if (!bookkeep.success) {
           this._message = { type: 'info', text: `Published, but recording the approval failed: ${bookkeep.error}${versionWarning}` };
         } else if (versionWarning) {
@@ -563,9 +564,16 @@ class PublishRequestsApp extends LitElement {
    * @returns {Promise<string>} Warning text (leading space) or '' when all succeeded.
    */
   async versionPublishedPaths(paths) {
-    const versions = await Promise.all(paths.map((path) => createVersion(
-      this._org, this._site, path,
-    )));
+    const versions = [];
+    const batchSize = 6;
+    for (let i = 0; i < paths.length; i += batchSize) {
+      const batchPaths = paths.slice(i, i + batchSize);
+      // eslint-disable-next-line no-await-in-loop
+      const batch = await Promise.all(batchPaths.map((path) => createVersion(
+        this._org, this._site, path,
+      )));
+      versions.push(...batch);
+    }
     const failed = paths.filter((path, i) => !versions[i].success);
     if (!failed.length) return '';
     return failed.length === 1 && paths.length === 1
@@ -581,10 +589,10 @@ class PublishRequestsApp extends LitElement {
     const result = await publishContent(this._org, this._site, request.path);
 
     if (result.success) {
-      const versionWarning = await this.versionPublishedPaths([request.path]);
       this._pendingRequests = this._pendingRequests.filter((r) => r.path !== request.path);
       // Record approval server-side (sheet removal + author email).
       const bookkeep = await approveRequests(this._org, this._site, [request.path], this.token);
+      const versionWarning = await this.versionPublishedPaths([request.path]);
       this._message = bookkeep.success
         ? { type: versionWarning ? 'info' : 'success', text: `Published: ${request.path}${versionWarning}` }
         : { type: 'info', text: `Published: ${request.path}. Recording approval failed: ${bookkeep.error}${versionWarning}` };
@@ -645,11 +653,11 @@ class PublishRequestsApp extends LitElement {
       .map((r) => r.path));
     const succeededPaths = allPaths.filter((path) => confirmed.has(path));
     const unconfirmedPaths = allPaths.filter((path) => !confirmed.has(path));
-    const versionWarning = await this.versionPublishedPaths(succeededPaths);
     // Record approval only for the published paths (sheet removal + author email).
     const bookkeep = succeededPaths.length
       ? await approveRequests(this._org, this._site, succeededPaths, this.token)
       : { success: true };
+    const versionWarning = await this.versionPublishedPaths(succeededPaths);
 
     this._pendingRequests = this._pendingRequests.filter((r) => !confirmed.has(r.path));
     this._approveAllProcessing = false;

@@ -104,8 +104,9 @@ single approval promotes the current preview with
 for paths with confirmed success. Intermediate approvals perform no Helix content
 operation. Review links compare preview versus live in the Page Status diff tool.
 
-After a final publish is confirmed, the inbox creates an **Approved & Published**
-DA version for each existing page or JSON sheet. It skips media files and
+After a final publish is confirmed, the inbox sends the workflow approval to the
+worker before it tries to create an **Approved & Published** DA version for each
+existing page or JSON sheet. It skips media files and
 requires DA read and write access to the source. If a source check or version
 fails, the inbox shows a warning without undoing the publish. The version
 captures the current DA source, not the published preview. Creating this version

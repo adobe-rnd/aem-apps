@@ -502,17 +502,19 @@ class PublishRequestsApp extends LitElement {
     let published = false;
     try {
       const fresh = await this.prepareApproval(request);
-      let versionWarning = null;
       if (fresh.isFinal) {
         const publication = await publishContent(this._org, this._site, fresh.path);
         if (!publication.success) return publication;
         published = true;
-        const version = await createVersion(this._org, this._site, fresh.path);
-        if (!version.success) versionWarning = `DA version not created (${version.error}).`;
       }
       const result = await approveRequests(
         this._org, this._site, [fresh.path], this.token, fresh.stepInfo.current, fresh.isFinal,
       );
+      let versionWarning = null;
+      if (published) {
+        const version = await createVersion(this._org, this._site, fresh.path);
+        if (!version.success) versionWarning = `DA version not created (${version.error}).`;
+      }
       if (result.status === 409 || result.stale?.includes(fresh.path)) {
         await checkPublishRequest(this._org, this._site, fresh.path, this.token).catch(() => {});
         return { success: false, published, error: 'Approval conflict. The request changed; refresh and review its current status.' };
@@ -717,14 +719,21 @@ published,
       }
     }
 
-    const versions = await Promise.all(publishedPaths.map((path) => createVersion(
-      this._org, this._site, path,
-    )));
+    const publishedSet = new Set(publishedPaths);
+    const finalResult = await this.approveGrouped(finals.filter((r) => publishedSet.has(r.path)));
+    const versions = [];
+    const batchSize = 6;
+    for (let i = 0; i < publishedPaths.length; i += batchSize) {
+      const batchPaths = publishedPaths.slice(i, i + batchSize);
+      // eslint-disable-next-line no-await-in-loop
+      const batch = await Promise.all(batchPaths.map((path) => createVersion(
+        this._org, this._site, path,
+      )));
+      versions.push(...batch);
+    }
     const unversioned = publishedPaths.filter((path, i) => !versions[i].success);
     const versionWarning = unversioned.length ? `DA version not created for: ${unversioned.join(', ')}.` : null;
 
-    const publishedSet = new Set(publishedPaths);
-    const finalResult = await this.approveGrouped(finals.filter((r) => publishedSet.has(r.path)));
     const approved = [...intermediateResult.approved, ...finalResult.approved];
     const error = [intermediateResult.error, finalResult.error].filter(Boolean).join(' ');
     const warning = [intermediateResult.warning, finalResult.warning, versionWarning]

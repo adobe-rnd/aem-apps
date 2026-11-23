@@ -330,7 +330,7 @@ const PUBLISH_VERSION_LABEL = 'Approved & Published';
 export function versionSourcePath(path) {
   const cleanPath = path.replace(/^\/+/, '');
   const lastSegment = cleanPath.split('/').pop();
-  if (!lastSegment) return null;
+  if (!lastSegment) return `${cleanPath}index.html`;
   if (!lastSegment.includes('.')) return `${cleanPath}.html`;
   return /\.(html|json)$/.test(lastSegment) ? cleanPath : null;
 }
