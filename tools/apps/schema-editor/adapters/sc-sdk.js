@@ -14,14 +14,15 @@
  * limitations under the License.
  */
 
-// da.live's Structured Content SDK; `validateSchema` checks the supported JSON Schema subset.
-const SDK_URL = 'https://da.live/nx/deps/da-sc-sdk/dist/index.js';
-
 let loading;
 
+/**
+ * The Structured Content SDK's `validateSchema`, which checks the supported JSON Schema subset.
+ * It ships with the app, bundled from the pinned `@adobe/da-sc-sdk` (`npm run build:da-sc-sdk`).
+ */
 // eslint-disable-next-line import/prefer-default-export
 export function loadScSdk() {
-  loading ??= import(SDK_URL).catch((error) => {
+  loading ??= import('../../../deps/da-sc-sdk/dist/index.js').catch((error) => {
     loading = undefined;
     throw error;
   });

@@ -146,8 +146,8 @@ extend the editor.
 
 - [nx2](https://github.com/adobe/da-nx/tree/main/nx2) shared components and
   styles, loaded from `da.live`.
-- The Structured Content SDK: `https://da.live/nx/deps/da-sc-sdk/dist/index.js`
-  (validation).
+- The Structured Content SDK's `validateSchema`, bundled with the app in
+  `tools/deps/da-sc-sdk` from the pinned `@adobe/da-sc-sdk` devDependency.
 - The DA app SDK: `https://da.live/nx/utils/sdk.js` (token, context, chat).
 
 ## Development
