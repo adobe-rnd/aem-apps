@@ -345,6 +345,19 @@ describe('replaceSchema', () => {
     expect(byKey(next, 'home').refDefId).to.equal(next.defs[0].id);
   });
 
+  it('keeps a field that changes kind, but none of its old contents', () => {
+    const model = open();
+    const { model: next } = replaceSchema(model, {
+      json: edited((json) => {
+        json.properties.tags = { type: 'object', title: 'Tags', properties: { Tag: { type: 'string' } } };
+      }),
+    });
+    const before = byKey(model, 'tags');
+    const after = byKey(next, 'tags');
+    expect(after).to.include({ id: before.id, kind: 'object', keyLocked: true });
+    expect(after.children[0].id).to.not.equal(before.item.id);
+  });
+
   it('is no edit when the JSON says the same', () => {
     const { model } = parseSchema(SOURCE);
     expect(replaceSchema(model, { json: structuredClone(SOURCE) }).model).to.equal(model);
