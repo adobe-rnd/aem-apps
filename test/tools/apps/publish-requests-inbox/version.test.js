@@ -55,7 +55,7 @@ function app(overrides = {}) {
   });
 }
 
-describe('v1 inbox DA version before publish', () => {
+describe('v1 inbox DA versions', () => {
   it('maps request paths to DA source paths', () => {
     const { versionSourcePath } = versionApi();
     assert.equal(versionSourcePath('/drafts/page'), 'drafts/page.html');
@@ -70,28 +70,46 @@ describe('v1 inbox DA version before publish', () => {
       return { ok: true };
     });
     assert.equal((await createVersion('example', 'website', '/page')).success, true);
-    assert.deepEqual(calls, [[
-      'https://admin.da.live/versionsource/example/website/page.html', 'POST', '{"label":"Approved & Published"}',
-    ]]);
+    assert.deepEqual(calls, [
+      ['https://admin.da.live/source/example/website/page.html', 'HEAD', undefined],
+      ['https://admin.da.live/versionsource/example/website/page.html', 'POST', '{"label":"Approved & Published"}'],
+    ]);
   });
 
-  it('reports a failed version without throwing', async () => {
-    const { createVersion } = versionApi(async () => ({ ok: false, status: 404 }));
+  it('does not try to version a missing DA source', async () => {
+    const calls = [];
+    const { createVersion } = versionApi(async (_url, { method }) => {
+      calls.push(method);
+      return { ok: false, status: 404 };
+    });
     const result = await createVersion('example', 'website', '/page');
     assert.equal(result.success, false);
-    assert.equal(result.error, 'Version failed: 404');
+    assert.equal(result.error, 'Source check failed: 404');
+    assert.deepEqual(calls, ['HEAD']);
   });
 
-  it('creates a version before a single publish', async () => {
+  it('creates a version after a single publish succeeds', async () => {
     const calls = [];
     const inbox = app({
       createVersion: async (_org, _site, path) => { calls.push(`version ${path}`); return { success: true }; },
       publishContent: async () => { calls.push('publish'); return { success: true }; },
     });
     await inbox.handleApprove();
-    assert.deepEqual(calls, ['version /page', 'publish']);
+    assert.deepEqual(calls, ['publish', 'version /page']);
     assert.equal(inbox._state, 'approved');
     assert.equal(inbox._message, null);
+  });
+
+  it('does not version a failed publish from the inbox', async () => {
+    const calls = [];
+    const inbox = app({
+      createVersion: async () => { calls.push('version'); return { success: true }; },
+      publishContent: async () => { calls.push('publish'); return { success: false, error: '403' }; },
+    });
+    inbox._pendingRequests = [{ path: '/page' }];
+    await inbox.handleInboxApprove({ path: '/page' });
+    assert.deepEqual(calls, ['publish']);
+    assert.equal(inbox._message.type, 'error');
   });
 
   it('still publishes and warns when the version fails', async () => {
@@ -107,19 +125,56 @@ describe('v1 inbox DA version before publish', () => {
     assert.match(inbox._message.text, /Published: \/page DA version not created \(Version failed: 500\)/);
   });
 
-  it('versions every path before a bulk publish and names failures', async () => {
+  it('versions only confirmed bulk resources and names version failures', async () => {
     const calls = [];
     const inbox = app({
       createVersion: async (_org, _site, path) => {
         calls.push(`version ${path}`);
         return { success: path !== '/two', error: 'Version failed: 500' };
       },
-      bulkPublishContent: async () => { calls.push('bulk'); return { success: true }; },
+      bulkPublishContent: async () => {
+        calls.push('bulk');
+        return { success: true, links: { self: 'https://admin.example/job' } };
+      },
+      pollJobStatus: async () => {
+        calls.push('poll');
+        return {
+          success: true,
+          job: {
+            data: {
+              resources: [
+                { path: '/one', status: 200 },
+                { path: '/two', status: 304 },
+                { path: '/failed', status: 500 },
+              ],
+            },
+          },
+        };
+      },
+      approveRequests: async (_org, _site, paths) => {
+        calls.push(`approve ${paths.join(', ')}`);
+        return { success: true };
+      },
     });
-    inbox._pendingRequests = [{ path: '/one' }, { path: '/two' }];
+    inbox._pendingRequests = [{ path: '/one' }, { path: '/two' }, { path: '/failed' }, { path: '/unknown' }];
     await inbox.handleApproveAll();
-    assert.deepEqual(calls, ['version /one', 'version /two', 'bulk']);
-    assert.equal(inbox._message.type, 'info');
-    assert.match(inbox._message.text, /All 2 requests published successfully! DA version not created for: \/two\./);
+    assert.deepEqual(calls, ['bulk', 'poll', 'version /one', 'version /two', 'approve /one, /two']);
+    assert.equal(inbox._message.type, 'error');
+    assert.match(inbox._message.text, /Published 2 of 4.*DA version not created for: \/two\./);
+    assert.deepEqual(inbox._pendingRequests.map((row) => row.path), ['/failed', '/unknown']);
+  });
+
+  it('does not approve or version a bulk response without a job link', async () => {
+    const calls = [];
+    const inbox = app({
+      createVersion: async () => { calls.push('version'); return { success: true }; },
+      bulkPublishContent: async () => ({ success: true }),
+      approveRequests: async () => { calls.push('approve'); return { success: true }; },
+    });
+    inbox._pendingRequests = [{ path: '/page' }];
+    await inbox.handleApproveAll();
+    assert.deepEqual(calls, []);
+    assert.equal(inbox._message.type, 'error');
+    assert.equal(inbox._pendingRequests.length, 1);
   });
 });

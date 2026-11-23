@@ -25,6 +25,7 @@ const source = readFileSync(new URL('../../../../tools/apps/publish-requests-inb
 function fixture(overrides = {}) {
   const scope = {
     ...api,
+    createVersion: async () => ({ success: true }),
     LitElement: class { requestUpdate() { return this; } },
     URL,
     URLSearchParams,
@@ -404,15 +405,19 @@ describe('inbox v2 approval handlers', () => {
         error: 'Timed out',
         job: { data: { resources: [{ path: '/page', status: 200 }] } },
       }),
+      createVersion: async (_org, _site, path) => {
+        calls.push(`version ${path}`);
+        return { success: true };
+      },
       approveRequests: async (_org, _site, paths) => {
-        calls.push(...paths);
+        calls.push(...paths.map((path) => `approve ${path}`));
         return { completed: paths };
       },
-      getAllPendingRequestsForUser: async () => rows.filter((row) => !calls.includes(row.path)),
+      getAllPendingRequestsForUser: async () => rows.filter((row) => !calls.includes(`approve ${row.path}`)),
     });
     app._pendingRequests = rows;
     await app.handleApproveAll();
-    assert.deepEqual(calls, ['/page']);
+    assert.deepEqual(calls, ['version /page', 'approve /page']);
     assert.deepEqual(Array.from(app._pendingRequests, (row) => row.path), ['/unknown']);
     assert.match(app._message.text, /1 published/);
   });
@@ -462,12 +467,35 @@ describe('inbox v2 approval handlers', () => {
     assert.equal(api.versionSourcePath('/v1.2/page'), 'v1.2/page.html');
   });
 
-  it('creates a labelled version before a final single publish', async () => {
+  function versionApi(daFetch) {
+    const apiSource = readFileSync(new URL('../../../../tools/apps/publish-requests-inbox-v2/api.js', import.meta.url), 'utf8');
+    const versionSource = apiSource.slice(apiSource.indexOf('// DA version'), apiSource.indexOf('// Helix publish'))
+      .replace(/^export /gm, '');
+    return vm.runInNewContext(`${versionSource}; createVersion`, {
+      DA_ADMIN: 'https://admin.da.live', daFetch, console,
+    });
+  }
+
+  it('checks for the source before posting the label and leaves media alone', async () => {
+    const calls = [];
+    const createVersion = versionApi(async (url, opts) => {
+      calls.push([url, opts.method, opts.body]);
+      return { ok: true };
+    });
+    assert.equal((await createVersion('example', 'website', '/assets/my-file.pdf')).success, true);
+    assert.equal((await createVersion('example', 'website', '/data/sheet.json')).success, true);
+    assert.deepEqual(calls, [
+      ['https://admin.da.live/source/example/website/data/sheet.json', 'HEAD', undefined],
+      ['https://admin.da.live/versionsource/example/website/data/sheet.json', 'POST', '{"label":"Approved & Published"}'],
+    ]);
+  });
+
+  it('creates a version after a final single publish succeeds', async () => {
     const calls = [];
     const app = fixture({
       checkPublishRequest: async () => finalRow,
       createVersion: async (org, site, path) => {
-        calls.push(['version', path, api.PUBLISH_VERSION_LABEL]);
+        calls.push(['version', path]);
         return { success: true };
       },
       publishContent: async () => { calls.push(['publish']); return { success: true }; },
@@ -475,8 +503,21 @@ describe('inbox v2 approval handlers', () => {
     });
     app._reviewRequest = finalRow;
     await app.handleApprove();
-    assert.deepEqual(calls, [['version', '/page', 'Approved & Published'], ['publish']]);
+    assert.deepEqual(calls, [['publish'], ['version', '/page']]);
     assert.equal(app._message.type, 'success');
+  });
+
+  it('does not version a failed final publish', async () => {
+    const calls = [];
+    const app = fixture({
+      checkPublishRequest: async () => finalRow,
+      createVersion: async () => { calls.push('version'); return { success: true }; },
+      publishContent: async () => { calls.push('publish'); return { success: false, error: '403' }; },
+    });
+    app._reviewRequest = finalRow;
+    await app.handleApprove();
+    assert.deepEqual(calls, ['publish']);
+    assert.equal(app._message.type, 'error');
   });
 
   it('still publishes and warns when the version fails', async () => {
@@ -510,7 +551,7 @@ describe('inbox v2 approval handlers', () => {
     assert.equal(versioned, false);
   });
 
-  it('versions only final requests before a bulk publish and warns on failures', async () => {
+  it('versions confirmed final requests after a bulk publish and warns on failures', async () => {
     const calls = [];
     const rows = [
       finalRow,
@@ -523,7 +564,17 @@ describe('inbox v2 approval handlers', () => {
         calls.push(`version ${path}`);
         return { success: path !== '/two', error: 'Version failed: 500' };
       },
-      bulkPublishContent: async () => { calls.push('bulk'); return { success: true }; },
+      bulkPublishContent: async () => {
+        calls.push('bulk');
+        return { success: true, links: { self: 'https://admin.example/job' } };
+      },
+      pollJobStatus: async () => {
+        calls.push('poll');
+        return {
+          success: true,
+          job: { data: { resources: [{ path: '/page', status: 200 }, { path: '/two', status: 304 }] } },
+        };
+      },
       approveRequests: async (_org, _site, paths, _token, _step, final) => (
         final ? { completed: paths } : { advanced: paths }),
       getAllPendingRequestsForUser: async () => [],
@@ -531,9 +582,25 @@ describe('inbox v2 approval handlers', () => {
     });
     app._pendingRequests = rows;
     await app.handleApproveAll();
-    assert.deepEqual(calls, ['version /page', 'version /two', 'bulk']);
+    assert.deepEqual(calls, ['bulk', 'poll', 'version /page', 'version /two']);
     assert.match(app._message.text, /2 published/);
     assert.match(app._message.text, /DA version not created for: \/two/);
+  });
+
+  it('does not approve or version a bulk response without a job link', async () => {
+    const calls = [];
+    const app = fixture({
+      checkPublishRequest: async () => finalRow,
+      createVersion: async () => { calls.push('version'); return { success: true }; },
+      bulkPublishContent: async () => ({ success: true }),
+      approveRequests: async () => { calls.push('approve'); return { completed: ['/page'] }; },
+      getAllPendingRequestsForUser: async () => [finalRow],
+    });
+    app._pendingRequests = [finalRow];
+    await app.handleApproveAll();
+    assert.deepEqual(calls, []);
+    assert.equal(app._message.type, 'error');
+    assert.equal(app._pendingRequests.length, 1);
   });
 });
 
