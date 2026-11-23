@@ -13,6 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+/**
+ * A bus channel: `emit` calls every subscriber. With `replay`, a new subscriber also gets the
+ * last value emitted, so state channels need no separate getter.
+ */
 // eslint-disable-next-line import/prefer-default-export
 export function createChannel({ replay = false } = {}) {
   const listeners = new Set();
@@ -26,7 +30,7 @@ export function createChannel({ replay = false } = {}) {
     },
     subscribe(fn) {
       listeners.add(fn);
-      if (replay && hasValue && (replay === true || replay(lastValue))) fn(lastValue);
+      if (replay && hasValue) fn(lastValue);
       return () => listeners.delete(fn);
     },
   };
