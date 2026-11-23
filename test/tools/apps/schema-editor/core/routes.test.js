@@ -22,7 +22,7 @@ import {
 describe('schema routes', () => {
   it('maps a missing hash or site to the none screen', () => {
     expect(parseRoute(null)).to.deep.equal({ screen: SCREENS.NONE });
-    expect(parseRoute({ org: 'adobe', site: null })).to.deep.equal({ screen: SCREENS.NONE });
+    expect(parseRoute({ org: 'adobe', site: null })).to.deep.equal({ screen: SCREENS.NONE, org: 'adobe' });
   });
 
   it('maps org/site to the browse screen', () => {

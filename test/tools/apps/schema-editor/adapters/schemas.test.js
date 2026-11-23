@@ -51,9 +51,20 @@ describe('createSchemaRepository', () => {
   });
 
   it('lists a site without a schemas folder as empty, and fails on other errors', async () => {
-    assert.deepEqual(await setup().repository.list(SITE), { items: [] });
+    const withContent = setup({
+      routes: { [`GET ${DA}/list/acme/web`]: json([{ name: 'index', ext: 'html', path: '/acme/web/index.html' }]) },
+    });
+    assert.deepEqual(await withContent.repository.list(SITE), { items: [] });
     const { repository } = setup({ routes: { [`GET ${DA}/list${SCHEMAS}`]: status(403) } });
     assert.deepEqual(await repository.list(SITE), { error: 'Request failed.', status: 403 });
+  });
+
+  it('flags a site that has no content at all as missing', async () => {
+    assert.deepEqual(await setup().repository.list(SITE), { items: [], siteMissing: true });
+    const empty = setup({ routes: { [`GET ${DA}/list/acme/web`]: json([]) } });
+    assert.deepEqual(await empty.repository.list(SITE), { items: [], siteMissing: true });
+    const emptyFolder = setup({ routes: { [`GET ${DA}/list${SCHEMAS}`]: json([]) } });
+    assert.deepEqual(await emptyFolder.repository.list(SITE), { items: [], siteMissing: true });
   });
 
   it('reads a schema out of its document', async () => {

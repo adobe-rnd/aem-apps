@@ -16,6 +16,19 @@
   flex: 0 1 auto;
 }
 
+/* The site comes first, like the root of a trail: it shrinks before the title does. */
+.group-start .site {
+  flex: 0 1 auto;
+  overflow: hidden;
+  min-width: 48px;
+  max-width: 32ch;
+  padding-inline-start: 6px;
+  font-size: var(--s2-component-m-regular-font-size);
+  color: var(--s2-gray-700);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .group-end {
   flex: 1 1000 auto;
   min-width: auto;

@@ -145,8 +145,15 @@ class SeBrowse extends LitElement {
       this._summaries = new Map();
     }
 
-    const { items, error, status } = await this._catalog.list();
+    const {
+      items, error, status, siteMissing,
+    } = await this._catalog.list();
     if (loadId !== this._loadId) return;
+    if (siteMissing) {
+      this._items = [];
+      this._status = 'missing';
+      return;
+    }
     if (error && quiet) return;
     if (error) {
       this._status = 'error';
@@ -291,6 +298,7 @@ class SeBrowse extends LitElement {
         <li class="row"><span class="skeleton row-skeleton"></span></li>`), true);
     }
     if (this._status === 'error') return this._renderError();
+    if (this._status === 'missing') return this._renderSiteMissing();
     if (!this._items.length) return this._renderEmpty();
 
     const visible = sortItems(
@@ -322,6 +330,19 @@ class SeBrowse extends LitElement {
               ${icon('ai')} With AI…
             </button>` : nothing}
         </div>
+      </div>
+    `;
+  }
+
+  _renderSiteMissing() {
+    return html`
+      <div class="empty" role="alert">
+        ${icon('alert', 'empty-icon')}
+        <h2>Site not found</h2>
+        <p>No site was found at <strong>${this.org}/${this.site}</strong>. Check the organization
+          and site names, or ask your administrator for access.</p>
+        <button type="button" class="nx-action-btn"
+          @click=${() => this.dispatchEvent(new Event('change-site'))}>Change site</button>
       </div>
     `;
   }
@@ -409,6 +430,19 @@ class SeBrowse extends LitElement {
     this._closeSortPopover();
   };
 
+  /** No New on a site that doesn't exist: there is nowhere to create it. */
+  _renderNew() {
+    if (this._status === 'missing') return nothing;
+    return html`
+      <nx-menu placement="below-end" .items=${newSchemaItems(this.chat?.available)}
+        @select=${(e) => this._create(e.detail.id)}>
+        <button slot="trigger" type="button" class="nx-btn-accent new-btn" aria-label="New schema">
+          New ${icon('chevronDown')}
+        </button>
+      </nx-menu>
+    `;
+  }
+
   /** Same toggle as the editor bar; hidden while the chat is open (on hosts that report it). */
   _renderChatToggle() {
     if (!this.chat?.available || this._chatOpen) return nothing;
@@ -426,17 +460,16 @@ class SeBrowse extends LitElement {
       <header class="bar">
         <div class="group group-start">
           ${this._renderChatToggle()}
+          <span class="site" title=${key}>${key}</span>
+          <button type="button" class="nx-action-btn-icon change-site"
+            title="Change site" aria-label="Change site"
+            @click=${() => this.dispatchEvent(new Event('change-site'))}>${icon('edit')}</button>
+          <span class="divider" aria-hidden="true"></span>
           <h1 class="title">Schemas</h1>
-          <span class="key" title=${key}>${key}</span>
         </div>
         <div class="group group-end">
           ${this._renderControls()}
-          <nx-menu placement="below-end" .items=${newSchemaItems(this.chat?.available)}
-            @select=${(e) => this._create(e.detail.id)}>
-            <button slot="trigger" type="button" class="nx-btn-accent new-btn" aria-label="New schema">
-              New ${icon('chevronDown')}
-            </button>
-          </nx-menu>
+          ${this._renderNew()}
         </div>
       </header>
       <div class="content">

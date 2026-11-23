@@ -23,7 +23,6 @@ import {
 import { buttons, shared, loadStyle } from './ui/shared/styles.js';
 import { confirmDialog } from './ui/shared/confirm.js';
 import { toast } from './ui/shared/toast.js';
-import './ui/fields/input.js';
 import { getNx2 } from './ui/shared/nx.js';
 
 const nx2 = getNx2();
@@ -64,6 +63,7 @@ class SeApp extends LitElement {
     _store: { state: true },
     _panelOpen: { state: true },
     _chat: { state: true },
+    _changingSite: { state: true },
   };
 
   _navigation = 0;
@@ -130,6 +130,7 @@ class SeApp extends LitElement {
     if (route.invalidName) {
       toast({ message: `"${route.invalidName}" is not a valid schema name.`, variant: 'negative' });
     }
+    if (route.screen === SCREENS.NONE) this._changeSite();
     if (route.screen !== SCREENS.AUTHOR) return;
 
     const { org, site, name } = route;
@@ -151,22 +152,37 @@ class SeApp extends LitElement {
     this._store = null;
   }
 
-  _openSite(event) {
-    event.preventDefault();
-    const value = event.target.querySelector('se-input')?.value?.trim() ?? '';
-    const [org, site] = value.replace(/^\/+/, '').split('/');
-    if (org && site) window.location.hash = routeHash({ org, site });
+  _changeSite = async () => {
+    try {
+      await import('./ui/shared/site-picker.js');
+      this._changingSite = true;
+    } catch {
+      toast({ message: 'Part of the app could not be loaded. Reload the page to try again.', variant: 'negative' });
+    }
+  };
+
+  _onSiteChange({ detail }) {
+    this._changingSite = false;
+    window.location.hash = routeHash(detail);
+  }
+
+  _renderSitePicker() {
+    if (!this._changingSite) return nothing;
+    const { org, site } = this._route ?? {};
+    return html`
+      <se-site-picker .org=${org} .site=${site}
+        @site-change=${this._onSiteChange}
+        @site-cancel=${() => { this._changingSite = false; }}></se-site-picker>
+    `;
   }
 
   _renderNoSite() {
+    import(`${nx2}/public/sl/components.js`);
     return html`
-      <section class="no-site">
-        <h1>Schemas</h1>
-        <p class="muted">Open a site to browse and edit its structured content schemas.</p>
-        <form @submit=${this._openSite}>
-          <se-input label="Organization / site" placeholder="my-org/my-site"></se-input>
-          <button type="submit" class="nx-btn-accent">Open</button>
-        </form>
+      <section class="message">
+        <h2>No site selected</h2>
+        <p>Choose an organization and site to browse and edit its structured content schemas.</p>
+        <sl-button class="primary outline" @click=${this._changeSite}>Choose a site</sl-button>
       </section>
     `;
   }
@@ -181,16 +197,21 @@ class SeApp extends LitElement {
     `;
   }
 
-  render() {
+  _renderScreen() {
     const { screen, org, site } = this._route ?? {};
     if (screen === SCREENS.NONE) return this._renderNoSite();
     if (screen === SCREENS.BROWSE) {
       return html`
-        <se-browse .org=${org} .site=${site} .repository=${repository} .chat=${this._chat}></se-browse>
+        <se-browse .org=${org} .site=${site} .repository=${repository} .chat=${this._chat}
+          @change-site=${this._changeSite}></se-browse>
       `;
     }
     if (screen === SCREENS.AUTHOR && this._store) return this._renderAuthor();
     return nothing;
+  }
+
+  render() {
+    return html`${this._renderScreen()}${this._renderSitePicker()}`;
   }
 }
 

@@ -15,7 +15,7 @@
  */
 // Schema catalog of a site: what the browse screen lists, creates, duplicates and deletes.
 // Storage goes through the injected repository (adapters/schemas.js):
-//   list({ org, site }) → { items?: [{ name, lastModified? }], error?, status? }
+//   list({ org, site }) → { items?: [{ name, lastModified? }], siteMissing?, error?, status? }
 //   read({ org, site, name }) → { json?, raw?, error?, status? }
 //   save({ org, site, name, json }) → { ok, error? }
 //   remove({ org, site, name }) → { ok, error? }

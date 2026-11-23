@@ -22,15 +22,24 @@ const NOT_FOUND = 404;
 /** The core's schema repository: one document per schema in the site's `.da/forms/schemas`. */
 // eslint-disable-next-line import/prefer-default-export
 export function createSchemaRepository(source) {
+  // DA lists a missing site as empty (or 404), so a site with no content at all doesn't exist.
+  async function siteMissing({ org, site }) {
+    const listed = await source.list({ path: `/${org}/${site}` });
+    return listed.status === NOT_FOUND || (!listed.error && !listed.items.length);
+  }
+
   async function list({ org, site }) {
     const listed = await source.list({ path: schemasFolder(org, site) });
-    // A site without schemas has no schemas folder yet.
-    if (listed.status === NOT_FOUND) return { items: [] };
-    if (listed.error) return { error: listed.error, status: listed.status };
-    const items = listed.items
+    // A site without schemas has no schemas folder yet; DA lists that as empty or 404.
+    if (listed.error && listed.status !== NOT_FOUND) {
+      return { error: listed.error, status: listed.status };
+    }
+    const items = (listed.items ?? [])
       .filter((item) => item?.name && item.ext === 'html')
       .map(({ name, lastModified }) => ({ name, lastModified }));
-    return { items, permissions: listed.permissions };
+    if (!items.length && await siteMissing({ org, site })) return { items, siteMissing: true };
+    const { permissions } = listed;
+    return permissions ? { items, permissions } : { items };
   }
 
   async function read({ org, site, name }) {

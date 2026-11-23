@@ -4,32 +4,25 @@
   overflow: hidden;
 }
 
-.no-site {
+/* Same centered message as the GraphQL endpoints app's "No site selected". */
+.message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   box-sizing: border-box;
-  display: grid;
-  gap: 12px;
-  max-width: 480px;
-  margin: 0 auto;
-  padding: 64px 24px;
+  width: min(700px, calc(100% - 48px));
+  margin: var(--s2-spacing-600) auto 0;
+  padding: var(--s2-spacing-300);
+  border-radius: var(--s2-corner-radius-500);
+  background: var(--s2-gray-25);
+  text-align: center;
 
-  h1 {
-    margin: 0;
-    font-size: var(--s2-heading-size-l);
-    color: var(--s2-gray-900);
+  h2 {
+    margin: 0 0 var(--s2-spacing-100);
   }
 
   p {
-    margin: 0;
-  }
-
-  form {
-    display: flex;
-    align-items: flex-end;
-    gap: 12px;
-  }
-
-  se-input {
-    flex: 1;
+    margin: 0 0 var(--s2-spacing-200);
   }
 }
 

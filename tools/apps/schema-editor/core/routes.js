@@ -28,7 +28,7 @@ export const SCREENS = Object.freeze({
 /** @param {{ org?: string, site?: string|null, path?: string|null } | null} state */
 export function parseRoute(state) {
   const { org, site, path } = state ?? {};
-  if (!org || !site) return { screen: SCREENS.NONE };
+  if (!org || !site) return org ? { screen: SCREENS.NONE, org } : { screen: SCREENS.NONE };
   if (!path) return { screen: SCREENS.BROWSE, org, site };
   const name = path.replace(/\.html$/, '');
   if (validateSchemaName(name)) {
