@@ -28,24 +28,41 @@ per-site sections later.
   back/forward moves between endpoints.
 - An invalid endpoint name in the hash opens the list. An endpoint, or site
   schemas, that cannot be loaded shows an error toast and returns to the list.
-- The list shows each endpoint's path (`/graphql/{name}`) and a copy button
-  for its full URL, from the [`graphql.endpoint` config](#configuration).
-- New endpoint (⊕) opens a dialog for the name, then an unsaved endpoint screen
+- Each screen is a da.live canvas: a 48px top bar and scrolling content. The
+  bar starts with the org/site and a pencil that opens the site picker, then
+  the GraphQL › endpoints › {endpoint} trail. Without a site, the picker opens
+  on load.
+- The list's bar has the endpoint search, Sort and New. Each row shows the
+  endpoint's path (`/{org}/{site}/endpoints/{name}/graphql`) and a link that
+  opens it in [GraphiQL](../graphiql/README.md), from the same code ref (for
+  example `?ref=local`); its menu opens the endpoint or opens it in GraphiQL,
+  copies its full URL on the
+  [`sc.graphql.url` worker](#configuration), or deletes it.
+- An endpoint's bar has the Schemas and GraphQL SDL tabs, the schema search
+  (Schemas tab), the unsaved status, and Discard and Save.
+- Under 640px, the bar shows the pencil without the org/site (its tooltip names
+  it), Sort shows only its icon, and the list's bar drops the trail; its search
+  is a button that opens the field, which closes again when left empty. List
+  rows show only the name and the menu. An endpoint's bar takes two rows: the
+  pencil, endpoint and buttons over the tabs and search.
+- New opens a dialog for the name, then an unsaved endpoint screen
   at `#/{org}/{site}/endpoints/{name}`. Cancel replaces the hash with
   `#/{org}/{site}/endpoints`, and so do saving and deleting an endpoint.
 - Saving writes the config and a new SDL from the current schemas as one
   document, publishes it so the engine serves it, then returns to the list.
   If publishing fails, the document stays saved and the changes stay unsaved;
   save again to retry.
-- A saved endpoint without unsaved changes shows Resave instead of Save. It
-  regenerates the SDL from the current schemas, then saves and publishes the
-  document again, and notifies the reindex service, as Save does.
+- A saved endpoint without unsaved changes has a disabled Save; holding Shift
+  enables it to resave the endpoint: it regenerates the SDL from the current schemas,
+  then saves and publishes the document again, and notifies the reindex
+  service, as Save does.
 - Deleting unpublishes the endpoint, so the engine stops serving it, then
   removes its document. If unpublishing fails, the endpoint is kept; delete
   again to retry.
-- The Schemas tab marks schemas that are added to the saved endpoint,
-  invalid, not found, or being added or removed, and links to the schema
-  editor. The search matches titles, IDs and these statuses; with several
+- The Schemas tab opens with a short explanation of the list: the schemas the
+  endpoint serves, from which saving generates its GraphQL schema. It marks
+  schemas that are added to the saved endpoint, invalid, not found, or being
+  added or removed, and links to the schema editor. The bar search matches titles, IDs and these statuses; with several
   space-separated keywords, it lists schemas matching any of them.
 - Users without write permission on the site see the app as view only.
 - The app asks for confirmation before it discards unsaved changes, whether on
@@ -85,15 +102,15 @@ site runs on Helix 6:
 
 ## Configuration
 
-The `graphql.endpoint` key of the DA site config, else of the org config, is
-the URL pattern of the GraphQL engine's endpoints. The app replaces
-`${endpoint}`, `${org}` and `${site}`:
+The `sc.graphql.url` key of the DA site config, else of the org config, is the
+base URL of the da-sc-graphql worker (https only), as in GraphiQL:
 
 | key | value |
 | --- | --- |
-| `graphql.endpoint` | `https://graphql.example.com/graphql/${endpoint}?org=${org}&site=${site}` |
+| `sc.graphql.url` | `https://graphql-worker.example.com` |
 
-Without the key, copying gives only the engine path `/graphql/{name}`.
+An endpoint's URL is `{sc.graphql.url}/{org}/{site}/endpoints/{name}/graphql`.
+Without the key, the endpoint URL can't be copied.
 
 ## Storage contract
 
@@ -230,28 +247,33 @@ adapters/                   the app's core instance and DA config
   index.js                  core and config bound to the DA SDK
   da-api.js                 SDK fetch, DA admin, Helix 6 detection, API URLs
   da-source.js              store port over DA and the AEM source bus
-  da-config.js              `graphql.endpoint` and `sc.graphql.url` from the DA config
+  da-config.js              `sc.graphql.url` from the DA config
   sc-validator.js           da-sc-sdk validator, lazy
 ui/                         custom elements, UI helpers and icons
   endpoints-screen/         endpoint list, new endpoint dialog, delete, read-only notice
-  endpoint-screen/          one endpoint: load, save, discard, leave confirmation
+    helpers/endpoints.js    endpoint rows: filter, sort
+  endpoint-screen/          one endpoint: tabs, search and save actions in the bar
     helpers/draft.js        schema selection, dirty check, save state
-  header/                   site context, GraphQL › endpoints › name trail, screen actions slot
-  endpoint-list/            table, endpoint URLs, row actions
-  endpoint-editor/          alerts, Schemas and GraphQL SDL tabs
-  schemas-panel/            Schemas tab: search and selection table
+  new-endpoint-dialog/      asks for a new endpoint's name
+  header/                   renderHeader: the bar template with site, pencil and trail
+  endpoint-list/            list rows, endpoint URLs, row menu
+  schemas-panel/            Schemas tab: selection list, filtered by the bar search
     helpers/options.js      schema rows: filter, sort, schema status
-  sdl-panel/                GraphQL SDL tab: problems slot + lazy read-only CodeMirror
+  sdl-panel/                GraphQL SDL tab: problems + lazy read-only CodeMirror
   shared/                   generic components with no GraphQL knowledge
-    table/                  list-table styles, sort headers, empty rows, row-click delegation
+    canvas/                 canvas layout and bar chrome (groups, divider)
+    list/                   list styles and sort headings, as in the schema editor
+    sort-menu/              the bar's Sort popover
     site-picker/            choose / change the org and site
     confirm/                promise-based confirmation dialog
     inline-alert/ status-light/ message/
   utils/
     route.js                hash ⇄ route, schema editor link
+    list.js                 sort toggling, text comparison, keyword matching
     messages.js             user-facing wording: status labels, toasts
-    icons.js                S2 icons from ui/img/ as <svg><use>
-  img/                      S2 icons
+    icons.js                S2 icons from ui/img/icons/ as <svg><use>
+  img/icons/                S2 icons, also nx2's `codeBase` icons (nx-search's
+                            search and close)
 ```
 
 - Buttons, icon buttons and the loading spinner use nx2's `buttons.css`;
@@ -269,16 +291,17 @@ ui/                         custom elements, UI helpers and icons
   generation errors; `saveEndpoint` applies the same rule.
 - The entry turns the hash into a route, loads the site once from folder
   listings and the DA config (`{ org, site, endpoints, found, canWrite,
-  endpointPattern }`, or `{ error }`) and
+  serviceUrl }`, or `{ error }`) and
   passes it to the screen for the route. Before leaving a screen with unsaved
   changes it asks `gql-endpoint-screen.confirmLeave()`.
 - Schema documents are read and validated only by the endpoint screen.
-- Screens emit `route-change` (`{ route, replace, isNew }`) and
-  `endpoints-change` (`{ endpoints }`); `gql-header` emits `endpoint-add` and
-  `change-site`. Components below the screens never call the store.
-  `change-site` and `schemas-select` bubble and are composed, so they reach
-  the shell and the endpoint screen without being re-dispatched; other events
-  don't bubble.
+- Screens render their own bar with `renderHeader` and emit `route-change`
+  (`{ route, replace, isNew }`), `endpoints-change` (`{ endpoints }`) and
+  `change-site` (the pencil). Components below the screens never call the
+  store. `schemas-select` bubbles and is composed, so it reaches the endpoint
+  screen without being re-dispatched; other events don't bubble. The schemas
+  panel takes the bar search as its `query`, and the SDL panel emits
+  `schemas-show` to switch to the Schemas tab.
 
 ## Dependencies
 

@@ -17,19 +17,20 @@
 import { html, nothing } from 'da-lit';
 
 const FILES = {
-  addCircle: 's2-icon-addcircle-20-n',
   alert: 's2-icon-alerttriangle-20-n',
-  arrowUp: 's2-icon-arrowupsend-20-n',
-  close: 's2-icon-close-20-n',
-  copy: 's2-icon-copy-20-n',
-  delete: 's2-icon-delete-20-n',
+  checkmark: 's2-icon-checkmark-20-n',
+  code: 's2-icon-code-20-n',
   edit: 's2-icon-edit-20-n',
   info: 's2-icon-infocircle-20-n',
+  more: 's2-icon-more-20-n',
   openIn: 's2-icon-openin-20-n',
   search: 's2-icon-search-20-n',
+  sort: 's2-icon-sort-20-n',
+  sortDown: 's2-icon-sortdown-20-n',
+  sortUp: 's2-icon-sortup-20-n',
 };
 
-const iconHref = (name) => `${new URL(`../img/${FILES[name]}.svg`, import.meta.url).href}#icon`;
+const iconHref = (name) => `${new URL(`../img/icons/${FILES[name]}.svg`, import.meta.url).href}#icon`;
 
 // S2 icon; `label` makes it a labelled image.
 // eslint-disable-next-line import/prefer-default-export

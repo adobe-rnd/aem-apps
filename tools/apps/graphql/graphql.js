@@ -17,14 +17,15 @@
 import { html, LitElement, nothing } from 'da-lit';
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { hashChange, loadStyle } from 'https://da.live/nx2/utils/utils.js';
-import { getColorScheme } from 'https://da.live/nx2/scripts/nx.js';
+import { getColorScheme, setConfig } from 'https://da.live/nx2/scripts/nx.js';
 import { showToast, VARIANT_ERROR } from 'https://da.live/nx2/blocks/shared/toast/toast.js';
-import { core, loadEndpointPattern } from './adapters/index.js';
+import { core, loadServiceUrl } from './adapters/index.js';
 import { buildHash, isSameRoute, toRoute } from './ui/utils/route.js';
 import { messageStyle, renderLoading, renderMessage } from './ui/shared/message/message.js';
+import { canvasStyle } from './ui/shared/canvas/canvas.js';
+import { headerStyle, renderHeader } from './ui/header/header.js';
 
 import 'https://da.live/nx2/public/sl/components.js';
-import './ui/header/header.js';
 
 const EL_NAME = 'graphql-app';
 
@@ -65,7 +66,9 @@ class Graphql extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.shadowRoot.adoptedStyleSheets = [buttonStyle, messageStyle, style];
+    this.shadowRoot.adoptedStyleSheets = [
+      buttonStyle, canvasStyle, headerStyle, messageStyle, style,
+    ];
     const unsubscribeHash = hashChange.subscribe((details) => {
       const route = toRoute(details);
       const staleHash = route?.site && window.location.hash !== buildHash(route);
@@ -91,7 +94,8 @@ class Graphql extends LitElement {
 
   async openRoute(route, { isNew, confirmed } = {}) {
     const current = this._route;
-    if (isSameRoute({ route, other: current })) {
+    // The first hash event may carry no route, which still has to open the site picker.
+    if (this._opened && isSameRoute({ route, other: current })) {
       this._isNew = isNew;
       return;
     }
@@ -100,6 +104,7 @@ class Graphql extends LitElement {
       if (!await this.endpointScreen.confirmLeave() || this._route !== current) return;
       setHash({ route });
     }
+    this._opened = true;
     this._route = route;
     this._isNew = isNew;
     if (!isSameSite(route, current) || this._site?.error) this._site = undefined;
@@ -111,13 +116,13 @@ class Graphql extends LitElement {
   }
 
   async loadSite(route) {
-    const [loaded, endpointPattern] = await Promise.all([
+    const [loaded, serviceUrl] = await Promise.all([
       core.listEndpoints(route),
-      loadEndpointPattern(route),
+      loadServiceUrl(route),
     ]);
     if (this._route !== route) return;
     this._site = {
-      ...loaded, org: route.org, site: route.site, endpointPattern,
+      ...loaded, org: route.org, site: route.site, serviceUrl,
     };
   }
 
@@ -198,18 +203,20 @@ class Graphql extends LitElement {
         @change-site=${this.handleChangeSite}></gql-endpoints-screen>`;
   }
 
+  // The shell's own states, shown in the same canvas as the screens.
+  renderState() {
+    if (!this._route?.site) return this.renderNoSite();
+    if (!this._site) return renderLoading('Loading endpoints…');
+    if (this._site.error) return this.renderSiteError();
+    return this.renderSiteMissing();
+  }
+
   renderMain() {
+    if (this._site?.found && !this._site.error) return this.renderScreen();
     const { org, site } = this._route ?? {};
-    const header = html`
-      <gql-header org=${org ?? nothing} site=${site ?? nothing}
-        @change-site=${this.handleChangeSite}></gql-header>`;
-    if (!site) return html`${header}${this.renderNoSite()}`;
-    if (!this._site) {
-      return html`${header}${renderLoading('Loading endpoints…')}`;
-    }
-    if (this._site.error) return html`${header}${this.renderSiteError()}`;
-    if (!this._site.found) return html`${header}${this.renderSiteMissing()}`;
-    return this.renderScreen();
+    return html`
+      ${renderHeader({ org, site, onChangeSite: () => this.handleChangeSite() })}
+      <div class="content">${this.renderState()}</div>`;
   }
 
   renderSitePicker() {
@@ -230,6 +237,10 @@ class Graphql extends LitElement {
 customElements.define(EL_NAME, Graphql);
 
 document.documentElement.style.colorScheme = getColorScheme() === 'dark-scheme' ? 'dark' : 'light';
+// nx2 components (nx-search's icons) read `codeBase` once, on first load, to build `<use href>`
+// URLs, which must be same-origin: point it at the app's `ui/`, whose img/icons/ has those icons.
+// The screens load after this.
+await setConfig({ codeBase: new URL('ui', import.meta.url).href });
 // The adapters fetch through the DA SDK, so wait for the shell's handshake before loading data.
 await DA_SDK;
 document.body.append(document.createElement(EL_NAME));

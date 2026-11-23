@@ -1,0 +1,12 @@
+nx-dialog {
+  --nx-dialog-min-width: 480px;
+}
+
+.nx-form-field p {
+  margin: 0;
+  font-size: var(--s2-body-size-xs);
+}
+
+.field-hint {
+  color: var(--s2-gray-700);
+}

@@ -14,75 +14,54 @@
  * limitations under the License.
  */
 /* eslint-disable import/no-unresolved */
-import { html, LitElement, nothing } from 'da-lit';
+import { html, nothing } from 'da-lit';
 import { loadStyle } from 'https://da.live/nx2/utils/utils.js';
 import { buildHash, ENDPOINTS_SECTION } from '../utils/route.js';
 import { icon } from '../utils/icons.js';
 
-const [buttonStyle, style] = await Promise.all([
-  loadStyle('https://da.live/nx2/styles/buttons.css'),
-  loadStyle(import.meta.url),
-]);
+// The app's top bar, rendered by each screen into its own shadow root so the screen styles its
+// controls. Screens adopt `headerStyle` after the canvas style (ui/shared/canvas/).
+export const headerStyle = await loadStyle(import.meta.url);
 
-const EL_NAME = 'gql-header';
-
-// The trail is app-specific (GraphQL › endpoints › name), so it is not nx-breadcrumb.
-class Header extends LitElement {
-  static properties = {
-    org: { type: String },
-    site: { type: String },
-    endpoint: { type: String },
-    addable: { type: Boolean },
-    addDisabled: { type: Boolean },
-  };
-
-  connectedCallback() {
-    super.connectedCallback();
-    this.shadowRoot.adoptedStyleSheets = [buttonStyle, style];
-  }
-
-  renderSiteContext() {
-    if (!this.site) return nothing;
-    return html`
-      <div class="site-context">
-        <span>${this.org} / ${this.site}</span>
-        <button type="button" class="nx-action-btn-icon nx-btn-sm change-site"
-          title="Change site" aria-label="Change site"
-          @click=${() => this.dispatchEvent(new Event('change-site', { bubbles: true, composed: true }))}>${icon({ name: 'edit' })}</button>
-      </div>`;
-  }
-
-  renderAdd() {
-    if (!this.addable) return nothing;
-    return html`
-      <div class="crumb">
-        <button type="button" class="nx-action-btn-icon nx-btn-sm add-endpoint" title="New endpoint"
-          aria-label="New endpoint" ?disabled=${this.addDisabled}
-          @click=${() => this.dispatchEvent(new Event('endpoint-add'))}>${icon({ name: 'addCircle' })}</button>
-      </div>`;
-  }
-
-  render() {
-    const { org, site, endpoint } = this;
-    const current = (label) => html`<span class="crumb-label" aria-current="page">${label}</span>`;
-    const section = endpoint
-      ? html`<a class="crumb-label" href=${buildHash({ org, site })}>${ENDPOINTS_SECTION}</a>`
-      : current(ENDPOINTS_SECTION);
-    return html`
-      <h1 class="visually-hidden">${endpoint ?? 'GraphQL endpoints'}</h1>
-      ${this.renderSiteContext()}
-      <div class="crumb-trail">
-        <nav aria-label="Breadcrumb">
-          <ol>
-            <li class="crumb"><span class="crumb-label">GraphQL</span></li>
-            <li class="crumb">${section}</li>
-            ${endpoint ? html`<li class="crumb">${current(endpoint)}</li>` : nothing}
-          </ol>
-        </nav>
-        ${this.renderAdd()}
-      </div>
-      <slot></slot>`;
-  }
+function renderSite({ org, site, onChangeSite }) {
+  if (!site) return nothing;
+  const key = `${org}/${site}`;
+  return html`
+    <span class="site" title=${key}>${key}</span>
+    <button type="button" class="nx-action-btn-icon change-site" title="Change site (${key})"
+      aria-label="Change site, ${key}" @click=${onChangeSite}>${icon({ name: 'edit' })}</button>
+    <span class="divider" aria-hidden="true"></span>`;
 }
 
-customElements.define(EL_NAME, Header);
+// GraphQL › endpoints › {endpoint}; the trail is app-specific, so it is not nx-breadcrumb.
+function renderTrail({ org, site, endpoint }) {
+  const current = (label) => html`<span class="crumb-label" aria-current="page">${label}</span>`;
+  const section = endpoint && site
+    ? html`<a class="crumb-label" href=${buildHash({ org, site })}>${ENDPOINTS_SECTION}</a>`
+    : current(ENDPOINTS_SECTION);
+  return html`
+    <nav class="trail" aria-label="Breadcrumb">
+      <ol>
+        <li class="crumb"><span class="crumb-label">GraphQL</span></li>
+        <li class="crumb">${section}</li>
+        ${endpoint ? html`<li class="crumb">${current(endpoint)}</li>` : nothing}
+      </ol>
+    </nav>`;
+}
+
+// `center` and `end` fill the bar's center and end groups; a bar without `center` gives the
+// end group the free space, so its controls (search, sort) can grow.
+export function renderHeader({
+  org, site, endpoint, onChangeSite, center, end,
+}) {
+  return html`
+    <header class="bar ${center ? 'centered' : ''} ${endpoint ? '' : 'root'}">
+      <h1 class="sr-only">${endpoint ?? 'GraphQL endpoints'}</h1>
+      <div class="group group-start">
+        ${renderSite({ org, site, onChangeSite })}
+        ${renderTrail({ org, site, endpoint })}
+      </div>
+      ${center ? html`<div class="group group-center">${center}</div>` : nothing}
+      <div class="group group-end">${end ?? nothing}</div>
+    </header>`;
+}

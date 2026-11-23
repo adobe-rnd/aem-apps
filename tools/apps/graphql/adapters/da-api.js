@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-export const AEM_API = 'https://api.aem.live';
-export const HLX_ADMIN = 'https://admin.hlx.page';
+const AEM_API = 'https://api.aem.live';
+const HLX_ADMIN = 'https://admin.hlx.page';
 
 // The SDK's fetch adds the user's token to any URL, so only known DA admins are used.
 const DA_ADMINS = [

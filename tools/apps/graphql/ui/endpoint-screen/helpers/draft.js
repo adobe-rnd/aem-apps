@@ -44,17 +44,20 @@ export function getSaveBlocker({ draft, preview, existing = [] }) {
   return undefined;
 }
 
-// A saved endpoint without changes can be resaved: its SDL is regenerated from the current
-// schemas, then saved and published again.
+// A saved endpoint without changes can be resaved while Shift is held (`shift`): its SDL is
+// regenerated from the current schemas, then saved and published again. Until then its Save is
+// disabled.
 export function getSaveState({
-  draft, blocker, dirty, busy,
+  draft, blocker, dirty, busy, shift,
 }) {
   const pending = draft.isNew || !!dirty;
+  const resave = !pending && !!shift;
   // The Schemas tab explains an empty selection, so it isn't repeated next to Save.
   const showHint = blocker && blocker !== NO_SCHEMAS_MESSAGE;
   return {
-    canSave: !blocker && !busy,
-    resave: !pending,
+    canSave: !blocker && !busy && (pending || resave),
+    pending,
+    resave,
     hint: showHint ? blocker : undefined,
   };
 }

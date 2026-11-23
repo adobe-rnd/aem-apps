@@ -1,0 +1,103 @@
+/* A screen as a da.live canvas, like the schema editor's: a fixed 48px top bar that never wraps
+ * and, under it, content that scrolls. The host is an inline-size container for narrow rules. */
+:host {
+  /* The da.live form editor's preview font, as in the schema editor; nx2 has no code font. */
+  --gql-code-font-family: consolas, monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+
+  /* The schema editor's text: the form editor's control size, in gray 800. */
+  font-family: var(--s2-font-family);
+  font-size: var(--s2-body-size-s);
+  color: var(--s2-gray-800);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.bar {
+  box-sizing: border-box;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  height: 48px;
+  padding: 0 12px;
+  border-block-end: 1px solid var(--s2-gray-200);
+  background: light-dark(#fff, var(--s2-gray-25));
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Start and end share the free space equally, so a center group stays centered. */
+.group-start,
+.group-end {
+  flex: 1 1 0;
+}
+
+.group-center {
+  flex: none;
+}
+
+.group-end {
+  justify-content: flex-end;
+}
+
+/* Zero specificity: a screen's own rule lets a child shrink (the trail, a hint, a search). */
+:where(.group-start, .group-end) > * {
+  flex: none;
+}
+
+.divider {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--s2-gray-300);
+}
+
+.bar nx-search {
+  flex: 0 1 240px;
+  min-width: 96px;
+}
+
+.bar :is(.nx-action-btn, .nx-action-btn-quiet, .nx-btn-accent) {
+  white-space: nowrap;
+}
+
+/* The da.live browse New button: an accent pill with no add icon. */
+.new-btn {
+  min-width: 88px;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.page {
+  container-type: inline-size;
+  box-sizing: border-box;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 24px 48px;
+}

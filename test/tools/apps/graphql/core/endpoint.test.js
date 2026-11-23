@@ -16,7 +16,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createConfig, getEndpointHref, getEndpointPath, isValidEndpointName,
+  createConfig, getEndpointPath, getEndpointUrl, isValidEndpointName,
   NO_SCHEMAS_MESSAGE, parseConfig, serializeEndpoint, validateConfig, validateEndpointName,
 } from '../../../../../tools/apps/graphql/core/endpoint.js';
 
@@ -67,21 +67,18 @@ describe('config', () => {
 describe('endpoint URL', () => {
   const args = { name: 'shop', org: 'acme', site: 'web' };
 
-  it('fills the pattern placeholders', () => {
-    // eslint-disable-next-line no-template-curly-in-string
-    const pattern = 'https://gql.example/graphql/${endpoint}?org=${org}&site=${site}';
-    assert.equal(getEndpointHref({ pattern, ...args }), 'https://gql.example/graphql/shop?org=acme&site=web');
+  it('is the worker path, encoded', () => {
+    assert.equal(getEndpointPath(args), '/acme/web/endpoints/shop/graphql');
+    assert.equal(getEndpointPath({ ...args, org: 'a&b' }), '/a%26b/web/endpoints/shop/graphql');
   });
 
-  it('fills repeated placeholders and encodes values', () => {
-    // eslint-disable-next-line no-template-curly-in-string
-    const pattern = 'https://gql.example/${org}/${org}/${site}';
-    assert.equal(getEndpointHref({ pattern, ...args, org: 'a&b' }), 'https://gql.example/a%26b/a%26b/web');
+  it('joins the path to the service URL', () => {
+    const serviceUrl = 'https://gql.example';
+    assert.equal(getEndpointUrl({ serviceUrl, ...args }), 'https://gql.example/acme/web/endpoints/shop/graphql');
   });
 
-  it('falls back to the engine path without a pattern', () => {
-    assert.equal(getEndpointPath('shop'), '/graphql/shop');
-    assert.equal(getEndpointHref(args), '/graphql/shop');
+  it('is undefined without a service URL', () => {
+    assert.equal(getEndpointUrl(args), undefined);
   });
 });
 

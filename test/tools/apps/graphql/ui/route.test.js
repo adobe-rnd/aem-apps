@@ -16,7 +16,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildHash, getSchemaEditorHref, isSameRoute, toRoute,
+  buildHash, getGraphiqlHref, getSchemaEditorHref, isSameRoute, toRoute,
 } from '../../../../../tools/apps/graphql/ui/utils/route.js';
 
 describe('route', () => {
@@ -48,5 +48,19 @@ describe('route', () => {
     assert.equal(isSameRoute({
       route: { org: 'o', site: 's' }, other: { org: 'o', site: 's', endpoint: 'e' },
     }), false);
+  });
+});
+
+describe('getGraphiqlHref', () => {
+  const app = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/graphiql/graphiql';
+  const href = (host) => getGraphiqlHref({
+    org: 'o', site: 's', endpoint: 'main', host,
+  });
+
+  it('opens the endpoint from the same code ref', () => {
+    assert.equal(href('main--aem-apps--adobe-rnd.aem.page'), `${app}#/o/s/main`);
+    assert.equal(href('graphql-sdl--aem-apps--adobe-rnd.aem.live'), `${app}?ref=graphql-sdl#/o/s/main`);
+    assert.equal(href('localhost'), `${app}?ref=local#/o/s/main`);
+    assert.equal(href('example.com'), `${app}#/o/s/main`);
   });
 });

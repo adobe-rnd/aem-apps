@@ -1,0 +1,39 @@
+:host {
+  display: flex;
+}
+
+.sort-btn {
+  white-space: nowrap;
+}
+
+.sort-popover {
+  box-sizing: border-box;
+  width: 200px;
+  max-width: calc(100vw - 16px);
+  padding: 8px;
+  border-radius: 10px;
+  color: var(--s2-gray-800);
+  font-size: 14px;
+}
+
+.sort-option {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 7px 12px;
+
+  .check {
+    width: 16px;
+    height: 18px;
+  }
+
+  .unchecked {
+    visibility: hidden;
+  }
+}
+
+/* A narrow canvas keeps the icon; the button's label still names the sort. */
+@container (width < 640px) {
+  .sort-btn .label {
+    display: none;
+  }
+}

@@ -1,62 +1,43 @@
-:host {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--s2-spacing-200) var(--s2-spacing-300);
+/* Without a center group the controls take the room; the trail gives way before the site. */
+.bar:not(.centered) {
+  .group-start {
+    flex: 0 1 auto;
+  }
+
+  .group-end {
+    flex: 1 1000 auto;
+    min-width: auto;
+  }
 }
 
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: 0;
+/* The site comes first, like the root of the trail: it shrinks before the trail does. */
+.site {
+  flex: 0 1 auto;
   overflow: hidden;
-  clip-path: inset(50%);
+  min-width: 48px;
+  max-width: 32ch;
+  padding-inline-start: 6px;
+  font-size: var(--s2-component-m-regular-font-size);
+  color: var(--s2-gray-700);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Sits in the top band reserved by the app's padding, at the card's right edge. */
-.site-context {
-  position: absolute;
-  top: 20px;
-  inset-inline-end: 20px;
-  display: flex;
-  align-items: center;
-  gap: var(--s2-spacing-50);
-  max-width: calc(100% - 40px);
-  font-size: var(--s2-component-m-regular-font-size);
-  color: var(--s2-gray-700);
-
-  span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+.group-start .trail {
+  flex: 0 1 auto;
+  min-width: 48px;
 }
 
-.crumb-trail {
+.trail ol {
   display: flex;
   align-items: center;
   min-width: 0;
+  margin: 0;
+  padding: 0 6px;
+  list-style: none;
+  font-size: var(--s2-component-l-regular-font-size, 16px);
+  line-height: 20px;
   color: var(--s2-gray-700);
-
-  /* The sl-button height, so the trail doesn't move when Save appears. */
-  min-height: 32px;
-
-  nav {
-    min-width: 0;
-  }
-
-  ol {
-    display: flex;
-    align-items: center;
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    font-size: var(--s2-component-l-regular-font-size);
-    line-height: var(--s2-component-m-regular-line-height);
-  }
 }
 
 .crumb {
@@ -65,33 +46,18 @@
   min-width: 0;
 
   &:not(:first-child)::before {
-    position: relative;
-    top: 2px;
     flex-shrink: 0;
     width: 8px;
     height: 8px;
     margin-inline: var(--s2-spacing-75);
     background-color: currentcolor;
-    mask: url('/tools/apps/graphql/ui/img/s2-icon-chevronleft-10-n.svg') center / contain no-repeat;
+    mask: url('/tools/apps/graphql/ui/img/icons/s2-icon-chevronleft-10-n.svg') center / contain no-repeat;
     content: '';
   }
-}
 
-/* Same 2px optical offset as the chevron, so ⊕ centres on the text's x-height. */
-.add-endpoint {
-  position: relative;
-  top: 2px;
-}
-
-/* An 18px icon in a 24px button, like da-live browse's new button. */
-.nx-action-btn-icon.add-endpoint {
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-
-  svg {
-    width: 18px;
-    height: 18px;
+  /* The current crumb keeps its room longest. */
+  &:not(:last-child) {
+    flex-shrink: 100;
   }
 }
 
@@ -104,19 +70,70 @@
   white-space: nowrap;
 
   &[aria-current] {
-    color: var(--s2-gray-800);
-    font-weight: var(--s2-component-m-bold-font-weight);
+    font-weight: 700;
+    color: var(--s2-gray-900);
   }
 }
 
 a.crumb-label {
   &:hover {
-    color: var(--s2-gray-800);
+    color: var(--s2-gray-900);
   }
 
   &:focus-visible {
     border-radius: var(--s2-corner-radius-100);
     outline: 2px solid var(--s2-blue-800);
     outline-offset: 2px;
+  }
+}
+
+/* A screen's search button stands in for its search on a narrow bar only. */
+.search-toggle {
+  display: none;
+}
+
+/* A narrow bar keeps the pencil, which names the site, and only the current crumb, none on the
+ * list. A bar without a center group sheds its groups, so an open search takes the free room;
+ * a closed one is its button. */
+@container (width < 640px) {
+  .site {
+    display: none;
+  }
+
+  .bar:not(.centered) {
+    gap: 4px;
+
+    .group {
+      display: contents;
+    }
+
+    .group-end > :first-child {
+      margin-inline-start: auto;
+    }
+
+    nx-search {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    nx-search.collapsed {
+      display: none;
+    }
+
+    .search-toggle {
+      display: flex;
+    }
+  }
+
+  .bar.root .change-site ~ :is(.divider, .trail) {
+    display: none;
+  }
+
+  .crumb:not(:last-child) {
+    display: none;
+  }
+
+  .crumb:last-child::before {
+    display: none;
   }
 }

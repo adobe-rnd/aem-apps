@@ -52,35 +52,42 @@ describe('draft', () => {
   it('decides whether Save is enabled and why not', () => {
     const saved = { name: 'main', isNew: false };
     const fresh = { name: '', isNew: true };
-    const enabled = { canSave: true, resave: false, hint: undefined };
+    const enabled = {
+      canSave: true, pending: true, resave: false, hint: undefined,
+    };
     assert.deepEqual(getSaveState({ draft: saved, dirty: true }), enabled);
     assert.deepEqual(getSaveState({ draft: { ...fresh, name: 'main' } }), enabled);
     assert.equal(getSaveState({ draft: saved, dirty: true, busy: true }).canSave, false);
     assert.deepEqual(
       getSaveState({ draft: saved, dirty: true, blocker: 'Fix it.' }),
-      { canSave: false, resave: false, hint: 'Fix it.' },
+      { ...enabled, canSave: false, hint: 'Fix it.' },
     );
     assert.deepEqual(
       getSaveState({ draft: fresh, blocker: 'Select a schema.' }),
-      { canSave: false, resave: false, hint: 'Select a schema.' },
+      { ...enabled, canSave: false, hint: 'Select a schema.' },
     );
     assert.deepEqual(
       getSaveState({ draft: fresh, blocker: NO_SCHEMAS_MESSAGE }),
-      { canSave: false, resave: false, hint: undefined },
+      { ...enabled, canSave: false },
     );
   });
 
-  it('offers to resave a saved endpoint without changes', () => {
+  it('resaves a saved endpoint without changes only while Shift is held', () => {
     const saved = { name: 'main', isNew: false };
+    const idle = {
+      canSave: false, pending: false, resave: false, hint: undefined,
+    };
+    assert.deepEqual(getSaveState({ draft: saved }), idle);
     assert.deepEqual(
-      getSaveState({ draft: saved }),
-      { canSave: true, resave: true, hint: undefined },
+      getSaveState({ draft: saved, shift: true }),
+      { ...idle, canSave: true, resave: true },
     );
-    assert.equal(getSaveState({ draft: saved, busy: true }).canSave, false);
+    assert.equal(getSaveState({ draft: saved, shift: true, busy: true }).canSave, false);
     assert.deepEqual(
-      getSaveState({ draft: saved, blocker: 'Fix it.' }),
-      { canSave: false, resave: true, hint: 'Fix it.' },
+      getSaveState({ draft: saved, shift: true, blocker: 'Fix it.' }),
+      { ...idle, resave: true, hint: 'Fix it.' },
     );
+    assert.equal(getSaveState({ draft: saved, dirty: true, shift: true }).resave, false);
   });
 
   it('selects and clears several schemas at once', () => {

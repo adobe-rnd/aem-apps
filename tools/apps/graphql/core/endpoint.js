@@ -22,18 +22,14 @@ export function createConfig({ name, schemas = [] }) {
   return { name, schemas: [...new Set(ids)].sort() };
 }
 
-export const getEndpointPath = (name) => `/graphql/${name}`;
+// An endpoint's path on the da-sc-graphql worker, as GraphiQL queries it.
+export const getEndpointPath = ({ org, site, name }) => `/${[org, site, 'endpoints', name, 'graphql']
+  .map(encodeURIComponent).join('/')}`;
 
-const URL_PLACEHOLDER = /\$\{(endpoint|org|site)\}/g;
-
-// The endpoint's URL from a pattern with ${endpoint}, ${org} and ${site}, else its engine path.
-export function getEndpointHref({
-  pattern, name, org, site,
-}) {
-  if (!pattern) return getEndpointPath(name);
-  const values = { endpoint: name, org, site };
-  return pattern.replace(URL_PLACEHOLDER, (_, key) => encodeURIComponent(values[key]));
-}
+// The endpoint's URL on the worker at `serviceUrl` (`sc.graphql.url`); undefined without it.
+export const getEndpointUrl = ({
+  serviceUrl, org, site, name,
+}) => (serviceUrl ? `${serviceUrl}${getEndpointPath({ org, site, name })}` : undefined);
 
 export function validateEndpointName({ name, existing = [] }) {
   if (!name) return 'An endpoint name is required.';

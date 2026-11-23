@@ -40,3 +40,21 @@ export const isSameRoute = ({ route, other }) => ROUTE_KEYS
   .every((key) => route?.[key] === other?.[key]);
 
 export const getSchemaEditorHref = ({ origin, org, site }) => `${origin}/apps/schema#/${org}/${site}`;
+
+const GRAPHIQL_APP = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/graphiql/graphiql';
+
+// The code ref this app is served from: `local` on localhost, the branch on `{ref}--aem-apps--…`.
+function codeRef(host = '') {
+  if (host === 'localhost' || host === '127.0.0.1') return 'local';
+  const [ref, repo] = host.split('.')[0].split('--');
+  return repo === 'aem-apps' && ref !== 'main' ? ref : undefined;
+}
+
+// The GraphiQL app on the endpoint, from the same code ref as this app.
+export function getGraphiqlHref({
+  org, site, endpoint, host,
+}) {
+  const ref = codeRef(host);
+  const query = ref ? `?ref=${encodeURIComponent(ref)}` : '';
+  return `${GRAPHIQL_APP}${query}#/${org}/${site}/${endpoint}`;
+}

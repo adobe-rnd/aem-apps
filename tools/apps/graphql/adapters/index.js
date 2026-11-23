@@ -17,7 +17,7 @@
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { createGraphqlCore } from '../core/operations.js';
 import { createDaApi } from './da-api.js';
-import { loadEndpointPattern as loadPattern, loadReindexUrl } from './da-config.js';
+import { loadServiceUrl as loadUrl } from './da-config.js';
 import { createDaStore } from './da-source.js';
 import { createReindexNotifier } from './reindex.js';
 import { loadValidator } from './sc-validator.js';
@@ -25,13 +25,21 @@ import { loadValidator } from './sc-validator.js';
 // Requests wait for the shell's DA SDK handshake and go through its token-aware fetch.
 const api = createDaApi(DA_SDK);
 
-const notifyReindex = createReindexNotifier({
-  loadUrl: ({ org, site }) => loadReindexUrl({ api, org, site }),
-});
+// One lookup per site, shared by the app and the reindex notifier; a failed one is retried.
+const serviceUrls = new Map();
+export const loadServiceUrl = ({ org, site }) => {
+  const key = `/${org}/${site}`;
+  if (!serviceUrls.has(key)) {
+    const pending = loadUrl({ api, org, site });
+    pending.catch(() => serviceUrls.delete(key));
+    serviceUrls.set(key, pending);
+  }
+  return serviceUrls.get(key);
+};
+
+const notifyReindex = createReindexNotifier({ loadUrl: loadServiceUrl });
 
 export const core = createGraphqlCore({
   store: createDaStore(api, { notifyReindex }),
   loadValidator,
 });
-
-export const loadEndpointPattern = ({ org, site }) => loadPattern({ api, org, site });

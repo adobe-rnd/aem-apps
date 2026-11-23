@@ -1,16 +1,10 @@
+/* The app is one canvas (ui/shared/canvas/): each screen fills it with its own bar. */
 :host {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2-spacing-400);
-  box-sizing: border-box;
-  width: 100%;
+  height: 100vh;
+}
 
-  /* Top: a 64px band for the site context, plus 20px; sides: keep content at the grid width. */
-  padding: 84px max(0px, (100% - var(--se-grid-container-width)) / 2) 20px;
-
-  @media (width >= 900px) {
-    height: 100vh;
-    min-height: 640px;
-  }
+gql-endpoints-screen,
+gql-endpoint-screen {
+  flex: 1;
+  min-height: 0;
 }

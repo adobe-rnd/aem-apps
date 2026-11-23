@@ -1,23 +1,90 @@
-:host {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--s2-spacing-400);
-}
+/* The controls give way, in turn, to the save buttons. */
+.group-end {
+  gap: 8px;
 
-.save-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--s2-spacing-300);
-  margin-inline-start: auto;
+  /* Discard and Cancel share Save's pill shape, in the neutral action color. */
+  .discard {
+    border-radius: var(--s2-corner-radius-800);
+    font-weight: var(--s2-component-m-bold-font-weight);
+  }
 
   .hint {
-    margin: 0;
+    flex: 0 1 auto;
+    overflow: hidden;
+    min-width: 32px;
     color: var(--s2-gray-700);
     font-size: var(--s2-body-size-s);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .status-light {
+    flex: 0 1 auto;
+    overflow: hidden;
+    min-width: 16px;
+    text-overflow: ellipsis;
   }
 }
 
-gql-endpoint-editor {
-  flex: 1;
+.bar nx-search.off {
+  visibility: hidden;
+}
+
+/* The SDL editor fills the page's height, in the body width, and scrolls inside itself. */
+.page.graphql {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  gql-sdl-panel {
+    flex: 1;
+    min-height: 0;
+  }
+}
+
+/* Narrow canvas: the bar takes two rows, the site, endpoint and buttons over the tabs and the
+ * search; the hint and the status light give their room to the buttons. */
+@container (width < 640px) {
+  .bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'start discard save'
+      'tabs search search';
+    gap: 8px;
+    height: auto;
+    padding-block: 8px;
+  }
+
+  .group-start {
+    grid-area: start;
+  }
+
+  .group-center {
+    grid-area: tabs;
+    justify-self: start;
+  }
+
+  .group-end {
+    display: contents;
+
+    /* No intrinsic width, so the search fills its row without widening the buttons above. */
+    nx-search {
+      grid-area: search;
+      min-width: 0;
+      contain: inline-size;
+    }
+
+    .discard {
+      grid-area: discard;
+    }
+
+    .save {
+      grid-area: save;
+    }
+
+    :is(.hint, .status-light) {
+      display: none;
+    }
+  }
 }

@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { compareText, matchKeywords } from '../../utils/list.js';
+
 // A row's unsaved change against the saved selection; none for a new endpoint.
 const getChange = ({ selected, wasSelected, saved }) => {
   if (!saved || selected === wasSelected) return undefined;
@@ -62,18 +64,17 @@ export function getSchemaStatus({
 // Keeps rows where any whitespace-separated keyword is in the id, title or status label.
 // `statusLabel(option)` lets the view make its status wording searchable too.
 export function filterSchemaOptions({ options = [], query = '', statusLabel }) {
-  const keywords = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (!keywords.length) return options;
-  return options.filter((option) => [option.id, option.title, statusLabel?.(option)]
-    .some((value) => keywords.some((keyword) => value?.toLowerCase().includes(keyword))));
+  return matchKeywords({
+    values: options,
+    query,
+    fields: (option) => [option.id, option.title, statusLabel?.(option)],
+  });
 }
 
 export function countChanges(options = []) {
   const count = (change) => options.filter((option) => option.change === change).length;
   return { adding: count('adding'), removing: count('removing') };
 }
-
-const compareText = (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
 
 const COMPARE = {
   id: (a, b) => compareText(a.id, b.id),

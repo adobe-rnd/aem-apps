@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-const ENDPOINT_PATTERN_KEY = 'graphql.endpoint';
-const REINDEX_URL_KEY = 'sc.graphql.url';
+const KEY = 'sc.graphql.url';
 
 // DA serves a config as a sheet; the source bus serves a site's as `{ [sheetName]: rows }`.
 function firstSheetRows(json, hlx6) {
@@ -24,40 +23,24 @@ function firstSheetRows(json, hlx6) {
   return json[json[':names']?.[0]]?.data;
 }
 
-async function readValue({
-  api, url, hlx6, key,
-}) {
+async function readValue({ api, url, hlx6 }) {
   const resp = await api.request(url);
   const json = resp?.ok ? await resp.json().catch(() => undefined) : undefined;
   const rows = firstSheetRows(json, hlx6);
   if (!Array.isArray(rows)) return undefined;
-  return rows.find((row) => row?.key === key)?.value;
+  return rows.find((row) => row?.key === KEY)?.value;
 }
 
-// The site's value of `key` in the config's first sheet, else the org's.
-async function loadValue({
-  api, org, site, key,
-}) {
+// The da-sc-graphql worker's base URL: the site's `sc.graphql.url`, else the org's; undefined
+// unless an https URL. It serves the endpoints and takes reindex notifications.
+// eslint-disable-next-line import/prefer-default-export
+export async function loadServiceUrl({ api, org, site }) {
   const { hlx6, orgConfig, siteConfig } = await api.locate(`/${org}/${site}`);
   const [orgValue, siteValue] = await Promise.all([
-    readValue({ api, url: orgConfig, key }),
-    readValue({
-      api, url: siteConfig, hlx6, key,
-    }),
+    readValue({ api, url: orgConfig }),
+    readValue({ api, url: siteConfig, hlx6 }),
   ]);
-  return siteValue || orgValue;
-}
-
-// The site's `graphql.endpoint` URL pattern, else the org's; undefined when unset or unreadable.
-export const loadEndpointPattern = ({ api, org, site }) => loadValue({
-  api, org, site, key: ENDPOINT_PATTERN_KEY,
-});
-
-// The site's `sc.graphql.url`, else the org's; undefined unless an https URL.
-export async function loadReindexUrl({ api, org, site }) {
-  const value = await loadValue({
-    api, org, site, key: REINDEX_URL_KEY,
-  });
+  const value = siteValue || orgValue;
   try {
     const url = new URL(String(value ?? '').trim());
     return url.protocol === 'https:' ? url.href.replace(/\/+$/, '') : undefined;
