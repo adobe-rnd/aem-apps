@@ -504,12 +504,11 @@ class PublishRequestsApp extends LitElement {
       const fresh = await this.prepareApproval(request);
       let versionWarning = null;
       if (fresh.isFinal) {
-        // Snapshot the approved source in DA; a failed version warns but does not block publish.
-        const version = await createVersion(this._org, this._site, fresh.path);
-        if (!version.success) versionWarning = `DA version not created (${version.error}).`;
         const publication = await publishContent(this._org, this._site, fresh.path);
         if (!publication.success) return publication;
         published = true;
+        const version = await createVersion(this._org, this._site, fresh.path);
+        if (!version.success) versionWarning = `DA version not created (${version.error}).`;
       }
       const result = await approveRequests(
         this._org, this._site, [fresh.path], this.token, fresh.stepInfo.current, fresh.isFinal,
@@ -689,20 +688,12 @@ published,
 
     let publishedPaths = [];
     let publishError = null;
-    let versionWarning = null;
 
     // Only requests on their last staffed step may go live.
     if (finals.length > 0) {
       const paths = finals.map((r) => r.path);
       this._message = { type: 'info', text: `Starting bulk publish of ${paths.length} pages...` };
       this.requestUpdate();
-
-      // Snapshot each approved source in DA; failures warn but do not block publish.
-      const versions = await Promise.all(paths.map((path) => createVersion(
-        this._org, this._site, path,
-      )));
-      const unversioned = paths.filter((path, i) => !versions[i].success);
-      if (unversioned.length) versionWarning = `DA version not created for: ${unversioned.join(', ')}.`;
 
       try {
         const bulkResult = await bulkPublishContent(this._org, this._site, paths);
@@ -719,12 +710,18 @@ published,
             publishError = `Publication not confirmed for: ${unconfirmed.join(', ') || 'remaining job resources'}. ${jobResult.error || ''} Check the live pages before retrying.`;
           }
         } else {
-          publishedPaths = paths;
+          publishError = 'Bulk publication could not be confirmed. No job link was returned. Check the live pages before retrying.';
         }
       } catch (error) {
         publishError = `Bulk publish could not be confirmed. ${error.message}`;
       }
     }
+
+    const versions = await Promise.all(publishedPaths.map((path) => createVersion(
+      this._org, this._site, path,
+    )));
+    const unversioned = publishedPaths.filter((path, i) => !versions[i].success);
+    const versionWarning = unversioned.length ? `DA version not created for: ${unversioned.join(', ')}.` : null;
 
     const publishedSet = new Set(publishedPaths);
     const finalResult = await this.approveGrouped(finals.filter((r) => publishedSet.has(r.path)));

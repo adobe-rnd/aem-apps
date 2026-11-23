@@ -104,14 +104,13 @@ single approval promotes the current preview with
 for paths with confirmed success. Intermediate approvals perform no Helix content
 operation. Review links compare preview versus live in the Page Status diff tool.
 
-Before each final publish (single or bulk), the inbox creates a DA version of the
-page source labelled **Approved & Published** with
-`POST https://admin.da.live/versionsource/{org}/{site}/{path}.html` (paths that
-already have an extension, such as `.json`, are kept). A failed version shows a
-warning but does not block publication. The version captures the current DA
-source, which can differ from the preview being published if the page was edited
-after its last preview. Helix 6 sites (content in the AEM source bus) are not
-supported and will show the warning.
+After a final publish is confirmed, the inbox creates an **Approved & Published**
+DA version for each existing page or JSON sheet. It skips media files and
+requires DA read and write access to the source. If a source check or version
+fails, the inbox shows a warning without undoing the publish. The version
+captures the current DA source, not the published preview. Creating this version
+updates the source's last-modified time. DA versioning in this inbox does not
+support Helix 6 sites (content in the AEM source bus).
 
 **I-5 remains unresolved: unpinned preview.** The reviewed preview is not frozen
 at submission. If an author re-previews before the approval click, live-only

@@ -505,12 +505,11 @@ class PublishRequestsApp extends LitElement {
     this._message = null;
 
     try {
-      // Snapshot the approved source in DA; a failed version warns but does not block publish.
-      const versionWarning = await this.versionBeforePublish([this._path]);
       // Publish the content via Helix Admin API (under the user's session)
       const result = await publishContent(this._org, this._site, this._path);
 
       if (result.success) {
+        const versionWarning = await this.versionPublishedPaths([this._path]);
         this._state = 'approved';
         // Record the approval server-side: removes the pending row + emails the author.
         const bookkeep = await approveRequests(this._org, this._site, [this._path], this.token);
@@ -560,11 +559,10 @@ class PublishRequestsApp extends LitElement {
   // ======== Inbox action handlers ========
 
   /**
-   * Create an "Approved & Published" DA version for each path before publishing.
-   * Failures never block publication.
+   * Create DA versions for confirmed published paths.
    * @returns {Promise<string>} Warning text (leading space) or '' when all succeeded.
    */
-  async versionBeforePublish(paths) {
+  async versionPublishedPaths(paths) {
     const versions = await Promise.all(paths.map((path) => createVersion(
       this._org, this._site, path,
     )));
@@ -580,10 +578,10 @@ class PublishRequestsApp extends LitElement {
     this._processingPaths = new Set([...this._processingPaths, request.path]);
     this.requestUpdate();
 
-    const versionWarning = await this.versionBeforePublish([request.path]);
     const result = await publishContent(this._org, this._site, request.path);
 
     if (result.success) {
+      const versionWarning = await this.versionPublishedPaths([request.path]);
       this._pendingRequests = this._pendingRequests.filter((r) => r.path !== request.path);
       // Record approval server-side (sheet removal + author email).
       const bookkeep = await approveRequests(this._org, this._site, [request.path], this.token);
@@ -608,9 +606,6 @@ class PublishRequestsApp extends LitElement {
     const allPaths = this._pendingRequests.map((r) => r.path);
     const totalCount = allPaths.length;
 
-    // Snapshot each approved source in DA; failures warn but do not block publish.
-    const versionWarning = await this.versionBeforePublish(allPaths);
-
     // Use bulk publish API for all paths in a single request
     // https://www.aem.live/docs/admin.html#tag/publish/operation/bulkPublish
     this._message = { type: 'info', text: `Starting bulk publish of ${totalCount} pages...` };
@@ -620,62 +615,55 @@ class PublishRequestsApp extends LitElement {
 
     if (!bulkResult.success) {
       this._approveAllProcessing = false;
-      this._message = { type: 'error', text: `Bulk publish failed: ${bulkResult.error}${versionWarning}` };
+      this._message = { type: 'error', text: `Bulk publish failed: ${bulkResult.error}` };
       return;
     }
 
-    // Poll the job until it completes using the self link from the response
     const jobSelfUrl = bulkResult.links?.self;
-    if (jobSelfUrl) {
-      this._message = { type: 'info', text: 'Bulk publish job started. Waiting for completion...' };
-      this.requestUpdate();
-
-      const jobResult = await pollJobStatus(jobSelfUrl);
-
-      if (!jobResult.success) {
-        this._approveAllProcessing = false;
-        this._message = {
-          type: 'error',
-          text: `Bulk publish job did not complete in time. Some pages may still be publishing. ${jobResult.error || ''}${versionWarning}`,
-        };
-        return;
-      }
-
-      // Check for any failures in the job details
-      const jobData = jobResult.job;
-      // 200 = published, 304 = already up-to-date — both are success
-      const failedResources = jobData?.data?.resources
-        ?.filter((r) => r.status !== 200 && r.status !== 304) || [];
-
-      if (failedResources.length > 0) {
-        const failedPaths = failedResources.map((r) => r.path);
-        const succeededPaths = allPaths.filter((p) => !failedPaths.includes(p));
-        let partialNotifyError = null;
-
-        // Record approval for the succeeded paths (sheet removal + author email).
-        if (succeededPaths.length > 0) {
-          const bookkeep = await approveRequests(this._org, this._site, succeededPaths, this.token);
-          if (!bookkeep.success) partialNotifyError = bookkeep.error;
-        }
-
-        const succeededSet = new Set(succeededPaths);
-        this._pendingRequests = this._pendingRequests.filter((r) => !succeededSet.has(r.path));
-
-        this._approveAllProcessing = false;
-        this._message = {
-          type: 'error',
-          text: `Published ${succeededPaths.length} of ${totalCount}. Failed: ${failedPaths.join(', ')}${partialNotifyError ? ` Author notification failed: ${partialNotifyError}` : ''}${versionWarning}`,
-        };
-        return;
-      }
+    if (!jobSelfUrl) {
+      this._approveAllProcessing = false;
+      this._message = { type: 'error', text: 'Bulk publication could not be confirmed. No job link was returned. Check the live pages before retrying.' };
+      return;
     }
 
-    // All succeeded — record approval for all paths (sheet removal + author email).
-    const bookkeep = await approveRequests(this._org, this._site, allPaths, this.token);
+    this._message = { type: 'info', text: 'Bulk publish job started. Waiting for completion...' };
+    this.requestUpdate();
+
+    const jobResult = await pollJobStatus(jobSelfUrl);
+    if (!jobResult.success) {
+      this._approveAllProcessing = false;
+      this._message = {
+        type: 'error',
+        text: `Bulk publish job did not complete in time. Some pages may still be publishing. ${jobResult.error || ''}`,
+      };
+      return;
+    }
+
+    // 200 = published, 304 = already up-to-date.
+    const confirmed = new Set((jobResult.job?.data?.resources || [])
+      .filter((r) => r.status === 200 || r.status === 304)
+      .map((r) => r.path));
+    const succeededPaths = allPaths.filter((path) => confirmed.has(path));
+    const unconfirmedPaths = allPaths.filter((path) => !confirmed.has(path));
+    const versionWarning = await this.versionPublishedPaths(succeededPaths);
+    // Record approval only for the published paths (sheet removal + author email).
+    const bookkeep = succeededPaths.length
+      ? await approveRequests(this._org, this._site, succeededPaths, this.token)
+      : { success: true };
+
+    this._pendingRequests = this._pendingRequests.filter((r) => !confirmed.has(r.path));
+    this._approveAllProcessing = false;
+
+    if (unconfirmedPaths.length) {
+      this._message = {
+        type: 'error',
+        text: `Published ${succeededPaths.length} of ${totalCount}. Publication not confirmed for: ${unconfirmedPaths.join(', ')}.${bookkeep.success ? '' : ` Author notification failed: ${bookkeep.error}`}${versionWarning}`,
+      };
+      return;
+    }
+
     const bulkNotifyError = bookkeep.success ? null : bookkeep.error;
 
-    this._pendingRequests = [];
-    this._approveAllProcessing = false;
     this._message = bulkNotifyError
       ? { type: 'info', text: `All ${totalCount} requests published. Author notification failed: ${bulkNotifyError}${versionWarning}` }
       : {

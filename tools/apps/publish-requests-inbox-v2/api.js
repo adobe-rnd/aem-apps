@@ -165,43 +165,46 @@ export async function fetchAccentSettings(org, site, token) {
 }
 
 // ===========================================================================
-// DA version (admin.da.live — snapshot of the source before final publish)
+// DA version (admin.da.live — snapshot of the current source after publish)
 // ===========================================================================
 
-export const PUBLISH_VERSION_LABEL = 'Approved & Published';
+const PUBLISH_VERSION_LABEL = 'Approved & Published';
 
 /**
- * DA source path for a request path: extensionless paths are pages (`.html`);
- * paths with an extension (e.g. `.json`) are kept.
+ * DA source path for a page or sheet. Media files are not versioned.
  * @param {string} path - Site-relative content path
- * @returns {string} Source path without leading slash
+ * @returns {string|null} Source path without leading slash, or null for unsupported files
  */
 export function versionSourcePath(path) {
   const cleanPath = path.replace(/^\/+/, '');
   const lastSegment = cleanPath.split('/').pop();
-  return lastSegment.includes('.') ? cleanPath : `${cleanPath}.html`;
+  if (!lastSegment) return null;
+  if (!lastSegment.includes('.')) return `${cleanPath}.html`;
+  return /\.(html|json)$/.test(lastSegment) ? cleanPath : null;
 }
 
 /**
- * Create a labelled DA version of the page source.
- * POST https://admin.da.live/versionsource/{org}/{site}/{path}.html
+ * Create a labelled version of an existing DA page or sheet.
  * @param {string} org - Organization
  * @param {string} site - Site
  * @param {string} path - Content path (site-relative)
- * @param {string} [label] - Version label
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-export async function createVersion(org, site, path, label = PUBLISH_VERSION_LABEL) {
+export async function createVersion(org, site, path) {
   try {
     const sourcePath = versionSourcePath(path);
-    const response = await daFetch(`${DA_ADMIN}/versionsource/${org}/${site}/${sourcePath}`, {
+    if (!sourcePath) return { success: true };
+
+    const key = `${org}/${site}/${sourcePath}`;
+    const source = await daFetch(`${DA_ADMIN}/source/${key}`, { method: 'HEAD', cache: 'no-store' });
+    if (!source.ok) return { success: false, error: `Source check failed: ${source.status}` };
+
+    const response = await daFetch(`${DA_ADMIN}/versionsource/${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label }),
+      body: JSON.stringify({ label: PUBLISH_VERSION_LABEL }),
     });
-    if (!response.ok) {
-      return { success: false, error: `Version failed: ${response.status}` };
-    }
+    if (!response.ok) return { success: false, error: `Version failed: ${response.status}` };
     return { success: true };
   } catch (error) {
     console.warn('Error creating version:', error);
