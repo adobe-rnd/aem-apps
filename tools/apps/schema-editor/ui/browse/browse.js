@@ -25,7 +25,7 @@ import {
 } from '../shared/styles.js';
 import { relativeTime, plural, severityCount } from '../shared/format.js';
 import { confirmDialog } from '../shared/confirm.js';
-import { toast as showToast } from '../shared/toast.js';
+import { toast } from '../shared/toast.js';
 import { createPrompt, sitePrompt } from '../../core/prompts.js';
 import { schemaDialog } from './schema-dialog.js';
 
@@ -87,10 +87,6 @@ const sortedBy = ({ property, direction }) => {
 };
 
 const sameSort = (a, b) => a?.property === b?.property && a?.direction === b?.direction;
-
-function toast(message, variant) {
-  showToast({ message, variant });
-}
 
 /**
  * `<se-browse>`: lists one site's schemas and creates, duplicates and deletes them through the
@@ -241,14 +237,14 @@ class SeBrowse extends LitElement {
   async _copyJson(item) {
     const { raw, error } = await this._catalog.rawJson(item);
     if (error) {
-      toast(`Couldn't read "${item.name}": ${error}`, 'negative');
+      toast({ message: `Couldn't read "${item.name}": ${error}`, variant: 'negative' });
       return;
     }
     try {
       await navigator.clipboard.writeText(raw);
-      toast('Schema JSON copied.', 'positive');
+      toast({ message: 'Schema JSON copied.', variant: 'positive' });
     } catch {
-      toast('Couldn\'t access the clipboard.', 'negative');
+      toast({ message: 'Couldn\'t access the clipboard.', variant: 'negative' });
     }
   }
 
@@ -264,11 +260,11 @@ class SeBrowse extends LitElement {
     if (!confirmed) return;
     const { ok, error } = await this._catalog.remove(item);
     if (!ok) {
-      toast(`Couldn't delete "${item.name}": ${error}`, 'negative');
+      toast({ message: `Couldn't delete "${item.name}": ${error}`, variant: 'negative' });
       return;
     }
     this._items = this._items.filter(({ name }) => name !== item.name);
-    toast(`Deleted "${item.name}".`, 'positive');
+    toast({ message: `Deleted "${item.name}".`, variant: 'positive' });
   }
 
   _onRowAction(item, id) {
