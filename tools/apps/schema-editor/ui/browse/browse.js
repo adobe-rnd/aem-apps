@@ -15,19 +15,22 @@
  */
 import { LitElement, html, nothing } from 'da-lit';
 import { routeHash } from '../../core/routes.js';
-import { icon, iconFile } from '../shared/icons.js';
+import { icon } from '../shared/icons.js';
 import {
   SchemaCatalog, DEFAULT_SORT, filterItems, sortItems, toggleSort,
 } from '../../core/catalog.js';
-import { deriveSchemaName } from '../../core/model/keys.js';
 import {
   buttons, shared, bar, loadStyle,
 } from '../shared/styles.js';
 import { relativeTime, plural, severityCount } from '../shared/format.js';
-import { confirmDialog } from '../shared/confirm.js';
-import { toast } from '../shared/toast.js';
 import { createPrompt, sitePrompt } from '../../core/prompts.js';
-import { schemaDialog } from './schema-dialog.js';
+import {
+  newSchemaItems, ROW_ITEMS, openInOldEditor, createSchema, duplicateSchema, copySchemaJson,
+  deleteSchema,
+} from './schema-actions.js';
+import {
+  SORT_COLUMNS, SORT_OPTIONS, sortedBy, sameSort,
+} from './sorting.js';
 
 await Promise.all([
   import('https://da.live/nx2/blocks/shared/menu/menu.js'),
@@ -38,55 +41,6 @@ await Promise.all([
 const style = await loadStyle(import.meta.url);
 
 const SUMMARY_CONCURRENCY = 6;
-const OLD_EDITOR = 'https://da.live/apps/schema';
-
-const NEW_ITEMS = [
-  {
-    id: 'blank', label: 'Blank', icon: iconFile('add'), description: 'Start from an empty schema.',
-  },
-  {
-    id: 'json',
-    label: 'From JSON Schema…',
-    icon: iconFile('code'),
-    description: 'Paste an existing schema definition.',
-  },
-];
-
-const AI_ITEM = {
-  id: 'ai', label: 'With AI…', icon: iconFile('ai'), description: 'Describe it to the assistant.',
-};
-
-const ROW_ITEMS = [
-  { id: 'open', label: 'Open', icon: iconFile('edit') },
-  { id: 'duplicate', label: 'Duplicate…', icon: iconFile('duplicate') },
-  { id: 'copy', label: 'Copy JSON', icon: iconFile('code') },
-  { id: 'old', label: 'Open in old editor', icon: iconFile('schema') },
-  { divider: true },
-  { id: 'delete', label: 'Delete…', icon: iconFile('delete') },
-];
-
-// Sorting works as on da.live browse: a Sort popover in the bar and sortable column headings.
-const SORT_COLUMNS = {
-  title: { label: 'Title', ascending: 'A-Z', descending: 'Z-A' },
-  name: { label: 'Name', ascending: 'A-Z', descending: 'Z-A' },
-  modified: { label: 'Modified', ascending: 'oldest first', descending: 'newest first' },
-};
-
-const SORT_OPTIONS = [
-  ['title', 'ascending', 'Title (A-Z)'],
-  ['title', 'descending', 'Title (Z-A)'],
-  ['name', 'ascending', 'Name (A-Z)'],
-  ['name', 'descending', 'Name (Z-A)'],
-  ['modified', 'descending', 'Modified at (Newest)'],
-  ['modified', 'ascending', 'Modified at (Oldest)'],
-].map(([property, direction, label]) => ({ property, direction, label }));
-
-const sortedBy = ({ property, direction }) => {
-  const column = SORT_COLUMNS[property];
-  return `${column.label} (${column[direction]})`;
-};
-
-const sameSort = (a, b) => a?.property === b?.property && a?.direction === b?.direction;
 
 /**
  * `<se-browse>`: lists one site's schemas and creates, duplicates and deletes them through the
@@ -151,10 +105,6 @@ class SeBrowse extends LitElement {
     this._unsubscribeChat = () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }
 
-  get _newItems() {
-    return this.chat?.available ? [...NEW_ITEMS, AI_ITEM] : NEW_ITEMS;
-  }
-
   get _names() {
     return this._items.map((item) => item.name);
   }
@@ -205,74 +155,26 @@ class SeBrowse extends LitElement {
       this.chat.ask(createPrompt({ org: this.org, site: this.site }));
       return;
     }
-    const fromJson = kind === 'json';
-    schemaDialog({
-      title: fromJson ? 'New schema from JSON Schema' : 'New schema',
-      confirmLabel: 'Create',
-      existingNames: this._names,
-      withJson: fromJson,
-      onSubmit: async ({ title, name, json }) => {
-        const result = await this._catalog.create({ name, title, json });
-        if (result.ok) this._open(name);
-        return result;
-      },
+    createSchema(this._catalog, {
+      names: this._names, fromJson: kind === 'json', onCreated: (name) => this._open(name),
     });
-  }
-
-  _duplicate(item) {
-    schemaDialog({
-      title: `Duplicate "${this._titleOf(item)}"`,
-      confirmLabel: 'Duplicate',
-      existingNames: this._names,
-      withTitle: false,
-      initialName: deriveSchemaName(`${item.name} copy`, this._names),
-      onSubmit: async ({ name }) => {
-        const result = await this._catalog.duplicate({ from: item.name, name });
-        if (result.ok) this._open(name);
-        return result;
-      },
-    });
-  }
-
-  async _copyJson(item) {
-    const { raw, error } = await this._catalog.rawJson(item);
-    if (error) {
-      toast({ message: `Couldn't read "${item.name}": ${error}`, variant: 'negative' });
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(raw);
-      toast({ message: 'Schema JSON copied.', variant: 'positive' });
-    } catch {
-      toast({ message: 'Couldn\'t access the clipboard.', variant: 'negative' });
-    }
   }
 
   async _delete(item) {
     const fields = this._summaries.get(item.name)?.fields ?? 1;
-    const confirmed = await confirmDialog({
-      title: `Delete "${this._titleOf(item)}"?`,
-      message: `Documents that use "${item.name}" will no longer open in the form editor.`,
-      confirmLabel: 'Delete',
-      destructive: true,
-      requireText: fields > 0 ? item.name : undefined,
-    });
-    if (!confirmed) return;
-    const { ok, error } = await this._catalog.remove(item);
-    if (!ok) {
-      toast({ message: `Couldn't delete "${item.name}": ${error}`, variant: 'negative' });
-      return;
+    if (await deleteSchema(this._catalog, item, { title: this._titleOf(item), fields })) {
+      this._items = this._items.filter(({ name }) => name !== item.name);
     }
-    this._items = this._items.filter(({ name }) => name !== item.name);
-    toast({ message: `Deleted "${item.name}".`, variant: 'positive' });
   }
 
   _onRowAction(item, id) {
     const actions = {
       open: () => this._open(item.name),
-      duplicate: () => this._duplicate(item),
-      copy: () => this._copyJson(item),
-      old: () => window.open(`${OLD_EDITOR}#/${this.org}/${this.site}`, '_blank', 'noopener'),
+      duplicate: () => duplicateSchema(this._catalog, item, {
+        title: this._titleOf(item), names: this._names, onCreated: (name) => this._open(name),
+      }),
+      copy: () => copySchemaJson(this._catalog, item),
+      old: () => openInOldEditor(this),
       delete: () => this._delete(item),
     };
     actions[id]?.();
@@ -504,7 +406,7 @@ class SeBrowse extends LitElement {
         </div>
         <div class="group group-end">
           ${this._renderControls()}
-          <nx-menu placement="below-end" .items=${this._newItems}
+          <nx-menu placement="below-end" .items=${newSchemaItems(this.chat?.available)}
             @select=${(e) => this._create(e.detail.id)}>
             <button slot="trigger" type="button" class="nx-btn-accent new-btn" aria-label="New schema">
               New ${icon('chevronDown')}
