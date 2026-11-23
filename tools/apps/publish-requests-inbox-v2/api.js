@@ -20,6 +20,7 @@ const CI_WORKER_URL = 'https://publish-requests-ci.aem-poc-lab.workers.dev';
 const LOCAL_WORKER_URL = 'http://localhost:8787';
 
 const CORS_PROXY = 'https://da-etc.adobeaem.workers.dev/cors';
+const DA_ADMIN = 'https://admin.da.live';
 
 // daFetch ensures a fresh IMS token is used on every request (handles token expiry)
 async function daFetch(...args) {
@@ -168,7 +169,6 @@ export async function fetchAccentSettings(org, site, token) {
 // ===========================================================================
 
 export const PUBLISH_VERSION_LABEL = 'Approved & Published';
-const DA_VERSION_URL = 'https://admin.da.live/versionsource';
 
 /**
  * DA source path for a request path: extensionless paths are pages (`.html`);
@@ -194,7 +194,7 @@ export function versionSourcePath(path) {
 export async function createVersion(org, site, path, label = PUBLISH_VERSION_LABEL) {
   try {
     const sourcePath = versionSourcePath(path);
-    const response = await daFetch(`${DA_VERSION_URL}/${org}/${site}/${sourcePath}`, {
+    const response = await daFetch(`${DA_ADMIN}/versionsource/${org}/${site}/${sourcePath}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label }),
