@@ -54,9 +54,12 @@ import {
 import { normalizePath } from '../../localization/core/domain/config.js';
 import { folderIndex, setFolder } from './data/folders.js';
 import { pageLabel } from './views/common.js';
+import { parseSite, siteHash } from './data/site-input.js';
+import defineSitePicker from './views/site-picker.js';
 
 const NX = 'https://da.live/nx';
 const SDK_TIMEOUT = 5000;
+const SETUP_GUIDE = 'https://github.com/adobe-rnd/aem-apps/blob/msm-next/tools/apps/msm-next/README.md';
 let styles = null;
 try {
   const { default: getStyle } = await import(`${NX}/utils/styles.js`);
@@ -1298,6 +1301,7 @@ class MsmNextApp extends LitElement {
 }
 
 customElements.define('msm-next-app', MsmNextApp);
+defineSitePicker({ styles, setupGuide: SETUP_GUIDE });
 
 const timeout = (ms) => new Promise((resolve) => { setTimeout(() => resolve(null), ms); });
 
@@ -1314,10 +1318,10 @@ async function resolveSetup() {
   if (window.self === window.top) return mockSetup('Not running inside DA, so this shows mock data. Open the app from da.live to see real content.');
   const sdk = await Promise.race([DA_SDK, timeout(SDK_TIMEOUT)]);
   if (!sdk?.actions?.daFetch) return mockSetup('DA did not respond, so this shows mock data.');
-  const [hashOrg, hashSite] = window.location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
-  const org = params.get('org') || hashOrg || sdk.context?.org;
-  const site = params.get('site') || hashSite || sdk.context?.repo;
-  if (!org || !site) return mockSetup('No org or site in the DA context, so this shows mock data.');
+  const fromHash = parseSite(window.location.hash);
+  const org = params.get('org') || fromHash?.org;
+  const site = params.get('site') || fromHash?.site;
+  if (!org || !site) return { mode: 'pick' };
   const { default: createRealLocalization } = await import('./data/real-localization.js');
   const translateDelay = Number(params.get('translateDelay')) || 0;
   const localization = await createRealLocalization({ org, actions: sdk.actions, translateDelay });
@@ -1332,9 +1336,31 @@ async function resolveSetup() {
   };
 }
 
-(async function init() {
+let current = null;
+let mountId = 0;
+
+async function mount() {
+  mountId += 1;
+  const id = mountId;
   const setup = await resolveSetup();
+  if (id !== mountId) return;
+  current = setup;
+  if (setup.mode === 'pick') {
+    const picker = document.createElement('msm-next-site-picker');
+    picker.addEventListener('pick', ({ detail }) => { window.location.hash = siteHash(detail); });
+    document.body.replaceChildren(picker);
+    return;
+  }
   const app = document.createElement('msm-next-app');
   Object.assign(app, setup);
-  document.body.append(app);
-}());
+  document.body.replaceChildren(app);
+}
+
+window.addEventListener('hashchange', () => {
+  if (current?.mode === 'mock') return;
+  const next = parseSite(window.location.hash);
+  if (next && next.org === current?.org && next.site === current?.site) return;
+  mount();
+});
+
+mount();
