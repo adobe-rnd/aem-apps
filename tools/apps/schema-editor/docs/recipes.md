@@ -68,7 +68,10 @@ first: the editor must not write anything the SDK rejects.
 2. **Call it** from `ui/shared/actions.js`, which holds the user intents shared
    by the canvas, the panel and the keyboard, or from a section through
    `ctx.dispatch`.
-3. **Test it** in `core/model/commands.test.js`.
+3. **Offer it on a card** (optional): add a menu item in `cardMenuItems`
+   (`ui/author/card-menu.js`) or a shortcut in `cardKeyCommand`
+   (`ui/author/navigation.js`). Then handle its id in the canvas's `_runAction`.
+4. **Test it** in `core/model/commands.test.js`.
 
 ## Add a drop rule
 
