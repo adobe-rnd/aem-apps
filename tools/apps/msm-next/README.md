@@ -90,4 +90,4 @@ The **Content proposals** panel shows the proposals that involve the open page:
 
 ## Sites that use the `msm` sheet
 
-Sites set up with base and satellite sites in the org `msm` sheet use the [Multi-Site Manager](https://www.aem.live/docs/ew/administering/multi-site-manager) tools.
+Sites set up with base and satellite sites in the org `msm` sheet use the [Multi-Site Manager](https://github.com/adobe-rnd/aem-apps/blob/main/tools/apps/msm/README.md) tools.
