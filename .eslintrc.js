@@ -25,10 +25,19 @@ module.exports = {
       files: ['tools/apps/schema-editor/core/**/*.js'],
       env: { browser: false, 'shared-node-browser': true },
       rules: {
+        'import/no-restricted-paths': ['error', {
+          basePath: __dirname,
+          zones: [{
+            target: './tools/apps/schema-editor/core',
+            from: './',
+            except: ['./tools/apps/schema-editor/core'],
+            message: 'Schema editor core is pure: it only imports other core modules.',
+          }],
+        }],
         'no-restricted-imports': ['error', {
           patterns: [{
-            group: ['../../**/*.js', '*:*'],
-            message: 'Schema editor core is pure: it only imports other core modules.',
+            group: ['*:*'],
+            message: 'Schema editor core is pure: it does not load modules from the network.',
           }],
         }],
       },

@@ -24,7 +24,8 @@ Each open schema has one `SchemaStore` (`core/session/store.js`).
 ## Rules
 
 1. **`core/` is pure.** It has no DOM, no network and no Lit, and it runs
-   under `node --test`. Any rule that decides *what* an edit does belongs
+   under `node --test`. ESLint fails any import from outside `core/`. Any
+   rule that decides *what* an edit does belongs
    here: drop targets, insertion points, page membership and lint. The `ui/`
    layer only renders the result and passes the intent on.
 2. **The store is the only gateway.** Views call `dispatch(command, args)`,
