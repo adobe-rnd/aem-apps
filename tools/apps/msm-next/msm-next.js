@@ -1359,7 +1359,10 @@ async function mount() {
 window.addEventListener('hashchange', () => {
   if (current?.mode === 'mock') return;
   const next = parseSite(window.location.hash);
-  if (next && next.org === current?.org && next.site === current?.site) return;
+  if (next && next.org === current?.org && next.site === current?.site) {
+    mountId += 1;
+    return;
+  }
   mount();
 });
 
