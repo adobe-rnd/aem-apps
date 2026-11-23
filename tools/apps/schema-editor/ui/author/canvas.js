@@ -16,21 +16,21 @@
 import { LitElement, html, nothing } from 'da-lit';
 import { icon, iconFile } from '../shared/icons.js';
 import { detachRef } from '../../core/model/commands.js';
-import { issuesByNode, worstSeverity } from '../../core/model/lint.js';
-import {
-  findNode, getDef, labelOf, refUsages,
-} from '../../core/model/query.js';
+import { issuesByNode } from '../../core/model/lint.js';
+import { findNode, getDef, labelOf } from '../../core/model/query.js';
 import {
   moveBy, duplicate, remove, makeReusable, deleteComponent, newComponent, editComponent,
 } from '../shared/actions.js';
-import { SEVERITY_NAME, usageLabel, usedIn } from '../shared/format.js';
 import { paletteMenuItems, parseMenuId, insertPaletteItem } from '../shared/palette.js';
 import { buttons, shared, loadStyle } from '../shared/styles.js';
+import { kindLabel, constraintChips, cardIcon } from './card-info.js';
+import { cardMenuItems } from './card-menu.js';
 import {
-  kindLabel, constraintChips, compactChips, cardIcon, isContainer,
-} from './card-info.js';
+  renderTitle, renderKind, renderChips, renderIssue, renderToggle, renderLock, renderBlockedNote,
+  headTitle,
+} from './card-parts.js';
 import {
-  visibleRows, treeKey, opening, ancestorKeys, rowKey, inPreview, outerUse,
+  visibleRows, treeKey, cardKeyCommand, opening, ancestorKeys, rowKey, inPreview, outerUse,
   NO_FOLDS, isFolded, withOpen, foldableKeys, allOpen,
 } from './navigation.js';
 import { CanvasDropController } from './canvas-drop.js';
@@ -201,8 +201,11 @@ class SeCanvas extends LitElement {
     if (remove(this.store, node.id).ok) this.announce(`Deleted ${label}.`);
   }
 
-  _onCardAction(node, row, id) {
+  /** Runs a card action, picked from its menu (see card-menu.js) or by a key. */
+  _runAction(id, node, row) {
     const actions = {
+      select: () => this._onCardClick(row),
+      deselect: () => this.store.select(null),
       properties: () => this._openProperties(node.id, 'settings'),
       json: () => this._openProperties(node.id, 'json'),
       up: () => moveBy(this.store, node.id, -1),
@@ -220,51 +223,22 @@ class SeCanvas extends LitElement {
   _onKeyDown(event) {
     if (event.target.closest?.('input, textarea, nx-menu')) return;
     const card = event.target.closest?.('[role="treeitem"]');
-    const id = card?.dataset.nodeId;
-    const key = card?.dataset.key;
-    const scope = card?.dataset.scope ?? '';
+    const { key, nodeId: id, scope = '' } = card?.dataset ?? {};
     const entry = findNode(this.model, id);
     if (!entry) return;
-    const mod = event.metaKey || event.ctrlKey;
-    const top = !entry.parent;
-    const row = { key, id, scope };
-
-    const run = (fn) => {
+    const action = cardKeyCommand(event, {
+      locked: inPreview(scope), top: !entry.parent, selected: Boolean(this.selection),
+    });
+    if (action) {
       event.preventDefault();
-      fn();
-    };
-    // A preview row only opens its component, where it can be edited.
-    const locked = inPreview(scope);
-    if (locked && event.key === 'Enter') {
-      run(() => this._openComponent(row));
-      return;
-    }
-    if (!locked && event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
-      run(() => moveBy(this.store, id, event.key === 'ArrowUp' ? -1 : 1));
-      return;
-    }
-    if (!locked && mod && event.key.toLowerCase() === 'd') {
-      run(() => duplicate(this.store, id));
-      return;
-    }
-    if (!locked && !mod && !top && (event.key === 'Delete' || event.key === 'Backspace')) {
-      run(() => this._remove(entry.node));
-      return;
-    }
-    if (event.key === 'Enter') {
-      run(() => {
-        this._activate(row);
-        this._showProperties();
-      });
-      return;
-    }
-    if (event.key === 'Escape' && this.selection) {
-      run(() => this.store.select(null));
+      this._runAction(action, entry.node, { key, id, scope });
       return;
     }
     const rows = this._rows();
     const move = treeKey(rows, key, event.key);
-    if (move) run(() => this._navigate(rows, move));
+    if (!move) return;
+    event.preventDefault();
+    this._navigate(rows, move);
   }
 
   _navigate(rows, move) {
@@ -278,31 +252,8 @@ class SeCanvas extends LitElement {
   }
 
   _menuItems(node, parent) {
-    const inGroup = parent?.kind === 'object';
-    const siblings = inGroup ? parent.children : [];
-    const index = siblings.indexOf(node);
-    const items = [
-      { id: 'properties', label: 'Properties', icon: iconFile('properties') },
-    ];
-    if (inGroup) {
-      items.push({ divider: true });
-      if (index > 0) items.push({ id: 'up', label: 'Move up' });
-      if (index < siblings.length - 1) items.push({ id: 'down', label: 'Move down' });
-      items.push({ id: 'duplicate', label: 'Duplicate', icon: iconFile('duplicate') });
-    }
-    if (node.kind === 'ref') {
-      items.push({ divider: true });
-      items.push({ id: 'edit', label: 'Edit component', icon: iconFile('component') });
-      items.push({ id: 'detach', label: 'Detach from component' });
-    } else if (isContainer(node) && parent) {
-      items.push({ divider: true });
-      items.push({ id: 'component', label: 'Make reusable component', icon: iconFile('component') });
-    }
-    items.push({ divider: true });
-    items.push({ id: 'json', label: 'View JSON', icon: iconFile('code') });
-    if (parent) items.push({ id: 'delete', label: 'Delete', icon: iconFile('delete') });
-    else items.push({ id: 'deleteDef', label: 'Delete component', icon: iconFile('delete') });
-    return items;
+    return cardMenuItems(node, parent)
+      .map((item) => (item.icon ? { ...item, icon: iconFile(item.icon) } : item));
   }
 
   /** An empty zone's add menu, set off from its drop text by a divider. */
@@ -317,37 +268,17 @@ class SeCanvas extends LitElement {
     `;
   }
 
-  _renderTitle(node, parent, def) {
-    const title = labelOf(this.model, node) || 'Untitled';
-    return html`
-      <span class="card-title">${title}</span>
-      ${def && def.name !== title ? html`<span class="card-key muted">${def.name}</span>` : nothing}
-      ${parent?.kind === 'object' ? html`<span class="card-key muted">${node.key}</span>` : nothing}
-      ${parent?.kind === 'array' ? html`<span class="card-key muted">(item)</span>` : nothing}
-    `;
-  }
-
-  _renderIssue(node) {
-    const issues = this._issues?.get(node.id);
-    const severity = worstSeverity(issues);
-    if (!severity || severity === 'info') return nothing;
-    const text = issues.filter((i) => i.severity === severity).map((i) => i.message).join('\n');
-    return html`<span class="card-issue is-${severity}" title=${text}>
-      ${icon('alert')}<span class="sr-only">${SEVERITY_NAME[severity]}: ${text}</span></span>`;
-  }
-
   _renderActions(node, parent, row, def, partOf) {
     // The schema has no actions; keep their column so its kind lines up.
     if (!parent && !def) return html`<span class="card-actions-space" aria-hidden="true"></span>`;
     // In place of the actions, so preview rows read as locked, not just grey.
     if (partOf) {
-      return html`<span class="card-lock" aria-hidden="true"
-        title=${`Part of the ${partOf.name} component`}>${icon('lock')}</span>`;
+      return renderLock(partOf);
     }
     return html`
       <span class="card-actions" @click=${(e) => e.stopPropagation()}>
         <nx-menu placement="below-end" .items=${this._menuItems(node, parent)}
-          @select=${(e) => this._onCardAction(node, row, e.detail.id)}>
+          @select=${(e) => this._runAction(e.detail.id, node, row)}>
           <button slot="trigger" type="button" class="nx-action-btn-quiet nx-action-btn-icon"
             tabindex="-1" title="Item actions" aria-label="Item actions">${icon('more')}</button>
         </nx-menu>
@@ -386,12 +317,6 @@ class SeCanvas extends LitElement {
     if (owner.kind === 'object') return this._renderGroupBody(owner, level, ctx);
     if (owner.kind === 'array') return this._renderListBody(owner, level, ctx);
     return nothing;
-  }
-
-  /** A narrow canvas hides the usage count (`.card-kind-more`). */
-  _renderUseKind(def) {
-    const used = refUsages(this.model, def.id).length;
-    return html`<span class="card-kind is-use-kind muted">Component: ${def.name}<span class="card-kind-more"> · used ${usedIn(used)}</span></span>`;
   }
 
   _renderGroupBody(node, level, ctx) {
@@ -453,12 +378,6 @@ class SeCanvas extends LitElement {
     `;
   }
 
-  _headTitle(open, partOf) {
-    if (partOf) return `Part of the ${partOf.name} component. Double-click to edit it on the Components page.`;
-    if (open?.def) return `Uses the ${open.def.name} component. Double-click to edit it on the Components page.`;
-    return nothing;
-  }
-
   /**
    * @param {object} ctx - `scope` (the uses the card shows under), `seen` (their components),
    *   `partOf` (the component a preview row is part of), `def` (when `node` is a component's top).
@@ -499,57 +418,25 @@ class SeCanvas extends LitElement {
         @focus=${(e) => { if (e.target === e.currentTarget) this._activate(row); }}>
         <div class="card-head" @click=${() => this._onCardClick(row)}
           @dblclick=${() => this._onDoubleClick(node, row)}
-          title=${this._headTitle(open, partOf)}
+          title=${headTitle(open, partOf)}
           draggable=${movable ? 'true' : 'false'}
           data-drag-node=${movable ? node.id : nothing}>
           <div class="card-row">
             <span class="card-icon">${icon(cardIcon(node, { def }))}</span>
-            ${open ? this._renderToggle(key, expanded) : nothing}
-            <span class="card-names">${this._renderTitle(node, parent, def)}</span>
-            ${open?.def ? this._renderUseKind(open.def)
-    : html`<span class="card-kind muted">${kindLabel(this.model, node)}${!parent && def ? ` · ${this._usage(def)}` : ''}</span>`}
-            ${chips.length ? this._renderChips(node, chips) : nothing}
-            ${this._renderIssue(node)}
+            ${open ? renderToggle(expanded, () => this._setOpen([key], !expanded)) : nothing}
+            <span class="card-names">${renderTitle(this.model, node, parent, def)}</span>
+            ${renderKind(this.model, node, { parent, def, use: open?.def })}
+            ${chips.length ? renderChips(node, chips) : nothing}
+            ${renderIssue(this._issues?.get(node.id))}
             ${this._renderActions(node, parent, row, def, partOf)}
           </div>
         </div>
         ${expanded ? this._renderBody(open, level, partOf, blocked
-    ? this._renderBlockedNote(open.def) : nothing) : nothing}
+    ? renderBlockedNote(open.def) : nothing) : nothing}
         ${node.kind === 'unsupported' ? html`<p class="unsupported-note muted">
           This part of the schema can't be edited visually. It is kept as is.</p>` : nothing}
       </div>
     `;
-  }
-
-  /** The title repeats the text, as the pill truncates it. */
-  _renderBlockedNote(def) {
-    const text = `${def.name} is a component. Edit it on the Components page.`;
-    return html`<span class="drop-reason" role="status" title=${text}>${text}</span>`;
-  }
-
-  /** All the chips, and the compact set a narrow canvas shows instead. */
-  _renderChips(node, chips) {
-    const chip = (text) => html`<span class="chip">${text}</span>`;
-    return html`
-      <span class="card-chips">${chips.map(chip)}</span>
-      <span class="card-chips is-compact" title=${chips.join(' · ')}>
-        ${compactChips(node).map(chip)}</span>
-    `;
-  }
-
-  _renderToggle(key, expanded) {
-    const label = expanded ? 'Collapse' : 'Expand';
-    return html`
-      <button type="button" class=${`tree-toggle${expanded ? ' is-expanded' : ''}`} tabindex="-1"
-        aria-label=${label} title=${label}
-        @click=${(e) => { e.stopPropagation(); this._setOpen([key], !expanded); }}>
-        ${icon('chevronRight')}</button>
-    `;
-  }
-
-  _usage(def) {
-    const used = refUsages(this.model, def.id).length;
-    return usageLabel(used);
   }
 
   _renderTrees() {

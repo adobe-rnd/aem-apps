@@ -17,7 +17,7 @@ import { beforeEach, describe, it } from 'node:test';
 import { expect } from '../../expect.js';
 import { parseSchema } from '../../../../../../tools/apps/schema-editor/core/model/parse.js';
 import {
-  visibleRows, treeKey, ancestorKeys, rowKey, inPreview, outerUse,
+  visibleRows, treeKey, cardKeyCommand, ancestorKeys, rowKey, inPreview, outerUse,
   NO_FOLDS, isFolded, withOpen, foldableKeys, allOpen,
 } from '../../../../../../tools/apps/schema-editor/ui/author/navigation.js';
 
@@ -147,5 +147,46 @@ describe('canvas navigation', () => {
     expect(inPreview(homeScope)).to.equal(true);
     expect(outerUse(host.id)).to.equal(host.id);
     expect(outerUse(homeScope)).to.equal(host.id);
+  });
+});
+
+describe('card key commands', () => {
+  const free = { locked: false, top: false, selected: false };
+  const press = (key, mods = {}, card = {}) => (
+    cardKeyCommand({ key, ...mods }, { ...free, ...card }));
+
+  it('names the card actions a key asks for', () => {
+    expect(press('Enter')).to.equal('select');
+    expect(press('ArrowUp', { altKey: true })).to.equal('up');
+    expect(press('ArrowDown', { altKey: true })).to.equal('down');
+    expect(press('d', { metaKey: true })).to.equal('duplicate');
+    expect(press('D', { ctrlKey: true })).to.equal('duplicate');
+    expect(press('Delete')).to.equal('delete');
+    expect(press('Backspace')).to.equal('delete');
+  });
+
+  it('leaves plain arrows and unbound keys to tree navigation', () => {
+    expect(press('ArrowUp')).to.equal(null);
+    expect(press('d')).to.equal(null);
+    expect(press('Backspace', { metaKey: true })).to.equal(null);
+  });
+
+  it('never deletes the top card', () => {
+    expect(press('Delete', {}, { top: true })).to.equal(null);
+    expect(press('ArrowDown', { altKey: true }, { top: true })).to.equal('down');
+  });
+
+  it('only opens the component from a preview row', () => {
+    const locked = { locked: true };
+    expect(press('Enter', {}, locked)).to.equal('edit');
+    expect(press('Delete', {}, locked)).to.equal(null);
+    expect(press('d', { metaKey: true }, locked)).to.equal(null);
+    expect(press('ArrowUp', { altKey: true }, locked)).to.equal(null);
+  });
+
+  it('clears a selection on Escape, even on a preview row', () => {
+    expect(press('Escape')).to.equal(null);
+    expect(press('Escape', {}, { selected: true })).to.equal('deselect');
+    expect(press('Escape', {}, { selected: true, locked: true })).to.equal('deselect');
   });
 });

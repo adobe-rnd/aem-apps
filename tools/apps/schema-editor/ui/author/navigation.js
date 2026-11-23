@@ -132,6 +132,26 @@ export function treeKey(rows, currentKey, key) {
   }
 }
 
+/**
+ * The card action a key press on a card asks for, named as in the card menu (see card-menu.js),
+ * or null to leave the key to `treeKey`. A preview row (`locked`) only opens its component; the
+ * top card can't be deleted; Escape clears a selection.
+ * @param {{ locked: boolean, top: boolean, selected: boolean }} card
+ */
+export function cardKeyCommand({
+  key, altKey, metaKey, ctrlKey,
+}, { locked, top, selected }) {
+  const mod = metaKey || ctrlKey;
+  if (key === 'Enter') return locked ? 'edit' : 'select';
+  if (key === 'Escape') return selected ? 'deselect' : null;
+  if (locked) return null;
+  if (altKey && key === 'ArrowUp') return 'up';
+  if (altKey && key === 'ArrowDown') return 'down';
+  if (mod && key.toLowerCase() === 'd') return 'duplicate';
+  if (!mod && !top && (key === 'Delete' || key === 'Backspace')) return 'delete';
+  return null;
+}
+
 export function ancestorKeys(rows, key) {
   const byKey = new Map(rows.map((row) => [row.key, row]));
   const keys = [];
