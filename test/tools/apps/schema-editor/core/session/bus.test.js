@@ -15,7 +15,7 @@
  */
 import { describe, it } from 'node:test';
 import { expect } from '../../expect.js';
-import { createChannel } from '../../../../../../tools/apps/schema-editor/core/session/channel.js';
+import { createChannel } from '../../../../../../tools/apps/schema-editor/core/session/bus.js';
 
 describe('bus channel', () => {
   it('calls every subscriber on emit, until it unsubscribes', () => {

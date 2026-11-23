@@ -17,12 +17,12 @@ import { describe, it } from 'node:test';
 import { validateSchema } from '@adobe/da-sc-sdk';
 import { expect } from '../expect.js';
 import { COMPLETE_EXAMPLE } from '../core/model/fixtures.js';
-import { loadScSdk } from '../../../../../tools/apps/schema-editor/adapters/sc-sdk.js';
+import * as bundle from '../../../../../tools/deps/da-sc-sdk/dist/index.js';
 
-describe('loadScSdk', () => {
+describe('bundled SC SDK', () => {
   // A stale bundle (the package was bumped without `npm run build:da-sc-sdk`) fails here.
   it('ships a validator that agrees with the pinned @adobe/da-sc-sdk', async () => {
-    const bundled = (await loadScSdk()).validateSchema;
+    const bundled = bundle.validateSchema;
     const invalid = { type: 'object', properties: { a: { type: 'null' } } };
 
     expect(bundled({ schema: COMPLETE_EXAMPLE })).to.deep.equal({ valid: true, schemaIssues: [] });

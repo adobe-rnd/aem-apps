@@ -20,7 +20,19 @@ import { createDaApi } from './da-api.js';
 import { createDaSource } from './da-source.js';
 import { createSchemaRepository } from './schemas.js';
 
-export { loadScSdk } from './sc-sdk.js';
+let scSdk;
+
+/**
+ * The Structured Content SDK's `validateSchema`, which checks the supported JSON Schema subset.
+ * It ships with the app, bundled from the pinned `@adobe/da-sc-sdk` (`npm run build:da-sc-sdk`).
+ */
+export function loadScSdk() {
+  scSdk ??= import('../../../deps/da-sc-sdk/dist/index.js').catch((error) => {
+    scSdk = undefined;
+    throw error;
+  });
+  return scSdk;
+}
 
 export const loadChat = () => DA_SDK.then(createChat, () => createChat());
 

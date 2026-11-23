@@ -17,8 +17,7 @@
 // untouched subtrees are shared, so history can keep snapshots. Invalid requests throw
 // `CommandError`.
 
-import { createId } from './ids.js';
-import { ELEMENTS, createNode } from './elements.js';
+import { ELEMENTS, createId, createNode } from './elements.js';
 import {
   deriveKey, deriveDefName, keyClash, validateDefName,
 } from './keys.js';

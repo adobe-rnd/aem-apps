@@ -16,9 +16,28 @@
 // Event bus of one authoring session. `*State` channels broadcast and replay to late
 // subscribers (e.g. lazily loaded panel views); `*Request` channels carry commands.
 
-import { createChannel } from './channel.js';
+/**
+ * A bus channel: `emit` calls every subscriber. With `replay`, a new subscriber also gets the
+ * last value emitted, so state channels need no separate getter.
+ */
+export function createChannel({ replay = false } = {}) {
+  const listeners = new Set();
+  let lastValue;
+  let hasValue = false;
+  return {
+    emit(detail) {
+      lastValue = detail;
+      hasValue = true;
+      listeners.forEach((fn) => fn(detail));
+    },
+    subscribe(fn) {
+      listeners.add(fn);
+      if (replay && hasValue) fn(lastValue);
+      return () => listeners.delete(fn);
+    },
+  };
+}
 
-// eslint-disable-next-line import/prefer-default-export
 export function createSchemaBus() {
   return Object.freeze({
     /**

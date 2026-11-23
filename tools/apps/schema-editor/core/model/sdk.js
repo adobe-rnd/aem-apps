@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 // Second validation layer: runs the da-sc-sdk compiler on the serialized schema and maps
-// its issues back onto model nodes. `validateSchema` is injected (adapters/sc-sdk.js).
+// its issues back onto model nodes. `validateSchema` is injected (`loadScSdk`).
 
 import { serializeSchema } from './serialize.js';
 import { walk } from './query.js';

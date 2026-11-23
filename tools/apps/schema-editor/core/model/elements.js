@@ -15,8 +15,15 @@
  */
 // The element catalogue: one table drives the palette, inspector sections and node creation.
 
-import { createId } from './ids.js';
 import { deriveKey } from './keys.js';
+
+let idCounter = 0;
+
+/** Node ids only need to be unique within an editing session; they are never serialized. */
+export function createId() {
+  idCounter += 1;
+  return `n${idCounter.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
 
 export const FORMAT_VARIANTS = Object.freeze(['date', 'time', 'date-time']);
 /** String variants stored as `x-semantic-type`; `enum` and `format` take precedence over them. */

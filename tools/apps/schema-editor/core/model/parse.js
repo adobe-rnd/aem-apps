@@ -17,8 +17,7 @@
 // nodes keep a `reason`, other keywords land in `extras`); turning that into issues is the
 // linter's job, so issues have a single source.
 
-import { createId } from './ids.js';
-import { FORMAT_VARIANTS, SEMANTIC_VARIANTS } from './elements.js';
+import { FORMAT_VARIANTS, SEMANTIC_VARIANTS, createId } from './elements.js';
 
 const TYPES = ['string', 'number', 'integer', 'boolean', 'object', 'array'];
 const COMPOSITION = ['allOf', 'anyOf', 'oneOf', 'not', 'if', 'then', 'else'];

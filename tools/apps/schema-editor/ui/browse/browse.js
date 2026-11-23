@@ -28,15 +28,38 @@ import {
   newSchemaItems, ROW_ITEMS, openInOldEditor, createSchema, duplicateSchema, copySchemaJson,
   deleteSchema,
 } from './schema-actions.js';
-import {
-  SORT_COLUMNS, SORT_OPTIONS, sortedBy, sameSort,
-} from './sorting.js';
 
 await Promise.all([
   import('https://da.live/nx2/blocks/shared/menu/menu.js'),
   import('https://da.live/nx2/blocks/shared/popover/popover.js'),
   import('https://da.live/nx2/blocks/shared/search/search.js'),
 ]);
+
+// The schema list's sort orders, named for people, as on da.live browse: a Sort popover in the
+// bar and sortable column headings. Sorting itself is `sortItems` (core/catalog.js).
+
+const SORT_COLUMNS = {
+  title: { label: 'Title', ascending: 'A-Z', descending: 'Z-A' },
+  name: { label: 'Name', ascending: 'A-Z', descending: 'Z-A' },
+  modified: { label: 'Modified', ascending: 'oldest first', descending: 'newest first' },
+};
+
+const SORT_OPTIONS = [
+  ['title', 'ascending', 'Title (A-Z)'],
+  ['title', 'descending', 'Title (Z-A)'],
+  ['name', 'ascending', 'Name (A-Z)'],
+  ['name', 'descending', 'Name (Z-A)'],
+  ['modified', 'descending', 'Modified at (Newest)'],
+  ['modified', 'ascending', 'Modified at (Oldest)'],
+].map(([property, direction, label]) => ({ property, direction, label }));
+
+/** "Title (A-Z)", "Modified (newest first)": the order a sort announces. */
+const sortedBy = ({ property, direction }) => {
+  const column = SORT_COLUMNS[property];
+  return `${column.label} (${column[direction]})`;
+};
+
+const sameSort = (a, b) => a?.property === b?.property && a?.direction === b?.direction;
 
 const style = await loadStyle(import.meta.url);
 

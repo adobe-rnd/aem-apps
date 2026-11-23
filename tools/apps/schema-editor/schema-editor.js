@@ -15,14 +15,13 @@
  */
 import { LitElement, html, nothing } from 'da-lit';
 import { hashChange } from 'https://da.live/nx2/utils/utils.js';
-import { getColorScheme } from 'https://da.live/nx2/scripts/nx.js';
+import { getColorScheme, setConfig } from 'https://da.live/nx2/scripts/nx.js';
 import { repository, loadScSdk, loadChat } from './adapters/index.js';
 import { SchemaStore } from './core/session/store.js';
 import { connectChat } from './core/session/chat.js';
 import {
   SCREENS, parseRoute, routeHash, sameRoute,
 } from './core/routes.js';
-import { configureNx } from './ui/shared/nx.js';
 import { buttons, shared, loadStyle } from './ui/shared/styles.js';
 import { confirmDialog } from './ui/shared/confirm.js';
 import { toast } from './ui/shared/toast.js';
@@ -193,6 +192,8 @@ class SeApp extends LitElement {
 if (!customElements.get(EL_NAME)) customElements.define(EL_NAME, SeApp);
 
 document.documentElement.style.colorScheme = getColorScheme() === 'dark-scheme' ? 'dark' : 'light';
-// nx2 components need their config before the first screen loads.
-await configureNx();
+// nx2 components read `codeBase` once, on first load, to build `<use href>` icon URLs, which must
+// be same-origin: point it at the app's `ui/`, whose img/icons also has the icons nx2 uses
+// outright. Set it before the first screen loads.
+await setConfig({ codeBase: new URL('ui', import.meta.url).href });
 document.body.append(document.createElement(EL_NAME));
