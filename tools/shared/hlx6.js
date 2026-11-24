@@ -25,27 +25,67 @@
 const HLX_ADMIN = 'https://admin.hlx.page';
 const AEM_API = 'https://api.aem.live';
 
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+// Wait before retry number `attempt` (from 0): the server's Retry-After in
+// seconds when the browser can read it, at most `maxMs`, else 1 s, 2 s, 4 s...
+function retryDelayMs(resp, attempt, maxMs = 5000) {
+  const seconds = Number.parseFloat(resp?.headers.get('retry-after') ?? resp?.headers.get('x-retry-after'));
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, maxMs);
+  return 1000 * 2 ** attempt;
+}
+
 /**
  * One admin ping, not cached: whether the site runs on Helix 6. The admin
- * ping answers every site and adds the X-API-Upgrade-Available header for
- * Helix 6 sites.
+ * ping adds the X-API-Upgrade-Available header for Helix 6 sites. Without
+ * it, a 2xx or a 404 means legacy; any other answer throws, with the
+ * response as `error.response`.
  * @param {string} org
  * @param {string} site
  * @param {Function} [fetchFn]
+ * @param {RequestInit} [init]
  * @returns {Promise<boolean>}
  */
-export async function pingHlx6(org, site, fetchFn = fetch) {
-  const resp = await fetchFn(`${HLX_ADMIN}/ping/${org}/${site}`);
-  return resp.headers.get('x-api-upgrade-available') !== null;
+export async function pingHlx6(org, site, fetchFn = fetch, init = undefined) {
+  const resp = await fetchFn(`${HLX_ADMIN}/ping/${org}/${site}`, init);
+  if (resp.headers.get('x-api-upgrade-available') !== null) return true;
+  if (resp.ok || resp.status === 404) return false;
+  throw Object.assign(new Error(`admin ping ${resp.status}`), { response: resp });
+}
+
+const PING_TIMEOUT_MS = 5000;
+const PING_RETRIES = 2;
+
+async function pingWithRetries(org, site, fetchFn) {
+  for (let attempt = 0; ; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
+    let failure;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      return await pingHlx6(org, site, fetchFn, { signal: controller.signal });
+    } catch (error) {
+      failure = error;
+    } finally {
+      clearTimeout(timer);
+    }
+    const status = failure.response?.status;
+    if ((status !== 429 && status !== 503) || attempt >= PING_RETRIES) {
+      const reason = status ? `admin ping ${status}` : 'admin ping failed';
+      throw new Error(`Could not check the setup of ${org}/${site} (${reason}). Try again.`, { cause: failure });
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(retryDelayMs(failure.response, attempt));
+  }
 }
 
 const answers = new Map();
 
 /**
- * Whether the site runs on Helix 6. The admin ping answers every site and
- * adds the X-API-Upgrade-Available header for Helix 6 sites. Each site is
- * pinged once per page load; a failed ping counts as legacy and is retried
- * on the next call.
+ * Whether the site runs on Helix 6, from the admin ping (see pingHlx6). Each
+ * site is pinged once per page load. A 429 or 503 is retried twice; a ping
+ * that still fails, times out or answers with another error rejects, so
+ * callers send nothing, and isn't cached, so the next call pings again.
  * @param {string} org
  * @param {string} site
  * @param {Function} [fetchFn]
@@ -54,13 +94,9 @@ const answers = new Map();
 export function isHlx6(org, site, fetchFn = fetch) {
   const key = `${org}/${site}`;
   if (!answers.has(key)) {
-    const answer = Promise.resolve()
-      .then(() => pingHlx6(org, site, fetchFn))
-      .catch(() => {
-        answers.delete(key);
-        return false;
-      });
+    const answer = pingWithRetries(org, site, fetchFn);
     answers.set(key, answer);
+    answer.catch(() => answers.delete(key));
   }
   return answers.get(key);
 }

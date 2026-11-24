@@ -32,7 +32,15 @@ function makePanel({ context, token, actions }) {
     const {
       org, site, path, ref,
     } = page;
-    const hlx6 = await isHlx6(org, site);
+    let hlx6;
+    try {
+      hlx6 = await isHlx6(org, site);
+    } catch {
+      // The ping failed, so nothing was sent. A network-error response
+      // (status 0) makes the workflow say the step failed and can be retried,
+      // not that its outcome is unknown.
+      return Response.error();
+    }
     const { href } = new URL(adminUrl(operation, {
       org, site, path, ref,
     }, hlx6));
