@@ -18,7 +18,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { aemApiUrl } from '../../../../tools/shared/hlx6.js';
+import * as shared from '../../../../tools/shared/hlx6.js';
 
 // The app and api.js import from da.live at load time, so the tests run their source in a VM.
 const read = (path) => readFileSync(new URL(`../../../../tools/apps/publish-requests-inbox/${path}`, import.meta.url), 'utf8');
@@ -39,7 +39,8 @@ function versionApi(daFetch, { hlx6 = false, sourceBus = hlx6 } = {}) {
     },
     usesSourceBus: async () => sourceBus,
     fetchSiteConfig: async () => null,
-    aemApiUrl,
+    aemApiUrl: shared.aemApiUrl,
+    pacedAemApiFetch: shared.pacedAemApiFetch,
     encodeURIComponent,
     daFetch,
     console: { warn: () => {} },
@@ -109,21 +110,31 @@ describe('v1 inbox DA versions', () => {
       return { ok: true };
     }, { hlx6: true });
     assert.equal((await createVersion('example', 'website', '/page')).success, true);
+    // No HEAD first: the version POST checks the source itself.
     assert.deepEqual(calls, [
-      ['https://api.aem.live/example/sites/website/source/page.html', 'HEAD', undefined],
       ['https://api.aem.live/example/sites/website/source/page.html/.versions?comment=Approved%20%26%20Published', 'POST', undefined],
     ]);
   });
 
-  it('does not try to version a missing Helix 6 source', async () => {
+  it('reports a missing Helix 6 source from the version POST, which creates nothing', async () => {
     const calls = [];
     const { createVersion } = versionApi(async (url) => {
       calls.push(url);
       return { ok: false, status: 404 };
     }, { hlx6: true });
     const result = await createVersion('example', 'website', '/page');
-    assert.equal(result.error, 'Source check failed: 404');
-    assert.deepEqual(calls, ['https://api.aem.live/example/sites/website/source/page.html']);
+    assert.equal(result.error, 'Version failed: 404');
+    assert.equal(calls.length, 1);
+  });
+
+  it('retries a Helix 6 version the API host rate-limited', async () => {
+    let count = 0;
+    const { createVersion } = versionApi(async () => {
+      count += 1;
+      return count === 1 ? new Response(null, { status: 429, headers: { 'retry-after': '0' } }) : { ok: true };
+    }, { hlx6: true });
+    assert.equal((await createVersion('example', 'website', '/page')).success, true);
+    assert.equal(count, 2);
   });
 
   it('versions a legacy page on DA when the site only has a source-bus overlay', async () => {

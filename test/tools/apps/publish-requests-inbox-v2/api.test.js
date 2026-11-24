@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import * as api from '../../../../tools/apps/publish-requests-inbox-v2/api.js';
-import { aemApiUrl } from '../../../../tools/shared/hlx6.js';
+import * as shared from '../../../../tools/shared/hlx6.js';
 
 const source = readFileSync(new URL('../../../../tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2.js', import.meta.url), 'utf8');
 
@@ -486,7 +486,8 @@ describe('inbox v2 approval handlers', () => {
       },
       usesSourceBus: async () => sourceBus,
       fetchSiteConfig: async () => null,
-      aemApiUrl,
+      aemApiUrl: shared.aemApiUrl,
+      pacedAemApiFetch: shared.pacedAemApiFetch,
       encodeURIComponent,
     });
   }
@@ -513,10 +514,20 @@ describe('inbox v2 approval handlers', () => {
     }, { hlx6: true });
     assert.equal((await createVersion('example', 'website', '/assets/my-file.pdf')).success, true);
     assert.equal((await createVersion('example', 'website', '/data/sheet.json')).success, true);
+    // No HEAD first: the version POST checks the source itself.
     assert.deepEqual(calls, [
-      ['https://api.aem.live/example/sites/website/source/data/sheet.json', 'HEAD', undefined],
       ['https://api.aem.live/example/sites/website/source/data/sheet.json/.versions?comment=Approved%20%26%20Published', 'POST', undefined],
     ]);
+  });
+
+  it('retries a Helix 6 version the API host rate-limited', async () => {
+    let count = 0;
+    const createVersion = versionApi(async () => {
+      count += 1;
+      return count === 1 ? new Response(null, { status: 429, headers: { 'retry-after': '0' } }) : { ok: true };
+    }, { hlx6: true });
+    assert.equal((await createVersion('example', 'website', '/page')).success, true);
+    assert.equal(count, 2);
   });
 
   it('versions a legacy page on DA when the site only has a source-bus overlay', async () => {

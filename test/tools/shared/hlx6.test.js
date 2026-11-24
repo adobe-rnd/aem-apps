@@ -182,6 +182,50 @@ describe('usesSourceBus', () => {
   });
 });
 
+// pacedAemApiFetch shares one pace for the page, so these tests wait for real.
+describe('pacedAemApiFetch', () => {
+  function recorder(answer = () => new Response(null, { status: 201 })) {
+    const starts = [];
+    const fetchFn = async (url, opts) => {
+      starts.push(Date.now());
+      return answer(url, opts, starts.length);
+    };
+    return { fetchFn, starts };
+  }
+
+  it('starts at most one request every 125 ms, also after an idle period', async () => {
+    const { fetchFn, starts } = recorder();
+    await Promise.all(Array.from({ length: 6 }, () => shared.pacedAemApiFetch(fetchFn, 'u', {})));
+    await new Promise((resolve) => { setTimeout(resolve, 300); });
+    await Promise.all(Array.from({ length: 6 }, () => shared.pacedAemApiFetch(fetchFn, 'u', {})));
+    const gaps = starts.slice(1).map((start, index) => start - starts[index]);
+    assert.equal(starts.length, 12);
+    assert.ok(gaps.every((gap) => gap >= 120), `gaps ${gaps}`);
+  });
+
+  it('retries a 429 or a network error and pauses everything queued for Retry-After', async () => {
+    const { fetchFn, starts } = recorder((url, opts, count) => {
+      if (count === 1) return new Response(null, { status: 429, headers: { 'retry-after': '1' } });
+      if (count === 2) throw new TypeError('Failed to fetch');
+      return new Response(null, { status: 201 });
+    });
+    const answers = await Promise.all([
+      shared.pacedAemApiFetch(fetchFn, 'a', {}),
+      shared.pacedAemApiFetch(fetchFn, 'b', {}),
+    ]);
+    assert.deepEqual(answers.map((resp) => resp.status), [201, 201]);
+    assert.equal(starts.length, 4);
+    // The 429 asked for 1 s; the queued request waited for it too.
+    assert.ok(starts[2] - starts[0] >= 950, `waited ${starts[2] - starts[0]} ms`);
+  });
+
+  it('returns the last answer once the retries are used up', async () => {
+    const { fetchFn, starts } = recorder(() => new Response(null, { status: 503, headers: { 'retry-after': '0' } }));
+    assert.equal((await shared.pacedAemApiFetch(fetchFn, 'u', {})).status, 503);
+    assert.equal(starts.length, 4);
+  });
+});
+
 describe('adminUrl', () => {
   const page = { org: 'org', site: 'site', path: '/drafts/x' };
 
