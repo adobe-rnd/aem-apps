@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { aemApiUrl } from '../../../../tools/shared/hlx6.js';
+import * as shared from '../../../../tools/shared/hlx6.js';
 
 const SETUP = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup';
 const read = (path) => readFileSync(new URL(`../../../../tools/apps/publish-requests-inbox/${path}`, import.meta.url), 'utf8');
@@ -46,18 +47,15 @@ function app(overrides = {}) {
   return Object.assign(new App(), { _org: 'example', _site: 'website', token: 'token' });
 }
 
-// hlx6: what the admin ping says (null: it failed); sourceBus: whether the
-// primary content is in the source bus (null: unknown).
+// hlx6: what the admin ping says; sourceBus: whether the primary content is in
+// the source bus. usesSourceBus replaces the stub, e.g. with the real one.
 function onboarding({
-  daFetch, fetch, hlx6 = false, sourceBus = hlx6,
+  daFetch, fetch, hlx6 = false, sourceBus = hlx6, usesSourceBus = async () => sourceBus,
 } = {}) {
   return vm.runInNewContext(`${onboardingSource}; ({ fetchDaConfigs, checkSiteExists, checkSiteRegistration })`, {
     DA_ADMIN: 'https://admin.da.live',
-    isHlx6: async () => {
-      if (hlx6 === null) throw new Error('Could not check the setup. Try again.');
-      return hlx6;
-    },
-    usesSourceBus: async () => sourceBus,
+    isHlx6: async () => hlx6,
+    usesSourceBus,
     fetchSiteConfig: async () => null,
     aemApiUrl,
     daFetch,
@@ -220,18 +218,29 @@ describe('v1 inbox onboarding reads', () => {
     assert.ok(calls.every((url) => !url.startsWith('https://api.aem.live')));
   });
 
-  it('does not block or guess when the content source is unknown', async () => {
+  it('reads the site from DA, as before, when the admin ping fails', async (test) => {
+    test.mock.method(global, 'fetch', async () => { throw new TypeError('network'); });
     const calls = [];
-    const { fetchDaConfigs, checkSiteExists } = onboarding({
-      hlx6: null,
-      sourceBus: null,
-      daFetch: async (url) => { calls.push(url); return Response.json({}); },
+    const answers = daAnswers({
+      'https://admin.da.live/config/example/ping-down/': {
+        status: 200,
+        body: { 'publish-workflow-config': { data: [{ pattern: '/*', approvers: 'a@example.com' }] } },
+      },
+      'https://admin.da.live/config/example/': { status: 404 },
+      'https://admin.da.live/list/example': { status: 200, body: [{ name: 'other' }] },
     });
-    const { siteConfig } = await fetchDaConfigs('example', 'website');
-    // Unreadable (null), so the inbox can't rule out rules and carries on.
-    assert.equal(siteConfig, null);
-    assert.equal(await checkSiteExists('example', 'website'), true);
-    assert.deepEqual(calls, ['https://admin.da.live/config/example/']);
+    const { fetchDaConfigs, checkSiteExists } = onboarding({
+      usesSourceBus: shared.usesSourceBus,
+      daFetch: (url) => { calls.push(url); return answers(url); },
+    });
+    const { siteConfig } = await fetchDaConfigs('example', 'ping-down');
+    assert.equal(siteConfig['publish-workflow-config'].data.length, 1);
+    assert.equal(await checkSiteExists('example', 'ping-down'), false);
+    assert.deepEqual(calls.sort(), [
+      'https://admin.da.live/config/example/',
+      'https://admin.da.live/config/example/ping-down/',
+      'https://admin.da.live/list/example',
+    ]);
   });
 
   it('keeps a missing org listing from blocking the site', async () => {

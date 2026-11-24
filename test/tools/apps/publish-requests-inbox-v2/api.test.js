@@ -471,8 +471,10 @@ describe('inbox v2 approval handlers', () => {
   });
 
   // hlx6: what the admin ping says; sourceBus: whether the primary content is
-  // in the source bus (null: unknown).
-  function versionApi(daFetch, { hlx6 = false, sourceBus = hlx6 } = {}) {
+  // in the source bus. usesSourceBus replaces the stub, e.g. with the real one.
+  function versionApi(daFetch, {
+    hlx6 = false, sourceBus = hlx6, usesSourceBus = async () => sourceBus,
+  } = {}) {
     const apiSource = readFileSync(new URL('../../../../tools/apps/publish-requests-inbox-v2/api.js', import.meta.url), 'utf8');
     const versionSource = apiSource.slice(apiSource.indexOf('// DA version'), apiSource.indexOf('// Helix publish'))
       .replace(/^export /gm, '');
@@ -480,7 +482,7 @@ describe('inbox v2 approval handlers', () => {
       DA_ADMIN: 'https://admin.da.live',
       daFetch,
       console,
-      usesSourceBus: async () => sourceBus,
+      usesSourceBus,
       fetchSiteConfig: async () => null,
       createSourceVersion: shared.createSourceVersion,
     });
@@ -537,16 +539,18 @@ describe('inbox v2 approval handlers', () => {
     ]);
   });
 
-  it('creates no version when the content source is unknown', async () => {
+  it('versions on DA, as before, when the admin ping fails', async (test) => {
+    test.mock.method(global, 'fetch', async () => { throw new TypeError('network'); });
     const calls = [];
-    const createVersion = versionApi(async (url) => {
-      calls.push(url);
+    const createVersion = versionApi(async (url, opts) => {
+      calls.push([url, opts.method]);
       return { ok: true };
-    }, { sourceBus: null });
-    const result = await createVersion('example', 'website', '/page');
-    assert.equal(result.success, false);
-    assert.match(result.error, /Could not determine where the content is stored/);
-    assert.deepEqual(calls, []);
+    }, { usesSourceBus: shared.usesSourceBus });
+    assert.equal((await createVersion('example', 'ping-down', '/page')).success, true);
+    assert.deepEqual(calls, [
+      ['https://admin.da.live/source/example/ping-down/page.html', 'HEAD'],
+      ['https://admin.da.live/versionsource/example/ping-down/page.html', 'POST'],
+    ]);
   });
 
   it('records final approval before creating a version', async () => {

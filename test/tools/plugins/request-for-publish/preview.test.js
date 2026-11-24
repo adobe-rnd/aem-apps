@@ -41,12 +41,13 @@ it('previews a Helix 6 page on api.aem.live', async (test) => {
   ]);
 });
 
-it('does not preview when the admin ping fails', async (test) => {
+it('previews through the proxied admin.hlx.page call when the admin ping fails', async (test) => {
   const { previewContent } = await load();
   test.mock.method(global, 'fetch', async () => new Response(null, { status: 503, headers: { 'retry-after': '0' } }));
   const calls = stubDaFetch(() => new Response(null, { status: 200 }));
-  const result = await previewContent('org', 'ping-down', '/drafts/x');
-  assert.equal(result.success, false);
-  assert.match(result.error, /Try again/);
-  assert.deepEqual(calls, []);
+  assert.deepEqual(await previewContent('org', 'ping-down', '/drafts/x'), { success: true });
+  const target = 'https://admin.hlx.page/preview/org/ping-down/main/drafts/x';
+  assert.deepEqual(calls.map(({ url, opts }) => [url, opts.method]), [
+    [`${PROXY}?url=${encodeURIComponent(target)}`, 'POST'],
+  ]);
 });

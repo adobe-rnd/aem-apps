@@ -83,16 +83,17 @@ export default function describeInboxPublish(name, load) {
       assert.deepEqual(JSON.parse(calls[0].opts.body), { paths: ['/a', '/b'], forceAsync: true });
     });
 
-    it('publishes nothing when the admin ping fails', async (test) => {
+    it('publishes through the proxied admin.hlx.page call when the admin ping fails', async (test) => {
       const api = await load();
       test.mock.method(global, 'fetch', async () => new Response(null, { status: 503, headers: { 'retry-after': '0' } }));
-      const calls = stubDaFetch(() => Response.json({ live: { status: 200 } }));
+      const calls = stubDaFetch(() => Response.json({ live: { status: 200 } }, { status: 202 }));
       const single = await api.publishContent('org', 'ping-down', '/drafts/x');
       const bulk = await api.bulkPublishContent('org', 'ping-down', ['/a']);
-      assert.deepEqual([single.success, bulk.success], [false, false]);
-      assert.match(single.error, /Try again/);
-      assert.match(bulk.error, /Try again/);
-      assert.deepEqual(calls, []);
+      assert.deepEqual([single.success, bulk.success], [true, true]);
+      assert.deepEqual(calls.map(({ url, opts }) => [url, opts.method, opts.body]), [
+        [`${PROXY}?url=https://admin.hlx.page/live/org/ping-down/main/drafts/x`, 'POST', undefined],
+        [`${PROXY}?url=https://admin.hlx.page/live/org/ping-down/main/*`, 'POST', JSON.stringify({ paths: ['/a'] })],
+      ]);
     });
 
     it('polls a legacy job through the proxy', async () => {

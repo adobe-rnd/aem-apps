@@ -67,41 +67,44 @@ describe('isHlx6', () => {
     assert.deepEqual(calls, ['https://admin.hlx.page/ping/org/once']);
   });
 
-  it('rejects when the ping fails and pings again on the next call', async () => {
-    await assert.rejects(isHlx6('org', 'flaky', async () => { throw new TypeError('network'); }), /Try again/);
+  // Before Helix 6 support the apps always used admin.hlx.page and DA, so a
+  // ping that fails falls back to that. The fallback isn't kept: the next
+  // call pings again.
+  it('falls back to legacy when the ping fails and pings again on the next call', async () => {
+    assert.equal(await isHlx6('org', 'flaky', async () => { throw new TypeError('network'); }), false);
     const { fetchFn } = pingFetch(HLX6);
     assert.equal(await isHlx6('org', 'flaky', fetchFn), true);
   });
 
-  it('rejects a 401 without caching it', async () => {
-    await assert.rejects(isHlx6('org', 'http-401', pingFetch({}, 401).fetchFn), /401/);
+  it('falls back to legacy on a 401 without caching it', async () => {
+    assert.equal(await isHlx6('org', 'http-401', pingFetch({}, 401).fetchFn), false);
     assert.equal(await isHlx6('org', 'http-401', pingFetch(HLX6).fetchFn), true);
   });
 
-  it('rejects a 403 without caching it', async () => {
-    await assert.rejects(isHlx6('org', 'http-403', pingFetch({}, 403).fetchFn), /403/);
+  it('falls back to legacy on a 403 without caching it', async () => {
+    assert.equal(await isHlx6('org', 'http-403', pingFetch({}, 403).fetchFn), false);
     assert.equal(await isHlx6('org', 'http-403', pingFetch(HLX6).fetchFn), true);
   });
 
-  it('rejects a 500 without caching it', async () => {
-    await assert.rejects(isHlx6('org', 'http-500', pingFetch({}, 500).fetchFn), /500/);
+  it('falls back to legacy on a 500 without caching it', async () => {
+    assert.equal(await isHlx6('org', 'http-500', pingFetch({}, 500).fetchFn), false);
     assert.equal(await isHlx6('org', 'http-500', pingFetch(HLX6).fetchFn), true);
   });
 
-  it('rejects a 503 without retrying or caching it', async () => {
+  it('falls back to legacy on a 503 without retrying or caching it', async () => {
     const { fetchFn, calls } = pingSequence({ status: 503, headers: { 'retry-after': '0' } }, { headers: HLX6 });
-    await assert.rejects(isHlx6('org', 'busy', fetchFn), /503/);
+    assert.equal(await isHlx6('org', 'busy', fetchFn), false);
     assert.equal(calls.length, 1);
     assert.equal(await isHlx6('org', 'busy', fetchFn), true);
   });
 
-  it('rejects a 429 without retrying it', async () => {
+  it('falls back to legacy on a 429 without retrying it', async () => {
     const { fetchFn, calls } = pingSequence({ status: 429, headers: { 'retry-after': '0' } });
-    await assert.rejects(isHlx6('org', 'limited', fetchFn), /429/);
+    assert.equal(await isHlx6('org', 'limited', fetchFn), false);
     assert.equal(calls.length, 1);
   });
 
-  it('gives up on a ping that does not answer', async (test) => {
+  it('falls back to legacy when the ping does not answer', async (test) => {
     test.mock.timers.enable({ apis: ['setTimeout'] });
     const stalled = (url, { signal }) => new Promise((resolve, reject) => {
       signal.addEventListener('abort', () => reject(new Error('aborted')));
@@ -109,7 +112,7 @@ describe('isHlx6', () => {
     const answer = isHlx6('org', 'stalled', stalled);
     await new Promise((resolve) => { setImmediate(resolve); });
     test.mock.timers.tick(10000);
-    await assert.rejects(answer, /Try again/);
+    assert.equal(await answer, false);
   });
 });
 
@@ -166,20 +169,29 @@ describe('usesSourceBus', () => {
     assert.equal(await shared.usesSourceBus('org', 'sb-overlay', fetchSiteConfig), false);
   });
 
-  it('is unknown when the config names no source, and asks again next time', async (test) => {
+  it('is false when the config can not be read, and reads it again next time', async (test) => {
     test.mock.method(global, 'fetch', pingFetch(HLX6).fetchFn);
-    const { fetchSiteConfig, calls } = sidekick(null, {}, { contentSourceType: 'sourcebus' });
-    assert.equal(await shared.usesSourceBus('org', 'sb-unknown', fetchSiteConfig), null);
-    assert.equal(await shared.usesSourceBus('org', 'sb-unknown', fetchSiteConfig), null);
-    assert.equal(await shared.usesSourceBus('org', 'sb-unknown', fetchSiteConfig), true);
-    assert.equal(calls.length, 3);
+    const { fetchSiteConfig, calls } = sidekick(null, { contentSourceType: 'sourcebus' });
+    assert.equal(await shared.usesSourceBus('org', 'sb-unreadable', fetchSiteConfig), false);
+    assert.equal(await shared.usesSourceBus('org', 'sb-unreadable', fetchSiteConfig), true);
+    assert.equal(calls.length, 2);
   });
 
-  it('is unknown when the ping fails', async (test) => {
-    test.mock.method(global, 'fetch', pingFetch({}, 500).fetchFn);
+  it('is false when the config names no source', async (test) => {
+    test.mock.method(global, 'fetch', pingFetch(HLX6).fetchFn);
+    const { fetchSiteConfig, calls } = sidekick({}, { contentSourceType: 'sourcebus' });
+    assert.equal(await shared.usesSourceBus('org', 'sb-no-source', fetchSiteConfig), false);
+    assert.equal(await shared.usesSourceBus('org', 'sb-no-source', fetchSiteConfig), false);
+    assert.equal(calls.length, 1);
+  });
+
+  it('is false when the ping fails, and pings again next time', async (test) => {
+    const ping = test.mock.method(global, 'fetch', pingFetch({}, 500).fetchFn);
     const { fetchSiteConfig, calls } = sidekick({ contentSourceType: 'sourcebus' });
-    assert.equal(await shared.usesSourceBus('org', 'sb-ping-down', fetchSiteConfig), null);
+    assert.equal(await shared.usesSourceBus('org', 'sb-ping-down', fetchSiteConfig), false);
     assert.deepEqual(calls, []);
+    ping.mock.mockImplementation(pingFetch(HLX6).fetchFn);
+    assert.equal(await shared.usesSourceBus('org', 'sb-ping-down', fetchSiteConfig), true);
   });
 });
 
