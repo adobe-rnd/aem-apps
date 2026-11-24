@@ -9,7 +9,10 @@ Without an endpoint, the first endpoint of the site opens; without a site, a sit
 
 - Lists the endpoints that the GraphQL Endpoints app (`tools/apps/graphql`) stores, one folder per
   endpoint in `/{org}/{site}/.da/graphql/endpoints/{name}/`. It reads them from DA, or from the
-  source bus for Helix 6 sites. The toolbar selects the endpoint.
+  source bus for Helix 6 sites.
+- Shows a da.live canvas, like the GraphQL Endpoints app: a bar with the site and its pencil, which
+  opens the site picker, and the trail `GraphQL › endpoints › {endpoint}`. The endpoint
+  crumb is a menu that switches to another endpoint of the site.
 - Renders [GraphiQL](https://github.com/graphql/graphiql) 3 for the selected endpoint. GraphiQL,
   React 18 and graphql-js load from unpkg and esm.sh; GraphiQL 3 is the last release with a UMD
   build.
@@ -40,10 +43,11 @@ the sites it is configured for.
 ## Structure
 
 - `graphiql.js`: the `gqi-app` element; routes the hash, loads the site, selects the endpoint.
+- `ui/header`: the bar; `ui/endpoint-menu`: the `gqi-endpoint-menu` endpoint switcher.
 - `adapters/da.js`: reads the endpoint folders and `sc.graphql.url` over the DA SDK.
 - `core/client.js`: the endpoint URL and the introspection.
 - `core/query.js`: the starter query.
 - `ui/graphiql`: the `gqi-graphiql` element that loads and renders GraphiQL.
-- `ui/shared`: the message and site-picker, copied from the GraphQL Endpoints app.
+- `ui/shared`: the canvas, message and site-picker, copied from the GraphQL Endpoints app.
 
 Tests are in `test/tools/apps/graphiql`.

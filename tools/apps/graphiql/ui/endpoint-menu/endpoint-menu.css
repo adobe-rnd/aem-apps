@@ -1,0 +1,79 @@
+:host {
+  display: flex;
+  min-width: 0;
+}
+
+/* Reads as the current crumb, with a chevron that opens the endpoints. */
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 4px 4px 6px;
+  border: none;
+  border-radius: var(--s2-corner-radius-100, 8px);
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  color: var(--s2-gray-900);
+  cursor: pointer;
+
+  &:hover,
+  &[aria-expanded='true'] {
+    background: var(--s2-gray-100);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--s2-blue-800);
+    outline-offset: 2px;
+  }
+}
+
+.label {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--s2-gray-700);
+}
+
+.popover {
+  box-sizing: border-box;
+  width: 240px;
+  max-width: calc(100vw - 16px);
+  max-height: min(400px, calc(100vh - 80px));
+  overflow: auto;
+  padding: 8px;
+  border-radius: 10px;
+  color: var(--s2-gray-800);
+  font-size: 14px;
+}
+
+.option {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 7px 12px;
+
+  .check {
+    flex: none;
+    width: 16px;
+    height: 18px;
+  }
+
+  .unchecked {
+    visibility: hidden;
+  }
+}
+
+.option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

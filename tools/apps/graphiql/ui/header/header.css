@@ -1,0 +1,85 @@
+.group-start {
+  flex: 1 1 auto;
+}
+
+/* The site comes first, like the root of the trail: it shrinks before the trail does. */
+.site {
+  flex: 0 1 auto;
+  overflow: hidden;
+  min-width: 48px;
+  max-width: 32ch;
+  padding-inline-start: 6px;
+  font-size: var(--s2-component-m-regular-font-size);
+  color: var(--s2-gray-700);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-start .trail {
+  flex: 0 1 auto;
+  min-width: 48px;
+}
+
+.trail ol {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  padding: 0 6px;
+  list-style: none;
+  font-size: var(--s2-component-l-regular-font-size, 16px);
+  line-height: 20px;
+  color: var(--s2-gray-700);
+}
+
+.crumb {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+
+  &:not(:first-child)::before {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    margin-inline: var(--s2-spacing-75);
+    background-color: currentcolor;
+    mask: url('/tools/apps/graphiql/ui/img/icons/s2-icon-chevronleft-10-n.svg') center / contain no-repeat;
+    content: '';
+  }
+
+  /* The current crumb keeps its room longest. */
+  &:not(:last-child) {
+    flex-shrink: 100;
+  }
+}
+
+.crumb-label {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &[aria-current] {
+    font-weight: 700;
+    color: var(--s2-gray-900);
+  }
+}
+
+gqi-endpoint-menu {
+  min-width: 0;
+}
+
+/* A narrow bar keeps the pencil, which names the site, and the endpoint. */
+@container (width < 640px) {
+  .site {
+    display: none;
+  }
+
+  .crumb:not(:last-child) {
+    display: none;
+  }
+
+  .crumb:last-child::before {
+    display: none;
+  }
+}

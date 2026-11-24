@@ -30,6 +30,10 @@ const CDN = {
 
 const EL_NAME = 'gqi-graphiql';
 
+// The view's own styles apply to its status messages too, which can show before GraphiQL loads.
+const style = await loadStyle(import.meta.url);
+document.adoptedStyleSheets = [...document.adoptedStyleSheets, style];
+
 const loadScript = (src) => new Promise((resolve, reject) => {
   const script = document.createElement('script');
   script.src = src;
@@ -53,9 +57,9 @@ const loadLibraries = () => {
       .then(() => loadScript(CDN.graphiql)),
     import(CDN.graphql),
     loadSheet(CDN.graphiqlCss),
-    loadStyle(import.meta.url),
-  ]).then(([, graphql, ...sheets]) => {
-    document.adoptedStyleSheets = [...document.adoptedStyleSheets, ...sheets];
+  ]).then(([, graphql, sheet]) => {
+    // GraphiQL's styles go first, so the view's rules win.
+    document.adoptedStyleSheets = [sheet, ...document.adoptedStyleSheets];
     return {
       graphql, React: window.React, ReactDOM: window.ReactDOM, GraphiQL: window.GraphiQL,
     };

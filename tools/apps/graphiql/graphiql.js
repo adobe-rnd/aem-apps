@@ -22,15 +22,16 @@ import { showToast, VARIANT_ERROR } from 'https://da.live/nx2/blocks/shared/toas
 import { createDaAdapter } from './adapters/da.js';
 import { buildHash, isSameRoute, toRoute } from './ui/utils/route.js';
 import { messageStyle, renderLoading, renderMessage } from './ui/shared/message/message.js';
+import { canvasStyle } from './ui/shared/canvas/canvas.js';
+import { headerStyle, renderHeader } from './ui/header/header.js';
 
 import 'https://da.live/nx2/public/sl/components.js';
 import './ui/graphiql/graphiql.js';
 
 const EL_NAME = 'gqi-app';
 
-const [buttonStyle, formStyle, style] = await Promise.all([
+const [buttonStyle, style] = await Promise.all([
   loadStyle('https://da.live/nx2/styles/buttons.css'),
-  loadStyle('https://da.live/nx2/styles/form.css'),
   loadStyle(import.meta.url),
 ]);
 
@@ -55,7 +56,9 @@ class GraphiqlApp extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.shadowRoot.adoptedStyleSheets = [buttonStyle, formStyle, messageStyle, style];
+    this.shadowRoot.adoptedStyleSheets = [
+      buttonStyle, canvasStyle, headerStyle, messageStyle, style,
+    ];
     this._unsubscribe = hashChange.subscribe((details) => this.openRoute(toRoute(details)));
   }
 
@@ -122,35 +125,16 @@ class GraphiqlApp extends LitElement {
     window.location.hash = buildHash(detail);
   }
 
-  renderEndpoint() {
-    if (!this.ready) return nothing;
-    const { endpoint } = this._route;
-    const { endpoints } = this._site;
-    const names = endpoints.includes(endpoint) ? endpoints : [endpoint, ...endpoints];
-    return html`
-      <label class="endpoint">
-        <span>Endpoint</span>
-        <select class="nx-input" .value=${endpoint}
-          @change=${({ target }) => this.selectEndpoint(target.value)}>
-          ${names.map((name) => html`
-            <option value=${name} ?selected=${name === endpoint}>${name}</option>`)}
-        </select>
-      </label>`;
-  }
-
-  renderToolbar() {
-    const { org, site } = this._route ?? {};
-    return html`
-      <div class="toolbar">
-        <h1>GraphiQL</h1>
-        ${this.renderEndpoint()}
-        ${site ? html`
-          <div class="site-context">
-            <span>${org} / ${site}</span>
-            <sl-button class="primary outline" size="small"
-              @click=${this.handleChangeSite}>Change site</sl-button>
-          </div>` : nothing}
-      </div>`;
+  renderHeader() {
+    const { org, site, endpoint } = this._route ?? {};
+    return renderHeader({
+      org,
+      site,
+      endpoint: this.ready ? endpoint : undefined,
+      endpoints: this._site?.endpoints,
+      onChangeSite: () => this.handleChangeSite(),
+      onEndpointChange: ({ detail }) => this.selectEndpoint(detail.endpoint),
+    });
   }
 
   renderMain() {
@@ -192,8 +176,8 @@ class GraphiqlApp extends LitElement {
   render() {
     const { org, site } = this._route ?? {};
     return html`
-      ${this.renderToolbar()}
-      ${this.renderMain()}
+      ${this.renderHeader()}
+      <div class="content">${this.renderMain()}</div>
       ${this._changingSite ? html`
         <gqi-site-picker .org=${org} .site=${site}
           @site-change=${this.handleSiteChange}

@@ -2,8 +2,6 @@ gqi-graphiql {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border: 1px solid var(--s2-gray-200);
-  border-radius: 8px;
   overflow: hidden;
 
   .graphiql-root {
