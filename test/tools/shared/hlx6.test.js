@@ -253,7 +253,7 @@ describe('adminUrl', () => {
 
 describe('isAemApiUrl', () => {
   it('recognizes api.aem.live links only', () => {
-    assert.equal(isAemApiUrl('https://api.aem.live/org/sites/site/jobs/publish/job-1'), true);
+    assert.equal(isAemApiUrl('https://api.aem.live/org/sites/site/jobs/live-publish/job-1'), true);
     assert.equal(isAemApiUrl('https://admin.hlx.page/job/org/site/main/publish/job-1'), false);
     assert.equal(isAemApiUrl('https://api.aem.live.example.com/x'), false);
     assert.equal(isAemApiUrl('not a url'), false);

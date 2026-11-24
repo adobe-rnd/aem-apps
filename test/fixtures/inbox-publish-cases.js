@@ -68,7 +68,7 @@ export default function describeInboxPublish(name, load) {
     it('bulk publishes Helix 6 pages on api.aem.live as a job it can poll', async (test) => {
       const api = await load();
       test.mock.method(global, 'fetch', pingFetch(HLX6));
-      const self = 'https://api.aem.live/org/sites/hlx6-site/jobs/publish/job-1';
+      const self = 'https://api.aem.live/org/sites/hlx6-site/jobs/live-publish/job-1';
       const calls = stubDaFetch(() => Response.json({ job: { state: 'created' }, links: { self } }, { status: 202 }));
       const result = await api.bulkPublishContent('org', 'hlx6-site', ['/a', 'b']);
       assert.equal(result.success, true);
@@ -106,7 +106,7 @@ export default function describeInboxPublish(name, load) {
 
     it('polls a Helix 6 job on api.aem.live directly', async () => {
       const api = await load();
-      const self = 'https://api.aem.live/org/sites/hlx6-site/jobs/publish/job-1';
+      const self = 'https://api.aem.live/org/sites/hlx6-site/jobs/live-publish/job-1';
       let polls = 0;
       const calls = stubDaFetch(() => {
         polls += 1;
