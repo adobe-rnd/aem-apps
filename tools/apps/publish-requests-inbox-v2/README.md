@@ -106,16 +106,21 @@ operation. Review links compare preview versus live in the Page Status diff tool
 On Helix 6 sites (the admin ping announces `x-api-upgrade-available`) the same
 calls go to `https://api.aem.live/{org}/sites/{site}/live/...` instead of
 admin.hlx.page; bulk publication sends `forceAsync: true` so there is a job to poll.
+If the ping fails, the inbox publishes nothing and shows an error to try again.
 
 After a final publish is confirmed, the inbox sends the workflow approval to the
 worker before it tries to create an **Approved & Published** DA version for each
 existing page or JSON sheet. It skips media files and
 requires DA read and write access to the source. If a source check or version
 fails, the inbox shows a warning without undoing the publish. The version
-captures the current DA source, not the published preview. Creating this version
-updates the source's last-modified time. On Helix 6 sites (content in the AEM
-source bus) the inbox checks the source and creates the version on `api.aem.live`
-(`POST /{org}/sites/{site}/source/{path}/.versions`, the label as `comment`).
+captures the current DA source, not the published preview. On DA, creating this
+version updates the source's last-modified time. When the site's content source
+is the AEM source bus (the sidekick config's content source, not the admin ping,
+which also flags sites that only have a source-bus overlay), the inbox creates
+the version there (`POST /{org}/sites/{site}/source/{path}/.versions` on
+`api.aem.live`, the label as `comment`). That call answers 404 for a missing
+source and leaves the source's last-modified time alone. Version requests start
+at most every 125 ms and are retried after a 429 or 503.
 
 **I-5 remains unresolved: unpinned preview.** The reviewed preview is not frozen
 at submission. If an author re-previews before the approval click, live-only
