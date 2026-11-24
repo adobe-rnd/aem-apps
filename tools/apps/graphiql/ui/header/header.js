@@ -23,14 +23,14 @@ import '../endpoint-menu/endpoint-menu.js';
 // canvas style (ui/shared/canvas/).
 export const headerStyle = await loadStyle(import.meta.url);
 
+// The gear at the end of the bar opens the site picker.
 function renderSite({ org, site, onChangeSite }) {
   if (!site) return nothing;
   const key = `${org}/${site}`;
   return html`
-    <span class="site" title=${key}>${key}</span>
     <button type="button" class="nx-action-btn-icon change-site" title="Change site (${key})"
-      aria-label="Change site, ${key}" @click=${onChangeSite}>${icon({ name: 'edit' })}</button>
-    <span class="divider" aria-hidden="true"></span>`;
+      aria-label="Change site, ${key}" aria-haspopup="dialog"
+      @click=${onChangeSite}>${icon({ name: 'settings' })}</button>`;
 }
 
 // GraphQL › endpoints › {endpoint}, as in the GraphQL Endpoints app; the endpoint crumb switches
@@ -56,9 +56,7 @@ export function renderHeader({
   return html`
     <header class="bar">
       <h1 class="sr-only">${endpoint ? `GraphiQL: ${endpoint}` : 'GraphiQL'}</h1>
-      <div class="group group-start">
-        ${renderSite({ org, site, onChangeSite })}
-        ${renderTrail({ endpoint, endpoints, onEndpointChange })}
-      </div>
+      <div class="group group-start">${renderTrail({ endpoint, endpoints, onEndpointChange })}</div>
+      <div class="group group-end">${renderSite({ org, site, onChangeSite })}</div>
     </header>`;
 }

@@ -19,7 +19,7 @@ import { html, nothing } from 'da-lit';
 const FILES = {
   checkmark: 's2-icon-checkmark-20-n',
   chevronDown: 's2-icon-chevrondown-20-n',
-  edit: 's2-icon-edit-20-n',
+  settings: 's2-icon-settings-20-n',
 };
 
 const iconHref = (name) => `${new URL(`../img/icons/${FILES[name]}.svg`, import.meta.url).href}#icon`;

@@ -2,17 +2,8 @@
   flex: 1 1 auto;
 }
 
-/* The site comes first, like the root of the trail: it shrinks before the trail does. */
-.site {
-  flex: 0 1 auto;
-  overflow: hidden;
-  min-width: 48px;
-  max-width: 32ch;
-  padding-inline-start: 6px;
-  font-size: var(--s2-component-m-regular-font-size);
-  color: var(--s2-gray-700);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.group-end {
+  flex: none;
 }
 
 .group-start .trail {
@@ -69,12 +60,8 @@ gqi-endpoint-menu {
   min-width: 0;
 }
 
-/* A narrow bar keeps the pencil, which names the site, and the endpoint. */
+/* A narrow bar keeps the endpoint. */
 @container (width < 640px) {
-  .site {
-    display: none;
-  }
-
   .crumb:not(:last-child) {
     display: none;
   }

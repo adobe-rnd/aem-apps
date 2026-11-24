@@ -10,8 +10,8 @@ Without an endpoint, the first endpoint of the site opens; without a site, a sit
 - Lists the endpoints that the GraphQL Endpoints app (`tools/apps/graphql`) stores, one folder per
   endpoint in `/{org}/{site}/.da/graphql/endpoints/{name}/`. It reads them from DA, or from the
   source bus for Helix 6 sites.
-- Shows a da.live canvas, like the GraphQL Endpoints app: a bar with the site and its pencil, which
-  opens the site picker, and the trail `GraphQL › endpoints › {endpoint}`. The endpoint
+- Shows a da.live canvas, like the GraphQL Endpoints app: a bar with the trail
+  `GraphQL › endpoints › {endpoint}` and, at its end, a gear that opens the site picker. The endpoint
   crumb is a menu that switches to another endpoint of the site.
 - Renders [GraphiQL](https://github.com/graphql/graphiql) 3 for the selected endpoint. GraphiQL,
   React 18 and graphql-js load from unpkg and esm.sh; GraphiQL 3 is the last release with a UMD
