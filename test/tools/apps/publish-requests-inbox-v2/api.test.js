@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import * as api from '../../../../tools/apps/publish-requests-inbox-v2/api.js';
+import { aemApiUrl } from '../../../../tools/shared/hlx6.js';
 
 const source = readFileSync(new URL('../../../../tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2.js', import.meta.url), 'utf8');
 
@@ -469,12 +470,12 @@ describe('inbox v2 approval handlers', () => {
     assert.equal(api.versionSourcePath('/drafts/'), 'drafts/index.html');
   });
 
-  function versionApi(daFetch) {
+  function versionApi(daFetch, { hlx6 = false } = {}) {
     const apiSource = readFileSync(new URL('../../../../tools/apps/publish-requests-inbox-v2/api.js', import.meta.url), 'utf8');
     const versionSource = apiSource.slice(apiSource.indexOf('// DA version'), apiSource.indexOf('// Helix publish'))
       .replace(/^export /gm, '');
     return vm.runInNewContext(`${versionSource}; createVersion`, {
-      DA_ADMIN: 'https://admin.da.live', daFetch, console,
+      DA_ADMIN: 'https://admin.da.live', daFetch, console, isHlx6: async () => hlx6, aemApiUrl, encodeURIComponent,
     });
   }
 
@@ -489,6 +490,20 @@ describe('inbox v2 approval handlers', () => {
     assert.deepEqual(calls, [
       ['https://admin.da.live/source/example/website/data/sheet.json', 'HEAD', undefined],
       ['https://admin.da.live/versionsource/example/website/data/sheet.json', 'POST', '{"label":"Approved & Published"}'],
+    ]);
+  });
+
+  it('creates a Helix 6 version in the source bus with the label as its comment', async () => {
+    const calls = [];
+    const createVersion = versionApi(async (url, opts) => {
+      calls.push([url, opts.method, opts.body]);
+      return { ok: true };
+    }, { hlx6: true });
+    assert.equal((await createVersion('example', 'website', '/assets/my-file.pdf')).success, true);
+    assert.equal((await createVersion('example', 'website', '/data/sheet.json')).success, true);
+    assert.deepEqual(calls, [
+      ['https://api.aem.live/example/sites/website/source/data/sheet.json', 'HEAD', undefined],
+      ['https://api.aem.live/example/sites/website/source/data/sheet.json/.versions?comment=Approved%20%26%20Published', 'POST', undefined],
     ]);
   });
 

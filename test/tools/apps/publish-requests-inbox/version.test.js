@@ -18,6 +18,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { aemApiUrl } from '../../../../tools/shared/hlx6.js';
 
 // The app and api.js import from da.live at load time, so the tests run their source in a VM.
 const read = (path) => readFileSync(new URL(`../../../../tools/apps/publish-requests-inbox/${path}`, import.meta.url), 'utf8');
@@ -27,9 +28,12 @@ const appSource = between(read('publish-requests-inbox.js'), 'class PublishReque
 const versionSource = between(read('api.js'), '// DA version', '// Workflow bookkeeping')
   .replace(/^export /gm, '');
 
-function versionApi(daFetch) {
+function versionApi(daFetch, { hlx6 = false } = {}) {
   return vm.runInNewContext(`${versionSource}; ({ versionSourcePath, createVersion })`, {
     DA_ADMIN: 'https://admin.da.live',
+    isHlx6: async () => hlx6,
+    aemApiUrl,
+    encodeURIComponent,
     daFetch,
     console: { warn: () => {} },
     JSON,
@@ -89,6 +93,30 @@ describe('v1 inbox DA versions', () => {
     assert.equal(result.success, false);
     assert.equal(result.error, 'Source check failed: 404');
     assert.deepEqual(calls, ['HEAD']);
+  });
+
+  it('creates a Helix 6 version in the source bus with the label as its comment', async () => {
+    const calls = [];
+    const { createVersion } = versionApi(async (url, opts) => {
+      calls.push([url, opts.method, opts.body]);
+      return { ok: true };
+    }, { hlx6: true });
+    assert.equal((await createVersion('example', 'website', '/page')).success, true);
+    assert.deepEqual(calls, [
+      ['https://api.aem.live/example/sites/website/source/page.html', 'HEAD', undefined],
+      ['https://api.aem.live/example/sites/website/source/page.html/.versions?comment=Approved%20%26%20Published', 'POST', undefined],
+    ]);
+  });
+
+  it('does not try to version a missing Helix 6 source', async () => {
+    const calls = [];
+    const { createVersion } = versionApi(async (url) => {
+      calls.push(url);
+      return { ok: false, status: 404 };
+    }, { hlx6: true });
+    const result = await createVersion('example', 'website', '/page');
+    assert.equal(result.error, 'Source check failed: 404');
+    assert.deepEqual(calls, ['https://api.aem.live/example/sites/website/source/page.html']);
   });
 
   it('records approval before creating a version after a single publish', async () => {
