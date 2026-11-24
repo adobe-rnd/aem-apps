@@ -40,3 +40,13 @@ it('previews a Helix 6 page on api.aem.live', async (test) => {
     ['https://api.aem.live/org/sites/hlx6-site/preview/drafts/x', 'POST'],
   ]);
 });
+
+it('does not preview when the admin ping fails', async (test) => {
+  const { previewContent } = await load();
+  test.mock.method(global, 'fetch', async () => new Response(null, { status: 503, headers: { 'retry-after': '0' } }));
+  const calls = stubDaFetch(() => new Response(null, { status: 200 }));
+  const result = await previewContent('org', 'ping-down', '/drafts/x');
+  assert.equal(result.success, false);
+  assert.match(result.error, /Try again/);
+  assert.deepEqual(calls, []);
+});

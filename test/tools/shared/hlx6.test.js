@@ -16,22 +16,35 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  adminUrl, aemApiUrl, isAemApiUrl, isHlx6,
+  adminUrl, aemApiUrl, isAemApiUrl, isHlx6, pingHlx6,
 } from '../../../tools/shared/hlx6.js';
 
-function pingFetch(headers = {}) {
+function pingFetch(headers = {}, status = 200) {
   const calls = [];
   const fetchFn = async (url) => {
     calls.push(url);
-    return { status: 200, headers: { get: (name) => headers[name.toLowerCase()] ?? null } };
+    return new Response(null, { status, headers });
   };
   return { fetchFn, calls };
 }
 
+// Answers the pings in order, the last answer for every later one.
+function pingSequence(...answers) {
+  const calls = [];
+  const fetchFn = async (url) => {
+    calls.push(url);
+    const { status = 200, headers = {} } = answers[Math.min(calls.length, answers.length) - 1];
+    return new Response(null, { status, headers });
+  };
+  return { fetchFn, calls };
+}
+
+const HLX6 = { 'x-api-upgrade-available': 'true' };
+
 // isHlx6 remembers each site's answer, so every test uses its own site name.
 describe('isHlx6', () => {
   it('is true when the admin ping announces the api upgrade', async () => {
-    const { fetchFn, calls } = pingFetch({ 'x-api-upgrade-available': 'true' });
+    const { fetchFn, calls } = pingFetch(HLX6);
     assert.equal(await isHlx6('org', 'upgraded', fetchFn), true);
     assert.deepEqual(calls, ['https://admin.hlx.page/ping/org/upgraded']);
   });
@@ -41,21 +54,68 @@ describe('isHlx6', () => {
     assert.equal(await isHlx6('org', 'legacy', fetchFn), false);
   });
 
-  it('is false when the ping fails', async () => {
-    assert.equal(await isHlx6('org', 'unreachable', async () => { throw new TypeError('network'); }), false);
+  it('is false for a 404 without the header', async () => {
+    const { fetchFn } = pingFetch({}, 404);
+    assert.equal(await isHlx6('org', 'unknown-site', fetchFn), false);
   });
 
   it('pings each site once', async () => {
-    const { fetchFn, calls } = pingFetch({ 'x-api-upgrade-available': 'true' });
+    const { fetchFn, calls } = pingFetch(HLX6);
     await Promise.all([isHlx6('org', 'once', fetchFn), isHlx6('org', 'once', fetchFn)]);
     assert.equal(await isHlx6('org', 'once', fetchFn), true);
     assert.deepEqual(calls, ['https://admin.hlx.page/ping/org/once']);
   });
 
-  it('pings again after a failed ping', async () => {
-    assert.equal(await isHlx6('org', 'flaky', async () => { throw new TypeError('network'); }), false);
-    const { fetchFn } = pingFetch({ 'x-api-upgrade-available': 'true' });
+  it('rejects when the ping fails and pings again on the next call', async () => {
+    await assert.rejects(isHlx6('org', 'flaky', async () => { throw new TypeError('network'); }), /Try again/);
+    const { fetchFn } = pingFetch(HLX6);
     assert.equal(await isHlx6('org', 'flaky', fetchFn), true);
+  });
+
+  it('rejects a 401 without caching it', async () => {
+    await assert.rejects(isHlx6('org', 'http-401', pingFetch({}, 401).fetchFn), /401/);
+    assert.equal(await isHlx6('org', 'http-401', pingFetch(HLX6).fetchFn), true);
+  });
+
+  it('rejects a 403 without caching it', async () => {
+    await assert.rejects(isHlx6('org', 'http-403', pingFetch({}, 403).fetchFn), /403/);
+    assert.equal(await isHlx6('org', 'http-403', pingFetch(HLX6).fetchFn), true);
+  });
+
+  it('rejects a 500 without caching it', async () => {
+    await assert.rejects(isHlx6('org', 'http-500', pingFetch({}, 500).fetchFn), /500/);
+    assert.equal(await isHlx6('org', 'http-500', pingFetch(HLX6).fetchFn), true);
+  });
+
+  it('retries a 503 and returns the later answer, honoring Retry-After', async () => {
+    const { fetchFn, calls } = pingSequence({ status: 503, headers: { 'retry-after': '0' } }, { headers: HLX6 });
+    assert.equal(await isHlx6('org', 'busy', fetchFn), true);
+    assert.equal(calls.length, 2);
+  });
+
+  it('gives up on a 429 after two retries', async () => {
+    const { fetchFn, calls } = pingSequence({ status: 429, headers: { 'retry-after': '0' } });
+    await assert.rejects(isHlx6('org', 'limited', fetchFn), /429/);
+    assert.equal(calls.length, 3);
+  });
+
+  it('gives up on a ping that does not answer', async (test) => {
+    test.mock.timers.enable({ apis: ['setTimeout'] });
+    const stalled = (url, { signal }) => new Promise((resolve, reject) => {
+      signal.addEventListener('abort', () => reject(new Error('aborted')));
+    });
+    const answer = isHlx6('org', 'stalled', stalled);
+    await new Promise((resolve) => { setImmediate(resolve); });
+    test.mock.timers.tick(10000);
+    await assert.rejects(answer, /Try again/);
+  });
+});
+
+describe('pingHlx6', () => {
+  it('reads the header on any answer and throws on an HTTP error without it', async () => {
+    assert.equal(await pingHlx6('org', 'site', pingFetch(HLX6, 503).fetchFn), true);
+    assert.equal(await pingHlx6('org', 'site', pingFetch({}, 404).fetchFn), false);
+    await assert.rejects(pingHlx6('org', 'site', pingFetch({}, 503).fetchFn), /503/);
   });
 });
 

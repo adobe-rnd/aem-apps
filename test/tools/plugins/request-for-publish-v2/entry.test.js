@@ -34,6 +34,7 @@ function loadPanel(overrides = {}) {
     createClient: (options) => options,
     adminUrl: hlx6.adminUrl,
     isHlx6: async () => false,
+    Response,
     ...overrides,
   });
 }
@@ -174,4 +175,22 @@ it('previews a Helix 6 /media file with its extension', async () => {
     org: 'example', site: 'website', path: '/docs/guide.pdf', ref: 'main', file: true,
   });
   assert.equal(calls[0][0], 'https://api.aem.live/example/sites/website/preview/docs/guide.pdf');
+});
+
+it('sends nothing when the admin ping fails, so the workflow reports a plain failure', async () => {
+  const calls = [];
+  const makePanel = loadPanel({
+    isHlx6: async () => { throw new Error('Could not check the site setup (admin ping 503). Try again.'); },
+    daFetch: async (...args) => calls.push(args),
+  });
+  const panel = makePanel({ context: {}, token: 'sdk-token', actions: {} });
+  const page = {
+    org: 'example', site: 'website', path: '/drafts/page', ref: 'main',
+  };
+  const preview = await panel.client.preview(page);
+  const publish = await panel.client.publish(page);
+  // A network-error response: not ok and status 0, which the workflow shows as
+  // "failed (unavailable)" instead of "could not be confirmed".
+  assert.deepEqual([preview.ok, preview.status, publish.ok, publish.status], [false, 0, false, 0]);
+  assert.deepEqual(calls, []);
 });
