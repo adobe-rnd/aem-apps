@@ -1,0 +1,92 @@
+:host {
+  display: block;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Same centered message as the GraphQL endpoints app's "No site selected". */
+.message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  width: min(700px, calc(100% - 48px));
+  margin: var(--s2-spacing-600) auto 0;
+  padding: var(--s2-spacing-300);
+  border-radius: var(--s2-corner-radius-500);
+  background: var(--s2-gray-25);
+  text-align: center;
+
+  h2 {
+    margin: 0 0 var(--s2-spacing-100);
+  }
+
+  p {
+    margin: 0 0 var(--s2-spacing-200);
+  }
+}
+
+.author-layout {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+
+  /* The panel gives up width before the canvas does, so the canvas keeps
+     its labels and actions beside the chat panel. The two are separate
+     surfaces, as da.live's frame separates its main area and panels: a 12px
+     gap of the frame's grey, a hairline edge and a 16px corner on each side.
+     The app sits in the frame's own rounded main area, which draws the
+     outer edges. */
+  &.panel-open {
+    grid-template-columns: minmax(0, 1fr) var(--se-panel-width, clamp(320px, 36vw, 400px));
+    column-gap: 12px;
+    background: var(--s2-gray-50);
+
+    > se-author {
+      border-inline-end: 1px solid var(--s2-gray-100);
+      border-start-end-radius: var(--s2-corner-radius-800, 16px);
+      background: var(--s2-gray-25, #fff);
+    }
+  }
+
+  > * {
+    min-height: 0;
+  }
+}
+
+se-tool-panel {
+  border-inline-start: 1px solid var(--s2-gray-100);
+  border-start-start-radius: var(--s2-corner-radius-800, 16px);
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+@media (width < 720px) {
+  .author-layout.panel-open {
+    grid-template-columns: minmax(0, 1fr);
+
+    > se-author {
+      border-inline-end: 0;
+      border-radius: 0;
+    }
+  }
+
+  /* Over the canvas but under the header, which keeps Save and Undo. */
+  se-tool-panel {
+    position: absolute;
+    inset: var(--se-bar-height, 48px) 0 0 auto;
+    z-index: 4;
+    width: min(400px, 100%);
+    box-shadow: var(--s2-drop-shadow-elevated, 0 4px 16px rgb(0 0 0 / 16%));
+  }
+}
+
+/* The author bar takes two rows here (ui/author/header.css). */
+@media (width < 560px) {
+  se-tool-panel {
+    inset-block-start: var(--se-bar-height-narrow, 88px);
+  }
+}

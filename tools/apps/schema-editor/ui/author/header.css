@@ -1,0 +1,134 @@
+/* The authoring screen's bar (shared chrome in ui/shared/bar.css). Start and end share
+ * the free space equally so the view switch stays centered and nothing shifts when
+ * text changes. */
+:host {
+  display: block;
+  container-type: inline-size;
+}
+
+.back {
+  box-sizing: border-box;
+  color: var(--s2-gray-700);
+  text-decoration: none;
+}
+
+/* The title selects the schema root. */
+.title {
+  border: 0;
+  border-radius: var(--s2-corner-radius-400, 8px);
+  background: none;
+  cursor: pointer;
+}
+
+.title:hover {
+  background: var(--s2-gray-100);
+}
+
+.title:focus-visible {
+  outline: 2px solid var(--s2-blue-800);
+  outline-offset: 0;
+}
+
+.status {
+  display: inline-flex;
+  flex: 0 1000 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-inline-start: 4px;
+  font-size: var(--s2-component-s-regular-font-size);
+  color: var(--s2-gray-700);
+  white-space: nowrap;
+}
+
+.status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status.is-error {
+  color: var(--s2-red-900);
+}
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--s2-orange-700, var(--s2-orange-800));
+}
+
+.issues {
+  height: 32px;
+  padding-inline: 8px;
+}
+
+.issues.is-error {
+  color: var(--s2-red-900);
+}
+
+.issues.is-warning {
+  color: var(--s2-orange-900);
+}
+
+.save {
+  min-width: 64px;
+  margin-inline-start: 4px;
+}
+
+/* S2 disabled accent: neutral fill instead of a washed-out blue. */
+.save:disabled {
+  opacity: 1;
+  color: var(--s2-gray-400);
+  background: var(--s2-gray-100);
+}
+
+/* Too narrow to keep the switch dead center: the start group keeps its room
+ * and the switch centers in what is left, as in the da.live canvas header. */
+@container (width < 760px) {
+  .status-text {
+    display: none;
+  }
+
+  .group-start {
+    flex: 0 1 auto;
+  }
+
+  .group-center {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .group-end {
+    flex: none;
+  }
+}
+
+/* Phone width: the view switch takes its own row under the bar, so the back link, title,
+ * undo/redo and Save keep their room on the first. Fixed rows, so the overlay panel
+ * (schema-editor.css) can sit just below. */
+@container (width < 560px) {
+  .bar {
+    flex-wrap: wrap;
+    align-content: flex-start;
+    row-gap: 0;
+    height: var(--se-bar-height-narrow, 88px);
+  }
+
+  .group-start,
+  .group-end {
+    height: var(--se-bar-height, 48px);
+  }
+
+  .group-start {
+    flex: 1 1 0;
+  }
+
+  .group-center {
+    order: 1;
+    flex: 1 0 100%;
+    align-items: flex-start;
+    justify-content: center;
+    height: calc(var(--se-bar-height-narrow, 88px) - var(--se-bar-height, 48px));
+  }
+}

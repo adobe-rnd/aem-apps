@@ -1,0 +1,18 @@
+.message {
+  margin: 0;
+  max-width: 48ch;
+  line-height: 1.5;
+}
+
+.nx-btn-accent.is-destructive {
+  background: var(--s2-red-900);
+
+  &:hover:not(:disabled) {
+    background: var(--s2-red-1000);
+  }
+}
+
+form {
+  display: grid;
+  gap: 16px;
+}

@@ -1,0 +1,24 @@
+/* The text input's box, as a multi-line one that grows vertically. */
+textarea.form-control {
+  height: auto;
+  min-height: var(--form-textarea-min-height, 88px);
+  padding: var(--s2-spacing-100) calc(var(--s2-spacing-200) - 2px);
+  line-height: 1.4;
+  resize: vertical;
+
+  &:disabled {
+    resize: none;
+  }
+}
+
+/* Reserve room for the alert icon (18px) at its 12px inline-end inset. */
+.form-field.has-error .form-control {
+  padding-right: 38px;
+}
+
+.form-field.has-error .form-field-icon {
+  /* Align the alert with the first text line (base rule keeps translateY(-50%)),
+     rather than the vertical center of the multi-line box. */
+  top: 18px;
+  inset-inline-end: 12px;
+}

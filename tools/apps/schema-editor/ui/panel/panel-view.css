@@ -1,0 +1,128 @@
+/* Shared layout of the schema editor's tool panel views. */
+
+:host {
+  display: block;
+}
+
+.panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  padding: 12px 16px 24px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.panel-header h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--s2-body-size-m);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--s2-gray-900);
+}
+
+.section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.section ~ .section {
+  padding-top: 16px;
+  border-top: 1px solid var(--s2-gray-200);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--s2-component-s-regular-font-size);
+  color: var(--s2-gray-700);
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A bare icon at the S2 icons' native 20px, as on the canvas. */
+.node-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--s2-gray-700);
+}
+
+.node-icon .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.node-icon.is-ref {
+  color: var(--s2-indigo-900);
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--s2-gray-800);
+  background: var(--s2-gray-75);
+}
+
+.notice.is-error {
+  background: var(--s2-red-100);
+}
+
+.notice.is-warning {
+  background: var(--s2-orange-100);
+}
+
+.notice.is-info {
+  background: var(--s2-blue-100);
+}
+
+.notice .icon {
+  margin-top: 1px;
+}
+
+pre.json {
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 8px;
+  font-family: var(--se-code-font-family);
+  font-size: var(--s2-body-size-xs);
+  line-height: 1.5;
+  white-space: pre;
+  color: var(--s2-gray-900);
+  background: var(--s2-gray-75);
+}
