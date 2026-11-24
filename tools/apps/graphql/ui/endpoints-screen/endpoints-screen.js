@@ -49,7 +49,6 @@ class EndpointsScreen extends LitElement {
     _sort: { state: true },
     _sortStatus: { state: true },
     _busy: { state: true },
-    _searchOpen: { state: true },
   };
 
   constructor() {
@@ -77,17 +76,6 @@ class EndpointsScreen extends LitElement {
     const label = SORT_OPTIONS.find((option) => option.key === sort.key
       && option.direction === sort.direction)?.label;
     this._sortStatus = `Sorted by ${label}, ${countEndpoints(this.visibleEndpoints.length)}`;
-  }
-
-  // On a narrow bar the search is a button until opened; empty, it closes when it loses focus.
-  async openSearch() {
-    this._searchOpen = true;
-    await this.updateComplete;
-    this.shadowRoot.querySelector('nx-search')?.focus();
-  }
-
-  closeSearch() {
-    if (!this._query) this._searchOpen = false;
   }
 
   // Naming only starts an unsaved endpoint screen; nothing is saved until the user saves it.
@@ -129,20 +117,15 @@ class EndpointsScreen extends LitElement {
 
   renderControls() {
     if (!this.site.endpoints.length) return nothing;
-    const open = this._searchOpen || !!this._query;
     return html`
-      ${open ? nothing : html`
-        <button type="button" class="nx-action-btn-quiet nx-action-btn-icon search-toggle"
-          title="Search endpoints" aria-label="Search endpoints"
-          @click=${this.openSearch}>${icon({ name: 'search' })}</button>`}
-      <nx-search size="m" class=${open ? nothing : 'collapsed'} placeholder="Search endpoints"
-        label="Search endpoints" .value=${this._query}
-        @input=${({ target }) => { this._query = target.value ?? ''; }}
-        @focusout=${this.closeSearch}>
-      </nx-search>
-      <gql-sort-menu .options=${SORT_OPTIONS} .sort=${this._sort}
-        @sort-change=${({ detail }) => this.setSort(detail)}></gql-sort-menu>
-      <span class="divider" aria-hidden="true"></span>`;
+      <div class="tools">
+        <nx-search size="m" placeholder="Search endpoints" label="Search endpoints"
+          .value=${this._query} @input=${({ target }) => { this._query = target.value ?? ''; }}>
+        </nx-search>
+        <gql-sort-menu .options=${SORT_OPTIONS} .sort=${this._sort}
+          @sort-change=${({ detail }) => this.setSort(detail)}></gql-sort-menu>
+        <span class="divider" aria-hidden="true"></span>
+      </div>`;
   }
 
   renderEmpty() {

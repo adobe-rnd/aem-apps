@@ -24,7 +24,6 @@ const FILES = {
   info: 's2-icon-infocircle-20-n',
   more: 's2-icon-more-20-n',
   openIn: 's2-icon-openin-20-n',
-  search: 's2-icon-search-20-n',
   sort: 's2-icon-sort-20-n',
   sortDown: 's2-icon-sortdown-20-n',
   sortUp: 's2-icon-sortup-20-n',
