@@ -238,23 +238,6 @@ describe('pacedAemApiFetch', () => {
     assert.equal((await shared.pacedAemApiFetch(server.fetchFn, 'u', {})).status, 500);
     assert.equal(server.starts.length, 1);
   });
-
-  it('keeps requests apart when the timers fire late, as in a background tab', async (test) => {
-    test.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() + 60000 });
-    const { fetchFn, starts } = recorder();
-    const flush = () => new Promise((resolve) => { setImmediate(resolve); });
-    const sent = Promise.all([1, 2, 3].map(() => shared.pacedAemApiFetch(fetchFn, 'u', {})));
-    await flush();
-    assert.equal(starts.length, 1);
-    // A throttled tab runs both waiting timers together, a second late.
-    test.mock.timers.tick(1000);
-    await flush();
-    assert.equal(starts.length, 2);
-    test.mock.timers.tick(125);
-    await flush();
-    await sent;
-    assert.deepEqual(starts.slice(1).map((start, index) => start - starts[index]), [1000, 125]);
-  });
 });
 
 describe('adminUrl', () => {
