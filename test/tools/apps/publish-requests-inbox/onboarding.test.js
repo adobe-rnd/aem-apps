@@ -18,6 +18,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { aemApiUrl } from '../../../../tools/shared/hlx6.js';
 
 const SETUP = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/publish-requests-setup/publish-requests-setup';
 const read = (path) => readFileSync(new URL(`../../../../tools/apps/publish-requests-inbox/${path}`, import.meta.url), 'utf8');
@@ -45,11 +46,14 @@ function app(overrides = {}) {
   return Object.assign(new App(), { _org: 'example', _site: 'website', token: 'token' });
 }
 
-function onboarding({ daFetch, fetch } = {}) {
+function onboarding({ daFetch, fetch, hlx6 = false } = {}) {
   return vm.runInNewContext(`${onboardingSource}; ({ fetchDaConfigs, checkSiteExists, checkSiteRegistration })`, {
     DA_ADMIN: 'https://admin.da.live',
+    isHlx6: async () => hlx6,
+    aemApiUrl,
     daFetch,
     fetch,
+    Object,
     getWorkerUrl: () => 'https://publish-requests-ci.aem-poc-lab.workers.dev',
     getOpts: () => ({}),
     encodeURIComponent,
@@ -147,6 +151,42 @@ describe('v1 inbox onboarding reads', () => {
     const { siteConfig, orgConfig } = await fetchDaConfigs('example', 'website');
     assert.deepEqual(Object.keys(siteConfig), ['library']);
     assert.equal(orgConfig, null);
+  });
+
+  it('reads a Helix 6 site config from config/editor/da.json in the DA sheet shape', async () => {
+    const calls = [];
+    const answers = daAnswers({
+      'https://api.aem.live/example/sites/website/config/editor/da.json': {
+        status: 200,
+        body: {
+          data: [{ key: 'editor.path', value: '/x' }],
+          'publish-workflow-config': [{ pattern: '/*', approvers: 'a@example.com' }],
+        },
+      },
+      'https://admin.da.live/config/example/': { status: 404 },
+    });
+    const { fetchDaConfigs } = onboarding({
+      hlx6: true,
+      daFetch: (url) => { calls.push(url); return answers(url); },
+    });
+    const { siteConfig, orgConfig } = await fetchDaConfigs('example', 'website');
+    assert.deepEqual(siteConfig['publish-workflow-config'].data, [{ pattern: '/*', approvers: 'a@example.com' }]);
+    assert.equal(JSON.stringify(orgConfig), '{}');
+    // The org config stays on DA, as in the worker.
+    assert.deepEqual(calls.sort(), [
+      'https://api.aem.live/example/sites/website/config/editor/da.json',
+      'https://admin.da.live/config/example/',
+    ].sort());
+  });
+
+  it('finds a Helix 6 site, which the DA org listing does not show', async () => {
+    const calls = [];
+    const { checkSiteExists } = onboarding({
+      hlx6: true,
+      daFetch: async (url) => { calls.push(url); return Response.json([{ name: 'other' }]); },
+    });
+    assert.equal(await checkSiteExists('example', 'website'), true);
+    assert.deepEqual(calls, []);
   });
 
   it('keeps a missing org listing from blocking the site', async () => {

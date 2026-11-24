@@ -15,7 +15,9 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { adminUrl, isAemApiUrl, isHlx6 } from '../../../tools/shared/hlx6.js';
+import {
+  adminUrl, aemApiUrl, isAemApiUrl, isHlx6,
+} from '../../../tools/shared/hlx6.js';
 
 function pingFetch(headers = {}) {
   const calls = [];
@@ -88,5 +90,12 @@ describe('isAemApiUrl', () => {
     assert.equal(isAemApiUrl('https://admin.hlx.page/job/org/site/main/publish/job-1'), false);
     assert.equal(isAemApiUrl('https://api.aem.live.example.com/x'), false);
     assert.equal(isAemApiUrl('not a url'), false);
+  });
+});
+
+describe('aemApiUrl', () => {
+  it('builds the URL of a site resource on api.aem.live', () => {
+    assert.equal(aemApiUrl('org', 'site', 'source/drafts/x.html'), 'https://api.aem.live/org/sites/site/source/drafts/x.html');
+    assert.equal(aemApiUrl('org', 'site', 'config/editor/da.json'), 'https://api.aem.live/org/sites/site/config/editor/da.json');
   });
 });
