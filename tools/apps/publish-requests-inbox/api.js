@@ -16,7 +16,7 @@
 /* eslint-disable import/no-unresolved, no-console, no-await-in-loop */
 
 import {
-  adminUrl, aemApiUrl, isAemApiUrl, isHlx6,
+  adminUrl, aemApiUrl, isAemApiUrl, isHlx6, usesSourceBus,
 } from '../../shared/hlx6.js';
 
 const WORKER_URL = 'https://publish-requests.aem-poc-lab.workers.dev';
@@ -160,10 +160,13 @@ async function getDaJson(url, missing = null) {
   }
 }
 
-// Helix 6 sites keep their DA site config in config/editor/da.json on api.aem.live,
-// each tab a plain row array. Returned in DA's shape ({ tab: { data: rows } }).
+// Sites whose content is in the source bus keep their DA site config in
+// config/editor/da.json on api.aem.live, each tab a plain row array. Returned
+// in DA's shape ({ tab: { data: rows } }). Null when the source is unknown.
 async function getSiteConfig(org, site) {
-  if (!await isHlx6(org, site)) return getDaJson(`${DA_ADMIN}/config/${org}/${site}/`, {});
+  const sourceBus = await usesSourceBus(org, site, fetchSiteConfig);
+  if (sourceBus === null) return null;
+  if (!sourceBus) return getDaJson(`${DA_ADMIN}/config/${org}/${site}/`, {});
   const config = await getDaJson(aemApiUrl(org, site, 'config/editor/da.json'), {});
   return config && Object.fromEntries(Object.entries(config)
     .map(([tab, rows]) => [tab, Array.isArray(rows) ? { data: rows } : rows]));
@@ -180,9 +183,10 @@ export async function fetchDaConfigs(org, site) {
 }
 
 // False only when the org listing loads without the site; an unreadable listing doesn't block.
-// Helix 6 sites aren't in the DA org listing; the admin ping only flags configured sites.
+// Source-bus sites aren't in the DA org listing; the admin ping only flags configured
+// sites. An unknown content source doesn't block either.
 export async function checkSiteExists(org, site) {
-  if (await isHlx6(org, site)) return true;
+  if (await usesSourceBus(org, site, fetchSiteConfig) !== false) return true;
   const items = await getDaJson(`${DA_ADMIN}/list/${org}`);
   return !Array.isArray(items) || items.some((item) => item.name === site);
 }
@@ -381,7 +385,11 @@ export async function createVersion(org, site, path) {
     if (!sourcePath) return { success: true };
 
     const key = `${org}/${site}/${sourcePath}`;
-    const hlx6 = await isHlx6(org, site);
+    // The primary content source, not the admin ping, says where versions live.
+    const hlx6 = await usesSourceBus(org, site, fetchSiteConfig);
+    if (hlx6 === null) {
+      return { success: false, error: 'Could not determine where the content is stored. Try again.' };
+    }
     const sourceUrl = hlx6 ? aemApiUrl(org, site, `source/${sourcePath}`) : `${DA_ADMIN}/source/${key}`;
     const source = await daFetch(sourceUrl, { method: 'HEAD', cache: 'no-store' });
     if (!source.ok) return { success: false, error: `Source check failed: ${source.status}` };

@@ -16,7 +16,7 @@
 /* eslint-disable import/no-unresolved, no-console, no-await-in-loop */
 
 import {
-  adminUrl, aemApiUrl, isAemApiUrl, isHlx6,
+  adminUrl, aemApiUrl, isAemApiUrl, isHlx6, usesSourceBus,
 } from '../../shared/hlx6.js';
 
 const WORKER_URL = 'https://publish-requests.aem-poc-lab.workers.dev';
@@ -201,7 +201,11 @@ export async function createVersion(org, site, path) {
     if (!sourcePath) return { success: true };
 
     const key = `${org}/${site}/${sourcePath}`;
-    const hlx6 = await isHlx6(org, site);
+    // The primary content source, not the admin ping, says where versions live.
+    const hlx6 = await usesSourceBus(org, site, fetchSiteConfig);
+    if (hlx6 === null) {
+      return { success: false, error: 'Could not determine where the content is stored. Try again.' };
+    }
     const sourceUrl = hlx6 ? aemApiUrl(org, site, `source/${sourcePath}`) : `${DA_ADMIN}/source/${key}`;
     const source = await daFetch(sourceUrl, { method: 'HEAD', cache: 'no-store' });
     if (!source.ok) return { success: false, error: `Source check failed: ${source.status}` };

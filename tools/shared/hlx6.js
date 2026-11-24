@@ -101,6 +101,39 @@ export function isHlx6(org, site, fetchFn = fetch) {
   return answers.get(key);
 }
 
+const sources = new Map();
+
+/**
+ * Whether the site's primary content lives in the source bus, which decides
+ * where its DA config and versions are. The admin ping alone can't say: it
+ * also flags a legacy site that only has a source-bus overlay. So for a
+ * flagged site this reads the sidekick config: source type `sourcebus` (with
+ * or without a URL) or a source URL on the API host means the source bus.
+ * True and false are kept for the page load; null (ping or config couldn't be
+ * read, or the config names no source) is asked again on the next call.
+ * @param {string} org
+ * @param {string} site
+ * @param {Function} fetchSiteConfig - (org, site) => sidekick config or null
+ * @returns {Promise<boolean|null>}
+ */
+export function usesSourceBus(org, site, fetchSiteConfig) {
+  const key = `${org}/${site}`;
+  if (!sources.has(key)) {
+    const answer = isHlx6(org, site)
+      .then(async (hlx6) => {
+        if (!hlx6) return false;
+        const config = await fetchSiteConfig(org, site);
+        const { contentSourceType: type, contentSourceUrl: url } = config ?? {};
+        if (!type && !url) return null;
+        return type === 'sourcebus' || url?.startsWith(`${AEM_API}/`) === true;
+      })
+      .catch(() => null);
+    sources.set(key, answer);
+    answer.then((value) => { if (value === null) sources.delete(key); });
+  }
+  return sources.get(key);
+}
+
 /**
  * URL of a site resource on api.aem.live, e.g. `source/drafts/page.html` or
  * `config/editor/da.json`. Helix 6 sites only.
