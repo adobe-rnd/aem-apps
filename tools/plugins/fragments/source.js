@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { aemApiUrl, pingHlx6 } from '../../shared/hlx6.js';
+
 // Content listing for the fragment picker. Legacy DA sites list through
 // admin.da.live; Helix 6 sites keep their content in the AEM source bus
 // (api.aem.live), which admin.da.live doesn't see. Both are normalized to the
@@ -21,8 +23,6 @@
 // files and { path: '/org/repo/a', name: 'a' } for folders.
 
 const DA_ADMIN = 'https://admin.da.live';
-const AEM_API = 'https://api.aem.live';
-const HLX_ADMIN = 'https://admin.hlx.page';
 const LOCALE_PATTERN = /^[a-z]{2}(-[a-z]{2,4})?$/i;
 
 export function isLocaleFolder(name) {
@@ -40,20 +40,14 @@ function isFolderItem(item) {
 
 /**
  * Whether the site runs on Helix 6 (content in the source bus). The admin
- * ping announces it with the X-API-Upgrade-Available header.
+ * ping announces it with the X-API-Upgrade-Available header. A ping that
+ * fails counts as legacy.
  * @param {string} org
  * @param {string} repo
  * @param {Function} [fetchFn]
  * @returns {Promise<boolean>}
  */
-export async function isHlx6(org, repo, fetchFn = fetch) {
-  try {
-    const resp = await fetchFn(`${HLX_ADMIN}/ping/${org}/${repo}`);
-    return resp.headers.get('x-api-upgrade-available') !== null;
-  } catch {
-    return false;
-  }
-}
+export const isHlx6 = (org, repo, fetchFn) => pingHlx6(org, repo, fetchFn).catch(() => false);
 
 function toDaItem(org, repo, folderPath, item) {
   const isFolder = item['content-type'] === 'application/folder' || item.name.endsWith('/');
@@ -133,7 +127,7 @@ export function createLister({
   return async (path) => {
     const folderPath = (path || '').replace(/\/$/, '');
     const url = hlx6
-      ? `${AEM_API}/${org}/sites/${repo}/source${folderPath}/`
+      ? aemApiUrl(org, repo, `source${folderPath}/`)
       : `${DA_ADMIN}/list/${org}/${repo}${folderPath}`;
     const resp = hlx6
       ? await limit(() => fetchWithRetry(fetchFn, url, { headers }, sleep))

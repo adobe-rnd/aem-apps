@@ -19,10 +19,25 @@
 // can't read the source bus, so apps and plugins preview and publish them on
 // api.aem.live (which sends CORS headers itself), like da.live's nx2 `aem`
 // helpers. Same detection as da-nx nx2 isHlx6.
-// Shared by the request-for-publish plugins and the publish-requests inboxes.
+// Shared by the request-for-publish plugins, the publish-requests inboxes and
+// the fragments plugin.
 
 const HLX_ADMIN = 'https://admin.hlx.page';
 const AEM_API = 'https://api.aem.live';
+
+/**
+ * One admin ping, not cached: whether the site runs on Helix 6. The admin
+ * ping answers every site and adds the X-API-Upgrade-Available header for
+ * Helix 6 sites.
+ * @param {string} org
+ * @param {string} site
+ * @param {Function} [fetchFn]
+ * @returns {Promise<boolean>}
+ */
+export async function pingHlx6(org, site, fetchFn = fetch) {
+  const resp = await fetchFn(`${HLX_ADMIN}/ping/${org}/${site}`);
+  return resp.headers.get('x-api-upgrade-available') !== null;
+}
 
 const answers = new Map();
 
@@ -40,8 +55,7 @@ export function isHlx6(org, site, fetchFn = fetch) {
   const key = `${org}/${site}`;
   if (!answers.has(key)) {
     const answer = Promise.resolve()
-      .then(() => fetchFn(`${HLX_ADMIN}/ping/${org}/${site}`))
-      .then((resp) => resp.headers.get('x-api-upgrade-available') !== null)
+      .then(() => pingHlx6(org, site, fetchFn))
       .catch(() => {
         answers.delete(key);
         return false;
@@ -49,6 +63,18 @@ export function isHlx6(org, site, fetchFn = fetch) {
     answers.set(key, answer);
   }
   return answers.get(key);
+}
+
+/**
+ * URL of a site resource on api.aem.live, e.g. `source/drafts/page.html` or
+ * `config/editor/da.json`. Helix 6 sites only.
+ * @param {string} org
+ * @param {string} site
+ * @param {string} resource - path below the site, without a leading slash
+ * @returns {string}
+ */
+export function aemApiUrl(org, site, resource) {
+  return `${AEM_API}/${org}/sites/${site}/${resource}`;
 }
 
 /**
@@ -66,20 +92,8 @@ export function adminUrl(operation, {
 }, hlx6) {
   const pathForUrl = path.startsWith('/') ? path : `/${path}`;
   return hlx6
-    ? `${AEM_API}/${org}/sites/${site}/${operation}${pathForUrl}`
+    ? aemApiUrl(org, site, `${operation}${pathForUrl}`)
     : `${HLX_ADMIN}/${operation}/${org}/${site}/${ref}${pathForUrl}`;
-}
-
-/**
- * URL of a site resource on api.aem.live, e.g. `source/drafts/page.html` or
- * `config/editor/da.json`. Helix 6 sites only.
- * @param {string} org
- * @param {string} site
- * @param {string} resource - path below the site, without a leading slash
- * @returns {string}
- */
-export function aemApiUrl(org, site, resource) {
-  return `${AEM_API}/${org}/sites/${site}/${resource}`;
 }
 
 /**
