@@ -17,6 +17,11 @@
   column-gap: 24px;
 }
 
+/* Short names still leave the paths room, in line from list to list. */
+.list .row-title {
+  min-width: 160px;
+}
+
 /* The icon keeps the shared 12px gap to the name. */
 .row-icon {
   margin-inline-end: -12px;
@@ -41,6 +46,10 @@ code {
   .list {
     --cols: auto minmax(0, 1fr) auto;
     --link-cols: auto minmax(0, 1fr);
+  }
+
+  .list .row-title {
+    min-width: 0;
   }
 
   .list-head,

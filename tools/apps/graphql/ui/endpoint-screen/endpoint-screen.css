@@ -42,15 +42,16 @@
   }
 }
 
-/* Narrow canvas: the bar takes two rows, the site, endpoint and buttons over the tabs and the
- * search; the hint and the status light give their room to the buttons. */
+/* Narrow canvas: the bar takes rows for the site, endpoint and buttons, then the tabs, then the
+ * search, which the SDL tab drops; the hint and the status light give their room to the buttons. */
 @container (width < 640px) {
   .bar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;
     grid-template-areas:
       'start discard save'
-      'tabs search search';
+      'tabs tabs tabs'
+      'search search search';
     gap: 8px;
     height: auto;
     padding-block: 8px;
@@ -73,6 +74,13 @@
       grid-area: search;
       min-width: 0;
       contain: inline-size;
+
+      /* Lines the search icon up with the pencil above. */
+      margin-inline-start: 7px;
+    }
+
+    nx-search.off {
+      display: none;
     }
 
     .discard {

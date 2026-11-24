@@ -41,10 +41,11 @@ per-site sections later.
 - An endpoint's bar has the Schemas and GraphQL SDL tabs, the schema search
   (Schemas tab), the unsaved status, and Discard and Save.
 - Under 640px, the bar shows the pencil without the org/site (its tooltip names
-  it), Sort shows only its icon, and the trail shows only its current crumb.
-  The list's bar takes two rows: the pencil, crumb and New over the search and
-  Sort. List rows show only the name and the menu. An endpoint's bar takes two rows: the
-  pencil, endpoint and buttons over the tabs and search.
+  it), Sort shows only its icon, and the trail shows only the link back to the
+  list and the current crumb. The list's bar takes two rows: the pencil, crumb
+  and New over the search and Sort. List rows show only the name and the menu.
+  An endpoint's bar puts the pencil, trail and buttons on top, the tabs under
+  them, and, on the Schemas tab, the search under the tabs.
 - New opens a dialog for the name, then an unsaved endpoint screen
   at `#/{org}/{site}/endpoints/{name}`. Cancel replaces the hash with
   `#/{org}/{site}/endpoints`, and so do saving and deleting an endpoint.

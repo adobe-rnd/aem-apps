@@ -93,7 +93,7 @@ a.crumb-label {
   display: contents;
 }
 
-/* A narrow bar keeps the pencil, which names the site, and only the current crumb. A bar
+/* A narrow bar keeps the pencil, which names the site, the current crumb and the link back. A bar
  * without a center group takes two rows: site, crumb and New on top; search and sort under. */
 @container (width < 640px) {
   .site {
@@ -140,11 +140,13 @@ a.crumb-label {
     }
   }
 
-  .crumb:not(:last-child) {
+  /* A linked crumb stays as the way back to the list. */
+  .crumb:not(:last-child, :has(a)) {
     display: none;
   }
 
-  .crumb:last-child::before {
+  .crumb:has(a)::before,
+  .crumb:not(:has(a)) + .crumb:last-child::before {
     display: none;
   }
 }
