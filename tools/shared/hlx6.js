@@ -71,6 +71,18 @@ export function adminUrl(operation, {
 }
 
 /**
+ * URL of a site resource on api.aem.live, e.g. `source/drafts/page.html` or
+ * `config/editor/da.json`. Helix 6 sites only.
+ * @param {string} org
+ * @param {string} site
+ * @param {string} resource - path below the site, without a leading slash
+ * @returns {string}
+ */
+export function aemApiUrl(org, site, resource) {
+  return `${AEM_API}/${org}/sites/${site}/${resource}`;
+}
+
+/**
  * Whether a URL (e.g. a job link from a bulk response) points at api.aem.live,
  * which answers browsers directly, unlike admin.hlx.page.
  * @param {string} url

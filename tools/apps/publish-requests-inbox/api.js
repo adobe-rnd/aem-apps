@@ -15,7 +15,9 @@
  */
 /* eslint-disable import/no-unresolved, no-console, no-await-in-loop */
 
-import { adminUrl, isAemApiUrl, isHlx6 } from '../../shared/hlx6.js';
+import {
+  adminUrl, aemApiUrl, isAemApiUrl, isHlx6,
+} from '../../shared/hlx6.js';
 
 const WORKER_URL = 'https://publish-requests.aem-poc-lab.workers.dev';
 const CI_WORKER_URL = 'https://publish-requests-ci.aem-poc-lab.workers.dev';
@@ -144,7 +146,7 @@ export async function fetchAccentSettings(org, site, token) {
 }
 
 // ===========================================================================
-// Site onboarding: DA existence + config (admin.da.live), worker registration
+// Site onboarding: site existence + config (DA or Helix 6), worker registration
 // ===========================================================================
 
 // The JSON, `missing` on a 404, or null when it can't be read.
@@ -158,17 +160,29 @@ async function getDaJson(url, missing = null) {
   }
 }
 
+// Helix 6 sites keep their DA site config in config/editor/da.json on api.aem.live,
+// each tab a plain row array. Returned in DA's shape ({ tab: { data: rows } }).
+async function getSiteConfig(org, site) {
+  if (!await isHlx6(org, site)) return getDaJson(`${DA_ADMIN}/config/${org}/${site}/`, {});
+  const config = await getDaJson(aemApiUrl(org, site, 'config/editor/da.json'), {});
+  return config && Object.fromEntries(Object.entries(config)
+    .map(([tab, rows]) => [tab, Array.isArray(rows) ? { data: rows } : rows]));
+}
+
 // A config that doesn't exist is {} (no tabs); one that can't be read is null.
+// The org config stays on DA for Helix 6 sites too, as in the worker.
 export async function fetchDaConfigs(org, site) {
   const [siteConfig, orgConfig] = await Promise.all([
-    getDaJson(`${DA_ADMIN}/config/${org}/${site}/`, {}),
+    getSiteConfig(org, site),
     getDaJson(`${DA_ADMIN}/config/${org}/`, {}),
   ]);
   return { siteConfig, orgConfig };
 }
 
 // False only when the org listing loads without the site; an unreadable listing doesn't block.
+// Helix 6 sites aren't in the DA org listing; the admin ping only flags configured sites.
 export async function checkSiteExists(org, site) {
+  if (await isHlx6(org, site)) return true;
   const items = await getDaJson(`${DA_ADMIN}/list/${org}`);
   return !Array.isArray(items) || items.some((item) => item.name === site);
 }
