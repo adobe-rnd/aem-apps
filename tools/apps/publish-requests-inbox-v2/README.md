@@ -120,7 +120,9 @@ which also flags sites that only have a source-bus overlay), the inbox creates
 the version there (`POST /{org}/sites/{site}/source/{path}/.versions` on
 `api.aem.live`, the label as `comment`). That call answers 404 for a missing
 source and leaves the source's last-modified time alone. Version requests start
-at most every 125 ms and are retried after a 429 or 503.
+at least 125 ms apart. A version request that gets a 429 waits and is sent
+again. One that gets a 503 or a network error is not, because the server may
+already have created the version.
 
 **I-5 remains unresolved: unpinned preview.** The reviewed preview is not frozen
 at submission. If an author re-previews before the approval click, live-only

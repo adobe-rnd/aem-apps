@@ -46,6 +46,7 @@ export async function pingHlx6(org, site, fetchFn = fetch, init = undefined) {
 }
 
 const PING_TIMEOUT_MS = 5000;
+
 async function pingWithTimeout(org, site, fetchFn) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
