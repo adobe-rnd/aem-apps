@@ -134,6 +134,65 @@ export function usesSourceBus(org, site, fetchSiteConfig) {
   return sources.get(key);
 }
 
+// The API host allows 10 requests per second per project
+// (https://www.aem.live/docs/limits), shared by every app and user of the
+// site, and its 429 has no CORS headers, so the browser reports a network
+// error. Requests sent with pacedAemApiFetch start at most every 125 ms
+// (8/s), also after an idle period. A 429, 503 or network error pauses every
+// queued request (for Retry-After when the browser can read it) and is
+// retried through the same pace.
+const API_MIN_INTERVAL_MS = 125;
+const API_RETRIES = 3;
+const API_MAX_PAUSE_MS = 10000;
+let nextApiStart = 0;
+let apiPausedUntil = 0;
+
+async function apiSlot() {
+  for (;;) {
+    const now = Date.now();
+    if (apiPausedUntil > now) {
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(apiPausedUntil - now);
+    } else {
+      const start = Math.max(now, nextApiStart);
+      nextApiStart = start + API_MIN_INTERVAL_MS;
+      // eslint-disable-next-line no-await-in-loop
+      if (start > now) await sleep(start - now);
+      // A pause that began while this request waited holds it too.
+      if (apiPausedUntil <= Date.now()) return;
+    }
+  }
+}
+
+/**
+ * Sends a request to the API host at the page's pace (see above).
+ * @param {Function} fetchFn - e.g. daFetch
+ * @param {string} url
+ * @param {RequestInit} opts
+ * @returns {Promise<Response>} the answer; the last one once retries are used up
+ */
+export async function pacedAemApiFetch(fetchFn, url, opts) {
+  for (let attempt = 0; ; attempt += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    await apiSlot();
+    let resp;
+    let failure;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      resp = await fetchFn(url, opts);
+    } catch (error) {
+      failure = error;
+    }
+    if (!failure && resp.status !== 429 && resp.status !== 503) return resp;
+    if (attempt >= API_RETRIES) {
+      if (failure) throw failure;
+      return resp;
+    }
+    const pause = retryDelayMs(resp, attempt, API_MAX_PAUSE_MS);
+    apiPausedUntil = Math.max(apiPausedUntil, Date.now() + pause);
+  }
+}
+
 /**
  * URL of a site resource on api.aem.live, e.g. `source/drafts/page.html` or
  * `config/editor/da.json`. Helix 6 sites only.

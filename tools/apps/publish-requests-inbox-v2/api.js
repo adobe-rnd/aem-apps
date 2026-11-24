@@ -16,7 +16,7 @@
 /* eslint-disable import/no-unresolved, no-console, no-await-in-loop */
 
 import {
-  adminUrl, aemApiUrl, isAemApiUrl, isHlx6, usesSourceBus,
+  adminUrl, aemApiUrl, isAemApiUrl, isHlx6, pacedAemApiFetch, usesSourceBus,
 } from '../../shared/hlx6.js';
 
 const WORKER_URL = 'https://publish-requests.aem-poc-lab.workers.dev';
@@ -200,24 +200,31 @@ export async function createVersion(org, site, path) {
     const sourcePath = versionSourcePath(path);
     if (!sourcePath) return { success: true };
 
-    const key = `${org}/${site}/${sourcePath}`;
     // The primary content source, not the admin ping, says where versions live.
-    const hlx6 = await usesSourceBus(org, site, fetchSiteConfig);
-    if (hlx6 === null) {
+    const sourceBus = await usesSourceBus(org, site, fetchSiteConfig);
+    if (sourceBus === null) {
       return { success: false, error: 'Could not determine where the content is stored. Try again.' };
     }
-    const sourceUrl = hlx6 ? aemApiUrl(org, site, `source/${sourcePath}`) : `${DA_ADMIN}/source/${key}`;
-    const source = await daFetch(sourceUrl, { method: 'HEAD', cache: 'no-store' });
+    if (sourceBus) {
+      // The source bus takes the label as the version comment, in the query (as
+      // da.live does). It answers 404 and creates nothing when the source is
+      // missing, so it needs no source check first.
+      const versions = `${aemApiUrl(org, site, `source/${sourcePath}`)}/.versions`;
+      const comment = encodeURIComponent(PUBLISH_VERSION_LABEL);
+      const response = await pacedAemApiFetch(daFetch, `${versions}?comment=${comment}`, { method: 'POST' });
+      if (!response.ok) return { success: false, error: `Version failed: ${response.status}` };
+      return { success: true };
+    }
+
+    const key = `${org}/${site}/${sourcePath}`;
+    const source = await daFetch(`${DA_ADMIN}/source/${key}`, { method: 'HEAD', cache: 'no-store' });
     if (!source.ok) return { success: false, error: `Source check failed: ${source.status}` };
 
-    // Helix 6 takes the label as the version comment, in the query (as da.live does).
-    const response = hlx6
-      ? await daFetch(`${sourceUrl}/.versions?comment=${encodeURIComponent(PUBLISH_VERSION_LABEL)}`, { method: 'POST' })
-      : await daFetch(`${DA_ADMIN}/versionsource/${key}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: PUBLISH_VERSION_LABEL }),
-      });
+    const response = await daFetch(`${DA_ADMIN}/versionsource/${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: PUBLISH_VERSION_LABEL }),
+    });
     if (!response.ok) return { success: false, error: `Version failed: ${response.status}` };
     return { success: true };
   } catch (error) {
