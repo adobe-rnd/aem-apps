@@ -15,7 +15,9 @@
  */
 /* eslint-disable import/no-unresolved, no-console, no-await-in-loop */
 
-import { adminUrl, isAemApiUrl, isHlx6 } from '../../shared/hlx6.js';
+import {
+  adminUrl, aemApiUrl, isAemApiUrl, isHlx6,
+} from '../../shared/hlx6.js';
 
 const WORKER_URL = 'https://publish-requests.aem-poc-lab.workers.dev';
 const CI_WORKER_URL = 'https://publish-requests-ci.aem-poc-lab.workers.dev';
@@ -167,7 +169,7 @@ export async function fetchAccentSettings(org, site, token) {
 }
 
 // ===========================================================================
-// DA version (admin.da.live — snapshot of the current source after publish)
+// DA version (admin.da.live or the Helix 6 source bus — snapshot of the source after publish)
 // ===========================================================================
 
 const PUBLISH_VERSION_LABEL = 'Approved & Published';
@@ -186,7 +188,8 @@ export function versionSourcePath(path) {
 }
 
 /**
- * Create a labelled version of an existing DA page or sheet.
+ * Create a labelled version of an existing DA page or sheet (on Helix 6, in
+ * the source bus).
  * @param {string} org - Organization
  * @param {string} site - Site
  * @param {string} path - Content path (site-relative)
@@ -198,14 +201,19 @@ export async function createVersion(org, site, path) {
     if (!sourcePath) return { success: true };
 
     const key = `${org}/${site}/${sourcePath}`;
-    const source = await daFetch(`${DA_ADMIN}/source/${key}`, { method: 'HEAD', cache: 'no-store' });
+    const hlx6 = await isHlx6(org, site);
+    const sourceUrl = hlx6 ? aemApiUrl(org, site, `source/${sourcePath}`) : `${DA_ADMIN}/source/${key}`;
+    const source = await daFetch(sourceUrl, { method: 'HEAD', cache: 'no-store' });
     if (!source.ok) return { success: false, error: `Source check failed: ${source.status}` };
 
-    const response = await daFetch(`${DA_ADMIN}/versionsource/${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: PUBLISH_VERSION_LABEL }),
-    });
+    // Helix 6 takes the label as the version comment, in the query (as da.live does).
+    const response = hlx6
+      ? await daFetch(`${sourceUrl}/.versions?comment=${encodeURIComponent(PUBLISH_VERSION_LABEL)}`, { method: 'POST' })
+      : await daFetch(`${DA_ADMIN}/versionsource/${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: PUBLISH_VERSION_LABEL }),
+      });
     if (!response.ok) return { success: false, error: `Version failed: ${response.status}` };
     return { success: true };
   } catch (error) {
