@@ -27,14 +27,6 @@ const AEM_API = 'https://api.aem.live';
 
 const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
-// Wait before retry number `attempt` (from 0): the server's Retry-After in
-// seconds when the browser can read it, at most `maxMs`, else 1 s, 2 s, 4 s...
-function retryDelayMs(resp, attempt, maxMs = 5000) {
-  const seconds = Number.parseFloat(resp?.headers.get('retry-after') ?? resp?.headers.get('x-retry-after'));
-  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, maxMs);
-  return 1000 * 2 ** attempt;
-}
-
 /**
  * One admin ping, not cached: whether the site runs on Helix 6. The admin
  * ping adds the X-API-Upgrade-Available header for Helix 6 sites. Without
@@ -54,28 +46,16 @@ export async function pingHlx6(org, site, fetchFn = fetch, init = undefined) {
 }
 
 const PING_TIMEOUT_MS = 5000;
-const PING_RETRIES = 2;
-
-async function pingWithRetries(org, site, fetchFn) {
-  for (let attempt = 0; ; attempt += 1) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
-    let failure;
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      return await pingHlx6(org, site, fetchFn, { signal: controller.signal });
-    } catch (error) {
-      failure = error;
-    } finally {
-      clearTimeout(timer);
-    }
-    const status = failure.response?.status;
-    if ((status !== 429 && status !== 503) || attempt >= PING_RETRIES) {
-      const reason = status ? `admin ping ${status}` : 'admin ping failed';
-      throw new Error(`Could not check the setup of ${org}/${site} (${reason}). Try again.`, { cause: failure });
-    }
-    // eslint-disable-next-line no-await-in-loop
-    await sleep(retryDelayMs(failure.response, attempt));
+async function pingWithTimeout(org, site, fetchFn) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
+  try {
+    return await pingHlx6(org, site, fetchFn, { signal: controller.signal });
+  } catch (error) {
+    const reason = error.response ? `admin ping ${error.response.status}` : 'admin ping failed';
+    throw new Error(`Could not check the setup of ${org}/${site} (${reason}). Try again.`, { cause: error });
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -83,9 +63,9 @@ const answers = new Map();
 
 /**
  * Whether the site runs on Helix 6, from the admin ping (see pingHlx6). Each
- * site is pinged once per page load. A 429 or 503 is retried twice; a ping
- * that still fails, times out or answers with another error rejects, so
- * callers send nothing, and isn't cached, so the next call pings again.
+ * site is pinged once per page load. A ping that fails, times out or answers
+ * with an error rejects, so callers send nothing, and isn't cached, so the
+ * next call pings again.
  * @param {string} org
  * @param {string} site
  * @param {Function} [fetchFn]
@@ -94,7 +74,7 @@ const answers = new Map();
 export function isHlx6(org, site, fetchFn = fetch) {
   const key = `${org}/${site}`;
   if (!answers.has(key)) {
-    const answer = pingWithRetries(org, site, fetchFn);
+    const answer = pingWithTimeout(org, site, fetchFn);
     answers.set(key, answer);
     answer.catch(() => answers.delete(key));
   }
@@ -140,13 +120,24 @@ export function usesSourceBus(org, site, fetchSiteConfig) {
 // error. Requests sent with pacedAemApiFetch start at least 125 ms apart
 // (8/s), measured from the last real start, so timers that fire late (a
 // background tab) don't send a burst. A 429, 503 or network error pauses
-// every queued request (for Retry-After when the browser can read it) and is
-// retried through the same pace.
+// every queued request (for Retry-After when the browser can read it). Only a
+// readable 429 is retried, through the same pace: after a 503 or a network
+// error the server may already have run the request, and a POST would then
+// run twice.
 const API_MIN_INTERVAL_MS = 125;
 const API_RETRIES = 3;
 const API_MAX_PAUSE_MS = 10000;
 let lastApiStart = 0;
 let apiPausedUntil = 0;
+
+// How long to pause after attempt number `attempt` (from 0) failed: the
+// server's Retry-After in seconds when the browser can read it, at most 10 s,
+// else 1 s, 2 s, 4 s...
+function pauseMs(resp, attempt) {
+  const seconds = Number.parseFloat(resp?.headers.get('retry-after') ?? resp?.headers.get('x-retry-after'));
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, API_MAX_PAUSE_MS);
+  return 1000 * 2 ** attempt;
+}
 
 async function apiSlot() {
   for (;;) {
@@ -184,14 +175,11 @@ export async function pacedAemApiFetch(fetchFn, url, opts) {
     } catch (error) {
       failure = error;
     }
-    const retry = failure || [429, 503].includes(resp.status) || isNetworkError(resp);
-    if (!retry) return resp;
-    if (attempt >= API_RETRIES) {
-      if (failure) throw failure;
-      return resp;
+    if (failure || [429, 503].includes(resp.status) || isNetworkError(resp)) {
+      apiPausedUntil = Math.max(apiPausedUntil, Date.now() + pauseMs(resp, attempt));
     }
-    const pause = retryDelayMs(resp, attempt, API_MAX_PAUSE_MS);
-    apiPausedUntil = Math.max(apiPausedUntil, Date.now() + pause);
+    if (failure) throw failure;
+    if (resp.status !== 429 || attempt >= API_RETRIES) return resp;
   }
 }
 
