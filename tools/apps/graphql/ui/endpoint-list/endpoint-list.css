@@ -5,8 +5,8 @@
 
 /* Name fits its longest entry (up to 40%), the path takes the rest. */
 .list {
-  --cols: auto fit-content(40%) minmax(0, 1fr) auto auto;
-  --link-cols: auto fit-content(40%) minmax(0, 1fr);
+  --cols: fit-content(40%) minmax(0, 1fr) auto auto;
+  --link-cols: fit-content(40%) minmax(0, 1fr);
 }
 
 .list,
@@ -20,11 +20,6 @@
 /* Short names still leave the paths room, in line from list to list. */
 .list .row-title {
   min-width: 160px;
-}
-
-/* The icon keeps the shared 12px gap to the name. */
-.row-icon {
-  margin-inline-end: -12px;
 }
 
 /* The link leaves the last two columns to the GraphiQL link and the actions menu. */
@@ -44,8 +39,8 @@ code {
 /* Narrow: only the name and the menu, which also opens GraphiQL and copies the URL. */
 @container (width < 640px) {
   .list {
-    --cols: auto minmax(0, 1fr) auto;
-    --link-cols: auto minmax(0, 1fr);
+    --cols: minmax(0, 1fr) auto;
+    --link-cols: minmax(0, 1fr);
   }
 
   .list .row-title {

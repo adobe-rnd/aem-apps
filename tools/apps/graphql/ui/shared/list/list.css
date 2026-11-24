@@ -111,11 +111,6 @@
   }
 }
 
-.row-icon {
-  display: flex;
-  color: var(--s2-gray-600);
-}
-
 .row-title {
   font-weight: 600;
   color: var(--s2-gray-900);

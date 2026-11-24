@@ -63,7 +63,7 @@ class EndpointList extends LitElement {
   }
 
   get menuItems() {
-    const items = this.serviceUrl ? [OPEN, GRAPHIQL, COPY] : [OPEN, GRAPHIQL];
+    const items = this.serviceUrl ? [OPEN, COPY, GRAPHIQL] : [OPEN, GRAPHIQL];
     return this.readOnly ? items : [...items, { divider: true }, DELETE];
   }
 
@@ -104,7 +104,6 @@ class EndpointList extends LitElement {
     return html`
       <li class="row">
         <a class="row-link" href=${this.hrefOf(endpoint)}>
-          <span class="row-icon">${icon({ name: 'code' })}</span>
           <span class="row-title">${endpoint}</span>
           <code class="row-text muted" title=${url ?? nothing}>${getEndpointPath({ org, site, name: endpoint })}</code>
         </a>
@@ -130,7 +129,6 @@ class EndpointList extends LitElement {
     return html`
       <div class="list">
         <div class="list-head" role="group" aria-label="Sort by">
-          <span aria-hidden="true"></span>
           ${nameHeading}
           <span aria-hidden="true">Endpoint</span>
           <span aria-hidden="true">GraphiQL</span>

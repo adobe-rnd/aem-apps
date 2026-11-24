@@ -35,9 +35,9 @@ per-site sections later.
 - The list's bar has the endpoint search, Sort and New. Each row shows the
   endpoint's path (`/{org}/{site}/endpoints/{name}/graphql`) and a link that
   opens it in [GraphiQL](../graphiql/README.md), from the same code ref (for
-  example `?ref=local`); its menu opens the endpoint or opens it in GraphiQL,
-  copies its full URL on the
-  [`sc.graphql.url` worker](#configuration), or deletes it.
+  example `?ref=local`); its menu opens the endpoint, copies its full URL on
+  the [`sc.graphql.url` worker](#configuration), opens it in GraphiQL, or
+  deletes it.
 - An endpoint's bar has the Schemas and GraphQL SDL tabs, the schema search
   (Schemas tab), the unsaved status, and Discard and Save.
 - Under 640px, the bar shows the pencil without the org/site (its tooltip names
