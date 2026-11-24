@@ -74,9 +74,7 @@ class EndpointList extends LitElement {
 
   graphiqlHrefOf(endpoint) {
     const { org, site } = this;
-    return getGraphiqlHref({
-      org, site, endpoint, host: window.location.hostname,
-    });
+    return getGraphiqlHref({ org, site, endpoint });
   }
 
   urlOf(endpoint) {

@@ -52,15 +52,10 @@ describe('route', () => {
 });
 
 describe('getGraphiqlHref', () => {
-  const app = 'https://da.live/app/adobe-rnd/aem-apps/tools/apps/graphiql/graphiql';
-  const href = (host) => getGraphiqlHref({
-    org: 'o', site: 's', endpoint: 'main', host,
-  });
-
-  it('opens the endpoint from the same code ref', () => {
-    assert.equal(href('main--aem-apps--adobe-rnd.aem.page'), `${app}#/o/s/main`);
-    assert.equal(href('graphql-sdl--aem-apps--adobe-rnd.aem.live'), `${app}?ref=graphql-sdl#/o/s/main`);
-    assert.equal(href('localhost'), `${app}?ref=local#/o/s/main`);
-    assert.equal(href('example.com'), `${app}#/o/s/main`);
+  it('opens the endpoint in GraphiQL from the graphiql code ref', () => {
+    assert.equal(
+      getGraphiqlHref({ org: 'o', site: 's', endpoint: 'main' }),
+      'https://da.live/app/adobe-rnd/aem-apps/tools/apps/graphiql/graphiql?ref=graphiql#/o/s/main',
+    );
   });
 });
