@@ -33,15 +33,9 @@ const versionSource = between(read('api.js'), '// DA version', '// Workflow book
 function versionApi(daFetch, { hlx6 = false, sourceBus = hlx6 } = {}) {
   return vm.runInNewContext(`${versionSource}; ({ versionSourcePath, createVersion })`, {
     DA_ADMIN: 'https://admin.da.live',
-    isHlx6: async () => {
-      if (hlx6 === null) throw new Error('Could not check the setup. Try again.');
-      return hlx6;
-    },
     usesSourceBus: async () => sourceBus,
     fetchSiteConfig: async () => null,
-    aemApiUrl: shared.aemApiUrl,
-    pacedAemApiFetch: shared.pacedAemApiFetch,
-    encodeURIComponent,
+    createSourceVersion: shared.createSourceVersion,
     daFetch,
     console: { warn: () => {} },
     JSON,
@@ -155,7 +149,7 @@ describe('v1 inbox DA versions', () => {
     const { createVersion } = versionApi(async (url) => {
       calls.push(url);
       return { ok: true };
-    }, { hlx6: null, sourceBus: null });
+    }, { sourceBus: null });
     const result = await createVersion('example', 'website', '/page');
     assert.equal(result.success, false);
     assert.match(result.error, /Could not determine where the content is stored/);

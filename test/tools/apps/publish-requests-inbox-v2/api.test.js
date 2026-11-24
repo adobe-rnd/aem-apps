@@ -480,15 +480,9 @@ describe('inbox v2 approval handlers', () => {
       DA_ADMIN: 'https://admin.da.live',
       daFetch,
       console,
-      isHlx6: async () => {
-        if (hlx6 === null) throw new Error('Could not check the setup. Try again.');
-        return hlx6;
-      },
       usesSourceBus: async () => sourceBus,
       fetchSiteConfig: async () => null,
-      aemApiUrl: shared.aemApiUrl,
-      pacedAemApiFetch: shared.pacedAemApiFetch,
-      encodeURIComponent,
+      createSourceVersion: shared.createSourceVersion,
     });
   }
 
@@ -548,7 +542,7 @@ describe('inbox v2 approval handlers', () => {
     const createVersion = versionApi(async (url) => {
       calls.push(url);
       return { ok: true };
-    }, { hlx6: null, sourceBus: null });
+    }, { sourceBus: null });
     const result = await createVersion('example', 'website', '/page');
     assert.equal(result.success, false);
     assert.match(result.error, /Could not determine where the content is stored/);

@@ -196,6 +196,23 @@ export function aemApiUrl(org, site, resource) {
 }
 
 /**
+ * Creates a version of a source in the source bus, at the page's pace, with
+ * the label as its comment (in the query, as da.live does). The server answers
+ * 404 and creates nothing when the source is missing, so no source check is
+ * needed first.
+ * @param {Function} fetchFn - e.g. daFetch
+ * @param {string} org
+ * @param {string} site
+ * @param {string} sourcePath - e.g. `drafts/page.html`
+ * @param {string} label
+ * @returns {Promise<Response>}
+ */
+export function createSourceVersion(fetchFn, org, site, sourcePath, label) {
+  const url = `${aemApiUrl(org, site, `source/${sourcePath}`)}/.versions?comment=${encodeURIComponent(label)}`;
+  return pacedAemApiFetch(fetchFn, url, { method: 'POST' });
+}
+
+/**
  * Admin API URL for a preview or live operation on a page. Bulk operations
  * use path `/*` on admin.hlx.page but `/` (the resource root) on
  * api.aem.live, which rejects `/*`. api.aem.live paths have no ref (it works

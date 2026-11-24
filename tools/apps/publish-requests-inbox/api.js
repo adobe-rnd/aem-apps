@@ -16,7 +16,7 @@
 /* eslint-disable import/no-unresolved, no-console, no-await-in-loop */
 
 import {
-  adminUrl, aemApiUrl, isAemApiUrl, isHlx6, pacedAemApiFetch, usesSourceBus,
+  adminUrl, aemApiUrl, createSourceVersion, isAemApiUrl, isHlx6, usesSourceBus,
 } from '../../shared/hlx6.js';
 
 const WORKER_URL = 'https://publish-requests.aem-poc-lab.workers.dev';
@@ -390,13 +390,8 @@ export async function createVersion(org, site, path) {
       return { success: false, error: 'Could not determine where the content is stored. Try again.' };
     }
     if (sourceBus) {
-      // The source bus takes the label as the version comment, in the query (as
-      // da.live does). It answers 404 and creates nothing when the source is
-      // missing, so it needs no source check first.
-      const versions = `${aemApiUrl(org, site, `source/${sourcePath}`)}/.versions`;
-      const comment = encodeURIComponent(PUBLISH_VERSION_LABEL);
-      const response = await pacedAemApiFetch(daFetch, `${versions}?comment=${comment}`, { method: 'POST' });
-      if (!response.ok) return { success: false, error: `Version failed: ${response.status}` };
+      const resp = await createSourceVersion(daFetch, org, site, sourcePath, PUBLISH_VERSION_LABEL);
+      if (!resp.ok) return { success: false, error: `Version failed: ${resp.status}` };
       return { success: true };
     }
 
