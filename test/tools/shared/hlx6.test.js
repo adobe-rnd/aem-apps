@@ -18,6 +18,7 @@ import assert from 'node:assert/strict';
 import {
   adminUrl, aemApiUrl, isAemApiUrl, isHlx6, pingHlx6,
 } from '../../../tools/shared/hlx6.js';
+import * as shared from '../../../tools/shared/hlx6.js';
 
 function pingFetch(headers = {}, status = 200) {
   const calls = [];
@@ -116,6 +117,68 @@ describe('pingHlx6', () => {
     assert.equal(await pingHlx6('org', 'site', pingFetch(HLX6, 503).fetchFn), true);
     assert.equal(await pingHlx6('org', 'site', pingFetch({}, 404).fetchFn), false);
     await assert.rejects(pingHlx6('org', 'site', pingFetch({}, 503).fetchFn), /503/);
+  });
+});
+
+// usesSourceBus remembers each site's answer too, so every test uses its own site name.
+describe('usesSourceBus', () => {
+  function sidekick(...configs) {
+    const calls = [];
+    const fetchSiteConfig = async (org, site) => {
+      calls.push(`${org}/${site}`);
+      return configs[Math.min(calls.length, configs.length) - 1];
+    };
+    return { fetchSiteConfig, calls };
+  }
+
+  it('is false for a site the ping does not flag, without reading its config', async (test) => {
+    test.mock.method(global, 'fetch', pingFetch().fetchFn);
+    const { fetchSiteConfig, calls } = sidekick({ contentSourceType: 'sourcebus' });
+    assert.equal(await shared.usesSourceBus('org', 'sb-legacy', fetchSiteConfig), false);
+    assert.deepEqual(calls, []);
+  });
+
+  it('is true for source type sourcebus without a URL, and reads the config once', async (test) => {
+    test.mock.method(global, 'fetch', pingFetch(HLX6).fetchFn);
+    const { fetchSiteConfig, calls } = sidekick({ contentSourceType: 'sourcebus' });
+    assert.equal(await shared.usesSourceBus('org', 'sb-type', fetchSiteConfig), true);
+    assert.equal(await shared.usesSourceBus('org', 'sb-type', fetchSiteConfig), true);
+    assert.deepEqual(calls, ['org/sb-type']);
+  });
+
+  it('is true for source type sourcebus even with a DA-shaped URL', async (test) => {
+    test.mock.method(global, 'fetch', pingFetch(HLX6).fetchFn);
+    const { fetchSiteConfig } = sidekick({ contentSourceType: 'sourcebus', contentSourceUrl: 'https://content.da.live/org/sb-both/' });
+    assert.equal(await shared.usesSourceBus('org', 'sb-both', fetchSiteConfig), true);
+  });
+
+  it('is true for a source URL on the API host', async (test) => {
+    test.mock.method(global, 'fetch', pingFetch(HLX6).fetchFn);
+    const { fetchSiteConfig } = sidekick({ contentSourceType: 'markup', contentSourceUrl: 'https://api.aem.live/org/sites/sb-url/source' });
+    assert.equal(await shared.usesSourceBus('org', 'sb-url', fetchSiteConfig), true);
+  });
+
+  it('is false for a legacy DA site that only has a source-bus overlay', async (test) => {
+    // The admin ping flags this site too.
+    test.mock.method(global, 'fetch', pingFetch(HLX6).fetchFn);
+    const { fetchSiteConfig } = sidekick({ contentSourceType: 'markup', contentSourceUrl: 'https://content.da.live/org/sb-overlay/' });
+    assert.equal(await shared.usesSourceBus('org', 'sb-overlay', fetchSiteConfig), false);
+  });
+
+  it('is unknown when the config names no source, and asks again next time', async (test) => {
+    test.mock.method(global, 'fetch', pingFetch(HLX6).fetchFn);
+    const { fetchSiteConfig, calls } = sidekick(null, {}, { contentSourceType: 'sourcebus' });
+    assert.equal(await shared.usesSourceBus('org', 'sb-unknown', fetchSiteConfig), null);
+    assert.equal(await shared.usesSourceBus('org', 'sb-unknown', fetchSiteConfig), null);
+    assert.equal(await shared.usesSourceBus('org', 'sb-unknown', fetchSiteConfig), true);
+    assert.equal(calls.length, 3);
+  });
+
+  it('is unknown when the ping fails', async (test) => {
+    test.mock.method(global, 'fetch', pingFetch({}, 500).fetchFn);
+    const { fetchSiteConfig, calls } = sidekick({ contentSourceType: 'sourcebus' });
+    assert.equal(await shared.usesSourceBus('org', 'sb-ping-down', fetchSiteConfig), null);
+    assert.deepEqual(calls, []);
   });
 });
 

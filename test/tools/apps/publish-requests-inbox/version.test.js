@@ -28,10 +28,17 @@ const appSource = between(read('publish-requests-inbox.js'), 'class PublishReque
 const versionSource = between(read('api.js'), '// DA version', '// Workflow bookkeeping')
   .replace(/^export /gm, '');
 
-function versionApi(daFetch, { hlx6 = false } = {}) {
+// hlx6: what the admin ping says; sourceBus: whether the primary content is
+// in the source bus (null: unknown).
+function versionApi(daFetch, { hlx6 = false, sourceBus = hlx6 } = {}) {
   return vm.runInNewContext(`${versionSource}; ({ versionSourcePath, createVersion })`, {
     DA_ADMIN: 'https://admin.da.live',
-    isHlx6: async () => hlx6,
+    isHlx6: async () => {
+      if (hlx6 === null) throw new Error('Could not check the setup. Try again.');
+      return hlx6;
+    },
+    usesSourceBus: async () => sourceBus,
+    fetchSiteConfig: async () => null,
     aemApiUrl,
     encodeURIComponent,
     daFetch,
@@ -117,6 +124,31 @@ describe('v1 inbox DA versions', () => {
     const result = await createVersion('example', 'website', '/page');
     assert.equal(result.error, 'Source check failed: 404');
     assert.deepEqual(calls, ['https://api.aem.live/example/sites/website/source/page.html']);
+  });
+
+  it('versions a legacy page on DA when the site only has a source-bus overlay', async () => {
+    const calls = [];
+    const { createVersion } = versionApi(async (url, opts) => {
+      calls.push([url, opts.method]);
+      return { ok: true };
+    }, { hlx6: true, sourceBus: false });
+    assert.equal((await createVersion('example', 'website', '/page')).success, true);
+    assert.deepEqual(calls, [
+      ['https://admin.da.live/source/example/website/page.html', 'HEAD'],
+      ['https://admin.da.live/versionsource/example/website/page.html', 'POST'],
+    ]);
+  });
+
+  it('creates no version when the content source is unknown', async () => {
+    const calls = [];
+    const { createVersion } = versionApi(async (url) => {
+      calls.push(url);
+      return { ok: true };
+    }, { hlx6: null, sourceBus: null });
+    const result = await createVersion('example', 'website', '/page');
+    assert.equal(result.success, false);
+    assert.match(result.error, /Could not determine where the content is stored/);
+    assert.deepEqual(calls, []);
   });
 
   it('records approval before creating a version after a single publish', async () => {

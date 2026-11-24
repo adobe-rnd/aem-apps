@@ -470,12 +470,24 @@ describe('inbox v2 approval handlers', () => {
     assert.equal(api.versionSourcePath('/drafts/'), 'drafts/index.html');
   });
 
-  function versionApi(daFetch, { hlx6 = false } = {}) {
+  // hlx6: what the admin ping says; sourceBus: whether the primary content is
+  // in the source bus (null: unknown).
+  function versionApi(daFetch, { hlx6 = false, sourceBus = hlx6 } = {}) {
     const apiSource = readFileSync(new URL('../../../../tools/apps/publish-requests-inbox-v2/api.js', import.meta.url), 'utf8');
     const versionSource = apiSource.slice(apiSource.indexOf('// DA version'), apiSource.indexOf('// Helix publish'))
       .replace(/^export /gm, '');
     return vm.runInNewContext(`${versionSource}; createVersion`, {
-      DA_ADMIN: 'https://admin.da.live', daFetch, console, isHlx6: async () => hlx6, aemApiUrl, encodeURIComponent,
+      DA_ADMIN: 'https://admin.da.live',
+      daFetch,
+      console,
+      isHlx6: async () => {
+        if (hlx6 === null) throw new Error('Could not check the setup. Try again.');
+        return hlx6;
+      },
+      usesSourceBus: async () => sourceBus,
+      fetchSiteConfig: async () => null,
+      aemApiUrl,
+      encodeURIComponent,
     });
   }
 
@@ -505,6 +517,31 @@ describe('inbox v2 approval handlers', () => {
       ['https://api.aem.live/example/sites/website/source/data/sheet.json', 'HEAD', undefined],
       ['https://api.aem.live/example/sites/website/source/data/sheet.json/.versions?comment=Approved%20%26%20Published', 'POST', undefined],
     ]);
+  });
+
+  it('versions a legacy page on DA when the site only has a source-bus overlay', async () => {
+    const calls = [];
+    const createVersion = versionApi(async (url, opts) => {
+      calls.push([url, opts.method]);
+      return { ok: true };
+    }, { hlx6: true, sourceBus: false });
+    assert.equal((await createVersion('example', 'website', '/data/sheet.json')).success, true);
+    assert.deepEqual(calls, [
+      ['https://admin.da.live/source/example/website/data/sheet.json', 'HEAD'],
+      ['https://admin.da.live/versionsource/example/website/data/sheet.json', 'POST'],
+    ]);
+  });
+
+  it('creates no version when the content source is unknown', async () => {
+    const calls = [];
+    const createVersion = versionApi(async (url) => {
+      calls.push(url);
+      return { ok: true };
+    }, { hlx6: null, sourceBus: null });
+    const result = await createVersion('example', 'website', '/page');
+    assert.equal(result.success, false);
+    assert.match(result.error, /Could not determine where the content is stored/);
+    assert.deepEqual(calls, []);
   });
 
   it('records final approval before creating a version', async () => {

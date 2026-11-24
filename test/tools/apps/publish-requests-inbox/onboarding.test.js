@@ -46,10 +46,19 @@ function app(overrides = {}) {
   return Object.assign(new App(), { _org: 'example', _site: 'website', token: 'token' });
 }
 
-function onboarding({ daFetch, fetch, hlx6 = false } = {}) {
+// hlx6: what the admin ping says (null: it failed); sourceBus: whether the
+// primary content is in the source bus (null: unknown).
+function onboarding({
+  daFetch, fetch, hlx6 = false, sourceBus = hlx6,
+} = {}) {
   return vm.runInNewContext(`${onboardingSource}; ({ fetchDaConfigs, checkSiteExists, checkSiteRegistration })`, {
     DA_ADMIN: 'https://admin.da.live',
-    isHlx6: async () => hlx6,
+    isHlx6: async () => {
+      if (hlx6 === null) throw new Error('Could not check the setup. Try again.');
+      return hlx6;
+    },
+    usesSourceBus: async () => sourceBus,
+    fetchSiteConfig: async () => null,
     aemApiUrl,
     daFetch,
     fetch,
@@ -187,6 +196,42 @@ describe('v1 inbox onboarding reads', () => {
     });
     assert.equal(await checkSiteExists('example', 'website'), true);
     assert.deepEqual(calls, []);
+  });
+
+  it('reads a legacy site with a source-bus overlay from DA', async () => {
+    // The admin ping flags overlays too; the primary content is still on DA.
+    const calls = [];
+    const answers = daAnswers({
+      'https://admin.da.live/config/example/website/': {
+        status: 200,
+        body: { 'publish-workflow-config': { data: [{ pattern: '/*', approvers: 'a@example.com' }] } },
+      },
+      'https://admin.da.live/config/example/': { status: 404 },
+      'https://admin.da.live/list/example': { status: 200, body: [{ name: 'other' }] },
+    });
+    const { fetchDaConfigs, checkSiteExists } = onboarding({
+      hlx6: true,
+      sourceBus: false,
+      daFetch: (url) => { calls.push(url); return answers(url); },
+    });
+    const { siteConfig } = await fetchDaConfigs('example', 'website');
+    assert.equal(siteConfig['publish-workflow-config'].data.length, 1);
+    assert.equal(await checkSiteExists('example', 'website'), false);
+    assert.ok(calls.every((url) => !url.startsWith('https://api.aem.live')));
+  });
+
+  it('does not block or guess when the content source is unknown', async () => {
+    const calls = [];
+    const { fetchDaConfigs, checkSiteExists } = onboarding({
+      hlx6: null,
+      sourceBus: null,
+      daFetch: async (url) => { calls.push(url); return Response.json({}); },
+    });
+    const { siteConfig } = await fetchDaConfigs('example', 'website');
+    // Unreadable (null), so the inbox can't rule out rules and carries on.
+    assert.equal(siteConfig, null);
+    assert.equal(await checkSiteExists('example', 'website'), true);
+    assert.deepEqual(calls, ['https://admin.da.live/config/example/']);
   });
 
   it('keeps a missing org listing from blocking the site', async () => {
