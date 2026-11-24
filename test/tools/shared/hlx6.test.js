@@ -88,16 +88,17 @@ describe('isHlx6', () => {
     assert.equal(await isHlx6('org', 'http-500', pingFetch(HLX6).fetchFn), true);
   });
 
-  it('retries a 503 and returns the later answer, honoring Retry-After', async () => {
+  it('rejects a 503 without retrying or caching it', async () => {
     const { fetchFn, calls } = pingSequence({ status: 503, headers: { 'retry-after': '0' } }, { headers: HLX6 });
+    await assert.rejects(isHlx6('org', 'busy', fetchFn), /503/);
+    assert.equal(calls.length, 1);
     assert.equal(await isHlx6('org', 'busy', fetchFn), true);
-    assert.equal(calls.length, 2);
   });
 
-  it('gives up on a 429 after two retries', async () => {
+  it('rejects a 429 without retrying it', async () => {
     const { fetchFn, calls } = pingSequence({ status: 429, headers: { 'retry-after': '0' } });
     await assert.rejects(isHlx6('org', 'limited', fetchFn), /429/);
-    assert.equal(calls.length, 3);
+    assert.equal(calls.length, 1);
   });
 
   it('gives up on a ping that does not answer', async (test) => {
@@ -203,40 +204,57 @@ describe('pacedAemApiFetch', () => {
     assert.ok(gaps.every((gap) => gap >= 120), `gaps ${gaps}`);
   });
 
-  it('retries a 429 or a network error and pauses everything queued for Retry-After', async () => {
-    const { fetchFn, starts } = recorder((url, opts, count) => {
-      if (count === 1) return new Response(null, { status: 429, headers: { 'retry-after': '1' } });
-      if (count === 2) throw new TypeError('Failed to fetch');
-      return new Response(null, { status: 201 });
-    });
+  it('retries a 429 and pauses everything queued for Retry-After', async () => {
+    const { fetchFn, starts } = recorder((url, opts, count) => (count === 1
+      ? new Response(null, { status: 429, headers: { 'retry-after': '1' } })
+      : new Response(null, { status: 201 })));
     const answers = await Promise.all([
       shared.pacedAemApiFetch(fetchFn, 'a', {}),
       shared.pacedAemApiFetch(fetchFn, 'b', {}),
     ]);
     assert.deepEqual(answers.map((resp) => resp.status), [201, 201]);
-    assert.equal(starts.length, 4);
+    assert.equal(starts.length, 3);
     // The 429 asked for 1 s; the queued request waited for it too.
-    assert.ok(starts[2] - starts[0] >= 950, `waited ${starts[2] - starts[0]} ms`);
+    assert.ok(starts[1] - starts[0] >= 950, `waited ${starts[1] - starts[0]} ms`);
   });
 
   it('returns the last answer once the retries are used up', async () => {
-    const { fetchFn, starts } = recorder(() => new Response(null, { status: 503, headers: { 'retry-after': '0' } }));
-    assert.equal((await shared.pacedAemApiFetch(fetchFn, 'u', {})).status, 503);
+    const { fetchFn, starts } = recorder(() => new Response(null, { status: 429, headers: { 'retry-after': '0' } }));
+    assert.equal((await shared.pacedAemApiFetch(fetchFn, 'u', {})).status, 429);
     assert.equal(starts.length, 4);
   });
 
-  it('retries the 500 daFetch makes up for a network error, not a 500 from the server', async () => {
-    // daFetch answers a failed fetch (e.g. a 429 without CORS headers) with
-    // new Response(null, { status: 500, statusText }), type 'default'.
-    const made = recorder((url, opts, count) => (count === 1
-      ? new Response(null, { status: 500, statusText: 'Failed to fetch' })
-      : new Response(null, { status: 201 })));
-    assert.equal((await shared.pacedAemApiFetch(made.fetchFn, 'u', {})).status, 201);
-    assert.equal(made.starts.length, 2);
+  it('does not retry a 503, which the server may have run', async () => {
+    const { fetchFn, starts } = recorder(() => new Response(null, { status: 503, headers: { 'retry-after': '0' } }));
+    assert.equal((await shared.pacedAemApiFetch(fetchFn, 'u', {})).status, 503);
+    assert.equal(starts.length, 1);
+  });
 
-    const server = recorder(() => ({ status: 500, ok: false, type: 'cors' }));
-    assert.equal((await shared.pacedAemApiFetch(server.fetchFn, 'u', {})).status, 500);
-    assert.equal(server.starts.length, 1);
+  it('does not retry a network error, which the server may have run, but pauses everything queued', async () => {
+    // A 429 without CORS headers looks like a network error. daFetch answers
+    // a failed fetch with new Response(null, { status: 500, statusText }),
+    // type 'default'; plain fetch throws.
+    const { fetchFn, starts } = recorder((url, opts, count) => {
+      if (count === 1) throw new TypeError('Failed to fetch');
+      if (count === 2) return new Response(null, { status: 500, statusText: 'Failed to fetch' });
+      return new Response(null, { status: 201 });
+    });
+    const [thrown, made, sent] = await Promise.allSettled(['a', 'b', 'c'].map((url) => shared.pacedAemApiFetch(fetchFn, url, {})));
+    assert.equal(thrown.status, 'rejected');
+    assert.equal(made.value.status, 500);
+    assert.equal(sent.value.status, 201);
+    assert.equal(starts.length, 3);
+    const gaps = starts.slice(1).map((start, index) => start - starts[index]);
+    assert.ok(gaps.every((gap) => gap >= 950), `gaps ${gaps}`);
+  });
+
+  it('neither retries nor pauses for a 500 from the server', async () => {
+    const { fetchFn, starts } = recorder((url, opts, count) => (count === 1
+      ? { status: 500, ok: false, type: 'cors' }
+      : new Response(null, { status: 201 })));
+    const answers = await Promise.all(['a', 'b'].map((url) => shared.pacedAemApiFetch(fetchFn, url, {})));
+    assert.deepEqual(answers.map((resp) => resp.status), [500, 201]);
+    assert.ok(starts[1] - starts[0] < 500, `waited ${starts[1] - starts[0]} ms`);
   });
 });
 
