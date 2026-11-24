@@ -1,4 +1,4 @@
-/* Without a center group the controls take the room; the trail gives way before the site. */
+/* Without a center group the controls take the room. */
 .bar:not(.centered) {
   .group-start {
     flex: 0 1 auto;
@@ -8,19 +8,6 @@
     flex: 1 1000 auto;
     min-width: auto;
   }
-}
-
-/* The site comes first, like the root of the trail: it shrinks before the trail does. */
-.site {
-  flex: 0 1 auto;
-  overflow: hidden;
-  min-width: 48px;
-  max-width: 32ch;
-  padding-inline-start: 6px;
-  font-size: var(--s2-component-m-regular-font-size);
-  color: var(--s2-gray-700);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .group-start .trail {
@@ -93,13 +80,9 @@ a.crumb-label {
   display: contents;
 }
 
-/* A narrow bar keeps the pencil, which names the site, the current crumb and the link back. A bar
- * without a center group takes two rows: site, crumb and New on top; search and sort under. */
+/* A narrow bar keeps the current crumb and the link back. A bar without a center group takes two
+ * rows: crumb, New and the site gear on top; search and sort under. */
 @container (width < 640px) {
-  .site {
-    display: none;
-  }
-
   .bar:not(.centered) {
     flex-wrap: wrap;
     row-gap: 0;
@@ -132,6 +115,11 @@ a.crumb-label {
 
     .tools .divider {
       display: none;
+    }
+
+    /* The bar's own gap spaces the divider here. */
+    .site-divider {
+      margin: 0;
     }
 
     nx-search {

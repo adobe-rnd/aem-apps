@@ -23,14 +23,13 @@ import { icon } from '../utils/icons.js';
 // controls. Screens adopt `headerStyle` after the canvas style (ui/shared/canvas/).
 export const headerStyle = await loadStyle(import.meta.url);
 
+// The gear at the end of the bar opens the site picker.
 function renderSite({ org, site, onChangeSite }) {
-  if (!site) return nothing;
   const key = `${org}/${site}`;
   return html`
-    <span class="site" title=${key}>${key}</span>
     <button type="button" class="nx-action-btn-icon change-site" title="Change site (${key})"
-      aria-label="Change site, ${key}" @click=${onChangeSite}>${icon({ name: 'edit' })}</button>
-    <span class="divider" aria-hidden="true"></span>`;
+      aria-label="Change site, ${key}" aria-haspopup="dialog"
+      @click=${onChangeSite}>${icon({ name: 'settings' })}</button>`;
 }
 
 // GraphQL › endpoints › {endpoint}; the trail is app-specific, so it is not nx-breadcrumb.
@@ -57,11 +56,13 @@ export function renderHeader({
   return html`
     <header class="bar ${center ? 'centered' : ''} ${endpoint ? '' : 'root'}">
       <h1 class="sr-only">${endpoint ?? 'GraphQL endpoints'}</h1>
-      <div class="group group-start">
-        ${renderSite({ org, site, onChangeSite })}
-        ${renderTrail({ org, site, endpoint })}
-      </div>
+      <div class="group group-start">${renderTrail({ org, site, endpoint })}</div>
       ${center ? html`<div class="group group-center">${center}</div>` : nothing}
-      <div class="group group-end">${end ?? nothing}</div>
+      <div class="group group-end">
+        ${end ?? nothing}
+        ${site ? html`
+          ${end ? html`<span class="divider site-divider" aria-hidden="true"></span>` : nothing}
+          ${renderSite({ org, site, onChangeSite })}` : nothing}
+      </div>
     </header>`;
 }

@@ -29,9 +29,8 @@ per-site sections later.
 - An invalid endpoint name in the hash opens the list. An endpoint, or site
   schemas, that cannot be loaded shows an error toast and returns to the list.
 - Each screen is a da.live canvas: a 48px top bar and scrolling content. The
-  bar starts with the org/site and a pencil that opens the site picker, then
-  the GraphQL › endpoints › {endpoint} trail. Without a site, the picker opens
-  on load.
+  bar starts with the GraphQL › endpoints › {endpoint} trail and ends with a
+  gear that opens the site picker. Without a site, the picker opens on load.
 - The list's bar has the endpoint search, Sort and New. Each row shows the
   endpoint's path (`/{org}/{site}/endpoints/{name}/graphql`) and a link that
   opens it in [GraphiQL](../graphiql/README.md) (from `?ref=graphiql` until it
@@ -40,12 +39,11 @@ per-site sections later.
   deletes it.
 - An endpoint's bar has the Schemas and GraphQL SDL tabs, the schema search
   (Schemas tab), the unsaved status, and Discard and Save.
-- Under 640px, the bar shows the pencil without the org/site (its tooltip names
-  it), Sort shows only its icon, and the trail shows only the link back to the
-  list and the current crumb. The list's bar takes two rows: the pencil, crumb
-  and New over the search and Sort. List rows show only the name and the menu.
-  An endpoint's bar puts the pencil, trail and buttons on top, the tabs under
-  them, and, on the Schemas tab, the search under the tabs.
+- Under 640px, Sort shows only its icon, and the trail shows only the link
+  back to the list and the current crumb. The list's bar takes two rows: the
+  crumb, New and the gear over the search and Sort. List rows show only the
+  name and the menu. An endpoint's bar puts the trail, buttons and gear on top,
+  the tabs under them, and, on the Schemas tab, the search under the tabs.
 - New opens a dialog for the name, then an unsaved endpoint screen
   at `#/{org}/{site}/endpoints/{name}`. Cancel replaces the hash with
   `#/{org}/{site}/endpoints`, and so do saving and deleting an endpoint.
@@ -256,7 +254,7 @@ ui/                         custom elements, UI helpers and icons
   endpoint-screen/          one endpoint: tabs, search and save actions in the bar
     helpers/draft.js        schema selection, dirty check, save state
   new-endpoint-dialog/      asks for a new endpoint's name
-  header/                   renderHeader: the bar template with site, pencil and trail
+  header/                   renderHeader: the bar template with trail and site gear
   endpoint-list/            list rows, endpoint URLs, row menu
   schemas-panel/            Schemas tab: selection list, filtered by the bar search
     helpers/options.js      schema rows: filter, sort, schema status
@@ -298,7 +296,7 @@ ui/                         custom elements, UI helpers and icons
 - Schema documents are read and validated only by the endpoint screen.
 - Screens render their own bar with `renderHeader` and emit `route-change`
   (`{ route, replace, isNew }`), `endpoints-change` (`{ endpoints }`) and
-  `change-site` (the pencil). Components below the screens never call the
+  `change-site` (the gear). Components below the screens never call the
   store. `schemas-select` bubbles and is composed, so it reaches the endpoint
   screen without being re-dispatched; other events don't bubble. The schemas
   panel takes the bar search as its `query`, and the SDL panel emits

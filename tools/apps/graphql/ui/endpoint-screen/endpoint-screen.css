@@ -8,6 +8,11 @@
     font-weight: var(--s2-component-m-bold-font-weight);
   }
 
+  /* 12px each side, as on the list's bar. */
+  .site-divider {
+    margin: 0 4px;
+  }
+
   .hint {
     flex: 0 1 auto;
     overflow: hidden;
@@ -42,16 +47,16 @@
   }
 }
 
-/* Narrow canvas: the bar takes rows for the site, endpoint and buttons, then the tabs, then the
+/* Narrow canvas: the bar takes rows for the endpoint, buttons and site gear, then the tabs, then the
  * search, which the SDL tab drops; the hint and the status light give their room to the buttons. */
 @container (width < 640px) {
   .bar {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto auto auto;
     grid-template-areas:
-      'start discard save'
-      'tabs tabs tabs'
-      'search search search';
+      'start discard save divider gear'
+      'tabs tabs tabs tabs tabs'
+      'search search search search search';
     gap: 8px;
     height: auto;
     padding-block: 8px;
@@ -75,7 +80,7 @@
       min-width: 0;
       contain: inline-size;
 
-      /* Lines the search icon up with the pencil above. */
+      /* Lines the search icon up with the crumb above. */
       margin-inline-start: 7px;
     }
 
@@ -91,7 +96,20 @@
       grid-area: save;
     }
 
+    /* Without Save, the divider has nothing to set apart. */
+    .site-divider {
+      grid-area: divider;
+    }
+
+    .change-site {
+      grid-area: gear;
+    }
+
     :is(.hint, .status-light) {
+      display: none;
+    }
+
+    &:not(:has(.save)) .site-divider {
       display: none;
     }
   }
