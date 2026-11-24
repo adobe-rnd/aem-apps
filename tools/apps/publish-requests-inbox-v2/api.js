@@ -201,11 +201,7 @@ export async function createVersion(org, site, path) {
     if (!sourcePath) return { success: true };
 
     // The primary content source, not the admin ping, says where versions live.
-    const sourceBus = await usesSourceBus(org, site, fetchSiteConfig);
-    if (sourceBus === null) {
-      return { success: false, error: 'Could not determine where the content is stored. Try again.' };
-    }
-    if (sourceBus) {
+    if (await usesSourceBus(org, site, fetchSiteConfig)) {
       const resp = await createSourceVersion(daFetch, org, site, sourcePath, PUBLISH_VERSION_LABEL);
       if (!resp.ok) return { success: false, error: `Version failed: ${resp.status}` };
       return { success: true };

@@ -162,11 +162,11 @@ async function getDaJson(url, missing = null) {
 
 // Sites whose content is in the source bus keep their DA site config in
 // config/editor/da.json on api.aem.live, each tab a plain row array. Returned
-// in DA's shape ({ tab: { data: rows } }). Null when the source is unknown.
+// in DA's shape ({ tab: { data: rows } }).
 async function getSiteConfig(org, site) {
-  const sourceBus = await usesSourceBus(org, site, fetchSiteConfig);
-  if (sourceBus === null) return null;
-  if (!sourceBus) return getDaJson(`${DA_ADMIN}/config/${org}/${site}/`, {});
+  if (!await usesSourceBus(org, site, fetchSiteConfig)) {
+    return getDaJson(`${DA_ADMIN}/config/${org}/${site}/`, {});
+  }
   const config = await getDaJson(aemApiUrl(org, site, 'config/editor/da.json'), {});
   return config && Object.fromEntries(Object.entries(config)
     .map(([tab, rows]) => [tab, Array.isArray(rows) ? { data: rows } : rows]));
@@ -184,9 +184,9 @@ export async function fetchDaConfigs(org, site) {
 
 // False only when the org listing loads without the site; an unreadable listing doesn't block.
 // Source-bus sites aren't in the DA org listing; the admin ping only flags configured
-// sites. An unknown content source doesn't block either.
+// sites.
 export async function checkSiteExists(org, site) {
-  if (await usesSourceBus(org, site, fetchSiteConfig) !== false) return true;
+  if (await usesSourceBus(org, site, fetchSiteConfig)) return true;
   const items = await getDaJson(`${DA_ADMIN}/list/${org}`);
   return !Array.isArray(items) || items.some((item) => item.name === site);
 }
@@ -385,11 +385,7 @@ export async function createVersion(org, site, path) {
     if (!sourcePath) return { success: true };
 
     // The primary content source, not the admin ping, says where versions live.
-    const sourceBus = await usesSourceBus(org, site, fetchSiteConfig);
-    if (sourceBus === null) {
-      return { success: false, error: 'Could not determine where the content is stored. Try again.' };
-    }
-    if (sourceBus) {
+    if (await usesSourceBus(org, site, fetchSiteConfig)) {
       const resp = await createSourceVersion(daFetch, org, site, sourcePath, PUBLISH_VERSION_LABEL);
       if (!resp.ok) return { success: false, error: `Version failed: ${resp.status}` };
       return { success: true };

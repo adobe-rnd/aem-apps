@@ -106,7 +106,8 @@ operation. Review links compare preview versus live in the Page Status diff tool
 On Helix 6 sites (the admin ping announces `x-api-upgrade-available`) the same
 calls go to `https://api.aem.live/{org}/sites/{site}/live/...` instead of
 admin.hlx.page; bulk publication sends `forceAsync: true` so there is a job to poll.
-If the ping fails, the inbox publishes nothing and shows an error to try again.
+If the ping fails, the inbox treats the site as legacy, as it did before Helix 6
+support, and pings again on the next call.
 
 After a final publish is confirmed, the inbox sends the workflow approval to the
 worker before it tries to create an **Approved & Published** DA version for each
@@ -118,7 +119,9 @@ version updates the source's last-modified time. When the site's content source
 is the AEM source bus (the sidekick config's content source, not the admin ping,
 which also flags sites that only have a source-bus overlay), the inbox creates
 the version there (`POST /{org}/sites/{site}/source/{path}/.versions` on
-`api.aem.live`, the label as `comment`). That call answers 404 for a missing
+`api.aem.live`, the label as `comment`). If the ping or the sidekick config
+can't be read, or the config names no content source, the inbox uses DA. The
+source-bus call answers 404 for a missing
 source and leaves the source's last-modified time alone. Version requests start
 at least 125 ms apart. A version request that gets a 429 waits and is sent
 again. One that gets a 503 or a network error is not, because the server may

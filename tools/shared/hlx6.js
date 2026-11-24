@@ -47,14 +47,14 @@ export async function pingHlx6(org, site, fetchFn = fetch, init = undefined) {
 
 const PING_TIMEOUT_MS = 5000;
 
+// The ping's answer, or null when it failed or timed out.
 async function pingWithTimeout(org, site, fetchFn) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
   try {
     return await pingHlx6(org, site, fetchFn, { signal: controller.signal });
-  } catch (error) {
-    const reason = error.response ? `admin ping ${error.response.status}` : 'admin ping failed';
-    throw new Error(`Could not check the setup of ${org}/${site} (${reason}). Try again.`, { cause: error });
+  } catch {
+    return null;
   } finally {
     clearTimeout(timer);
   }
@@ -62,24 +62,30 @@ async function pingWithTimeout(org, site, fetchFn) {
 
 const answers = new Map();
 
+// Each site is pinged once per page load; a failed ping isn't kept, so the
+// next call pings again.
+function cachedPing(org, site, fetchFn) {
+  const key = `${org}/${site}`;
+  if (!answers.has(key)) {
+    const answer = pingWithTimeout(org, site, fetchFn);
+    answers.set(key, answer);
+    answer.then((value) => { if (value === null) answers.delete(key); });
+  }
+  return answers.get(key);
+}
+
 /**
  * Whether the site runs on Helix 6, from the admin ping (see pingHlx6). Each
  * site is pinged once per page load. A ping that fails, times out or answers
- * with an error rejects, so callers send nothing, and isn't cached, so the
- * next call pings again.
+ * with an error counts as legacy, which is what the apps did before they
+ * knew Helix 6, and isn't cached, so the next call pings again.
  * @param {string} org
  * @param {string} site
  * @param {Function} [fetchFn]
  * @returns {Promise<boolean>}
  */
-export function isHlx6(org, site, fetchFn = fetch) {
-  const key = `${org}/${site}`;
-  if (!answers.has(key)) {
-    const answer = pingWithTimeout(org, site, fetchFn);
-    answers.set(key, answer);
-    answer.catch(() => answers.delete(key));
-  }
-  return answers.get(key);
+export async function isHlx6(org, site, fetchFn = fetch) {
+  return await cachedPing(org, site, fetchFn) === true;
 }
 
 const sources = new Map();
@@ -90,29 +96,31 @@ const sources = new Map();
  * also flags a legacy site that only has a source-bus overlay. So for a
  * flagged site this reads the sidekick config: source type `sourcebus` (with
  * or without a URL) or a source URL on the API host means the source bus.
- * True and false are kept for the page load; null (ping or config couldn't be
- * read, or the config names no source) is asked again on the next call.
+ * Anything else is false, the DA the apps used before they knew Helix 6. The
+ * answer is kept for the page load, unless the ping or the config couldn't be
+ * read: then the next call asks again.
  * @param {string} org
  * @param {string} site
  * @param {Function} fetchSiteConfig - (org, site) => sidekick config or null
- * @returns {Promise<boolean|null>}
+ * @returns {Promise<boolean>}
  */
-export function usesSourceBus(org, site, fetchSiteConfig) {
+export async function usesSourceBus(org, site, fetchSiteConfig) {
   const key = `${org}/${site}`;
   if (!sources.has(key)) {
-    const answer = isHlx6(org, site)
+    // null: couldn't be read, so not kept.
+    const answer = cachedPing(org, site, fetch)
       .then(async (hlx6) => {
-        if (!hlx6) return false;
+        if (hlx6 !== true) return hlx6;
         const config = await fetchSiteConfig(org, site);
-        const { contentSourceType: type, contentSourceUrl: url } = config ?? {};
-        if (!type && !url) return null;
+        if (!config) return null;
+        const { contentSourceType: type, contentSourceUrl: url } = config;
         return type === 'sourcebus' || url?.startsWith(`${AEM_API}/`) === true;
       })
       .catch(() => null);
     sources.set(key, answer);
     answer.then((value) => { if (value === null) sources.delete(key); });
   }
-  return sources.get(key);
+  return await sources.get(key) === true;
 }
 
 // The API host allows 10 requests per second per project
