@@ -16,22 +16,16 @@
   flex: 0 1 auto;
 }
 
-/* The site comes first, like the root of a trail: it shrinks before the title does. */
-.group-start .site {
-  flex: 0 1 auto;
-  overflow: hidden;
-  min-width: 48px;
-  max-width: 32ch;
-  padding-inline-start: 6px;
-  font-size: var(--s2-component-m-regular-font-size);
-  color: var(--s2-gray-700);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .group-end {
   flex: 1 1000 auto;
   min-width: auto;
+}
+
+/* New, then the site gear: kept together, also when the end group dissolves on a narrow bar. */
+.end-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .bar nx-search {
@@ -240,11 +234,10 @@
   display: contents;
 }
 
-/* Narrow canvas: the pencil names the site and Sort is its icon. The bar takes two rows:
- * site, title and New on top; search and sort under them. */
+/* Narrow canvas: Sort is its icon. The bar takes two rows: title, New and the site gear on
+ * top; search and sort under them. */
 @container (width < 640px) {
   .wide,
-  .group-start .site,
   .tools .divider {
     display: none;
   }

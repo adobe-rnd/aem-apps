@@ -461,16 +461,17 @@ class SeBrowse extends LitElement {
       <header class="bar">
         <div class="group group-start">
           ${this._renderChatToggle()}
-          <span class="site" title=${key}>${key}</span>
-          <button type="button" class="nx-action-btn-icon change-site"
-            title="Change site (${key})" aria-label="Change site, ${key}"
-            @click=${() => this.dispatchEvent(new Event('change-site'))}>${icon('edit')}</button>
-          <span class="divider" aria-hidden="true"></span>
-          <h1 class="title">Schemas</h1>
+          <h1 class="title"><span class="wide">Structured Content </span>Schemas</h1>
         </div>
         <div class="group group-end">
           ${this._renderControls()}
-          ${this._renderNew()}
+          <div class="end-actions">
+            ${this._renderNew()}
+            <span class="divider" aria-hidden="true"></span>
+            <button type="button" class="nx-action-btn-icon change-site"
+              title="Change site (${key})" aria-label="Change site, ${key}" aria-haspopup="dialog"
+              @click=${() => this.dispatchEvent(new Event('change-site'))}>${icon('settings')}</button>
+          </div>
         </div>
       </header>
       <div class="content">

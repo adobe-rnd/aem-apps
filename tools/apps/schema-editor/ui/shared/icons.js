@@ -56,6 +56,7 @@ const FILES = {
   redo: 'redo',
   save: 'savefloppy',
   search: 'search',
+  settings: 'settings',
   sort: 'sort',
   sortUp: 'sortup',
   sortDown: 'sortdown',
