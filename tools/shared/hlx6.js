@@ -88,41 +88,6 @@ export async function isHlx6(org, site, fetchFn = fetch) {
   return await cachedPing(org, site, fetchFn) === true;
 }
 
-const sources = new Map();
-
-/**
- * Whether the site's primary content lives in the source bus, which decides
- * where its DA config and versions are. The admin ping alone can't say: it
- * also flags a legacy site that only has a source-bus overlay. So for a
- * flagged site this reads the sidekick config: source type `sourcebus` (with
- * or without a URL) or a source URL on the API host means the source bus.
- * Anything else is false, the DA the apps used before they knew Helix 6. The
- * answer is kept for the page load, unless the ping or the config couldn't be
- * read: then the next call asks again.
- * @param {string} org
- * @param {string} site
- * @param {Function} fetchSiteConfig - (org, site) => sidekick config or null
- * @returns {Promise<boolean>}
- */
-export async function usesSourceBus(org, site, fetchSiteConfig) {
-  const key = `${org}/${site}`;
-  if (!sources.has(key)) {
-    // null: couldn't be read, so not kept.
-    const answer = cachedPing(org, site, fetch)
-      .then(async (hlx6) => {
-        if (hlx6 !== true) return hlx6;
-        const config = await fetchSiteConfig(org, site);
-        if (!config) return null;
-        const { contentSourceType: type, contentSourceUrl: url } = config;
-        return type === 'sourcebus' || url?.startsWith(`${AEM_API}/`) === true;
-      })
-      .catch(() => null);
-    sources.set(key, answer);
-    answer.then((value) => { if (value === null) sources.delete(key); });
-  }
-  return await sources.get(key) === true;
-}
-
 // The API host allows 10 requests per second per project
 // (https://www.aem.live/docs/limits), shared by every app and user of the
 // site, and its 429 has no CORS headers, so the browser reports a network

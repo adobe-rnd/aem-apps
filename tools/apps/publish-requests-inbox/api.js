@@ -16,7 +16,7 @@
 /* eslint-disable import/no-unresolved, no-console, no-await-in-loop */
 
 import {
-  adminUrl, aemApiUrl, createSourceVersion, isAemApiUrl, isHlx6, usesSourceBus,
+  adminUrl, aemApiUrl, createSourceVersion, isAemApiUrl, isHlx6,
 } from '../../shared/hlx6.js';
 
 const WORKER_URL = 'https://publish-requests.aem-poc-lab.workers.dev';
@@ -164,7 +164,7 @@ async function getDaJson(url, missing = null) {
 // config/editor/da.json on api.aem.live, each tab a plain row array. Returned
 // in DA's shape ({ tab: { data: rows } }).
 async function getSiteConfig(org, site) {
-  if (!await usesSourceBus(org, site, fetchSiteConfig)) {
+  if (!await isHlx6(org, site)) {
     return getDaJson(`${DA_ADMIN}/config/${org}/${site}/`, {});
   }
   const config = await getDaJson(aemApiUrl(org, site, 'config/editor/da.json'), {});
@@ -183,10 +183,9 @@ export async function fetchDaConfigs(org, site) {
 }
 
 // False only when the org listing loads without the site; an unreadable listing doesn't block.
-// Source-bus sites aren't in the DA org listing; the admin ping only flags configured
-// sites.
+// Source-bus sites aren't in the DA org listing.
 export async function checkSiteExists(org, site) {
-  if (await usesSourceBus(org, site, fetchSiteConfig)) return true;
+  if (await isHlx6(org, site)) return true;
   const items = await getDaJson(`${DA_ADMIN}/list/${org}`);
   return !Array.isArray(items) || items.some((item) => item.name === site);
 }
@@ -384,8 +383,7 @@ export async function createVersion(org, site, path) {
     const sourcePath = versionSourcePath(path);
     if (!sourcePath) return { success: true };
 
-    // The primary content source, not the admin ping, says where versions live.
-    if (await usesSourceBus(org, site, fetchSiteConfig)) {
+    if (await isHlx6(org, site)) {
       const resp = await createSourceVersion(daFetch, org, site, sourcePath, PUBLISH_VERSION_LABEL);
       if (!resp.ok) return { success: false, error: `Version failed: ${resp.status}` };
       return { success: true };

@@ -16,7 +16,7 @@
 /* eslint-disable import/no-unresolved, no-console, no-await-in-loop */
 
 import {
-  adminUrl, createSourceVersion, isAemApiUrl, isHlx6, usesSourceBus,
+  adminUrl, createSourceVersion, isAemApiUrl, isHlx6,
 } from '../../shared/hlx6.js';
 
 const WORKER_URL = 'https://publish-requests.aem-poc-lab.workers.dev';
@@ -200,8 +200,7 @@ export async function createVersion(org, site, path) {
     const sourcePath = versionSourcePath(path);
     if (!sourcePath) return { success: true };
 
-    // The primary content source, not the admin ping, says where versions live.
-    if (await usesSourceBus(org, site, fetchSiteConfig)) {
+    if (await isHlx6(org, site)) {
       const resp = await createSourceVersion(daFetch, org, site, sourcePath, PUBLISH_VERSION_LABEL);
       if (!resp.ok) return { success: false, error: `Version failed: ${resp.status}` };
       return { success: true };

@@ -115,12 +115,11 @@ existing page or JSON sheet. It skips media files and
 requires DA read and write access to the source. If a source check or version
 fails, the inbox shows a warning without undoing the publish. The version
 captures the current DA source, not the published preview. On DA, creating this
-version updates the source's last-modified time. When the site's content source
-is the AEM source bus (the sidekick config's content source, not the admin ping,
-which also flags sites that only have a source-bus overlay), the inbox creates
-the version there (`POST /{org}/sites/{site}/source/{path}/.versions` on
-`api.aem.live`, the label as `comment`). If the ping or the sidekick config
-can't be read, or the config names no content source, the inbox uses DA. The
+version updates the source's last-modified time. On Helix 6 sites
+(the admin ping announces `x-api-upgrade-available`), the inbox creates the
+version in the source bus (`POST /{org}/sites/{site}/source/{path}/.versions` on
+`api.aem.live`, the label as `comment`). If the ping can't be read, the inbox
+uses DA. The
 source-bus call answers 404 for a missing
 source and leaves the source's last-modified time alone. Version requests start
 at least 125 ms apart. A version request that gets a 429 waits and is sent

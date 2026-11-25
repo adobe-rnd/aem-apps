@@ -470,11 +470,9 @@ describe('inbox v2 approval handlers', () => {
     assert.equal(api.versionSourcePath('/drafts/'), 'drafts/index.html');
   });
 
-  // hlx6: what the admin ping says; sourceBus: whether the primary content is
-  // in the source bus. usesSourceBus replaces the stub, e.g. with the real one.
+  // hlx6: what the admin ping says. isHlx6 replaces the stub, e.g. with the real one.
   function versionApi(daFetch, {
-    hlx6 = false, sourceBus = hlx6, usesSourceBus = async () => sourceBus,
-    fetchSiteConfig = async () => null,
+    hlx6 = false, isHlx6 = async () => hlx6,
   } = {}) {
     const apiSource = readFileSync(new URL('../../../../tools/apps/publish-requests-inbox-v2/api.js', import.meta.url), 'utf8');
     const versionSource = apiSource.slice(apiSource.indexOf('// DA version'), apiSource.indexOf('// Helix publish'))
@@ -483,8 +481,7 @@ describe('inbox v2 approval handlers', () => {
       DA_ADMIN: 'https://admin.da.live',
       daFetch,
       console,
-      usesSourceBus,
-      fetchSiteConfig,
+      isHlx6,
       createSourceVersion: shared.createSourceVersion,
     });
   }
@@ -527,37 +524,16 @@ describe('inbox v2 approval handlers', () => {
     assert.equal(count, 2);
   });
 
-  it('versions in the source bus when the admin ping flags the site, whatever its sidekick config names', async (test) => {
+  it('versions in the source bus when the admin ping flags the site, with no sidekick read', async (test) => {
     test.mock.method(global, 'fetch', async () => new Response(null, { headers: { 'x-api-upgrade-available': 'true' } }));
-    const sidekickReads = [];
     const calls = [];
     const createVersion = versionApi(async (url, opts) => {
       calls.push([url, opts.method]);
       return { ok: true };
-    }, {
-      usesSourceBus: shared.usesSourceBus,
-      fetchSiteConfig: async () => {
-        sidekickReads.push('read');
-        return { contentSourceType: 'onedrive', contentSourceUrl: 'https://example.sharepoint.com/sites/by-ping' };
-      },
-    });
+    }, { isHlx6: shared.isHlx6 });
     assert.equal((await createVersion('example', 'by-ping', '/data/sheet.json')).success, true);
     assert.deepEqual(calls, [
       ['https://api.aem.live/example/sites/by-ping/source/data/sheet.json/.versions?comment=Approved%20%26%20Published', 'POST'],
-    ]);
-    assert.deepEqual(sidekickReads, []);
-  });
-
-  it('versions a legacy page on DA when the site only has a source-bus overlay', async () => {
-    const calls = [];
-    const createVersion = versionApi(async (url, opts) => {
-      calls.push([url, opts.method]);
-      return { ok: true };
-    }, { hlx6: true, sourceBus: false });
-    assert.equal((await createVersion('example', 'website', '/data/sheet.json')).success, true);
-    assert.deepEqual(calls, [
-      ['https://admin.da.live/source/example/website/data/sheet.json', 'HEAD'],
-      ['https://admin.da.live/versionsource/example/website/data/sheet.json', 'POST'],
     ]);
   });
 
@@ -567,7 +543,7 @@ describe('inbox v2 approval handlers', () => {
     const createVersion = versionApi(async (url, opts) => {
       calls.push([url, opts.method]);
       return { ok: true };
-    }, { usesSourceBus: shared.usesSourceBus });
+    }, { isHlx6: shared.isHlx6 });
     assert.equal((await createVersion('example', 'ping-down', '/page')).success, true);
     assert.deepEqual(calls, [
       ['https://admin.da.live/source/example/ping-down/page.html', 'HEAD'],

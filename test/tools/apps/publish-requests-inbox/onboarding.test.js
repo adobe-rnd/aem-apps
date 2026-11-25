@@ -47,17 +47,13 @@ function app(overrides = {}) {
   return Object.assign(new App(), { _org: 'example', _site: 'website', token: 'token' });
 }
 
-// hlx6: what the admin ping says; sourceBus: whether the primary content is in
-// the source bus. usesSourceBus replaces the stub, e.g. with the real one.
+// hlx6: what the admin ping says. isHlx6 replaces the stub, e.g. with the real one.
 function onboarding({
-  daFetch, fetch, hlx6 = false, sourceBus = hlx6, usesSourceBus = async () => sourceBus,
-  fetchSiteConfig = async () => null,
+  daFetch, fetch, hlx6 = false, isHlx6 = async () => hlx6,
 } = {}) {
   return vm.runInNewContext(`${onboardingSource}; ({ fetchDaConfigs, checkSiteExists, checkSiteRegistration })`, {
     DA_ADMIN: 'https://admin.da.live',
-    isHlx6: async () => hlx6,
-    usesSourceBus,
-    fetchSiteConfig,
+    isHlx6,
     aemApiUrl,
     daFetch,
     fetch,
@@ -197,10 +193,8 @@ describe('v1 inbox onboarding reads', () => {
     assert.deepEqual(calls, []);
   });
 
-  it('classifies a site by the admin ping alone, whatever its sidekick config names as primary source', async (test) => {
-    // The ping flags the site; the sidekick config says onedrive (a source bus overlay only).
+  it('reads a site the admin ping flags from the source bus, with no sidekick read', async (test) => {
     test.mock.method(global, 'fetch', async () => new Response(null, { headers: { 'x-api-upgrade-available': 'true' } }));
-    const sidekickReads = [];
     const calls = [];
     const answers = daAnswers({
       'https://api.aem.live/example/sites/by-ping/config/editor/da.json': {
@@ -210,12 +204,7 @@ describe('v1 inbox onboarding reads', () => {
       'https://admin.da.live/config/example/': { status: 404 },
     });
     const { fetchDaConfigs, checkSiteExists } = onboarding({
-      hlx6: true,
-      usesSourceBus: shared.usesSourceBus,
-      fetchSiteConfig: async (org, site) => {
-        sidekickReads.push(`${org}/${site}`);
-        return { contentSourceType: 'onedrive', contentSourceUrl: 'https://example.sharepoint.com/sites/by-ping' };
-      },
+      isHlx6: shared.isHlx6,
       daFetch: (url) => { calls.push(url); return answers(url); },
     });
     const { siteConfig } = await fetchDaConfigs('example', 'by-ping');
@@ -225,29 +214,6 @@ describe('v1 inbox onboarding reads', () => {
       'https://api.aem.live/example/sites/by-ping/config/editor/da.json',
     ]);
     assert.equal(siteConfig['publish-workflow-config'].data.length, 1);
-    assert.deepEqual(sidekickReads, []);
-  });
-
-  it('reads a legacy site with a source-bus overlay from DA', async () => {
-    // The admin ping flags overlays too; the primary content is still on DA.
-    const calls = [];
-    const answers = daAnswers({
-      'https://admin.da.live/config/example/website/': {
-        status: 200,
-        body: { 'publish-workflow-config': { data: [{ pattern: '/*', approvers: 'a@example.com' }] } },
-      },
-      'https://admin.da.live/config/example/': { status: 404 },
-      'https://admin.da.live/list/example': { status: 200, body: [{ name: 'other' }] },
-    });
-    const { fetchDaConfigs, checkSiteExists } = onboarding({
-      hlx6: true,
-      sourceBus: false,
-      daFetch: (url) => { calls.push(url); return answers(url); },
-    });
-    const { siteConfig } = await fetchDaConfigs('example', 'website');
-    assert.equal(siteConfig['publish-workflow-config'].data.length, 1);
-    assert.equal(await checkSiteExists('example', 'website'), false);
-    assert.ok(calls.every((url) => !url.startsWith('https://api.aem.live')));
   });
 
   it('reads the site from DA, as before, when the admin ping fails', async (test) => {
@@ -262,7 +228,7 @@ describe('v1 inbox onboarding reads', () => {
       'https://admin.da.live/list/example': { status: 200, body: [{ name: 'other' }] },
     });
     const { fetchDaConfigs, checkSiteExists } = onboarding({
-      usesSourceBus: shared.usesSourceBus,
+      isHlx6: shared.isHlx6,
       daFetch: (url) => { calls.push(url); return answers(url); },
     });
     const { siteConfig } = await fetchDaConfigs('example', 'ping-down');
