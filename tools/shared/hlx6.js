@@ -62,18 +62,6 @@ async function pingWithTimeout(org, site, fetchFn) {
 
 const answers = new Map();
 
-// Each site is pinged once per page load; a failed ping isn't kept, so the
-// next call pings again.
-function cachedPing(org, site, fetchFn) {
-  const key = `${org}/${site}`;
-  if (!answers.has(key)) {
-    const answer = pingWithTimeout(org, site, fetchFn);
-    answers.set(key, answer);
-    answer.then((value) => { if (value === null) answers.delete(key); });
-  }
-  return answers.get(key);
-}
-
 /**
  * Whether the site runs on Helix 6, from the admin ping (see pingHlx6). Each
  * site is pinged once per page load. A ping that fails, times out or answers
@@ -85,7 +73,13 @@ function cachedPing(org, site, fetchFn) {
  * @returns {Promise<boolean>}
  */
 export async function isHlx6(org, site, fetchFn = fetch) {
-  return await cachedPing(org, site, fetchFn) === true;
+  const key = `${org}/${site}`;
+  if (!answers.has(key)) {
+    const answer = pingWithTimeout(org, site, fetchFn);
+    answers.set(key, answer);
+    answer.then((value) => { if (value === null) answers.delete(key); });
+  }
+  return await answers.get(key) === true;
 }
 
 // The API host allows 10 requests per second per project
