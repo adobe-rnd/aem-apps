@@ -51,12 +51,13 @@ function app(overrides = {}) {
 // the source bus. usesSourceBus replaces the stub, e.g. with the real one.
 function onboarding({
   daFetch, fetch, hlx6 = false, sourceBus = hlx6, usesSourceBus = async () => sourceBus,
+  fetchSiteConfig = async () => null,
 } = {}) {
   return vm.runInNewContext(`${onboardingSource}; ({ fetchDaConfigs, checkSiteExists, checkSiteRegistration })`, {
     DA_ADMIN: 'https://admin.da.live',
     isHlx6: async () => hlx6,
     usesSourceBus,
-    fetchSiteConfig: async () => null,
+    fetchSiteConfig,
     aemApiUrl,
     daFetch,
     fetch,
@@ -194,6 +195,37 @@ describe('v1 inbox onboarding reads', () => {
     });
     assert.equal(await checkSiteExists('example', 'website'), true);
     assert.deepEqual(calls, []);
+  });
+
+  it('classifies a site by the admin ping alone, whatever its sidekick config names as primary source', async (test) => {
+    // The ping flags the site; the sidekick config says onedrive (a source bus overlay only).
+    test.mock.method(global, 'fetch', async () => new Response(null, { headers: { 'x-api-upgrade-available': 'true' } }));
+    const sidekickReads = [];
+    const calls = [];
+    const answers = daAnswers({
+      'https://api.aem.live/example/sites/by-ping/config/editor/da.json': {
+        status: 200,
+        body: { 'publish-workflow-config': [{ pattern: '/*', approvers: 'a@example.com' }] },
+      },
+      'https://admin.da.live/config/example/': { status: 404 },
+    });
+    const { fetchDaConfigs, checkSiteExists } = onboarding({
+      hlx6: true,
+      usesSourceBus: shared.usesSourceBus,
+      fetchSiteConfig: async (org, site) => {
+        sidekickReads.push(`${org}/${site}`);
+        return { contentSourceType: 'onedrive', contentSourceUrl: 'https://example.sharepoint.com/sites/by-ping' };
+      },
+      daFetch: (url) => { calls.push(url); return answers(url); },
+    });
+    const { siteConfig } = await fetchDaConfigs('example', 'by-ping');
+    assert.equal(await checkSiteExists('example', 'by-ping'), true);
+    assert.deepEqual(calls.sort(), [
+      'https://admin.da.live/config/example/',
+      'https://api.aem.live/example/sites/by-ping/config/editor/da.json',
+    ]);
+    assert.equal(siteConfig['publish-workflow-config'].data.length, 1);
+    assert.deepEqual(sidekickReads, []);
   });
 
   it('reads a legacy site with a source-bus overlay from DA', async () => {
