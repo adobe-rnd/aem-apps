@@ -52,7 +52,7 @@ access needs to add:
 
 | title  | path                                                                                                    | icon                                                                                                    | experience |
 | ------ | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------- |
-| `Tags` | `https://tags--aem-apps--adobe-rnd.aem.live/tools/plugins/tags/tags.html`                                | `https://tags--aem-apps--adobe-rnd.aem.live/tools/plugins/tags/classification.svg`                         | `dialog`?  |
+| `Tags` | `https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/tags/tags.html`                                | `https://main--aem-apps--adobe-rnd.aem.live/tools/plugins/tags/classification.svg`                         | `dialog`?  |
 
 Append `?taxonomy=...` to the `path` for sites that keep `taxonomy.json`
 somewhere other than the default location (see **Taxonomy location**
