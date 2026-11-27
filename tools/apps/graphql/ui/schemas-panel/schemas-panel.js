@@ -1,0 +1,212 @@
+/*
+ * Copyright 2026 Adobe Systems Incorporated
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/* eslint-disable no-underscore-dangle, import/no-unresolved */
+import { html, LitElement, nothing } from 'da-lit';
+import { loadStyle } from 'https://da.live/nx2/utils/utils.js';
+import {
+  countChanges, filterSchemaOptions, getSchemaStatus, sortSchemaOptions,
+} from './helpers/options.js';
+import { SCHEMA_STATUSES, unsavedSchemaChanges } from '../utils/messages.js';
+import { icon } from '../utils/icons.js';
+import {
+  delegateRowClick, renderEmptyRow, renderSortHeader, tableStyle,
+} from '../shared/table/table.js';
+import { renderStatusLight, statusLightStyle } from '../shared/status-light/status-light.js';
+
+const [formStyle, buttonStyle, style] = await Promise.all([
+  loadStyle('https://da.live/nx2/styles/form.css'),
+  loadStyle('https://da.live/nx2/styles/buttons.css'),
+  loadStyle(import.meta.url),
+]);
+
+const EL_NAME = 'gql-schemas-panel';
+
+const DEFAULT_SORT = { key: 'title', direction: 'ascending' };
+
+class SchemasPanel extends LitElement {
+  static properties = {
+    options: { attribute: false },
+    busy: { type: Boolean },
+    schemaEditorHref: { type: String },
+    _query: { state: true },
+    _sort: { state: true },
+  };
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.shadowRoot.adoptedStyleSheets = [
+      formStyle, buttonStyle, tableStyle, statusLightStyle, style,
+    ];
+  }
+
+  get _visible() {
+    const options = filterSchemaOptions({
+      options: this.options,
+      query: this._query,
+      statusLabel: (option) => SCHEMA_STATUSES[getSchemaStatus(option)]?.label,
+    });
+    return sortSchemaOptions({ options, ...this.sort });
+  }
+
+  get sort() {
+    return this._sort ?? DEFAULT_SORT;
+  }
+
+  handleSearch({ target }) {
+    this._query = target.value;
+  }
+
+  clearSearch() {
+    this._query = '';
+    this.shadowRoot.querySelector('.search input')?.focus();
+  }
+
+  select({ ids, selected }) {
+    const detail = { ids, selected };
+    this.dispatchEvent(new CustomEvent('schemas-select', { detail, bubbles: true, composed: true }));
+  }
+
+  handleSelectAll(selected) {
+    const ids = this._visible
+      .filter((option) => option.usable || (!selected && option.selected))
+      .map((option) => option.id);
+    if (ids.length) this.select({ ids, selected });
+  }
+
+  // Unusable schemas can only be deselected, so they count only when selected.
+  renderSelectAll(visible) {
+    const togglable = visible.filter((option) => option.usable || option.selected);
+    const all = togglable.length > 0 && togglable.every((option) => option.selected);
+    const some = togglable.some((option) => option.selected);
+    return html`
+      <span class="nx-checkbox ${some && !all ? 'indeterminate' : ''}">
+        <input type="checkbox" class="select-all" aria-label="Select all shown schemas"
+          .checked=${all} .indeterminate=${some && !all}
+          ?disabled=${this.busy || !togglable.length}
+          @change=${() => this.handleSelectAll(!all)} />
+      </span>`;
+  }
+
+  renderCount() {
+    const { options } = this;
+    const selected = options.filter((option) => option.selected).length;
+    const changes = unsavedSchemaChanges(countChanges(options));
+    const note = changes ? html` · <span class="changes">${changes}</span>` : nothing;
+    return html`
+      <span class="count">${selected} of ${options.length} selected${note}</span>`;
+  }
+
+  renderEditorLink() {
+    return html`
+      <a class="nx-action-btn-icon nx-btn-sm editor-link" href=${this.schemaEditorHref} target="_blank" rel="noopener"
+        title="Open in Schema Editor" aria-label="Open in Schema Editor">${icon({ name: 'openIn' })}</a>`;
+  }
+
+  renderStatus(option) {
+    const kind = getSchemaStatus(option);
+    if (!kind) return nothing;
+    const { variant, label, title } = SCHEMA_STATUSES[kind];
+    const issues = kind === 'invalid' && option.issues.join('\n');
+    return html`
+      ${renderStatusLight({ variant, label, title: issues || title })}
+      ${kind === 'invalid' ? this.renderEditorLink() : nothing}`;
+  }
+
+  isDisabled(option) {
+    return this.busy || (!option.usable && !option.selected);
+  }
+
+  renderCheckbox(option) {
+    return html`
+      <span class="nx-checkbox">
+        <input type="checkbox" class="row-control" aria-label=${option.id} .value=${option.id}
+          .checked=${option.selected} ?disabled=${this.isDisabled(option)}
+          @change=${({ target }) => this.select({ ids: [option.id], selected: target.checked })} />
+      </span>`;
+  }
+
+  renderRow(option, hasStatus) {
+    const label = option.title || option.id;
+    const className = `schema-option ${this.isDisabled(option) ? 'disabled' : 'clickable'}`;
+    return html`
+      <tr class=${className} @click=${delegateRowClick}>
+        <td class="select">${this.renderCheckbox(option)}</td>
+        <td class="schema-title"><span title=${label}>${label}</span></td>
+        <td class="schema-id"><span title=${option.id}>${option.id}</span></td>
+        ${hasStatus ? html`<td class="state"><div class="state-cell">${this.renderStatus(option)}</div></td>` : nothing}
+      </tr>`;
+  }
+
+  renderList(visible) {
+    const hasStatus = this.options.some((option) => getSchemaStatus(option));
+    const { sort } = this;
+    const onSort = (next) => { this._sort = next; };
+    const header = (key, label, className) => renderSortHeader({
+      key, label, className, sort, onSort,
+    });
+    const body = visible.length
+      ? visible.map((option) => this.renderRow(option, hasStatus))
+      : renderEmptyRow({
+        colspan: hasStatus ? 4 : 3, text: `No schemas match “${this._query?.trim()}”.`,
+      });
+    return html`
+      <div class="table-wrap">
+        <table class="list-table schema-list">
+          <thead>
+            <tr>
+              <th class="select" scope="col">${this.renderSelectAll(visible)}</th>
+              ${header('title', 'Title', 'schema-title')}
+              ${header('id', 'ID', 'schema-id')}
+              ${hasStatus ? header('status', 'Status', 'state') : nothing}
+            </tr>
+          </thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>`;
+  }
+
+  renderSearch() {
+    const clear = this._query
+      ? html`<button type="button" class="search-clear" aria-label="Clear search"
+          @click=${this.clearSearch}>${icon({ name: 'close' })}</button>`
+      : nothing;
+    return html`
+      <div class="search">
+        ${icon({ name: 'search', className: 'search-icon' })}
+        <input type="search" placeholder="Search schemas" aria-label="Search schemas"
+          .value=${this._query ?? ''} @input=${this.handleSearch} />
+        ${clear}
+      </div>`;
+  }
+
+  render() {
+    if (!this.options.length) {
+      return html`<p class="empty">This site has no Structured Content schemas yet. Create one
+        in the <a href=${this.schemaEditorHref} target="_blank" rel="noopener">Schema Editor</a>
+        first.</p>`;
+    }
+    const visible = this._visible;
+    return html`
+      <div class="picker-toolbar">
+        ${this.renderSearch()}
+        ${this.renderCount()}
+      </div>
+      ${this.renderList(visible)}
+    `;
+  }
+}
+
+customElements.define(EL_NAME, SchemasPanel);
