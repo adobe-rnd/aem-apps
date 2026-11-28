@@ -15,6 +15,10 @@
  */
 /* eslint-disable import/no-unresolved, no-console, no-await-in-loop */
 
+import {
+  adminUrl, aemApiUrl, createSourceVersion, isAemApiUrl, isHlx6,
+} from '../../shared/hlx6.js';
+
 const WORKER_URL = 'https://publish-requests.aem-poc-lab.workers.dev';
 const CI_WORKER_URL = 'https://publish-requests-ci.aem-poc-lab.workers.dev';
 const LOCAL_WORKER_URL = 'http://localhost:8787';
@@ -142,7 +146,7 @@ export async function fetchAccentSettings(org, site, token) {
 }
 
 // ===========================================================================
-// Site onboarding: DA existence + config (admin.da.live), worker registration
+// Site onboarding: site existence + config (DA or Helix 6), worker registration
 // ===========================================================================
 
 // The JSON, `missing` on a 404, or null when it can't be read.
@@ -156,17 +160,32 @@ async function getDaJson(url, missing = null) {
   }
 }
 
+// Sites whose content is in the source bus keep their DA site config in
+// config/editor/da.json on api.aem.live, each tab a plain row array. Returned
+// in DA's shape ({ tab: { data: rows } }).
+async function getSiteConfig(org, site) {
+  if (!await isHlx6(org, site)) {
+    return getDaJson(`${DA_ADMIN}/config/${org}/${site}/`, {});
+  }
+  const config = await getDaJson(aemApiUrl(org, site, 'config/editor/da.json'), {});
+  return config && Object.fromEntries(Object.entries(config)
+    .map(([tab, rows]) => [tab, Array.isArray(rows) ? { data: rows } : rows]));
+}
+
 // A config that doesn't exist is {} (no tabs); one that can't be read is null.
+// The org config stays on DA for Helix 6 sites too, as in the worker.
 export async function fetchDaConfigs(org, site) {
   const [siteConfig, orgConfig] = await Promise.all([
-    getDaJson(`${DA_ADMIN}/config/${org}/${site}/`, {}),
+    getSiteConfig(org, site),
     getDaJson(`${DA_ADMIN}/config/${org}/`, {}),
   ]);
   return { siteConfig, orgConfig };
 }
 
 // False only when the org listing loads without the site; an unreadable listing doesn't block.
+// Source-bus sites aren't in the DA org listing.
 export async function checkSiteExists(org, site) {
+  if (await isHlx6(org, site)) return true;
   const items = await getDaJson(`${DA_ADMIN}/list/${org}`);
   return !Array.isArray(items) || items.some((item) => item.name === site);
 }
@@ -188,12 +207,14 @@ export async function checkSiteRegistration(org, site, token) {
 }
 
 // ===========================================================================
-// Helix publish (admin.hlx.page — unchanged, runs under the user's session)
+// Helix publish (runs under the user's session). Legacy sites go through the
+// CORS proxy to admin.hlx.page; Helix 6 sites go to api.aem.live directly.
 // ===========================================================================
 
 /**
  * Publish content via Helix Admin API
  * POST https://admin.hlx.page/live/{org}/{site}/main/{path}
+ * Helix 6: POST https://api.aem.live/{org}/sites/{site}/live/{path}
  * @param {string} org - Organization
  * @param {string} site - Site
  * @param {string} path - Content path
@@ -204,7 +225,10 @@ export async function publishContent(org, site, path) {
     // Ensure path starts with /
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
 
-    const publishUrl = `${CORS_PROXY}?url=https://admin.hlx.page/live/${org}/${site}/main${cleanPath}`;
+    const hlx6 = await isHlx6(org, site);
+    const publishUrl = hlx6
+      ? adminUrl('live', { org, site, path: cleanPath }, true)
+      : `${CORS_PROXY}?url=https://admin.hlx.page/live/${org}/${site}/main${cleanPath}`;
 
     const response = await daFetch(publishUrl, { method: 'POST' });
 
@@ -234,6 +258,7 @@ export async function publishContent(org, site, path) {
 /**
  * Bulk publish multiple content paths via Helix Admin API
  * POST https://admin.hlx.page/live/{org}/{site}/main/*
+ * Helix 6: POST https://api.aem.live/{org}/sites/{site}/live/ (forceAsync)
  * @param {string} org - Organization
  * @param {string} site - Site
  * @param {string[]} paths - Array of content paths to publish
@@ -244,12 +269,19 @@ export async function bulkPublishContent(org, site, paths) {
     // Normalize paths — ensure each starts with /
     const cleanPaths = paths.map((p) => (p.startsWith('/') ? p : `/${p}`));
 
-    const bulkUrl = `${CORS_PROXY}?url=https://admin.hlx.page/live/${org}/${site}/main/*`;
+    const hlx6 = await isHlx6(org, site);
+    const bulkUrl = hlx6
+      ? adminUrl('live', { org, site, path: '/' }, true)
+      : `${CORS_PROXY}?url=https://admin.hlx.page/live/${org}/${site}/main/*`;
+    // api.aem.live takes bulk paths at the resource root (it answers /* with a
+    // 400), and runs up to 200 paths synchronously, keeping no job to poll.
+    // forceAsync gives the same job and /details flow as admin.hlx.page.
+    const body = hlx6 ? { paths: cleanPaths, forceAsync: true } : { paths: cleanPaths };
 
     const response = await daFetch(bulkUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paths: cleanPaths }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -285,7 +317,10 @@ export async function bulkPublishContent(org, site, paths) {
  * @returns {Promise<Object>} Final job status
  */
 export async function pollJobStatus(jobSelfUrl, maxWaitMs = 60000, intervalMs = 2000) {
-  const jobUrl = `${CORS_PROXY}?url=${encodeURIComponent(jobSelfUrl)}/details`;
+  // Helix 6 job links point at api.aem.live, which needs no proxy.
+  const jobUrl = isAemApiUrl(jobSelfUrl)
+    ? `${jobSelfUrl}/details`
+    : `${CORS_PROXY}?url=${encodeURIComponent(jobSelfUrl)}/details`;
   const startTime = Date.now();
 
   while (Date.now() - startTime < maxWaitMs) {
@@ -317,7 +352,7 @@ export async function pollJobStatus(jobSelfUrl, maxWaitMs = 60000, intervalMs = 
 }
 
 // ===========================================================================
-// DA version (admin.da.live — snapshot of the current source after publish)
+// DA version (admin.da.live or the Helix 6 source bus — snapshot of the source after publish)
 // ===========================================================================
 
 const PUBLISH_VERSION_LABEL = 'Approved & Published';
@@ -336,7 +371,8 @@ export function versionSourcePath(path) {
 }
 
 /**
- * Create a labelled version of an existing DA page or sheet.
+ * Create a labelled version of an existing DA page or sheet (on Helix 6, in
+ * the source bus).
  * @param {string} org - Organization
  * @param {string} site - Site
  * @param {string} path - Content path (site-relative)
@@ -346,6 +382,12 @@ export async function createVersion(org, site, path) {
   try {
     const sourcePath = versionSourcePath(path);
     if (!sourcePath) return { success: true };
+
+    if (await isHlx6(org, site)) {
+      const resp = await createSourceVersion(daFetch, org, site, sourcePath, PUBLISH_VERSION_LABEL);
+      if (!resp.ok) return { success: false, error: `Version failed: ${resp.status}` };
+      return { success: true };
+    }
 
     const key = `${org}/${site}/${sourcePath}`;
     const source = await daFetch(`${DA_ADMIN}/source/${key}`, { method: 'HEAD', cache: 'no-store' });

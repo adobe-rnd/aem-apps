@@ -59,6 +59,11 @@ describe('isHlx6', () => {
     const fetchFn = async () => { throw new Error('offline'); };
     assert.equal(await isHlx6('acme', 'web', fetchFn), false);
   });
+
+  it('is false for an HTTP error without the header', async () => {
+    const fetchFn = fakeFetch({ 'https://admin.hlx.page/ping/acme/web': { status: 503 } });
+    assert.equal(await isHlx6('acme', 'web', fetchFn), false);
+  });
 });
 
 describe('createLister (hlx6)', () => {

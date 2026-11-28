@@ -103,15 +103,28 @@ single approval promotes the current preview with
 `POST /live/{org}/{site}/main/*`, polls the job, and records final approvals only
 for paths with confirmed success. Intermediate approvals perform no Helix content
 operation. Review links compare preview versus live in the Page Status diff tool.
+On Helix 6 sites (the admin ping announces `x-api-upgrade-available`) the same
+calls go to `https://api.aem.live/{org}/sites/{site}/live/...` instead of
+admin.hlx.page; bulk publication sends `forceAsync: true` so there is a job to poll.
+If the ping fails, the inbox treats the site as legacy, as it did before Helix 6
+support, and pings again on the next call.
 
 After a final publish is confirmed, the inbox sends the workflow approval to the
 worker before it tries to create an **Approved & Published** DA version for each
 existing page or JSON sheet. It skips media files and
 requires DA read and write access to the source. If a source check or version
 fails, the inbox shows a warning without undoing the publish. The version
-captures the current DA source, not the published preview. Creating this version
-updates the source's last-modified time. DA versioning in this inbox does not
-support Helix 6 sites (content in the AEM source bus).
+captures the current DA source, not the published preview. On DA, creating this
+version updates the source's last-modified time. On Helix 6 sites
+(the admin ping announces `x-api-upgrade-available`), the inbox creates the
+version in the source bus (`POST /{org}/sites/{site}/source/{path}/.versions` on
+`api.aem.live`, the label as `comment`). If the ping can't be read, the inbox
+uses DA. The
+source-bus call answers 404 for a missing
+source and leaves the source's last-modified time alone. Version requests start
+at least 125 ms apart. A version request that gets a 429 waits and is sent
+again. One that gets a 503 or a network error is not, because the server may
+already have created the version.
 
 **I-5 remains unresolved: unpinned preview.** The reviewed preview is not frozen
 at submission. If an author re-previews before the approval click, live-only

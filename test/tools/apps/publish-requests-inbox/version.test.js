@@ -18,6 +18,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import * as shared from '../../../../tools/shared/hlx6.js';
 
 // The app and api.js import from da.live at load time, so the tests run their source in a VM.
 const read = (path) => readFileSync(new URL(`../../../../tools/apps/publish-requests-inbox/${path}`, import.meta.url), 'utf8');
@@ -27,9 +28,14 @@ const appSource = between(read('publish-requests-inbox.js'), 'class PublishReque
 const versionSource = between(read('api.js'), '// DA version', '// Workflow bookkeeping')
   .replace(/^export /gm, '');
 
-function versionApi(daFetch) {
+// hlx6: what the admin ping says. isHlx6 replaces the stub, e.g. with the real one.
+function versionApi(daFetch, {
+  hlx6 = false, isHlx6 = async () => hlx6,
+} = {}) {
   return vm.runInNewContext(`${versionSource}; ({ versionSourcePath, createVersion })`, {
     DA_ADMIN: 'https://admin.da.live',
+    isHlx6,
+    createSourceVersion: shared.createSourceVersion,
     daFetch,
     console: { warn: () => {} },
     JSON,
@@ -89,6 +95,67 @@ describe('v1 inbox DA versions', () => {
     assert.equal(result.success, false);
     assert.equal(result.error, 'Source check failed: 404');
     assert.deepEqual(calls, ['HEAD']);
+  });
+
+  it('creates a Helix 6 version in the source bus with the label as its comment', async () => {
+    const calls = [];
+    const { createVersion } = versionApi(async (url, opts) => {
+      calls.push([url, opts.method, opts.body]);
+      return { ok: true };
+    }, { hlx6: true });
+    assert.equal((await createVersion('example', 'website', '/page')).success, true);
+    // No HEAD first: the version POST checks the source itself.
+    assert.deepEqual(calls, [
+      ['https://api.aem.live/example/sites/website/source/page.html/.versions?comment=Approved%20%26%20Published', 'POST', undefined],
+    ]);
+  });
+
+  it('reports a missing Helix 6 source from the version POST, which creates nothing', async () => {
+    const calls = [];
+    const { createVersion } = versionApi(async (url) => {
+      calls.push(url);
+      return { ok: false, status: 404 };
+    }, { hlx6: true });
+    const result = await createVersion('example', 'website', '/page');
+    assert.equal(result.error, 'Version failed: 404');
+    assert.equal(calls.length, 1);
+  });
+
+  it('retries a Helix 6 version the API host rate-limited', async () => {
+    let count = 0;
+    const { createVersion } = versionApi(async () => {
+      count += 1;
+      return count === 1 ? new Response(null, { status: 429, headers: { 'retry-after': '0' } }) : { ok: true };
+    }, { hlx6: true });
+    assert.equal((await createVersion('example', 'website', '/page')).success, true);
+    assert.equal(count, 2);
+  });
+
+  it('versions in the source bus when the admin ping flags the site, with no sidekick read', async (test) => {
+    test.mock.method(global, 'fetch', async () => new Response(null, { headers: { 'x-api-upgrade-available': 'true' } }));
+    const calls = [];
+    const { createVersion } = versionApi(async (url, opts) => {
+      calls.push([url, opts.method]);
+      return { ok: true };
+    }, { isHlx6: shared.isHlx6 });
+    assert.equal((await createVersion('example', 'by-ping', '/page')).success, true);
+    assert.deepEqual(calls, [
+      ['https://api.aem.live/example/sites/by-ping/source/page.html/.versions?comment=Approved%20%26%20Published', 'POST'],
+    ]);
+  });
+
+  it('versions on DA, as before, when the admin ping fails', async (test) => {
+    test.mock.method(global, 'fetch', async () => { throw new TypeError('network'); });
+    const calls = [];
+    const { createVersion } = versionApi(async (url, opts) => {
+      calls.push([url, opts.method]);
+      return { ok: true };
+    }, { isHlx6: shared.isHlx6 });
+    assert.equal((await createVersion('example', 'ping-down', '/page')).success, true);
+    assert.deepEqual(calls, [
+      ['https://admin.da.live/source/example/ping-down/page.html', 'HEAD'],
+      ['https://admin.da.live/versionsource/example/ping-down/page.html', 'POST'],
+    ]);
   });
 
   it('records approval before creating a version after a single publish', async () => {

@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import * as api from '../../../../tools/apps/publish-requests-inbox-v2/api.js';
+import * as shared from '../../../../tools/shared/hlx6.js';
 
 const source = readFileSync(new URL('../../../../tools/apps/publish-requests-inbox-v2/publish-requests-inbox-v2.js', import.meta.url), 'utf8');
 
@@ -469,12 +470,19 @@ describe('inbox v2 approval handlers', () => {
     assert.equal(api.versionSourcePath('/drafts/'), 'drafts/index.html');
   });
 
-  function versionApi(daFetch) {
+  // hlx6: what the admin ping says. isHlx6 replaces the stub, e.g. with the real one.
+  function versionApi(daFetch, {
+    hlx6 = false, isHlx6 = async () => hlx6,
+  } = {}) {
     const apiSource = readFileSync(new URL('../../../../tools/apps/publish-requests-inbox-v2/api.js', import.meta.url), 'utf8');
     const versionSource = apiSource.slice(apiSource.indexOf('// DA version'), apiSource.indexOf('// Helix publish'))
       .replace(/^export /gm, '');
     return vm.runInNewContext(`${versionSource}; createVersion`, {
-      DA_ADMIN: 'https://admin.da.live', daFetch, console,
+      DA_ADMIN: 'https://admin.da.live',
+      daFetch,
+      console,
+      isHlx6,
+      createSourceVersion: shared.createSourceVersion,
     });
   }
 
@@ -489,6 +497,57 @@ describe('inbox v2 approval handlers', () => {
     assert.deepEqual(calls, [
       ['https://admin.da.live/source/example/website/data/sheet.json', 'HEAD', undefined],
       ['https://admin.da.live/versionsource/example/website/data/sheet.json', 'POST', '{"label":"Approved & Published"}'],
+    ]);
+  });
+
+  it('creates a Helix 6 version in the source bus with the label as its comment', async () => {
+    const calls = [];
+    const createVersion = versionApi(async (url, opts) => {
+      calls.push([url, opts.method, opts.body]);
+      return { ok: true };
+    }, { hlx6: true });
+    assert.equal((await createVersion('example', 'website', '/assets/my-file.pdf')).success, true);
+    assert.equal((await createVersion('example', 'website', '/data/sheet.json')).success, true);
+    // No HEAD first: the version POST checks the source itself.
+    assert.deepEqual(calls, [
+      ['https://api.aem.live/example/sites/website/source/data/sheet.json/.versions?comment=Approved%20%26%20Published', 'POST', undefined],
+    ]);
+  });
+
+  it('retries a Helix 6 version the API host rate-limited', async () => {
+    let count = 0;
+    const createVersion = versionApi(async () => {
+      count += 1;
+      return count === 1 ? new Response(null, { status: 429, headers: { 'retry-after': '0' } }) : { ok: true };
+    }, { hlx6: true });
+    assert.equal((await createVersion('example', 'website', '/page')).success, true);
+    assert.equal(count, 2);
+  });
+
+  it('versions in the source bus when the admin ping flags the site, with no sidekick read', async (test) => {
+    test.mock.method(global, 'fetch', async () => new Response(null, { headers: { 'x-api-upgrade-available': 'true' } }));
+    const calls = [];
+    const createVersion = versionApi(async (url, opts) => {
+      calls.push([url, opts.method]);
+      return { ok: true };
+    }, { isHlx6: shared.isHlx6 });
+    assert.equal((await createVersion('example', 'by-ping', '/data/sheet.json')).success, true);
+    assert.deepEqual(calls, [
+      ['https://api.aem.live/example/sites/by-ping/source/data/sheet.json/.versions?comment=Approved%20%26%20Published', 'POST'],
+    ]);
+  });
+
+  it('versions on DA, as before, when the admin ping fails', async (test) => {
+    test.mock.method(global, 'fetch', async () => { throw new TypeError('network'); });
+    const calls = [];
+    const createVersion = versionApi(async (url, opts) => {
+      calls.push([url, opts.method]);
+      return { ok: true };
+    }, { isHlx6: shared.isHlx6 });
+    assert.equal((await createVersion('example', 'ping-down', '/page')).success, true);
+    assert.deepEqual(calls, [
+      ['https://admin.da.live/source/example/ping-down/page.html', 'HEAD'],
+      ['https://admin.da.live/versionsource/example/ping-down/page.html', 'POST'],
     ]);
   });
 
